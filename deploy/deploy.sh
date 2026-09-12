@@ -192,7 +192,9 @@ run_sql_file() {  # run_sql_file <db> <container_path>
 # rows whose *Enc column is still NULL get processed).
 run_encryption_backfill() {
   log "Backfilling AES-256-GCM ciphertext into *Enc columns before cutover"
-  docker compose --profile tools run --rm silen-encrypt-backfill
+  # --build: `run` alone reuses an already-built image even when the Dockerfile
+  # changed on disk (bit us once - fixed image, stale container, same crash).
+  docker compose --profile tools run --build --rm silen-encrypt-backfill
   ok "backfill complete"
 }
 
