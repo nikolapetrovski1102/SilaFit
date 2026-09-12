@@ -1,0 +1,76 @@
+name: silenfit
+
+services:
+  silen-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: silen-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
+      MSSQL_PID: "Developer"
+      # Cap SQL Server's buffer pool. Without this, `max server memory` defaults to
+      # effectively unlimited: on a small box mssql commits nearly all RAM, the OS +
+      # API get pushed into swap, and the resulting paging shows up as pinned CPU +
+      # thousands of disk IOPS even with zero users. Override per box via .env.
+      MSSQL_MEMORY_LIMIT_MB: "${MSSQL_MEMORY_LIMIT_MB:-2048}"
+    ports:
+      - "127.0.0.1:${DB_PORT:-14340}:1433"   # localhost only — not exposed publicly
+    volumes:
+      - silen-sqldata:/var/opt/mssql
+    restart: unless-stopped
+    # Hard ceiling as a backstop to the SQL-level cap above. Keep it a little above
+    # MSSQL_MEMORY_LIMIT_MB so SQL Server (cgroup-aware) has headroom for the CLR /
+    # connections / plan cache that live outside the buffer pool.
+    mem_limit: "${DB_MEM_LIMIT:-2560m}"
+    memswap_limit: "${DB_MEM_LIMIT:-2560m}"   # = mem_limit ⇒ the container itself never swaps
+    healthcheck:
+      test: >
+        /bin/bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" ||
+                      /opt/mssql-tools/bin/sqlcmd  -S localhost -U sa -P "$$MSSQL_SA_PASSWORD"    -Q "SELECT 1"'
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 45s
+
+  silen-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: silen-api
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      # Behind nginx TLS termination. The runtime auto-adds ForwardedHeadersMiddleware
+      # (trusting X-Forwarded-For/Proto) when this is set AND the app is running in a
+      # container — no code change needed. Without it, app.UseHttpsRedirection() would
+      # see every request as plain http (nginx talks http to Kestrel) and redirect it
+      # back to https, which nginx re-terminates and forwards as http again: a loop.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      # Overrides ConnectionStrings:SilenDb from appsettings.json
+      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      # Overrides Jwt:SigningKey from appsettings.json (kept out of source control — see deploy/.env)
+      Jwt__Issuer: "SilenApi"
+      Jwt__Audience: "SilenApp"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+      Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-43200}"
+      # OAuth client ids — leave unset to disable that sign-in method server-side checks.
+      GoogleAuth__ClientIds__0: "${GOOGLE_WEB_CLIENT_ID:-}"
+      AppleAuth__ClientIds__0: "${APPLE_BUNDLE_ID:-com.nikolapetrovski.silafit}"
+      # OpenRouter — powers AI-narrated progress analytics text. Leave blank to disable.
+      OpenRouter__ApiKey: "${OPENROUTER_API_KEY:-}"
+      OpenRouter__Model: "${OPENROUTER_MODEL:-openai/gpt-4.1}"
+      FeatureFlags__DevTiersFree: "false"
+    ports:
+      - "127.0.0.1:${API_PORT:-5010}:8080"   # localhost only — nginx proxies to it
+    restart: unless-stopped
+    # Backstop like the db service's mem_limit above: without a ceiling, a leak can
+    # let the API eat all host RAM and push everything (including SQL Server) into
+    # swap. Docker OOM-kills the container at the limit and `restart: unless-stopped`
+    # brings it back, which is a much faster recovery than a wedged, swap-thrashing host.
+    mem_limit: "${API_MEM_LIMIT:-1024m}"
+
+volumes:
+  silen-sqldata:

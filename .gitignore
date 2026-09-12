@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Visual Studio / VS for Mac
+.vs/
+
+# .NET / backend
+backend/**/bin/
+backend/**/obj/
+*.user
+
+# SQL Server data volume mounts (docker-compose uses a named volume, not a bind mount, but just in case)
+database/**/*.mdf
+database/**/*.ldf
+
+# Environment/secrets
+.env
+*.local.json

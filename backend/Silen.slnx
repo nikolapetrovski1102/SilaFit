@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Silen.Api/Silen.Api.csproj" />
+    <Project Path="src/Silen.Common/Silen.Common.csproj" />
+    <Project Path="src/Silen.Data/Silen.Data.csproj" />
+    <Project Path="src/Silen.Services/Silen.Services.csproj" />
+  </Folder>
+</Solution>

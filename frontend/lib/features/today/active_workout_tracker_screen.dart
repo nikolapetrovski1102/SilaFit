@@ -1,0 +1,1439 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
+
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
+import '../../core/widgets/mascot/mascot_dialog.dart';
+import '../../core/widgets/mascot/mascot_pose.dart';
+import '../../core/widgets/silen_button.dart';
+import '../settings/settings_controller.dart';
+import 'active_workout_draft_store.dart';
+import 'exercise_memory_store.dart';
+import 'today_controller.dart';
+import 'today_models.dart';
+
+/// Exercises tagged with this `EquipmentType` (see the seed data in
+/// `database/seed/001_SeedReferenceData.sql`) are the only ones where a
+/// bar-plus-plates breakdown, or a floor at the empty-bar weight, means
+/// anything - every other equipment type (dumbbell, cable, machine,
+/// bodyweight, kettlebell) is loaded a different way and would show
+/// nonsense plate math if this gate weren't here (e.g. a 30kg dumbbell
+/// press incorrectly rendered as "5kg per side" barbell plates).
+const _barbellEquipment = 'Barbell';
+
+/// [weightKg] on a dumbbell exercise is the load in *each* hand, not the
+/// total moved - so unlike every other equipment type, tonnage for a
+/// dumbbell set has to count that load twice. Kettlebell is deliberately
+/// excluded: the seeded "Kettlebell Swing" is one two-handed implement,
+/// not a pair, so its logged weight is already the total load.
+const _bilateralDumbbellEquipment = 'Dumbbell';
+
+/// One set's local draft state. The backend has no set-by-set logging
+/// endpoint (only whole-session completion) - only the final aggregate
+/// (duration/tonnage) is ever sent to the server, in
+/// [TodayController.completeWorkout], exactly as the old
+/// `complete_workout_screen.dart` already did. The set table itself is kept
+/// alive across app kills/backgrounding by mirroring it into an
+/// [ActiveWorkoutDraft] on every change (see `_saveDraft`), but that's
+/// on-device only, purely to resume this screen - it's never itself sent
+/// to the backend.
+///
+/// [weightKg] is always the source of truth in kilograms, regardless of
+/// [UserSettings.weightUnit] - the unit only ever affects display/step
+/// size, never storage, matching the convention already set by
+/// `onboarding_controller.dart`'s weight picker.
+class _SetDraft {
+  double weightKg;
+  int reps;
+  bool completed = false;
+
+  _SetDraft({required this.weightKg, required this.reps});
+}
+
+const _plateSizesKg = [20.0, 15.0, 10.0, 5.0, 2.5, 1.25];
+const _plateSizesLb = [45.0, 35.0, 25.0, 10.0, 5.0, 2.5];
+
+/// kg -> lb, matching the factor already used by
+/// `onboarding_flow_screen.dart`'s `_formatWeight`.
+const _kgToLb = 2.20462;
+
+/// Greedy per-side plate breakdown for [totalWeightKg] on a [barbellKg]
+/// bar, expressed in whichever [unit] the caller wants the plates named in
+/// ('kg' or 'lb') - both the target and the bar are converted to that unit
+/// first, so a lb-preference lifter sees real lb plate sizes rather than a
+/// kg breakdown with a unit label slapped on. Returns an empty list if the
+/// target is at or below the bar itself.
+List<double> _plateBreakdown(double totalWeightKg, double barbellKg, String unit) {
+  final isLb = unit == 'lb';
+  final total = isLb ? totalWeightKg * _kgToLb : totalWeightKg;
+  final bar = isLb ? barbellKg * _kgToLb : barbellKg;
+  var perSide = (total - bar) / 2;
+  if (perSide <= 0.01) return const [];
+  final plates = <double>[];
+  for (final plate in (isLb ? _plateSizesLb : _plateSizesKg)) {
+    while (perSide + 0.01 >= plate) {
+      plates.add(plate);
+      perSide -= plate;
+    }
+  }
+  return plates;
+}
+
+String _formatWeight(double kg, String unit) {
+  final display = unit == 'lb' ? kg * _kgToLb : kg;
+  return display.toStringAsFixed(display % 1 == 0 ? 0 : 1);
+}
+
+/// Rich, client-side-only set-logging UI seeded from the day's prescribed
+/// [TargetExercise]s. Telemetry bar (elapsed timer + rest-timer ring),
+/// session/exercise round-progress tracking, an optional exercise demo
+/// video, editable set rows with unit-aware plate math, and a bottom action
+/// row that walks exercise-by-exercise before submitting the whole
+/// session's aggregate via [TodayController.completeWorkout].
+class ActiveWorkoutTrackerScreen extends StatefulWidget {
+  final TodaySession session;
+  final List<TargetExercise> exercises;
+  final TodayController controller;
+
+  const ActiveWorkoutTrackerScreen({
+    super.key,
+    required this.session,
+    required this.exercises,
+    required this.controller,
+  });
+
+  @override
+  State<ActiveWorkoutTrackerScreen> createState() =>
+      _ActiveWorkoutTrackerScreenState();
+}
+
+class _ActiveWorkoutTrackerScreenState
+    extends State<ActiveWorkoutTrackerScreen> {
+  late List<List<_SetDraft>> _setsByExercise;
+  int _exerciseIndex = 0;
+
+  // Resolved once from Settings at mount - see the class doc on _SetDraft.
+  // Falls back to the spec defaults if Settings hasn't finished its own
+  // first load yet (e.g. a very fast cold-start tap-through).
+  late final String _weightUnit;
+  late final double _barbellStandardKg;
+
+  // Wall-clock rather than a `Stopwatch` - a `Stopwatch` lives only in this
+  // object's memory, so it can't tell a resumed screen how much time has
+  // actually passed. [_startedAtUtc] is the one thing carried over from a
+  // restored `ActiveWorkoutDraft` (see [_init]); `_elapsed` is recomputed
+  // from it on every tick instead of tracked incrementally.
+  late DateTime _startedAtUtc;
+  Timer? _ticker;
+  Duration _elapsed = Duration.zero;
+
+  // False until [_init]'s draft lookup resolves - a single fast local
+  // storage read, but still async, so the set table can't be built
+  // synchronously in `initState` the way it used to be.
+  bool _ready = false;
+
+  bool _isFinishing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_init());
+  }
+
+  /// Seeds the set table from the day's prescribed exercises, then checks
+  /// for a still-fresh [ActiveWorkoutDraft] for this exact session and, if
+  /// one exists, restores its sets/exercise index/start time over the fresh
+  /// seed instead - see [ActiveWorkoutDraftStore] for the freshness window.
+  Future<void> _init() async {
+    final settings = context.read<SettingsController>().state.data;
+    _weightUnit = settings?.weightUnit ?? 'kg';
+    _barbellStandardKg = settings?.barbellStandardKg ?? 20.0;
+
+    // Last time each exercise was actually logged, if ever - a fresh set
+    // starts from there instead of always resetting to the barbell standard
+    // or the target rep-range midpoint, matching how a lifter actually
+    // plans a set ("what did I do last time").
+    final memory = await ExerciseMemoryStore.instance.loadAll();
+
+    final freshSets = widget.exercises
+        .map((exercise) {
+          final remembered = memory[exercise.exerciseId];
+          return List.generate(
+            exercise.targetSets <= 0 ? 1 : exercise.targetSets,
+            (_) => _SetDraft(
+              weightKg: remembered?.weightKg ??
+                  _weightFloorKgFor(exercise.equipmentType),
+              reps: remembered?.reps ??
+                  ((exercise.targetRepsLow + exercise.targetRepsHigh) / 2)
+                      .round()
+                      .clamp(1, 999),
+            ),
+          );
+        })
+        .toList();
+
+    final sessionId = widget.session.workoutSessionId;
+    final draft = sessionId == null
+        ? null
+        : await ActiveWorkoutDraftStore.instance.load(sessionId);
+
+    // Only trusted when it matches the shape of today's exercises - a
+    // draft saved against a different/older plan for the same session id
+    // would otherwise restore the wrong number of exercises or sets.
+    final draftMatchesShape = draft != null &&
+        draft.setsByExercise.length == freshSets.length &&
+        draft.exerciseIndex >= 0 &&
+        draft.exerciseIndex < freshSets.length;
+
+    if (!mounted) return;
+    setState(() {
+      _setsByExercise = draftMatchesShape
+          ? draft.setsByExercise
+              .map((sets) => sets
+                  .map((s) => _SetDraft(weightKg: s.weightKg, reps: s.reps)
+                    ..completed = s.completed)
+                  .toList())
+              .toList()
+          : freshSets;
+      _exerciseIndex = draftMatchesShape ? draft.exerciseIndex : 0;
+      _startedAtUtc = draftMatchesShape ? draft.startedAtUtc : DateTime.now().toUtc();
+      _elapsed = DateTime.now().toUtc().difference(_startedAtUtc);
+      _ready = true;
+    });
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _elapsed = DateTime.now().toUtc().difference(_startedAtUtc));
+      }
+    });
+    // Persist immediately so Home can offer "Continue Workout" as soon as
+    // this screen has been opened once, even before a set is logged - the
+    // elapsed timer is already running by then.
+    _saveDraft();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  /// Fire-and-forget snapshot of the current sets/exercise/start-time to
+  /// device storage, so the workout survives the app being backgrounded or
+  /// killed. A no-op when the session has no id (nothing meaningful to key
+  /// the draft on) - same guard `_finishWorkout` already uses.
+  void _saveDraft() {
+    final sessionId = widget.session.workoutSessionId;
+    if (sessionId == null) return;
+    unawaited(ActiveWorkoutDraftStore.instance.save(ActiveWorkoutDraft(
+      workoutSessionId: sessionId,
+      exerciseIndex: _exerciseIndex,
+      setsByExercise: _setsByExercise
+          .map((sets) => sets
+              .map((s) => DraftSet(
+                    weightKg: s.weightKg,
+                    reps: s.reps,
+                    completed: s.completed,
+                  ))
+              .toList())
+          .toList(),
+      startedAtUtc: _startedAtUtc,
+      savedAtUtc: DateTime.now().toUtc(),
+    )));
+  }
+
+  List<_SetDraft> get _currentSets => _setsByExercise[_exerciseIndex];
+  TargetExercise get _currentExercise => widget.exercises[_exerciseIndex];
+  bool get _isLastExercise => _exerciseIndex == widget.exercises.length - 1;
+
+  /// kg per tap: a quarter-plate-per-side jump in whichever unit is active
+  /// (2.5 kg, or 5 lb converted back to kg for storage) rather than a fixed
+  /// kg step that would look like an odd fractional lb jump to an
+  /// lb-preference lifter.
+  double get _weightStepKg => _weightUnit == 'lb' ? 5 / _kgToLb : 2.5;
+
+  /// The lowest weight this exercise's equipment can plausibly show. Only a
+  /// barbell exercise (or one with no `equipmentType` on record, so the
+  /// pre-existing behaviour holds rather than guessing) has a real hard
+  /// floor - the empty bar itself. Every other equipment type just floors
+  /// at one weight-step above zero, so a dumbbell/cable/machine set can be
+  /// dialled down without getting stuck at a 20kg barbell-bar minimum that
+  /// has nothing to do with what's actually in the lifter's hands.
+  double _weightFloorKgFor(String? equipmentType) =>
+      (equipmentType == null || equipmentType == _barbellEquipment)
+          ? _barbellStandardKg
+          : _weightStepKg;
+
+  double get _weightFloorKg => _weightFloorKgFor(_currentExercise.equipmentType);
+
+  /// The current exercise's first not-yet-logged set - the only set this
+  /// screen ever shows. `null` once every set is logged (see
+  /// `_ExerciseCompleteCard`).
+  int? get _activeSetIndex {
+    final i = _currentSets.indexWhere((s) => !s.completed);
+    return i == -1 ? null : i;
+  }
+
+  /// How many sets in the current exercise are logged, for the header ring.
+  /// `_logSet` only ever completes `_activeSetIndex` (the first incomplete
+  /// set), so completion is always contiguous from the front - the count is
+  /// just `_activeSetIndex`, or every set once none are left incomplete.
+  int get _completedSetsInCurrentExercise =>
+      _activeSetIndex ?? _currentSets.length;
+
+  /// Real target reps only - `TargetExercise` defaults both bounds to 0
+  /// when the plan carries no rep prescription, and a "Target 0-0 reps"
+  /// readout would read as a bug, not an empty state.
+  bool get _hasRealRepTarget =>
+      _currentExercise.targetRepsLow > 0 && _currentExercise.targetRepsHigh > 0;
+
+  /// Reps at (or above) which the *previous* completed set in this exercise
+  /// is considered to have moved easily enough that the upcoming set should
+  /// go up in weight - the prescribed top of the rep range when there is
+  /// one, or a flat 12 (per the user's own example) otherwise.
+  int get _repsSuggestingHeavier => _hasRealRepTarget ? _currentExercise.targetRepsHigh : 12;
+
+  /// True right as a new set becomes active if the set just before it hit
+  /// the rep ceiling above - the minimalist progressive-overload nudge
+  /// shown on `_CurrentSetCard` next to the weight stat.
+  bool get _suggestWeightIncrease {
+    final active = _activeSetIndex;
+    if (active == null || active == 0) return false;
+    final previous = _currentSets[active - 1];
+    return previous.completed && previous.reps >= _repsSuggestingHeavier;
+  }
+
+  void _logSet(int index) {
+    setState(() {
+      _currentSets[index].completed = true;
+      // Carry the just-logged weight into the next set - a lifter almost
+      // always repeats the same weight set-to-set unless they deliberately
+      // adjust it, so the next set should open at what was just lifted
+      // rather than resetting to the pre-workout seed from `_init` (which
+      // every target set was given the same starting value from, since only
+      // the active set is ever editable before its turn comes). Mirrors
+      // `_addSet`'s carry-forward for a set added beyond the target count.
+      if (index + 1 < _currentSets.length) {
+        _currentSets[index + 1].weightKg = _currentSets[index].weightKg;
+      }
+    });
+    _saveDraft();
+    // Fire-and-forget, like `_saveDraft` - remembers this exercise's weight
+    // and reps for next time (see `ExerciseMemoryStore`), independent of
+    // whether this whole workout ever gets finished.
+    unawaited(ExerciseMemoryStore.instance.remember(
+      _currentExercise.exerciseId,
+      _currentSets[index].weightKg,
+      _currentSets[index].reps,
+    ));
+  }
+
+  void _addSet() {
+    final last = _currentSets.isNotEmpty ? _currentSets.last : null;
+    setState(() => _currentSets.add(_SetDraft(
+          weightKg: last?.weightKg ?? _weightFloorKg,
+          reps: last?.reps ?? _currentExercise.targetRepsLow,
+        )));
+    _saveDraft();
+  }
+
+  void _adjustWeight(int index, double directionSign) {
+    setState(() {
+      final floor = _weightFloorKg;
+      final next = _currentSets[index].weightKg + directionSign * _weightStepKg;
+      _currentSets[index].weightKg =
+          next < floor ? floor : double.parse(next.toStringAsFixed(2));
+    });
+    _saveDraft();
+  }
+
+  void _setWeightDirect(int index, double kg) {
+    final floor = _weightFloorKg;
+    setState(() => _currentSets[index].weightKg = kg < floor ? floor : kg);
+    _saveDraft();
+  }
+
+  void _adjustReps(int index, int delta) {
+    setState(() {
+      final next = _currentSets[index].reps + delta;
+      _currentSets[index].reps = next < 1 ? 1 : next;
+    });
+    _saveDraft();
+  }
+
+  void _setRepsDirect(int index, int reps) {
+    setState(() => _currentSets[index].reps = reps < 1 ? 1 : reps);
+    _saveDraft();
+  }
+
+  double get _totalTonnageKg {
+    var total = 0.0;
+    for (var i = 0; i < _setsByExercise.length; i++) {
+      // See `_bilateralDumbbellEquipment` - a dumbbell set's logged weight
+      // is per hand, so the load actually moved is double what a
+      // barbell/machine/cable set of the same number would be.
+      final perRepMultiplier =
+          widget.exercises[i].equipmentType == _bilateralDumbbellEquipment
+              ? 2
+              : 1;
+      for (final set in _setsByExercise[i]) {
+        if (set.completed) {
+          total += set.weightKg * set.reps * perRepMultiplier;
+        }
+      }
+    }
+    return total;
+  }
+
+  Future<void> _onPrimaryAction() async {
+    if (!_isLastExercise) {
+      setState(() => _exerciseIndex++);
+      _saveDraft();
+      return;
+    }
+    await _finishWorkout();
+  }
+
+  Future<void> _finishWorkout() async {
+    final sessionId = widget.session.workoutSessionId;
+    if (sessionId == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _isFinishing = true);
+    final durationMinutes = _elapsed.inMinutes < 1 ? 1 : _elapsed.inMinutes;
+    final ok = await widget.controller.completeWorkout(
+      workoutSessionId: sessionId,
+      durationMinutes: durationMinutes,
+      tonnageKg: _totalTonnageKg > 0 ? _totalTonnageKg : null,
+    );
+    if (!mounted) return;
+    setState(() => _isFinishing = false);
+    if (ok) {
+      // Session is logged server-side now - the local draft would only ever
+      // be stale from here on, so it's cleared regardless of whether the
+      // mascot dialog below is dismissed or the screen is popped first.
+      // Fire-and-forget (like `_saveDraft`) rather than awaited: nothing
+      // below depends on the clear having finished, and awaiting it would
+      // just be one more async gap to guard `context` against.
+      unawaited(ActiveWorkoutDraftStore.instance.clear());
+      // Streak-milestone heuristic: no per-set PR-detection data exists
+      // server-side, so a "proud" moment is approximated client-side as
+      // hitting a 7-day streak multiple; every other finish is "celebrating".
+      final streakDays = widget.controller.state.data?.currentStreakDays ?? 0;
+      final isMilestone = streakDays > 0 && streakDays % 7 == 0;
+      await MascotDialog.show(
+        context,
+        pose: isMilestone ? MascotPose.proud : MascotPose.celebrating,
+        title: isMilestone ? '$streakDays-day streak!' : 'Workout complete',
+        message: isMilestone
+            ? 'You\'re on fire - $streakDays days in a row. Keep it going.'
+            : 'Nice work. Your session has been logged.',
+        actionLabel: 'Nice',
+        showConfetti: true,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } else if (widget.controller.actionError != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(widget.controller.actionError!)));
+    }
+  }
+
+  Future<void> _confirmExit() async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card)),
+        title: Text('Leave workout?', style: AppTypography.headlineSm),
+        content: Text(
+            'Your progress is saved - pick up from here with Continue Workout on Home.',
+            style: AppTypography.bodyMd
+                .copyWith(color: AppColors.onSurfaceVariant)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text('Keep training', style: AppTypography.bodyMd)),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text('Leave', style: AppTypography.bodyMd)),
+        ],
+      ),
+    );
+    if (leave != true) return;
+    // Deliberately no draft clear here (unlike `_finishWorkout`) - leaving
+    // is a pause, not an abandon, and the dialog above now promises the
+    // sets already logged are exactly what "Continue Workout" on Home will
+    // hand back. `_saveDraft` has already been keeping this current after
+    // every set/weight/rep change, so there's nothing left to persist here.
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  String _formatElapsed(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      // Draft lookup (see `_init`) hasn't resolved yet - a single fast
+      // local read, so this shows for at most a frame or two, never long
+      // enough to warrant its own skeleton/shimmer state.
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(
+              strokeWidth: 2.5, color: AppColors.accent),
+        ),
+      );
+    }
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Stack(
+        children: [
+          // Subtle in-progress-workout flourish - a low-opacity mascot accent
+          // tucked in the corner, purely decorative.
+          Positioned(
+            right: -18,
+            bottom: 96,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: 0.08,
+                child: Image.asset(MascotPose.lifting.assetPath, width: 160),
+              ),
+            ),
+          ),
+          SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                  AppSpacing.sm, AppSpacing.marginMobile, 0),
+              child: _TelemetryBar(
+                onClose: _confirmExit,
+                elapsedLabel: _formatElapsed(_elapsed),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.marginMobile),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 280),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                              begin: const Offset(0.04, 0), end: Offset.zero)
+                          .animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Column(
+                    key: ValueKey(_exerciseIndex),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                                'EXERCISE ${_exerciseIndex + 1} OF ${widget.exercises.length}',
+                                style: AppTypography.labelCaps
+                                    .copyWith(color: AppColors.accent)),
+                          ),
+                          if (_currentExercise.demoVideoUrl != null)
+                            _WatchDemoChip(
+                              isVideo: _isVideoUrl(_currentExercise.demoVideoUrl!),
+                              onTap: () => showExerciseVideoSheet(
+                                context,
+                                url: _currentExercise.demoVideoUrl!,
+                                exerciseName: _currentExercise.name,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // The exercise name as the screen's title - the
+                          // largest, first thing read on the page, same
+                          // headline weight Home gives its own title.
+                          Expanded(
+                            child: Text(_currentExercise.name,
+                                style: AppTypography.headlineLg
+                                    .copyWith(fontSize: 32)),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          // One gapped ring segment per set, sweeping
+                          // smoothly to full whenever `_logSet` completes
+                          // one - a glanceable "how far into this exercise
+                          // am I" that doesn't need its own progress bar.
+                          _SetProgressRing(
+                            totalSets: _currentSets.length,
+                            completedSets: _completedSetsInCurrentExercise,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        // The set count in the target is the *live* count
+                        // (grows with Add Set), not the plan's static
+                        // targetSets - and the whole target only shows up
+                        // when the plan actually prescribed a rep range.
+                        _hasRealRepTarget
+                            ? '${_currentExercise.muscleGroup} · Target ${_currentSets.length} × ${_currentExercise.targetRepsLow}-${_currentExercise.targetRepsHigh} reps'
+                            : _currentExercise.muscleGroup,
+                        style: AppTypography.bodyMd
+                            .copyWith(color: AppColors.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: AppSpacing.xxxl),
+                      // Only the current set - no list of upcoming or past
+                      // sets to scan past. Keyed on the active set (or the
+                      // "all done" state) so logging a set, or adding a new
+                      // one once the exercise was fully logged, animates
+                      // forward instead of just swapping numbers in place.
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 320),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) => FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            scale: Tween<double>(begin: 0.96, end: 1)
+                                .animate(animation),
+                            child: child,
+                          ),
+                        ),
+                        child: _activeSetIndex != null
+                            ? _CurrentSetCard(
+                                key: ValueKey('set-$_activeSetIndex'),
+                                setIndex: _activeSetIndex!,
+                                totalSets: _currentSets.length,
+                                set: _currentSets[_activeSetIndex!],
+                                weightUnit: _weightUnit,
+                                barbellStandardKg: _barbellStandardKg,
+                                weightFloorKg: _weightFloorKg,
+                                isBarbell: _currentExercise.equipmentType ==
+                                        _barbellEquipment ||
+                                    _currentExercise.equipmentType == null,
+                                suggestWeightIncrease: _suggestWeightIncrease,
+                                onLog: () => _logSet(_activeSetIndex!),
+                                onWeightDelta: (sign) =>
+                                    _adjustWeight(_activeSetIndex!, sign),
+                                onRepsDelta: (delta) =>
+                                    _adjustReps(_activeSetIndex!, delta),
+                                onWeightDirectKg: (kg) =>
+                                    _setWeightDirect(_activeSetIndex!, kg),
+                                onRepsDirect: (reps) =>
+                                    _setRepsDirect(_activeSetIndex!, reps),
+                              )
+                            : _ExerciseCompleteCard(
+                                key: const ValueKey('complete'),
+                                totalSets: _currentSets.length,
+                              ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                  AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SecondaryPillButton(
+                        label: 'Add Set', onPressed: _addSet),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    flex: 2,
+                    child: PrimaryPillButton(
+                      label: _isLastExercise
+                          ? 'Finish Workout'
+                          : 'Finish Exercise',
+                      icon: _isLastExercise
+                          ? Icons.check_rounded
+                          : Icons.arrow_forward_rounded,
+                      isLoading: _isFinishing,
+                      onPressed: _onPrimaryAction,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TelemetryBar extends StatelessWidget {
+  final VoidCallback onClose;
+  final String elapsedLabel;
+
+  const _TelemetryBar({
+    required this.onClose,
+    required this.elapsedLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: onClose,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(Icons.close_rounded, size: 20, color: AppColors.onSurface),
+          ),
+        ),
+        const Spacer(),
+        Icon(Icons.timer_outlined, size: 16, color: AppColors.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(elapsedLabel,
+            style: AppTypography.numericUnit.copyWith(color: AppColors.onSurface)),
+        const Spacer(),
+        // Balances the close button's width so the elapsed time stays
+        // visually centered now that nothing sits to its right.
+        const SizedBox(width: 40),
+      ],
+    );
+  }
+}
+
+/// Whether [url] points at a real video file rather than a static image.
+/// `Exercise.DemoVideoUrl` is typed for video, but the free, legally-clear
+/// seed source ([free-exercise-db](https://github.com/yuhonas/free-exercise-db),
+/// public domain) only has step-position JPEGs - so this same column also
+/// carries plain image URLs today, and the sheet below renders accordingly
+/// instead of feeding a `.jpg` into `video_player` (which would just sit in
+/// its error state for every exercise).
+bool _isVideoUrl(String url) {
+  final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+  return path.endsWith('.mp4') ||
+      path.endsWith('.mov') ||
+      path.endsWith('.webm') ||
+      path.endsWith('.m3u8');
+}
+
+class _WatchDemoChip extends StatelessWidget {
+  final bool isVideo;
+  final VoidCallback onTap;
+
+  const _WatchDemoChip({required this.isVideo, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+                isVideo
+                    ? Icons.play_circle_fill_rounded
+                    : Icons.image_rounded,
+                size: 16,
+                color: AppColors.accent),
+            const SizedBox(width: 4),
+            Text(isVideo ? 'Watch form' : 'View form',
+                style: AppTypography.labelCaps
+                    .copyWith(color: AppColors.onSurface, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Opens a bottom sheet showing an exercise's form reference - a looping
+/// muted video when [url] is one, or a static photo when it isn't (see
+/// [_isVideoUrl]).
+Future<void> showExerciseVideoSheet(
+  BuildContext context, {
+  required String url,
+  required String exerciseName,
+}) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surfaceContainer,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+    builder: (_) => _ExerciseVideoSheet(url: url, exerciseName: exerciseName),
+  );
+}
+
+class _ExerciseVideoSheet extends StatefulWidget {
+  final String url;
+  final String exerciseName;
+
+  const _ExerciseVideoSheet({required this.url, required this.exerciseName});
+
+  @override
+  State<_ExerciseVideoSheet> createState() => _ExerciseVideoSheetState();
+}
+
+class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
+  late final bool _isVideo = _isVideoUrl(widget.url);
+  VideoPlayerController? _controller;
+  bool _muted = true;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_isVideo) return; // Image case is handled entirely by Image.network in build().
+    final uri = Uri.tryParse(widget.url);
+    if (uri == null) {
+      _failed = true;
+      return;
+    }
+    final controller = VideoPlayerController.networkUrl(uri);
+    _controller = controller;
+    controller
+        .initialize()
+        .then((_) {
+          if (!mounted) return;
+          controller
+            ..setLooping(true)
+            ..setVolume(0)
+            ..play();
+          setState(() {});
+        })
+        .catchError((_) {
+          if (!mounted) return;
+          setState(() => _failed = true);
+        });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _toggleMute() {
+    final controller = _controller;
+    if (controller == null) return;
+    setState(() => _muted = !_muted);
+    controller.setVolume(_muted ? 0 : 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    final ready = controller != null && controller.value.isInitialized;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+            AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(widget.exerciseName,
+                      style: AppTypography.headlineSm,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Icon(Icons.close_rounded,
+                      size: 22, color: AppColors.onSurfaceVariant),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.inset),
+              child: AspectRatio(
+                aspectRatio: ready ? controller.value.aspectRatio : 4 / 3,
+                child: Container(
+                  color: AppColors.surfaceContainerLowest,
+                  child: !_isVideo
+                      ? Image.network(
+                          widget.url,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null
+                                  ? child
+                                  : Center(
+                                      child: SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: AppColors.accent),
+                                      ),
+                                    ),
+                          errorBuilder: (context, error, stack) => Center(
+                            child: Text('Couldn\'t load the form photo.',
+                                style: AppTypography.bodySm),
+                          ),
+                        )
+                      : _failed
+                          ? Center(
+                              child: Text('Couldn\'t load the form video.',
+                                  style: AppTypography.bodySm),
+                            )
+                          : !ready
+                              ? Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2.5, color: AppColors.accent),
+                                  ),
+                                )
+                              : GestureDetector(
+                                  onTap: () => setState(() => controller.value.isPlaying
+                                      ? controller.pause()
+                                      : controller.play()),
+                                  child: Stack(
+                                    alignment: Alignment.bottomRight,
+                                    children: [
+                                      VideoPlayer(controller),
+                                      Padding(
+                                        padding: const EdgeInsets.all(8),
+                                        child: GestureDetector(
+                                          onTap: _toggleMute,
+                                          child: Container(
+                                            width: 32,
+                                            height: 32,
+                                            alignment: Alignment.center,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: Colors.black.withOpacity(0.45),
+                                            ),
+                                            child: Icon(
+                                              _muted
+                                                  ? Icons.volume_off_rounded
+                                                  : Icons.volume_up_rounded,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A ring split into one gapped segment per set - empty until that set is
+/// logged, then sweeps to fully filled. `_logSet` only ever completes
+/// `_activeSetIndex` (the first incomplete set), so segments always fill
+/// left-to-right in set order - a single fractional "how many segments are
+/// filled" value is enough to drive every segment's fill via one implicit
+/// tween, rather than tracking each segment's own animation state.
+class _SetProgressRing extends StatelessWidget {
+  static const _size = 48.0;
+  static const _strokeWidth = 5.0;
+
+  final int totalSets;
+  final int completedSets;
+
+  const _SetProgressRing({required this.totalSets, required this.completedSets});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _size,
+      height: _size,
+      child: TweenAnimationBuilder<double>(
+        // `begin` only matters on the very first build - TweenAnimationBuilder
+        // animates from whatever value it's currently at on every later
+        // change, same convention as `RadialProgressRing`.
+        tween: Tween(begin: 0, end: completedSets.toDouble()),
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, _) => CustomPaint(
+          painter: _SegmentedRingPainter(
+            totalSegments: totalSets < 1 ? 1 : totalSets,
+            filledSegments: value,
+            strokeWidth: _strokeWidth,
+            trackColor: AppColors.surfaceContainerHighest,
+            activeColor: AppColors.accent,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentedRingPainter extends CustomPainter {
+  final int totalSegments;
+  final double filledSegments;
+  final double strokeWidth;
+  final Color trackColor;
+  final Color activeColor;
+
+  _SegmentedRingPainter({
+    required this.totalSegments,
+    required this.filledSegments,
+    required this.strokeWidth,
+    required this.trackColor,
+    required this.activeColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    // A fixed angular gap reads as clean dashes at the set counts this
+    // screen realistically shows (rarely more than 4-5) - it only starts
+    // crowding well past that, which a normal workout won't reach.
+    const gap = 0.26; // radians
+    final sweep = totalSegments == 1
+        ? 2 * math.pi - gap
+        : (2 * math.pi - gap * totalSegments) / totalSegments;
+
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    final activePaint = Paint()
+      ..color = activeColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    var start = -math.pi / 2;
+    for (var i = 0; i < totalSegments; i++) {
+      canvas.drawArc(rect, start, sweep, false, trackPaint);
+      final localFill = (filledSegments - i).clamp(0.0, 1.0);
+      if (localFill > 0) {
+        canvas.drawArc(rect, start, sweep * localFill, false, activePaint);
+      }
+      start += sweep + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SegmentedRingPainter oldDelegate) =>
+      oldDelegate.totalSegments != totalSegments ||
+      oldDelegate.filledSegments != filledSegments ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.trackColor != trackColor ||
+      oldDelegate.activeColor != activeColor;
+}
+
+/// The single active set for the current exercise - the only set this
+/// screen ever shows (see the `_activeSetIndex`-keyed `AnimatedSwitcher` in
+/// `ActiveWorkoutTrackerScreen.build`). Large and centered, in the spirit
+/// of the onboarding wheel screens' one-focal-value layout, rather than a
+/// dense multi-row table of every set at once.
+class _CurrentSetCard extends StatelessWidget {
+  final int setIndex;
+  final int totalSets;
+  final _SetDraft set;
+  final String weightUnit;
+  final double barbellStandardKg;
+  final double weightFloorKg;
+  // Whether this exercise is a confirmed-or-unknown barbell lift - the only
+  // case where a bar-plus-plates breakdown is meaningful (see
+  // `_barbellEquipment` on the parent state).
+  final bool isBarbell;
+  final bool suggestWeightIncrease;
+  final VoidCallback onLog;
+  final ValueChanged<double> onWeightDelta;
+  final ValueChanged<int> onRepsDelta;
+  final ValueChanged<double> onWeightDirectKg;
+  final ValueChanged<int> onRepsDirect;
+
+  const _CurrentSetCard({
+    super.key,
+    required this.setIndex,
+    required this.totalSets,
+    required this.set,
+    required this.weightUnit,
+    required this.barbellStandardKg,
+    required this.weightFloorKg,
+    required this.isBarbell,
+    required this.suggestWeightIncrease,
+    required this.onLog,
+    required this.onWeightDelta,
+    required this.onRepsDelta,
+    required this.onWeightDirectKg,
+    required this.onRepsDirect,
+  });
+
+  Future<void> _editWeight(BuildContext context) async {
+    final result = await _showQuickEntrySheet(
+      context,
+      title: 'Set ${setIndex + 1} weight',
+      unitSuffix: weightUnit,
+      initialValue: double.parse(_formatWeight(set.weightKg, weightUnit)),
+      step: weightUnit == 'lb' ? 5 : 2.5,
+      min: weightUnit == 'lb' ? weightFloorKg * _kgToLb : weightFloorKg,
+    );
+    if (result != null) {
+      onWeightDirectKg(weightUnit == 'lb' ? result / _kgToLb : result);
+    }
+  }
+
+  Future<void> _editReps(BuildContext context) async {
+    final result = await _showQuickEntrySheet(
+      context,
+      title: 'Set ${setIndex + 1} reps',
+      unitSuffix: 'reps',
+      initialValue: set.reps.toDouble(),
+      step: 1,
+      min: 1,
+      isWholeNumber: true,
+    );
+    if (result != null) onRepsDirect(result.round());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plates = isBarbell
+        ? _plateBreakdown(set.weightKg, barbellStandardKg, weightUnit)
+        : const <double>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('SET ${setIndex + 1} OF ',
+                style: AppTypography.labelCaps
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+            // The one place a set actually being added is visible in this
+            // current-set-only layout - the new set itself never appears on
+            // screen until it's the active one, so this count pulsing is
+            // Add Set's only on-screen feedback.
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              transitionBuilder: (child, animation) => ScaleTransition(
+                scale: Tween<double>(begin: 0.5, end: 1).animate(
+                    CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+                child: FadeTransition(opacity: animation, child: child),
+              ),
+              child: Text('$totalSets',
+                  key: ValueKey(totalSets),
+                  style: AppTypography.labelCaps
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        _BigStat(
+          value: '${_formatWeight(set.weightKg, weightUnit)} $weightUnit',
+          label: 'WEIGHT',
+          onMinus: () => onWeightDelta(-1),
+          onPlus: () => onWeightDelta(1),
+          onTap: () => _editWeight(context),
+        ),
+        if (plates.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+              'Per side: ${plates.map((p) => p % 1 == 0 ? p.toStringAsFixed(0) : p.toStringAsFixed(2)).join(' + ')} $weightUnit',
+              style: AppTypography.labelSm
+                  .copyWith(color: AppColors.onSurfaceVariant)),
+        ],
+        if (suggestWeightIncrease) ...[
+          const SizedBox(height: AppSpacing.xs),
+          // Minimalist by design: a quiet inline hint, not a dialog or
+          // banner - the last set already cleared the rep ceiling, so this
+          // is a nudge to go up, not a decision that needs confirming.
+          GestureDetector(
+            onTap: () => onWeightDelta(1),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm, vertical: AppSpacing.xxs),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.trending_up_rounded,
+                      size: 14, color: AppColors.accent),
+                  const SizedBox(width: AppSpacing.xxs),
+                  Text('Last set was easy - try going heavier',
+                      style: AppTypography.labelSm
+                          .copyWith(color: AppColors.accent)),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.lg),
+        _BigStat(
+          value: '${set.reps} reps',
+          label: 'REPS',
+          onMinus: () => onRepsDelta(-1),
+          onPlus: () => onRepsDelta(1),
+          onTap: () => _editReps(context),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            label: 'Log Set',
+            icon: Icons.check_rounded,
+            height: 56,
+            onPressed: onLog,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown once every set in the exercise is logged, in place of
+/// `_CurrentSetCard` - there's no "current set" left to display, just a
+/// quiet confirmation until the user adds another set or moves on via the
+/// bottom "Finish Exercise"/"Finish Workout" button.
+class _ExerciseCompleteCard extends StatelessWidget {
+  final int totalSets;
+
+  const _ExerciseCompleteCard({super.key, required this.totalSets});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(Icons.check_circle_rounded, size: 56, color: AppColors.accent),
+        const SizedBox(height: AppSpacing.md),
+        Text('All $totalSets sets logged', style: AppTypography.headlineSm),
+        const SizedBox(height: AppSpacing.xxs),
+        Text('Add another set, or move on when you\'re ready.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMd
+                .copyWith(color: AppColors.onSurfaceVariant)),
+      ],
+    );
+  }
+}
+
+/// One big, centered, tap-to-edit stat (weight or reps) for the current
+/// set - the flanking +/- controls nudge it, tapping the value itself opens
+/// a quick numeric-entry sheet for typing an exact number. Deliberately
+/// large: with only one set ever on screen at a time, this is the page's
+/// single focal control rather than one line in a dense table.
+class _BigStat extends StatelessWidget {
+  final String value;
+  final String label;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+  final VoidCallback onTap;
+
+  const _BigStat({
+    required this.value,
+    required this.label,
+    required this.onMinus,
+    required this.onPlus,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _StepperButton(icon: Icons.remove_rounded, onTap: onMinus, size: 44),
+        Expanded(
+          child: GestureDetector(
+            onTap: onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(value,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.displayStatMobile),
+                const SizedBox(height: 2),
+                Text(label,
+                    style: AppTypography.labelCaps
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ),
+        _StepperButton(icon: Icons.add_rounded, onTap: onPlus, size: 44),
+      ],
+    );
+  }
+}
+
+class _StepperButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final double size;
+
+  const _StepperButton({required this.icon, this.onTap, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            },
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: onTap == null
+              ? Colors.transparent
+              : AppColors.surfaceContainer,
+        ),
+        child: Icon(icon,
+            size: size * 0.44,
+            color: onTap == null
+                ? AppColors.onSurfaceVariant.withOpacity(0.4)
+                : AppColors.onSurface),
+      ),
+    );
+  }
+}
+
+/// Opens a compact bottom sheet for typing a weight or rep count directly
+/// instead of tapping +/- repeatedly to reach it - e.g. jumping straight to
+/// 60 kg rather than 16 taps from the bar. Returns the confirmed value in
+/// whatever unit [unitSuffix] names, or null if the sheet was dismissed.
+Future<double?> _showQuickEntrySheet(
+  BuildContext context, {
+  required String title,
+  required String unitSuffix,
+  required double initialValue,
+  required double step,
+  required double min,
+  bool isWholeNumber = false,
+}) {
+  final controller = TextEditingController(
+      text: isWholeNumber
+          ? initialValue.round().toString()
+          : (initialValue % 1 == 0
+              ? initialValue.toStringAsFixed(0)
+              : initialValue.toStringAsFixed(1)));
+
+  return showModalBottomSheet<double>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surfaceContainer,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+    builder: (sheetContext) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+            AppSpacing.marginMobile,
+            AppSpacing.marginMobile,
+            AppSpacing.marginMobile,
+            AppSpacing.md + MediaQuery.of(sheetContext).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: AppTypography.headlineSm),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: TextInputType.numberWithOptions(
+                        decimal: !isWholeNumber),
+                    textAlign: TextAlign.center,
+                    style: AppTypography.displayStatMobile,
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      filled: true,
+                      fillColor: AppColors.surfaceContainerHighest,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.inset),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.inset),
+                        borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: Text(unitSuffix,
+                      style: AppTypography.bodyLg
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            PrimaryPillButton(
+              label: 'Set',
+              onPressed: () {
+                final parsed = double.tryParse(controller.text.trim());
+                if (parsed == null) {
+                  Navigator.of(sheetContext).pop();
+                  return;
+                }
+                final clamped = parsed < min ? min : parsed;
+                Navigator.of(sheetContext).pop(clamped);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+

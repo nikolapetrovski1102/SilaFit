@@ -1,0 +1,28 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+*.g.dart
+*.freezed.dart
+
+# Generated native scaffolding (created by `flutter create .`)
+android/
+ios/
+macos/
+linux/
+windows/
+web/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Misc
+.DS_Store
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+coverage/

@@ -1,0 +1,47 @@
+services:
+  silen-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: silen-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Silen_Dev_Passw0rd!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "14330:1433"
+    volumes:
+      - silen-sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  silen-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: silen-api
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      # This compose file is the local dev stack (see the dev SA password
+      # above, and the local-only secrets note below) - without this, the
+      # API defaults to the Production environment and silently never loads
+      # appsettings.Development.json, which is where FeatureFlags:DevTiersFree
+      # and the real AppleAuth bundle-id client id live.
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=Silen_Dev_Passw0rd!;TrustServerCertificate=True;"
+      # Jwt:Issuer/Audience/SigningKey are intentionally not overridden here -
+      # they're picked up from appsettings.Development.json (loaded above via
+      # ASPNETCORE_ENVIRONMENT) so dotnet run and docker compose up always
+      # sign/validate with the same key. Update the key there, not here.
+      # Real values come from a local, gitignored .env at the repo root (Compose
+      # auto-substitutes ${VAR} from it) - never commit real values here.
+      OpenRouter__ApiKey: "${OPENROUTER_API_KEY}"
+      GoogleAuth__ClientIds__0: "${GOOGLE_WEB_CLIENT_ID}"
+    ports:
+      - "5080:8080"
+
+volumes:
+  silen-sqldata:

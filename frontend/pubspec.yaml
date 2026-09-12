@@ -1,0 +1,128 @@
+name: silafit
+description: SilaFit - AI-assisted fitness tracker (Kinetic Pulse design system).
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking
+  http: ^1.2.2
+
+  # State management - simple ChangeNotifier + Provider, no code-gen required.
+  provider: ^6.1.2
+
+  # Local persistence: device id + JWT session (shared across the app,
+  # see lib/core/session/session_store.dart - the single source of truth
+  # every feature reads from, no per-feature duplicate storage).
+  shared_preferences: ^2.3.2
+
+  # Stable per-install device id used for the device-id login flow.
+  uuid: ^4.5.1
+
+  intl: ^0.19.0
+
+  # Identity providers required by the spec: Google, Apple, email, device-id.
+  google_sign_in: ^6.2.1
+  sign_in_with_apple: ^6.1.3
+  crypto: ^3.0.5
+
+  # Progress screen's 1RM trend line chart (bezier smoothing, gradient fill,
+  # tap tooltips) - the one deliberate exception to this codebase's
+  # hand-roll-everything animation convention; reproducing bezier
+  # interpolation + hit-testing + tooltip positioning by hand would be a
+  # large, bug-prone undertaking for no real benefit over an MIT-licensed,
+  # actively-maintained, idiomatic Flutter chart package.
+  fl_chart: ^0.69.2
+
+  # Real OS notification-permission prompt on the onboarding flow's final
+  # screen - no existing dependency covers this.
+  permission_handler: ^11.3.1
+
+  # Active Workout Tracker's per-exercise form-demo video sheet - plays
+  # `Exercise.DemoVideoUrl` (a plain hosted mp4). Official Flutter-team
+  # package; no hand-rolled platform channel exists for this.
+  video_player: ^2.9.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
+
+flutter:
+  uses-material-design: true
+
+  # Kinetic Pulse brand imagery - the SilaFit mark plus the Stitch mockup
+  # photography used for the Today hero card, Split cards, and profile
+  # avatar placeholder (see lib/core/theme/app_images.dart).
+  assets:
+    - assets/branding/
+    - assets/mascot/
+
+  # Hanken Grotesk (Precision Kinetic type scale, see
+  # lib/core/theme/app_typography.dart) bundled locally instead of fetched
+  # over the network via google_fonts - avoids the startup/jank hit of
+  # downloading the font on a cold cache. One variable-font file covers every
+  # weight the app uses (400/500/600); Flutter picks the matching instance
+  # per `weight:` entry below.
+  fonts:
+    - family: HankenGrotesk
+      fonts:
+        - asset: assets/fonts/HankenGrotesk-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/HankenGrotesk-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/HankenGrotesk-Variable.ttf
+          weight: 600
+
+# --- flutter_launcher_icons: generates the real app-store/launcher icons
+# from the SilaFit mark for every platform. `image_path` is the flattened
+# mark on white (used as-is for iOS, which doesn't want transparency);
+# `adaptive_icon_*` gives Android's adaptive-icon system a transparent
+# foreground so it isn't clipped by the circular/squircle/rounded masks.
+# Run: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/branding/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#f5fbf5"
+  adaptive_icon_foreground: "assets/branding/app_icon_adaptive_fg.png"
+  web:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    background_color: "#f5fbf5"
+    theme_color: "#f77e2d"
+  macos:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+
+# --- flutter_native_splash: the native (pre-Flutter-engine) splash screen,
+# shown instantly on cold start before AppColors/ThemeMode can even run -
+# so it needs its own explicit light/dark background pair. Colors mirror
+# AppColors.background in each mode; the transparent-background mark reads
+# correctly on both. Run: dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#f5fbf5"
+  color_dark: "#0f1512"
+  image: "assets/branding/app_icon_transparent.png"
+  # The iOS target was renamed from Runner to SilaFit, so its Info.plist
+  # moved out of the tool's default `ios/Runner/Info.plist` path.
+  info_plist_files:
+    - "ios/SilaFit/Info.plist"
+  image_dark: "assets/branding/app_icon_transparent.png"
+  android_12:
+    color: "#f5fbf5"
+    color_dark: "#0f1512"
+    image: "assets/branding/app_icon_adaptive_fg.png"
+    image_dark: "assets/branding/app_icon_adaptive_fg.png"
+  web: false

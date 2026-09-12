@@ -1,0 +1,11 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.nikolapetrovski.silafit",
+      "sha256_cert_fingerprints":
+        ["0C:85:94:EB:03:A0:9C:C9:0E:DA:C9:BA:49:CC:5C:98:3B:AB:BE:CD:A7:05:07:69:BB:10:8C:2D:09:A7:26:29"]
+    }
+  }
+]
