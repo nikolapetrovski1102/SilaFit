@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SilaFit Admin — Precision Kinetic Console</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/admin.css" />
+  <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) { /* private mode */ }
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- Mobile sidebar overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="admin-shell">
+
+    <!-- ================= Sidebar ================= -->
+    <aside class="sidebar" id="sidebar">
+      <a class="sidebar__logo" href="index.html">
+        <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit" />
+        SilaFit
+        <span class="chip chip--accent">Admin</span>
+      </a>
+
+      <div class="sidebar__label">Manage</div>
+      <button class="side-link is-active" data-view="overview" id="navOverview">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
+        Overview
+      </button>
+      <button class="side-link" data-view="mealPlans" id="navMealPlans">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3M4 3h16M8 16l1.5 5M16 16l-1.5 5M12 12v4"/></svg>
+        Meal Plans <span class="count" id="countMealPlans"></span>
+      </button>
+      <button class="side-link" data-view="suggestions" id="navSuggestions">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 3Zm-3 17h6"/></svg>
+        Meal Suggestions <span class="count" id="countSuggestions"></span>
+      </button>
+      <button class="side-link" data-view="exercises" id="navExercises">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/></svg>
+        Exercises <span class="count" id="countExercises"></span>
+      </button>
+      <button class="side-link" data-view="plans" id="navPlans">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 2.4 7.2H22l-6 4.6 2.3 7.2-6.3-4.5-6.3 4.5L8 13.8 2 9.2h7.6L12 2Z"/></svg>
+        Subscription Plans <span class="count" id="countPlans"></span>
+      </button>
+
+      <div class="sidebar__label">People</div>
+      <button class="side-link" data-view="users" id="navUsers">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 7M21 20c0-2.5-1.5-4.6-3.7-5.5"/></svg>
+        Users <span class="count" id="countUsers"></span>
+      </button>
+
+      <div class="sidebar__label">System</div>
+      <button class="side-link" data-view="settings" id="navSettings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.06-.4.1-.8.1-1.2Z"/></svg>
+        Settings
+      </button>
+      <a class="side-link" href="index.html" id="navLiveSite">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
+        View live site
+      </a>
+      <button class="side-link" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="theme-toggle__sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+        <svg class="theme-toggle__moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+        <span data-theme-toggle-label>Light mode</span>
+      </button>
+
+      <div class="sidebar__footer">
+        <!-- Filled in from the API session in js/admin-session.js -->
+        <div class="sidebar__user" role="group" aria-label="Signed-in console operator">
+          <div class="sidebar__avatar"><img src="assets/img/branding/profile_avatar.png" alt="" /></div>
+          <div style="flex:1;min-width:0;">
+            <div class="label-sm" style="color:var(--high-emphasis);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-session-username>Checking session…</div>
+            <div class="body-sm" style="font-size:11px;" data-session-expiry>two-factor session</div>
+          </div>
+          <div class="sidebar__status" title="Signed in"></div>
+        </div>
+        <button class="btn btn--secondary btn--sm" type="button" data-sign-out style="width:100%;margin-top:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l-5-5 5-5M5 12h12" transform="scale(-1,1) translate(-24,0)"/></svg>
+          Sign out
+        </button>
+      </div>
+    </aside>
+
+    <!-- ================= Main ================= -->
+    <main class="main">
+
+      <!-- Shown only when the API can't confirm the session (offline/5xx). A 401
+           never gets here — js/admin-session.js sends the browser to the login page. -->
+      <div class="session-warning" id="sessionWarning" role="status" hidden></div>
+
+      <!-- ======= Overview ======= -->
+      <section class="view is-active" id="view-overview">
+        <div class="topbar">
+          <button class="admin-menu-btn" id="menuBtn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Overview</h1>
+            <div class="sub" id="overviewDate"></div>
+          </div>
+          <div class="topbar__actions">
+            <a class="btn btn--secondary btn--sm" href="index.html" id="topLiveSiteBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
+              Live site
+            </a>
+            <button class="btn btn--primary btn--sm" data-goto="mealPlans" data-open-create="mealPlan" id="newMealPlanBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New meal plan
+            </button>
+          </div>
+        </div>
+
+        <div class="view-body">
+          <div class="stat-grid">
+            <div class="card stat-card" id="statCardUsers">
+              <div class="stat-card__head">
+                <span class="eyebrow">Total users</span>
+                <div class="stat-card__icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 7"/></svg>
+                </div>
+              </div>
+              <div class="stat-card__value" id="statUsers">–</div>
+              <div class="stat-card__delta up">▲ 12% this month</div>
+            </div>
+            <div class="card stat-card stat-card--gold" id="statCardSubs">
+              <div class="stat-card__head">
+                <span class="eyebrow">Paid subscribers</span>
+                <div class="stat-card__icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 2.4 7.2H22l-6 4.6 2.3 7.2-6.3-4.5-6.3 4.5L8 13.8 2 9.2h7.6L12 2Z"/></svg>
+                </div>
+              </div>
+              <div class="stat-card__value" id="statSubs">–</div>
+              <div class="stat-card__delta up">▲ 8% this month</div>
+            </div>
+            <div class="card stat-card" id="statCardMeals">
+              <div class="stat-card__head">
+                <span class="eyebrow">Meals in library</span>
+                <div class="stat-card__icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3M4 3h16M12 12v9"/></svg>
+                </div>
+              </div>
+              <div class="stat-card__value" id="statMeals">–</div>
+              <div class="stat-card__delta neutral" id="statMealsDelta"></div>
+            </div>
+            <div class="card stat-card" id="statCardMrr">
+              <div class="stat-card__head">
+                <span class="eyebrow">MRR</span>
+                <div class="stat-card__icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>
+                </div>
+              </div>
+              <div class="stat-card__value" id="statMrr">–</div>
+              <div class="stat-card__delta up">▲ 15% this month</div>
+            </div>
+          </div>
+
+          <div class="panel-grid">
+            <div class="card">
+              <div class="panel-head">
+                <div>
+                  <div class="headline-sm">Workouts logged</div>
+                  <div class="body-sm">Last 12 weeks · all users</div>
+                </div>
+                <span class="chip chip--accent">
+                  <svg width="8" height="8" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor" opacity="0.7"/></svg>
+                  Live
+                </span>
+              </div>
+              <div class="bar-chart" id="workoutChart"></div>
+              <div class="chart-legend">
+                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--accent)"></div>Current week</div>
+                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--surface-highest)"></div>Previous weeks</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-head">
+                <div class="headline-sm">Recent activity</div>
+                <button class="btn btn--ghost btn--sm" style="font-size:12px;height:30px;padding:0 12px;">View all</button>
+              </div>
+              <div class="activity-list" id="activityList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======= Meal Plans ======= -->
+      <section class="view" id="view-mealPlans">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Meal Plans</h1>
+            <div class="sub">Weekly templates users can adopt — 7 days × 4 meal slots, macro-targeted.</div>
+          </div>
+          <div class="topbar__actions">
+            <div class="filter-pills" id="mealPlanFilters"></div>
+            <button class="btn btn--primary btn--sm" data-open-create="mealPlan" id="createMealPlanBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New plan
+            </button>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="plan-grid" id="mealPlanGrid"></div>
+        </div>
+      </section>
+
+      <!-- ======= Meal Suggestions ======= -->
+      <section class="view" id="view-suggestions">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Meal Suggestions</h1>
+            <div class="sub">The rotating library behind the app's "Suggested this month" strip and the landing page.</div>
+          </div>
+          <div class="topbar__actions">
+            <div class="search-box">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input class="input" id="suggestionSearch" placeholder="Search meals…" />
+            </div>
+            <select class="select" id="suggestionMonthFilter" style="width:140px;height:38px;font-size:13px;"></select>
+            <button class="btn btn--primary btn--sm" data-open-create="suggestion" id="createSuggestionBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New suggestion
+            </button>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="card table-card">
+            <div class="table-scroll">
+              <table class="data" id="suggestionsTable"></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======= Exercises ======= -->
+      <section class="view" id="view-exercises">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Exercises</h1>
+            <div class="sub">Reference library used by every split and the active workout tracker.</div>
+          </div>
+          <div class="topbar__actions">
+            <div class="search-box">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input class="input" id="exerciseSearch" placeholder="Search exercises…" />
+            </div>
+            <select class="select" id="exerciseMuscleFilter" style="width:140px;height:38px;font-size:13px;"></select>
+            <button class="btn btn--primary btn--sm" data-open-create="exercise" id="createExerciseBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New exercise
+            </button>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="card table-card">
+            <div class="table-scroll">
+              <table class="data" id="exercisesTable"></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======= Subscription Plans ======= -->
+      <section class="view" id="view-plans">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Subscription Plans</h1>
+            <div class="sub">Pricing and feature lists — rendered live on the marketing site's pricing section.</div>
+          </div>
+          <div class="topbar__actions">
+            <button class="btn btn--primary btn--sm" data-open-create="plan" id="createPlanBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New plan
+            </button>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="subplan-grid" id="subPlanGrid"></div>
+        </div>
+      </section>
+
+      <!-- ======= Users ======= -->
+      <section class="view" id="view-users">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Users</h1>
+            <div class="sub">Registered athletes and their subscription status.</div>
+          </div>
+          <div class="topbar__actions">
+            <div class="search-box">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input class="input" id="userSearch" placeholder="Search users…" />
+            </div>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="user-kpi-row" id="userKpiRow"></div>
+          <div class="card table-card">
+            <div class="table-scroll">
+              <table class="data" id="usersTable"></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======= Settings ======= -->
+      <section class="view" id="view-settings">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Settings</h1>
+            <div class="sub">Store management, publishing controls, and danger zone.</div>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="panel-grid">
+            <div class="card">
+              <div class="headline-sm" style="margin-bottom:20px;">Content &amp; publishing</div>
+              <div class="settings-section">
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Publish suggestions to landing page</div>
+                    <div class="settings-row__desc">The "Suggested this month" strip reads this store directly. Disable to hide all suggestions from the public site.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" checked id="settingPublishSuggestions" /><span class="track"></span></label>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Publish meal plans to app</div>
+                    <div class="settings-row__desc">Published plans appear in the app's nutrition tab for all users to adopt.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" checked id="settingPublishPlans" /><span class="track"></span></label>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Email weekly content reports</div>
+                    <div class="settings-row__desc">Summary of plan adoptions and suggestion engagement sent every Monday.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="settingEmailReports" /><span class="track"></span></label>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Show AI analytics to Pro users</div>
+                    <div class="settings-row__desc">Monthly AI-generated training reports visible in the Pro tier dashboard.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" checked id="settingAiReports" /><span class="track"></span></label>
+                </div>
+              </div>
+
+              <div class="headline-sm" style="margin-bottom:12px;">Console access</div>
+              <div class="settings-section">
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Signed in as <span data-session-username>…</span></div>
+                    <div class="settings-row__desc" data-session-expiry>Confirming session…</div>
+                  </div>
+                  <button class="btn btn--secondary btn--sm" type="button" data-sign-out>Sign out</button>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Sign out everywhere</div>
+                    <div class="settings-row__desc">Revokes every console session for this operator, on every device — including any tab you no longer have open.</div>
+                  </div>
+                  <button class="btn btn--danger btn--sm" type="button" data-sign-out-everywhere>Revoke all sessions</button>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row__info">
+                    <div class="settings-row__title">Access is enforced by the API</div>
+                    <div class="settings-row__desc">This page is only served at all when the request carries a valid two-factor session; the password and authenticator code are checked server-side against a PBKDF2 hash and a TOTP secret, never in the browser.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="headline-sm" style="margin-bottom:12px;color:var(--error);">Danger zone</div>
+              <p class="body-sm" style="margin-bottom:16px;line-height:19px;">
+                Reset every collection back to the factory seed data from the SQL seeds. All custom edits will be permanently lost. This cannot be undone.
+              </p>
+              <button class="btn btn--danger btn--sm" id="resetStoreBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Reset to seed data
+              </button>
+            </div>
+            <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;">
+              <img src="assets/img/mascot/resting.png" alt="Mascot resting" style="width:120px;opacity:0.88;" />
+              <div class="headline-sm">Everything looks good.</div>
+              <p class="body-sm" style="max-width:220px;line-height:18px;">
+                The mascot rests while the system hums. All content is persisted locally and renders live on the marketing site.
+              </p>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite;"></div>
+                <span class="body-sm" style="color:var(--accent);font-weight:600;">Store healthy</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+  <div id="modalRoot"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/admin-auth.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/admin.js"></script>
+  <!-- After admin.js: it only decorates the console, and it must not delay rendering. -->
+  <script src="js/admin-session.js"></script>
+</body>
+</html>

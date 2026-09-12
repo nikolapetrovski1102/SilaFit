@@ -1,0 +1,523 @@
+/* ============================================================
+   SilaFit — Precision Kinetic base layer
+   Mirrors frontend/lib/core/theme/{app_colors,app_spacing,
+   app_typography}.dart. Dark mode is the app's default, so the
+   site is dark-first; light mode mirrors AppPalette.light (warm
+   cream surfaces, deep burgundy accent, mustard secondary) so the
+   two products stay in sync. Depth comes purely from
+   surface-container layering — deliberately flat, no shadows, no
+   hairline borders.
+
+   Every colour lives in one of the two token blocks below: the
+   dark values sit on :root, and [data-theme="light"] overrides
+   them. The active theme is stamped on <html> by the inline
+   bootstrap in each page's <head> (localStorage → OS preference →
+   dark) and toggled by js/theme.js, so rules never need to know
+   which mode is active — they just consume tokens.
+   ============================================================ */
+
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('../assets/fonts/HankenGrotesk-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces (AppPalette.dark) */
+  --background: #0f1512;
+  --surface-lowest: #0a0f0d;
+  --surface-low: #171d1a;
+  --surface: #1b211e;
+  --surface-high: #252b28;
+  --surface-highest: #303633;
+  --surface-bright: #343b37;
+
+  /* Text */
+  --on-surface: #dee4df;
+  --on-surface-variant: #c6c9af;
+  --high-emphasis: #ffffff;
+  --outline: #8f937b;
+  --outline-variant: #454935;
+
+  /* Lime accent (Precision Kinetic primary) */
+  --accent: #d0f043;
+  --on-accent: #1d2900;
+  --accent-container: #d0f043;
+  --on-accent-container: #3a4a00;
+  --accent-dim: rgba(208, 240, 67, 0.14);
+
+  /* Gold secondary (Pro tier) */
+  --secondary: #e6c367;
+  --secondary-container: #735800;
+  --on-secondary-container: #f6d173;
+  --secondary-dim: rgba(230, 195, 103, 0.14);
+
+  /* Tertiary pale blue (carbs) */
+  --tertiary-container: #c7e7fa;
+  --tertiary: #c7e7fa;
+  --tertiary-dim: rgba(199, 231, 250, 0.12);
+
+  /* Status */
+  --error: #ffb4ab;
+  --error-dim: rgba(255, 180, 171, 0.12);
+  --error-dim-strong: rgba(255, 180, 171, 0.2);
+
+  /* Macro bar triad — mirrors the app's protein/carbs/fats colours */
+  --macro-protein: #d0f043;
+  --macro-carbs: #c7e7fa;
+  --macro-fats: #e6c367;
+
+  /* Chrome: sticky nav, admin topbar, table headers */
+  --chrome-bg: rgba(15, 21, 18, 0.72);
+  --chrome-bg-solid: rgba(10, 15, 13, 0.9);
+  --chrome-border: rgba(208, 240, 67, 0.06);
+  --chrome-border-strong: rgba(208, 240, 67, 0.08);
+  --chrome-shadow: 0 1px 0 rgba(208, 240, 67, 0.08);
+  --menu-bg: rgba(27, 33, 30, 0.97);
+  --topbar-bg: rgba(15, 21, 18, 0.6);
+  --th-bg: rgba(23, 29, 26, 0.6);
+  --row-hover: rgba(37, 43, 40, 0.35);
+  --hover-tint: rgba(255, 255, 255, 0.04);
+
+  /* Floating glass panels (hero cards) */
+  --glass-bg: rgba(37, 43, 40, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Overlays */
+  --scrim: rgba(10, 15, 13, 0.78);
+  --overlay-scrim: rgba(10, 15, 13, 0.6);
+  --sidebar-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+
+  /* Accent shades that aren't 1:1 with the palette roles */
+  --accent-hover: #ddf564;
+  --accent-gradient: linear-gradient(135deg, #d0f043 0%, #a8d000 100%);
+  --accent-edge: rgba(208, 240, 67, 0.12);
+  --accent-hairline: rgba(208, 240, 67, 0.08);
+  --accent-hairline-strong: rgba(208, 240, 67, 0.2);
+  --accent-soft: rgba(208, 240, 67, 0.4);
+  --accent-wash: rgba(208, 240, 67, 0.04);
+  --accent-glow: rgba(208, 240, 67, 0.5);
+  --secondary-edge: rgba(230, 195, 103, 0.15);
+  --secondary-hairline: rgba(230, 195, 103, 0.25);
+  --card-shadow-featured: 0 0 0 1px rgba(230, 195, 103, 0.25), 0 32px 64px rgba(0, 0, 0, 0.3);
+
+  /* Mock device frames + photography treatments */
+  --phone-ring: 0 0 0 1px rgba(208, 240, 67, 0.08);
+  --phone-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+  --phone-glow: 0 0 60px rgba(208, 240, 67, 0.06);
+  --carousel-shadow: 0 0 0 1px rgba(208, 240, 67, 0.06), 0 32px 64px rgba(0, 0, 0, 0.5);
+  --shot-fade: rgba(15, 21, 18, 0.7);
+
+  /* Ambient blooms + hero glow */
+  --bloom-primary: rgba(208, 240, 67, 0.07);
+  --bloom-secondary: rgba(230, 195, 103, 0.06);
+  --bloom-tertiary: rgba(199, 231, 250, 0.05);
+  --hero-glow-1: rgba(208, 240, 67, 0.05);
+  --hero-glow-2: rgba(230, 195, 103, 0.04);
+
+  /* Text/controls sitting on top of the accent (CTA banner) */
+  --on-accent-muted: rgba(29, 41, 0, 0.7);
+  --on-accent-hover: #141f00;
+  --on-accent-dim: rgba(0, 0, 0, 0.15);
+
+  /* Radius (AppRadius) */
+  --r-card: 18px;
+  --r-inset: 12px;
+  --r-pill: 9999px;
+
+  /* Spacing (AppSpacing) */
+  --sp-xxs: 4px;
+  --sp-xs: 8px;
+  --sp-sm: 12px;
+  --sp-md: 16px;
+  --sp-lg: 20px;
+  --sp-xl: 24px;
+  --sp-xxl: 32px;
+  --sp-xxxl: 40px;
+
+  --font: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+}
+
+/* ------------------------------------------------------------
+   Light mode — AppPalette.light. Light mode never puts light text
+   on a bright fill: the accent becomes a deep burgundy and text
+   sits on cream, exactly like the app's light theme.
+   ------------------------------------------------------------ */
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces (AppPalette.light) */
+  --background: #f5eedd;
+  --surface-lowest: #ffffff;
+  --surface-low: #efe6d0;
+  --surface: #e8dcc0;
+  --surface-high: #dccda9;
+  --surface-highest: #cbb98f;
+  --surface-bright: #ffffff;
+
+  /* Text */
+  --on-surface: #241b12;
+  /* AppPalette.light ships #6e624a, which measures 4.40:1 as body copy on
+     --surface. Two shades deeper clears 4.5:1 there and on --surface-low
+     without a visible difference next to the app. */
+  --on-surface-variant: #6c6048;
+  --high-emphasis: #1a130c;
+  /* AppPalette.light ships #a0916d here, but the site spends this
+     token on small muted text, where #a0916d only manages ~2.7:1
+     on cream — darkened to clear 4.5:1. */
+  --outline: #7a6a43;
+  --outline-variant: #e1d3ae;
+
+  /* Burgundy accent (light-mode primary) */
+  --accent: #800020;
+  --on-accent: #fbefe2;
+  --accent-container: #f0d9dd;
+  --on-accent-container: #800020;
+  --accent-dim: rgba(128, 0, 32, 0.1);
+
+  /* Mustard secondary */
+  --secondary: #8a5a12;
+  --secondary-container: #f5c463;
+  --on-secondary-container: #3f2600;
+  --secondary-dim: rgba(138, 90, 18, 0.12);
+
+  /* Tertiary blue (carbs) */
+  --tertiary-container: #c7e7fa;
+  --tertiary: #14607f;
+  --tertiary-dim: rgba(20, 96, 127, 0.12);
+
+  /* Status */
+  --error: #ba1a1a;
+  --error-dim: rgba(186, 26, 26, 0.1);
+  --error-dim-strong: rgba(186, 26, 26, 0.18);
+
+  /* Macro bars keep the app's trio in dark; on cream they need
+     deeper fills to stay legible, so protein follows the burgundy
+     accent and carbs/fats take mid-tone counterparts. */
+  --macro-protein: #800020;
+  --macro-carbs: #2e7d9a;
+  --macro-fats: #8a5a12;
+
+  /* Chrome */
+  --chrome-bg: rgba(245, 238, 221, 0.82);
+  --chrome-bg-solid: rgba(245, 238, 221, 0.94);
+  --chrome-border: rgba(128, 0, 32, 0.12);
+  --chrome-border-strong: rgba(128, 0, 32, 0.18);
+  --chrome-shadow: 0 1px 0 rgba(128, 0, 32, 0.12);
+  --menu-bg: rgba(245, 238, 221, 0.98);
+  --topbar-bg: rgba(245, 238, 221, 0.7);
+  --th-bg: rgba(239, 230, 208, 0.9);
+  --row-hover: rgba(203, 185, 143, 0.35);
+  --hover-tint: rgba(26, 19, 12, 0.05);
+
+  /* Floating glass panels */
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(26, 19, 12, 0.08);
+  --glass-shadow: 0 8px 24px rgba(26, 19, 12, 0.14);
+
+  /* Overlays */
+  --scrim: rgba(36, 27, 18, 0.45);
+  --overlay-scrim: rgba(36, 27, 18, 0.35);
+  --sidebar-shadow: 4px 0 24px rgba(26, 19, 12, 0.18);
+
+  /* Accent shades */
+  --accent-hover: #9c0a2c;
+  --accent-gradient: linear-gradient(135deg, #800020 0%, #b01b3e 100%);
+  --accent-edge: rgba(128, 0, 32, 0.22);
+  --accent-hairline: rgba(128, 0, 32, 0.14);
+  --accent-hairline-strong: rgba(128, 0, 32, 0.28);
+  --accent-soft: rgba(128, 0, 32, 0.45);
+  --accent-wash: rgba(128, 0, 32, 0.045);
+  --accent-glow: rgba(128, 0, 32, 0.35);
+  --secondary-edge: rgba(138, 90, 18, 0.22);
+  --secondary-hairline: rgba(138, 90, 18, 0.35);
+  --card-shadow-featured: 0 0 0 1px rgba(138, 90, 18, 0.35), 0 24px 48px rgba(26, 19, 12, 0.12);
+
+  /* Mock device frames + photography treatments */
+  --phone-ring: 0 0 0 1px rgba(128, 0, 32, 0.14);
+  --phone-shadow: 0 32px 64px rgba(26, 19, 12, 0.2);
+  --phone-glow: 0 0 60px rgba(128, 0, 32, 0.06);
+  --carousel-shadow: 0 0 0 1px rgba(128, 0, 32, 0.1), 0 28px 56px rgba(26, 19, 12, 0.18);
+  --shot-fade: rgba(245, 238, 221, 0.7);
+
+  /* Ambient blooms + hero glow */
+  --bloom-primary: rgba(128, 0, 32, 0.05);
+  --bloom-secondary: rgba(138, 90, 18, 0.05);
+  --bloom-tertiary: rgba(20, 96, 127, 0.05);
+  --hero-glow-1: rgba(128, 0, 32, 0.05);
+  --hero-glow-2: rgba(138, 90, 18, 0.05);
+
+  /* Text/controls on top of the accent */
+  --on-accent-muted: rgba(251, 239, 226, 0.78);
+  --on-accent-hover: #ffffff;
+  --on-accent-dim: rgba(255, 255, 255, 0.18);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--background);
+  color: var(--on-surface);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100%; display: block; }
+a { color: inherit; text-decoration: none; }
+button { font-family: var(--font); cursor: pointer; }
+input, select, textarea { font-family: var(--font); }
+::selection { background: var(--accent); color: var(--on-accent); }
+
+/* ---------- Type scale (AppTypography) ---------- */
+.eyebrow {
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+.eyebrow--accent { color: var(--accent); }
+
+.display {
+  font-size: clamp(42px, 6.5vw, 76px);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  color: var(--high-emphasis);
+}
+
+.headline-lg { font-size: 28px; line-height: 34px; letter-spacing: -0.02em; font-weight: 600; color: var(--high-emphasis); }
+.headline-md { font-size: 22px; line-height: 28px; letter-spacing: -0.015em; font-weight: 600; color: var(--high-emphasis); }
+.headline-sm { font-size: 18px; line-height: 24px; letter-spacing: -0.01em; font-weight: 600; color: var(--high-emphasis); }
+.body-md      { font-size: 14px; line-height: 20px; font-weight: 400; color: var(--on-surface); }
+.body-sm      { font-size: 13px; line-height: 18px; font-weight: 400; color: var(--on-surface-variant); }
+.label-sm     { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--on-surface); }
+
+.stat {
+  font-size: 48px;
+  line-height: 52px;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--high-emphasis);
+}
+
+/* ---------- Buttons (SilenButton.dart) ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: transform 120ms ease, background-color 160ms ease, opacity 160ms ease;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(0.98); }
+
+.btn--primary { background: var(--accent); color: var(--on-accent); }
+.btn--primary:hover { background: var(--accent-hover); }
+
+.btn--secondary { background: var(--surface-high); color: var(--on-surface); }
+.btn--secondary:hover { background: var(--surface-highest); }
+
+.btn--ghost { background: transparent; color: var(--on-surface-variant); }
+.btn--ghost:hover { color: var(--high-emphasis); background: var(--surface-low); }
+
+.btn--danger { background: var(--error-dim); color: var(--error); }
+.btn--danger:hover { background: var(--error-dim-strong); }
+
+.btn--sm { height: 36px; padding: 0 16px; font-size: 13px; font-weight: 600; }
+.btn--lg { height: 56px; padding: 0 36px; font-size: 17px; gap: 10px; }
+
+.btn[disabled] { opacity: 0.5; pointer-events: none; }
+
+/* Focus visible styles */
+.btn:focus-visible, .side-link:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Theme toggle ---------- */
+.theme-toggle {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-high);
+  color: var(--on-surface-variant);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.theme-toggle:hover { background: var(--surface-highest); color: var(--high-emphasis); }
+.theme-toggle svg { display: block; }
+
+/* Show the mode you'd switch to: sun on dark, moon on light. */
+[data-theme="dark"] .theme-toggle__moon { display: none; }
+[data-theme="light"] .theme-toggle__sun { display: none; }
+
+/* ---------- Cards (SectionCard) ---------- */
+.card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  padding: var(--sp-lg);
+}
+.card--low   { background: var(--surface-low); }
+.card--high  { background: var(--surface-high); }
+.card--lowest{ background: var(--surface-lowest); }
+
+/* ---------- Chips / pills ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-high);
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+.chip--accent    { background: var(--accent-dim); color: var(--accent); }
+.chip--gold      { background: var(--secondary-dim); color: var(--secondary); }
+/* On light mode's tan cards the translucent washes leave coloured chip
+   text too faint, so chips switch to the palette's container pairs, and
+   the neutral chip lifts off the tan card instead of sinking into it.
+   :where() keeps the neutral rule at chip-level specificity so the
+   variants below (error, solid) still win. */
+:where([data-theme="light"]) .chip   { background: var(--surface-low); }
+[data-theme="light"] .chip--accent { background: var(--accent-container); color: var(--on-accent-container); }
+[data-theme="light"] .chip--gold   { background: var(--secondary-container); color: var(--on-secondary-container); }
+.chip--error     { background: var(--error-dim); color: var(--error); }
+.chip--solid     { background: var(--accent); color: var(--on-accent); }
+
+/* ---------- Form controls (inset wells) ---------- */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label {
+  font-size: 11px; line-height: 14px; letter-spacing: 0.05em;
+  font-weight: 600; text-transform: uppercase; color: var(--on-surface-variant);
+}
+.input, .select, .textarea {
+  width: 100%;
+  background: var(--surface-low);
+  border: 0;
+  border-radius: var(--r-inset);
+  padding: 12px 14px;
+  color: var(--high-emphasis);
+  font-size: 14px;
+  line-height: 20px;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 160ms ease, background-color 160ms ease;
+}
+.input::placeholder, .textarea::placeholder { color: var(--outline); }
+.input:focus, .select:focus, .textarea:focus {
+  outline-color: var(--accent);
+  background: var(--surface-lowest);
+}
+.select {
+  appearance: none;
+  /* Chevron baked into a data URI, so it can't read a token — the
+     light-mode override below swaps it for the warm ink variant. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c6c9af' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+[data-theme="light"] .select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e624a' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.textarea { resize: vertical; min-height: 84px; }
+
+/* ---------- Toast (mascot_toast vibe) ---------- */
+.toast-stack {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-highest);
+  color: var(--high-emphasis);
+  border-radius: var(--r-pill);
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: toast-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.toast--error .dot { background: var(--error); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 900;
+  animation: fade-in 160ms ease;
+}
+.modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--r-card);
+  padding: var(--sp-xl);
+  animation: modal-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+.modal--wide { max-width: 860px; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+/* ---------- Scroll reveal ---------- */
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity 560ms ease, transform 560ms cubic-bezier(0.16, 1, 0.3, 1); }
+.reveal.is-visible { opacity: 1; transform: none; }
+
+/* ---------- Utilities ---------- */
+.muted { color: var(--on-surface-variant); }
+.accent-text { color: var(--accent); }
+.gold-text { color: var(--secondary); }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px; }

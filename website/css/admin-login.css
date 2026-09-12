@@ -1,0 +1,168 @@
+/* ============================================================
+   SilaFit admin sign-in — Precision Kinetic
+   Only what base.css doesn't already give us: a centred card, the two-step
+   indicator and the code field. Every colour comes from the shared theme
+   tokens, so this page follows the light/dark toggle for free.
+   ============================================================ */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-bloom { z-index: 0; }
+.login-bloom--primary { top: -180px; right: -180px; }
+.login-bloom--secondary { bottom: -200px; left: -160px; }
+
+.login-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.03em;
+  color: var(--high-emphasis);
+}
+.login-brand img { width: 34px; height: 34px; border-radius: 8px; }
+
+.login-card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.login-card__head { display: flex; flex-direction: column; gap: 8px; }
+.login-card__head h1 {
+  font-size: 23px;
+  line-height: 30px;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+  color: var(--high-emphasis);
+}
+.login-card__head .body-sm { line-height: 19px; }
+.login-card__foot { border-top: 1px solid var(--surface-high); padding-top: 16px; }
+/* --on-surface-variant, not --outline: this is 13px body copy, and the outline
+   token is tuned for hairlines and icon strokes, where it lands under 4:1. */
+.login-card__foot .body-sm { color: var(--on-surface-variant); line-height: 18px; }
+
+/* ---------- Two-step indicator ---------- */
+.login-steps {
+  display: flex;
+  list-style: none;
+  gap: 8px;
+}
+.login-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--r-inset);
+  background: var(--surface-low);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+  transition: background-color 200ms ease, color 200ms ease;
+}
+.login-step span {
+  width: 18px; height: 18px; flex: none;
+  border-radius: 50%;
+  /* --surface, not --surface-highest: the number is 10px, and the tan badge
+     only managed 3.2:1 against the muted ink. */
+  background: var(--surface);
+  color: var(--on-surface-variant);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+.login-step.is-active { background: var(--accent-dim); color: var(--accent); }
+.login-step.is-active span { background: var(--accent); color: var(--on-accent); }
+.login-step.is-done span { background: var(--accent); color: var(--on-accent); }
+
+/* ---------- Forms ---------- */
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+.login-form[hidden] { display: none; }
+.login-submit { width: 100%; }
+.login-hint { font-size: 13px; line-height: 19px; color: var(--on-surface-variant); }
+.login-hint b { color: var(--high-emphasis); font-weight: 600; }
+.login-hint__timer { color: var(--on-surface-variant); }
+
+.login-code {
+  font-size: 26px;
+  letter-spacing: 0.42em;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  padding: 14px;
+}
+.login-code::placeholder { letter-spacing: 0.42em; color: var(--outline); }
+
+.login-link {
+  border: 0;
+  background: none;
+  color: var(--on-surface-variant);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+  align-self: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 160ms ease;
+}
+.login-link:hover { color: var(--accent); }
+
+/* ---------- Alerts ---------- */
+/* The tint is composited over the *lightest* surface, not the card: a 10% red
+   wash directly on cream dragged the error red down to 4.07:1, whereas over
+   --surface-lowest the same wash leaves it at 5.1:1. Still reads as a tinted
+   alert in both themes. */
+.login-alert {
+  border-radius: var(--r-inset);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 19px;
+  background: linear-gradient(var(--error-dim), var(--error-dim)), var(--surface-lowest);
+  color: var(--error);
+  font-weight: 500;
+}
+.login-alert[hidden] { display: none; }
+.login-alert--info {
+  background: linear-gradient(var(--accent-dim), var(--accent-dim)), var(--surface-lowest);
+  color: var(--accent);
+}
+
+/* ---------- Footer ---------- */
+.login-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.login-foot a {
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  transition: color 160ms ease;
+}
+.login-foot a:hover { color: var(--accent); }
+
+@media (max-width: 420px) {
+  .login-card { padding: 22px; }
+  .login-step { font-size: 11px; padding: 8px 10px; }
+}

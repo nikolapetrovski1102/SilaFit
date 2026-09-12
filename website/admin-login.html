@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SilaFit Admin — Sign in</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/admin-login.css" />
+  <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) { /* private mode */ }
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body class="login-page">
+
+  <div class="bloom bloom--primary login-bloom login-bloom--primary"></div>
+  <div class="bloom bloom--secondary login-bloom login-bloom--secondary"></div>
+
+  <main class="login-shell">
+
+    <a class="login-brand" href="index.html">
+      <img src="assets/img/branding/app_icon_transparent.png" alt="" />
+      <span>SilaFit</span>
+      <span class="chip chip--accent">Admin</span>
+    </a>
+
+    <section class="login-card" aria-labelledby="loginHeading">
+      <header class="login-card__head">
+        <span class="eyebrow eyebrow--accent">Restricted console</span>
+        <h1 id="loginHeading">Sign in to the admin console</h1>
+        <p class="body-sm" id="loginIntro">
+          Two factors are required: your console password, then a code from your authenticator app.
+        </p>
+      </header>
+
+      <!-- Step indicator -->
+      <ol class="login-steps" id="loginSteps">
+        <li class="login-step is-active" data-step="1"><span>1</span> Password</li>
+        <li class="login-step" data-step="2"><span>2</span> Authenticator code</li>
+      </ol>
+
+      <div class="login-alert" id="loginAlert" role="alert" hidden></div>
+
+      <!-- ============ Step 1: password ============ -->
+      <form class="login-form" id="passwordForm" novalidate autocomplete="on">
+        <div class="field">
+          <label for="adminUsername">Username</label>
+          <input class="input" type="text" id="adminUsername" name="username"
+                 autocomplete="username" autocapitalize="none" spellcheck="false" required />
+        </div>
+        <div class="field">
+          <label for="adminPassword">Password</label>
+          <input class="input" type="password" id="adminPassword" name="password"
+                 autocomplete="current-password" required />
+        </div>
+        <button class="btn btn--primary login-submit" type="submit" id="passwordSubmit">
+          Continue
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+        </button>
+      </form>
+
+      <!-- ============ Step 2: authenticator code ============ -->
+      <form class="login-form" id="codeForm" novalidate hidden>
+        <p class="login-hint" id="codeHint">
+          Enter the 6-digit code for <b data-session-username>this account</b>.
+          <span class="login-hint__timer" id="challengeTimer"></span>
+        </p>
+        <div class="field">
+          <label for="adminCode">Authenticator code</label>
+          <input class="input login-code" type="text" id="adminCode" name="code"
+                 inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+                 pattern="[0-9]*" placeholder="000000" required />
+        </div>
+        <button class="btn btn--primary login-submit" type="submit" id="codeSubmit">
+          Sign in
+        </button>
+        <button class="login-link" type="button" id="restartBtn">Use a different account</button>
+      </form>
+
+      <footer class="login-card__foot">
+        <span class="body-sm">Sessions end after 30 minutes without activity, and can be revoked from the console.</span>
+      </footer>
+    </section>
+
+    <div class="login-foot">
+      <a href="index.html">← Back to silafit.tappit.click</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+        <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+      </button>
+    </div>
+
+  </main>
+
+  <script src="js/theme.js"></script>
+  <script src="js/admin-auth.js"></script>
+  <script src="js/admin-login.js"></script>
+</body>
+</html>

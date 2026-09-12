@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SilaFit — Precision Kinetic Fitness Tracking</title>
+  <meta name="description" content="SilaFit pairs precision workout telemetry with adaptive meal planning. AI-powered splits, PR prediction, hydration, streaks, and nutrition targets that move with your training load." />
+  <meta property="og:title" content="SilaFit — Precision Kinetic Fitness Tracking" />
+  <meta property="og:description" content="Train smarter. Eat right. Recover better. SilaFit is the AI-assisted fitness tracker built for serious lifters." />
+  <meta property="og:image" content="assets/img/branding/app_icon.png" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/site.css" />
+  <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) { /* private mode */ }
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- ================= Nav ================= -->
+  <header class="nav" id="mainNav">
+    <div class="nav__inner">
+      <a class="nav__logo" href="#top">
+        <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit logo" />
+        SilaFit
+      </a>
+      <nav class="nav__links" id="navLinks">
+        <a href="#features">Features</a>
+        <a href="#nutrition">Nutrition</a>
+        <a href="#splits">Training</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#community">Community</a>
+      </nav>
+      <button class="nav__burger" id="navBurger" aria-label="Menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="nav__cta">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
+          <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+          <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+        </button>
+        <a class="btn btn--secondary btn--sm" href="admin.html">Admin</a>
+        <a class="btn btn--primary btn--sm" href="#pricing">Start free</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= Hero ================= -->
+  <section class="hero" id="top">
+    <div class="bloom bloom--primary" style="top:-200px;right:-150px;"></div>
+    <div class="bloom bloom--secondary" style="bottom:-250px;left:-100px;"></div>
+
+    <div class="hero__inner">
+      <div class="hero__grid">
+
+        <!-- Copy -->
+        <div class="hero__copy">
+          <div class="hero__eyebrow reveal">
+            <span class="hero__eyebrow-dot"></span>
+            <span class="hero__eyebrow-text">Precision Kinetic · AI-Assisted Training</span>
+          </div>
+          <h1 class="hero__headline reveal">
+            Strength,<br />measured<br /><span class="gradient-text">to the rep.</span>
+          </h1>
+          <p class="hero__sub reveal reveal-delay-1">
+            SilaFit pairs workout telemetry with adaptive meal planning — splits, PR prediction, hydration, streaks, and nutrition targets that move with your training load.
+          </p>
+          <div class="hero__actions reveal reveal-delay-2">
+            <a class="btn btn--primary" href="#pricing" id="heroCtaBtn">
+              Start training free
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+            </a>
+            <a class="btn btn--secondary" href="#features" id="heroLearnBtn">See how it works</a>
+          </div>
+          <div class="hero__stats reveal reveal-delay-3">
+            <div class="hero__stat">
+              <div class="stat num" data-count="48" data-suffix="k">0</div>
+              <div class="eyebrow">Workouts logged</div>
+            </div>
+            <div class="hero__stat">
+              <div class="stat num" data-count="12" data-suffix="k">0</div>
+              <div class="eyebrow">Meals planned</div>
+            </div>
+            <div class="hero__stat">
+              <div class="stat num" data-count="97" data-suffix="%">0</div>
+              <div class="eyebrow">Streak survival</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual: phone + floating cards -->
+        <div class="hero__visual reveal-right reveal-delay-1">
+          <!-- Kcal card (left) -->
+          <div class="hero__float-card hero__float-card--kcal" aria-hidden="true">
+            <div class="float-card__icon float-card__icon--lime">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            </div>
+            <div>
+              <div class="float-card__label">Today's target</div>
+              <div class="float-card__value">2,140 <span style="font-size:12px;font-weight:500;color:var(--outline)">/ 2,600 kcal</span></div>
+            </div>
+            <svg class="mini-ring" width="40" height="40" viewBox="0 0 40 40">
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--surface-highest)" stroke-width="5"/>
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--accent)" stroke-width="5"
+                stroke-linecap="round" stroke-dasharray="101" stroke-dashoffset="26"
+                transform="rotate(-90 20 20)"/>
+            </svg>
+          </div>
+
+          <!-- Phone -->
+          <div class="phone-mockup">
+            <div class="phone-mockup__frame">
+              <div class="phone-mockup__screen">
+                <div class="phone-mockup__notch" aria-hidden="true"></div>
+                <img src="assets/img/branding/today_hero.png" alt="SilaFit app today screen" />
+                <div class="phone-mockup__screen-overlay" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PR card (right top) -->
+          <div class="hero__float-card hero__float-card--pr" aria-hidden="true">
+            <div class="float-card__icon float-card__icon--gold">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>
+            </div>
+            <div>
+              <div class="float-card__label">Predicted PR</div>
+              <div class="float-card__value"><span class="gold">180 kg</span> deadlift</div>
+            </div>
+          </div>
+
+          <!-- Streak card (right bottom) -->
+          <div class="hero__float-card hero__float-card--streak" aria-hidden="true">
+            <div class="float-card__icon float-card__icon--lime">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c3.5 4.5 6 7.7 6 11a6 6 0 1 1-12 0c0-3.3 2.5-6.5 6-11Z"/></svg>
+            </div>
+            <div>
+              <div class="float-card__label">Current streak</div>
+              <div class="float-card__value"><span class="accent">112</span> days 🔥</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Trust bar ================= -->
+  <div class="trust-bar" aria-hidden="true">
+    <div class="trust-bar__track" id="trustTrack">
+      <!-- Rendered by JS — doubled for seamless loop -->
+    </div>
+  </div>
+
+  <!-- ================= Features bento ================= -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section__head reveal">
+        <span class="eyebrow eyebrow--accent">The system</span>
+        <h2>Everything a lifter tracks.<br />Nothing they don't.</h2>
+        <p>Six precision instruments, one calm dashboard — built around the way you actually train, eat, and recover.</p>
+      </div>
+      <div class="bento-grid">
+
+        <!-- Splits card (wide) -->
+        <article class="bento-card bento-card--wide reveal" id="feat-splits">
+          <div class="bento-card__icon bento-card__icon--lime">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/></svg>
+          </div>
+          <h3>Smart workout splits</h3>
+          <p>A curated split library — PPL, Upper/Lower, PHUL, Arnold — matched to your goal, with session tracking down to the set. Every rep, logged.</p>
+          <div class="sparkline" aria-hidden="true">
+            <div class="sparkline__bar is-highlight" style="height:40%"></div>
+            <div class="sparkline__bar" style="height:55%"></div>
+            <div class="sparkline__bar is-highlight" style="height:62%"></div>
+            <div class="sparkline__bar" style="height:48%"></div>
+            <div class="sparkline__bar is-highlight" style="height:70%"></div>
+            <div class="sparkline__bar" style="height:58%"></div>
+            <div class="sparkline__bar is-highlight" style="height:82%"></div>
+            <div class="sparkline__bar" style="height:74%"></div>
+            <div class="sparkline__bar is-highlight" style="height:88%"></div>
+            <div class="sparkline__bar is-accent" style="height:100%"></div>
+          </div>
+        </article>
+
+        <!-- PR prediction card -->
+        <article class="bento-card reveal reveal-delay-1" id="feat-pr">
+          <div class="bento-card__icon bento-card__icon--gold">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>
+          </div>
+          <h3>1RM progression & PR prediction</h3>
+          <p>Bezier-smoothed trend lines and predictive PR curves show where your lifts are heading before you get there.</p>
+        </article>
+
+        <!-- Streaks card -->
+        <article class="bento-card reveal reveal-delay-2" id="feat-streaks">
+          <div class="bento-card__icon bento-card__icon--lime">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c3.5 4.5 6 7.7 6 11a6 6 0 1 1-12 0c0-3.3 2.5-6.5 6-11Z"/></svg>
+          </div>
+          <h3>Streaks that stick</h3>
+          <p>A kinetic streak engine that celebrates consistency — rest days count, because recovery is training too.</p>
+          <div class="streak-dots" aria-hidden="true">
+            <div class="streak-dot done"></div><div class="streak-dot done"></div><div class="streak-dot rest"></div>
+            <div class="streak-dot done"></div><div class="streak-dot done"></div><div class="streak-dot done"></div>
+            <div class="streak-dot rest"></div><div class="streak-dot done"></div><div class="streak-dot done"></div>
+            <div class="streak-dot done"></div><div class="streak-dot done"></div><div class="streak-dot rest"></div>
+            <div class="streak-dot done"></div><div class="streak-dot today"></div>
+          </div>
+        </article>
+
+        <!-- Adaptive meal plan card (wide, gold) -->
+        <article class="bento-card bento-card--wide bento-card--gold reveal reveal-delay-1" id="feat-nutrition">
+          <div class="bento-card__icon bento-card__icon--gold">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>
+          </div>
+          <h3>Adaptive meal planning</h3>
+          <p>Calorie and macro targets calibrated to your training load, with a rotating library of whole-food meal suggestions — built from USDA data.</p>
+          <div class="bento-ring-row" aria-hidden="true">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--surface-highest)" stroke-width="8"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--secondary)" stroke-width="8"
+                stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="50"
+                transform="rotate(-90 40 40)"/>
+              <text x="40" y="36" text-anchor="middle" fill="var(--high-emphasis)" font-size="14" font-weight="700">2,000</text>
+              <text x="40" y="50" text-anchor="middle" fill="var(--on-surface-variant)" font-size="8" letter-spacing="1">KCAL</text>
+            </svg>
+            <div class="bento-ring-labels">
+              <div class="bento-ring-label">
+                <span class="bento-ring-label__dot" style="background:var(--macro-protein)"></span>
+                Protein <b>160 g</b>
+              </div>
+              <div class="bento-ring-label">
+                <span class="bento-ring-label__dot" style="background:var(--macro-carbs)"></span>
+                Carbs <b>180 g</b>
+              </div>
+              <div class="bento-ring-label">
+                <span class="bento-ring-label__dot" style="background:var(--macro-fats)"></span>
+                Fats <b>65 g</b>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Hydration card -->
+        <article class="bento-card reveal reveal-delay-2" id="feat-hydration">
+          <div class="bento-card__icon bento-card__icon--blue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c3.5 4.5 6 7.7 6 11a6 6 0 1 1-12 0c0-3.3 2.5-6.5 6-11Z"/></svg>
+          </div>
+          <h3>Hydration & bodyweight</h3>
+          <p>Water intake and morning weigh-ins logged in two taps, trended against your training volume over time.</p>
+        </article>
+
+        <!-- AI analytics card -->
+        <article class="bento-card reveal reveal-delay-3" id="feat-ai">
+          <div class="bento-card__icon bento-card__icon--gold">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 2.4 7.2H22l-6 4.6 2.3 7.2-6.3-4.5-6.3 4.5L8 13.8 2 9.2h7.6L12 2Z"/></svg>
+          </div>
+          <h3>AI monthly analytics</h3>
+          <p>A coach-grade report every month: volume landmarks, deload signals, and exactly what to change next block.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= How it works ================= -->
+  <section class="section section--alt section--accent-edge" id="how">
+    <div class="wrap">
+      <div class="how-it-works">
+        <div class="reveal-left">
+          <span class="eyebrow eyebrow--accent">How it works</span>
+          <h2 style="font-size:clamp(32px,4vw,48px);line-height:1.08;margin:16px 0 40px;font-weight:800;letter-spacing:-0.03em;color:var(--high-emphasis)">
+            From first rep to next PR, automatically.
+          </h2>
+          <div class="steps-list" id="stepsList">
+            <div class="step is-active" data-step="0">
+              <div class="step__num">1</div>
+              <div>
+                <div class="step__title">Pick your split</div>
+                <div class="step__desc">Choose from PPL, Upper/Lower, PHUL, Arnold, or build your own. SilaFit sets your weekly schedule and session targets instantly.</div>
+              </div>
+              <div class="step__progress"></div>
+            </div>
+            <div class="step" data-step="1">
+              <div class="step__num">2</div>
+              <div>
+                <div class="step__title">Log every set</div>
+                <div class="step__desc">Track weight and reps as you lift. The kinetic engine calculates your 1RM and updates your PR curve in real time.</div>
+              </div>
+              <div class="step__progress"></div>
+            </div>
+            <div class="step" data-step="2">
+              <div class="step__num">3</div>
+              <div>
+                <div class="step__title">Fuel with precision</div>
+                <div class="step__desc">Get a weekly meal plan calibrated to your training volume. USDA-verified macros. Whole foods. No guessing.</div>
+              </div>
+              <div class="step__progress"></div>
+            </div>
+            <div class="step" data-step="3">
+              <div class="step__num">4</div>
+              <div>
+                <div class="step__title">Read the AI report</div>
+                <div class="step__desc">Every month, get a coach-grade analysis: peak volume, deload signals, and your next training block recommendation.</div>
+              </div>
+              <div class="step__progress"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen carousel -->
+        <div class="how-visual reveal-right">
+          <div class="screen-carousel">
+            <div class="screen-carousel__inner">
+
+              <!-- Slide 0: Today screen -->
+              <div class="screen-slide is-active">
+                <div class="mock-topbar">
+                  <div class="mock-topbar-title">Today</div>
+                  <div class="mock-topbar-date">Mon · Push Day</div>
+                </div>
+                <div class="mock-card">
+                  <div class="mock-card__label">Calories</div>
+                  <div class="mock-card__value">2,140</div>
+                  <div class="mock-card__sub">of 2,600 kcal target</div>
+                  <div class="mock-progress-track"><div class="mock-progress-fill" style="width:82%"></div></div>
+                </div>
+                <div class="mock-card">
+                  <div class="mock-card__label">Workout</div>
+                  <div class="mock-card__value" style="font-size:15px">PPL Hypertrophy</div>
+                  <div class="mock-card__sub">6 exercises · 18 sets remaining</div>
+                </div>
+                <div class="mock-list">
+                  <div class="mock-list-item"><div class="mock-list-dot" style="background:var(--accent)"></div><div class="mock-list-label">Bench Press</div><div class="mock-list-val">4×8 · 80 kg</div></div>
+                  <div class="mock-list-item"><div class="mock-list-dot" style="background:var(--accent)"></div><div class="mock-list-label">Incline DB</div><div class="mock-list-val">3×10 · 32 kg</div></div>
+                  <div class="mock-list-item"><div class="mock-list-dot" style="background:var(--surface-highest)"></div><div class="mock-list-label">Cable Fly</div><div class="mock-list-val">3×12 · 20 kg</div></div>
+                </div>
+              </div>
+
+              <!-- Slide 1: Progress screen -->
+              <div class="screen-slide">
+                <div class="mock-topbar">
+                  <div class="mock-topbar-title">Progress</div>
+                  <div class="mock-topbar-date">Bench Press</div>
+                </div>
+                <div class="mock-card">
+                  <div class="mock-card__label">Current 1RM</div>
+                  <div class="mock-card__value">102.5 kg</div>
+                  <div class="mock-card__sub" style="color:var(--accent)">↑ +7.5 kg this block</div>
+                </div>
+                <div class="mock-card">
+                  <div class="mock-card__label">Predicted PR (4 weeks)</div>
+                  <div class="mock-card__value" style="color:var(--secondary)">110 kg</div>
+                  <div class="mock-card__sub">AI confidence: high</div>
+                </div>
+                <div style="padding:8px 0 4px;font-size:9px;color:var(--outline);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">Volume trend</div>
+                <div style="display:flex;align-items:flex-end;gap:3px;height:40px;">
+                  <div style="flex:1;background:var(--surface-highest);border-radius:2px;height:50%"></div>
+                  <div style="flex:1;background:var(--surface-highest);border-radius:2px;height:62%"></div>
+                  <div style="flex:1;background:var(--surface-highest);border-radius:2px;height:55%"></div>
+                  <div style="flex:1;background:var(--surface-highest);border-radius:2px;height:75%"></div>
+                  <div style="flex:1;background:var(--surface-highest);border-radius:2px;height:68%"></div>
+                  <div style="flex:1;background:var(--surface-highest);border-radius:2px;height:82%"></div>
+                  <div style="flex:1;background:var(--accent);border-radius:2px;height:100%"></div>
+                </div>
+              </div>
+
+              <!-- Slide 2: Meals screen -->
+              <div class="screen-slide">
+                <div class="mock-topbar">
+                  <div class="mock-topbar-title">Nutrition</div>
+                  <div class="mock-topbar-date">Lean Cut week</div>
+                </div>
+                <div class="mock-card">
+                  <div class="mock-card__label">Today's macros</div>
+                  <div style="display:flex;gap:8px;margin-top:8px;">
+                    <div style="flex:1;text-align:center;">
+                      <div style="font-size:16px;font-weight:700;color:var(--accent)">38g</div>
+                      <div style="font-size:9px;color:var(--outline)">protein</div>
+                    </div>
+                    <div style="flex:1;text-align:center;">
+                      <div style="font-size:16px;font-weight:700;color:var(--tertiary)">45g</div>
+                      <div style="font-size:9px;color:var(--outline)">carbs</div>
+                    </div>
+                    <div style="flex:1;text-align:center;">
+                      <div style="font-size:16px;font-weight:700;color:var(--secondary)">16g</div>
+                      <div style="font-size:9px;color:var(--outline)">fats</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mock-list">
+                  <div class="mock-list-item"><div class="mock-list-dot" style="background:var(--accent)"></div><div class="mock-list-label">Breakfast · Greek Yogurt Bowl</div><div class="mock-list-val">316 kcal</div></div>
+                  <div class="mock-list-item"><div class="mock-list-dot" style="background:var(--surface-highest)"></div><div class="mock-list-label">Lunch · Caesar Salad</div><div class="mock-list-val">393 kcal</div></div>
+                  <div class="mock-list-item"><div class="mock-list-dot" style="background:var(--surface-highest)"></div><div class="mock-list-label">Dinner · Shrimp & Zucchini</div><div class="mock-list-val">315 kcal</div></div>
+                </div>
+              </div>
+
+              <!-- Slide 3: AI report screen -->
+              <div class="screen-slide">
+                <div class="mock-topbar">
+                  <div class="mock-topbar-title">AI Report</div>
+                  <div class="mock-topbar-date">September 2026</div>
+                </div>
+                <div class="mock-card" style="border-left:3px solid var(--accent)">
+                  <div class="mock-card__label">Volume landmark ✓</div>
+                  <div class="mock-card__value" style="font-size:13px">Peak week hit</div>
+                  <div class="mock-card__sub">You hit a new personal volume record this block. Great time to deload next week.</div>
+                </div>
+                <div class="mock-card" style="border-left:3px solid var(--secondary)">
+                  <div class="mock-card__label">Deload signal ⚠</div>
+                  <div class="mock-card__value" style="font-size:13px;color:var(--secondary)">Week 5 — deload advised</div>
+                  <div class="mock-card__sub">HRV trend and sleep scores suggest accumulated fatigue.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Nutrition / Meal planning ================= -->
+  <section class="section" id="nutrition">
+    <div class="wrap">
+      <div class="meals-showcase">
+
+        <div class="reveal-left">
+          <span class="eyebrow eyebrow--accent">Nutrition engine</span>
+          <h2 style="font-size:clamp(32px,4.5vw,48px);line-height:1.06;margin:16px 0 16px;font-weight:800;letter-spacing:-0.03em;color:var(--high-emphasis)">
+            Meal plans that flex with your training.
+          </h2>
+          <p class="muted" style="font-size:16px;line-height:26px;max-width:460px;">
+            Every plan is built from whole foods at realistic portions — macros summed from per-100g USDA data, not guessed. Pick a goal, get a week, log it in one tap.
+          </p>
+          <div class="card" style="margin-top:28px;">
+            <div class="macro-panel">
+              <div class="macro-panel__ring">
+                <svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true">
+                  <circle cx="56" cy="56" r="46" fill="none" stroke="var(--surface-high)" stroke-width="12"/>
+                  <circle cx="56" cy="56" r="46" fill="none" stroke="var(--accent)" stroke-width="12"
+                    stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="72"
+                    transform="rotate(-90 56 56)"/>
+                  <text x="56" y="52" text-anchor="middle" fill="var(--high-emphasis)" font-size="18" font-weight="700">2,000</text>
+                  <text x="56" y="68" text-anchor="middle" fill="var(--on-surface-variant)" font-size="9" letter-spacing="1">KCAL TARGET</text>
+                </svg>
+                <div class="macro-legend">
+                  <div class="macro-legend__row"><span class="macro-legend__dot" style="background:var(--macro-protein)"></span>Protein <b>160 g</b></div>
+                  <div class="macro-legend__row"><span class="macro-legend__dot" style="background:var(--macro-carbs)"></span>Carbs <b>180 g</b></div>
+                  <div class="macro-legend__row"><span class="macro-legend__dot" style="background:var(--macro-fats)"></span>Fats <b>65 g</b></div>
+                </div>
+              </div>
+              <div class="macro-bars">
+                <div class="macro-bar">
+                  <div class="macro-bar__label"><span>Protein</span><span class="num">160 / 160 g</span></div>
+                  <div class="macro-bar__track"><div class="macro-bar__fill" style="width:100%;background:var(--macro-protein)"></div></div>
+                </div>
+                <div class="macro-bar">
+                  <div class="macro-bar__label"><span>Carbs</span><span class="num">164 / 180 g</span></div>
+                  <div class="macro-bar__track"><div class="macro-bar__fill" style="width:91%;background:var(--macro-carbs)"></div></div>
+                </div>
+                <div class="macro-bar">
+                  <div class="macro-bar__label"><span>Fats</span><span class="num">58 / 65 g</span></div>
+                  <div class="macro-bar__track"><div class="macro-bar__fill" style="width:89%;background:var(--macro-fats)"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="reveal-right">
+          <div class="eyebrow" style="margin-bottom:16px;">Suggested this month</div>
+          <div class="meal-strip" id="mealStrip"><!-- rendered from SilaStore --></div>
+          <p class="body-sm" style="margin-top:14px;">
+            Managed live from the <a href="admin.html" class="accent-text" style="font-weight:600">admin dashboard</a> — edits appear here instantly.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Training splits ================= -->
+  <section class="section section--alt section--accent-edge" id="splits">
+    <div class="wrap">
+      <div class="splits">
+        <div class="splits__visual reveal-left">
+          <img class="splits__shot" src="assets/img/branding/split_hero.png" alt="Lifter pressing dumbbells" />
+        </div>
+        <div class="reveal-right">
+          <span class="eyebrow eyebrow--accent">Training library</span>
+          <h2 style="font-size:clamp(32px,4.5vw,48px);line-height:1.06;margin:16px 0 28px;font-weight:800;letter-spacing:-0.03em;color:var(--high-emphasis)">
+            A split for every goal.<br />A plan for every week.
+          </h2>
+          <div class="splits__list">
+            <div class="split-row">
+              <div class="split-row__badge">PPL</div>
+              <div class="split-row__meta">
+                <div class="headline-sm">PPL Hypertrophy Protocol</div>
+                <div class="label-sm">Intermediate · 6 days · Build muscle</div>
+              </div>
+              <span class="chip chip--accent">Popular</span>
+            </div>
+            <div class="split-row">
+              <div class="split-row__badge">U/L</div>
+              <div class="split-row__meta">
+                <div class="headline-sm">Upper / Lower Split</div>
+                <div class="label-sm">Beginner · 4 days · Stay active</div>
+              </div>
+            </div>
+            <div class="split-row">
+              <div class="split-row__badge">5×</div>
+              <div class="split-row__meta">
+                <div class="headline-sm">5-Day Metabolic Circuit</div>
+                <div class="label-sm">Beginner · 5 days · Lose fat</div>
+              </div>
+            </div>
+            <div class="split-row">
+              <div class="split-row__badge">ARN</div>
+              <div class="split-row__meta">
+                <div class="headline-sm">Arnold Split</div>
+                <div class="label-sm">Advanced · 6 days · Build muscle</div>
+              </div>
+            </div>
+            <div class="split-row">
+              <div class="split-row__badge">PHUL</div>
+              <div class="split-row__meta">
+                <div class="headline-sm">PHUL Power-Hypertrophy</div>
+                <div class="label-sm">Intermediate · 4 days · Strength & size</div>
+              </div>
+              <span class="chip chip--gold">New</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Pricing ================= -->
+  <section class="section" id="pricing">
+    <div class="wrap">
+      <div class="section__head section__head--center reveal">
+        <span class="eyebrow eyebrow--accent">Pricing</span>
+        <h2>Start free. Upgrade when the numbers demand it.</h2>
+        <p>Plans are managed from the admin dashboard — prices and features update here live.</p>
+      </div>
+
+      <div style="display:flex;justify-content:center;">
+        <div class="billing-toggle reveal" role="group" aria-label="Billing period">
+          <button class="is-active" data-billing="monthly" id="billingMonthly">Monthly</button>
+          <button data-billing="yearly" id="billingYearly">Yearly <span class="save-badge">Save 30%</span></button>
+        </div>
+      </div>
+
+      <div class="pricing-grid" id="pricingGrid"><!-- rendered from SilaStore --></div>
+    </div>
+  </section>
+
+  <!-- ================= Community / testimonials ================= -->
+  <section class="section section--alt section--accent-edge" id="community">
+    <div class="wrap">
+      <div class="section__head section__head--center reveal">
+        <span class="eyebrow eyebrow--accent">Community</span>
+        <h2>Lifters who stopped guessing.</h2>
+        <p>Real athletes. Real results. The numbers speak for themselves.</p>
+      </div>
+      <div class="testimonials-grid">
+        <article class="quote-card reveal">
+          <div class="quote-card__stars">★★★★★</div>
+          <span class="chip chip--accent">112-day streak</span>
+          <blockquote>"The PR prediction is scary accurate. It called my 180 kg deadlift three weeks out — and the deload signal saved my lower back the month after."</blockquote>
+          <div class="quote-card__who">
+            <div class="quote-card__avatar"><img src="assets/img/branding/profile_avatar.png" alt="Marko P." /></div>
+            <div>
+              <div class="quote-card__name">Marko P.</div>
+              <div class="quote-card__role">Advanced tier · Powerlifting block</div>
+            </div>
+          </div>
+        </article>
+        <article class="quote-card reveal reveal-delay-1">
+          <div class="quote-card__stars">★★★★★</div>
+          <span class="chip chip--gold">−9 kg in 4 months</span>
+          <blockquote>"The meal plans are actual food I already cook. I stopped tracking in three apps and just follow the week. The macro bars keep me honest."</blockquote>
+          <div class="quote-card__who">
+            <div class="quote-card__avatar"><img src="assets/img/branding/profile_avatar.png" alt="Elena R." /></div>
+            <div>
+              <div class="quote-card__name">Elena R.</div>
+              <div class="quote-card__role">Pro tier · Lean Cut plan</div>
+            </div>
+          </div>
+        </article>
+        <article class="quote-card reveal reveal-delay-2">
+          <div class="quote-card__stars">★★★★★</div>
+          <span class="chip">First pull-up ✓</span>
+          <blockquote>"Started with calisthenics foundations on the free tier. Six weeks later I did my first strict pull-up. The mascot celebrates harder than my gym buddies."</blockquote>
+          <div class="quote-card__who">
+            <div class="quote-card__avatar"><img src="assets/img/branding/profile_avatar.png" alt="Ivana K." /></div>
+            <div>
+              <div class="quote-card__name">Ivana K.</div>
+              <div class="quote-card__role">Free tier · Calisthenics</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CTA banner ================= -->
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-banner reveal">
+        <div>
+          <span class="eyebrow">Ready when you are</span>
+          <h2>Your next PR is already on the curve.</h2>
+          <p>Download SilaFit, pick a split, and let the precision kinetic system handle the math. Free forever tier — no card required.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+            <a class="btn" href="#pricing" id="ctaStartBtn">Start training free</a>
+            <a class="btn btn--ghost btn--sm" href="admin.html" style="background:var(--on-accent-dim);color:var(--on-accent);border:0;padding:0 20px;height:40px;font-size:14px;">View admin demo</a>
+          </div>
+        </div>
+        <img class="cta-banner__mascot" src="assets/img/mascot/lifting.png" alt="SilaFit mascot lifting a barbell" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Footer ================= -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer__grid">
+        <div class="footer__brand">
+          <a class="nav__logo" href="#top">
+            <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit logo" />
+            SilaFit
+          </a>
+          <p>Precision Kinetic fitness tracking — AI-assisted splits, adaptive nutrition, and streaks that respect recovery.</p>
+          <div class="footer__social">
+            <button class="footer__social-btn" aria-label="Twitter/X" title="Twitter/X">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M4 20 20 4"/></svg>
+            </button>
+            <button class="footer__social-btn" aria-label="Instagram" title="Instagram">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button class="footer__social-btn" aria-label="GitHub" title="GitHub">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+            </button>
+          </div>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#nutrition">Meal planning</a></li>
+            <li><a href="#splits">Training splits</a></li>
+            <li><a href="#pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Company</h4>
+          <ul>
+            <li><a href="#">About</a></li>
+            <li><a href="#community">Community</a></li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Press kit</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Terms of service</a></li>
+            <li><a href="admin.html">Admin dashboard</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 SilaFit. Precision Kinetic design system.</span>
+        <div class="footer__status">
+          <span class="footer__status-dot"></span>
+          <span>All systems operational</span>
+        </div>
+        <span>Made for lifters, by lifters.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/theme.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/site.js"></script>
+</body>
+</html>
