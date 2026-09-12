@@ -85,6 +85,75 @@ migration instead of an in-place column-type change:
 If you ever need to roll back after a cutover but before running 026, the
 `*_Legacy` columns still hold the original plaintext — no data is lost.
 
+## Admin console (two-factor sign-in)
+
+`website/admin.html` is protected by nginx, not by anything inside the page. The
+`location = /admin.html` block in `nginx-silafit.tappit.click.conf` issues an
+`auth_request` subrequest to `GET /api/admin/auth/session` and serves the console
+only on a 200; anything else is redirected to `admin-login.html`. That single
+location is the whole gate — everything else under `website/` (css, js, assets)
+is shared with the public site and stays public, and the login page is
+deliberately ungated because it is what hands out the cookie in the first place.
+The gate **fails closed**: if the API is unreachable nginx answers 500 rather
+than serving the console on an unproven session.
+
+Sign-in needs both factors, and passing the first grants nothing on its own:
+
+1. username + password, checked against `dbo.AdminUsers` with the same PBKDF2
+   hasher the app uses (`Silen.Common.Helpers.PasswordHasher`). Success returns a
+   5-minute *challenge* token, not a session.
+2. a 6-digit RFC 6238 TOTP code (`Silen.Common.Helpers.TotpHelper`). Success sets
+   the `silafit_admin_session` HttpOnly + SameSite=Strict cookie; the raw token is
+   never echoed into a response body.
+
+Wrong password and wrong code count against the same lockout, so neither factor
+can be brute-forced independently.
+
+### Creating / rotating an operator
+
+Accounts are created only by the provisioning tool or direct SQL — there is no
+self-service sign-up. The same command both creates and rotates:
+
+```bash
+cd /opt/silen/deploy
+docker compose --profile tools run --rm silen-admin-provision
+```
+
+It prompts for the username and password, then prints the TOTP secret and an
+`otpauth://` URI to enroll in Google Authenticator / Authy / 1Password, plus the
+code valid at that moment. **Store the secret in a password manager — it is the
+only copy.** For an unattended run, set `SILEN_ADMIN_USERNAME` and
+`SILEN_ADMIN_PASSWORD` in `.env` instead of prompting.
+
+Rotating an existing operator's password issues a new TOTP secret by default and
+drops every live session for that account (so a leaked password can be shut out
+immediately). Pass `--keep-totp` to rotate the password only and keep the existing
+enrollment:
+
+```bash
+docker compose --profile tools run --rm silen-admin-provision -- --keep-totp
+```
+
+### Where the state lives
+
+- `dbo.AdminUsers` (`database/schema/027_AdminAccounts.sql`) — password hash +
+  salt, the failed-attempt counter and lockout window, and the TOTP secret
+  encrypted with `ENCRYPTION_MASTER_KEY` (`AdminTotpSecretCipher`), so a database
+  dump alone does not let anyone generate codes.
+- `dbo.AdminSessions` — session **token hashes**, never the tokens themselves,
+  with both an idle (`AdminAuth__SessionIdleMinutes`) and an absolute
+  (`AdminAuth__SessionAbsoluteMinutes`) deadline. "Revoke all sessions" in the
+  console deletes every row for that operator.
+- All access goes through the stored procedures in `database/procedures/Admin.sql`
+  (idempotent `CREATE OR ALTER`), applied by `deploy.sh` like the rest.
+
+### Tunables
+
+Overridable in `.env` (see `.env.example`): `ADMIN_SESSION_IDLE_MINUTES`,
+`ADMIN_LOCKOUT_THRESHOLD`, `ADMIN_LOCKOUT_MINUTES`. `AdminAuth__CookieSecure`
+must stay `true` in production — a `Secure` cookie is never sent over plain HTTP,
+and the only path that turns it off is local development.
+
 ## Notes
 - DB engine is **Microsoft SQL Server** (all access goes through stored procedures,
   no ORM/LINQ-to-SQL — see `database/procedures`).

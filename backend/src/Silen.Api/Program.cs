@@ -15,6 +15,7 @@ builder.Services.Configure<AppleAuthOptions>(builder.Configuration.GetSection(Ap
 builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 builder.Services.Configure<EncryptionOptions>(builder.Configuration.GetSection(EncryptionOptions.SectionName));
+builder.Services.Configure<AdminAuthOptions>(builder.Configuration.GetSection(AdminAuthOptions.SectionName));
 
 builder.Services.AddSilenData();
 builder.Services.AddSilenServices();
@@ -51,6 +52,27 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim(JwtTokenFactory.TierClaimType, AccountTier.Registered.ToString()));
 });
 
+// Development-only CORS for the static site in website/. Locally the site is served
+// by a throwaway static file server on some localhost port while the API runs on
+// :5080, so admin sign-in needs a cross-origin fetch *with* credentials (the session
+// cookie). Only loopback origins are allowed, and only outside Production - in
+// production the site and the API are the same origin, so CORS never applies.
+const string DevSiteCorsPolicy = "DevLocalSite";
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy(DevSiteCorsPolicy, policy => policy
+            .SetIsOriginAllowed(origin =>
+                Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+                (uri.Host == "localhost" || uri.Host == "127.0.0.1"))
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());
+    });
+}
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -60,6 +82,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors(DevSiteCorsPolicy);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

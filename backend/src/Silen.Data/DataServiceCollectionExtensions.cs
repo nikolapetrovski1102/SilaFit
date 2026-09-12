@@ -23,6 +23,9 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IUserProfileProvider, UserProfileProvider>();
         services.AddScoped<IMealPlanningProvider, MealPlanningProvider>();
         services.AddScoped<IAnalyticsProvider, AnalyticsProvider>();
+        services.AddScoped<IAdminProvider, AdminProvider>();
+        services.AddScoped<IAdminRbacProvider, AdminRbacProvider>();
+        services.AddScoped<IAdminContentProvider, AdminContentProvider>();
 
         return services;
     }

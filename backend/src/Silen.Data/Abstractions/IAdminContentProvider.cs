@@ -1,0 +1,70 @@
+using Silen.Common.Dtos;
+using Silen.Common.Models;
+
+namespace Silen.Data.Abstractions;
+
+/// <summary>
+/// The reference content the console edits - exercises, meal suggestions,
+/// subscription plans and the split library - plus the read-only user list.
+///
+/// Reads and writes are separate procedures from the app's own (Exercises.sql,
+/// MealPlanning.sql, Plans.sql, Splits.sql) because they serve a different caller
+/// and return different shapes; the app never sees a usage count or a subscriber
+/// count, and the console never sees a person's logs.
+///
+/// Every write takes an <see cref="AdminActorModel"/>: the audit row is written by
+/// the procedure inside the same transaction as the change.
+/// </summary>
+public interface IAdminContentProvider
+{
+    Task<List<AdminExerciseModel>> GetExercisesAsync(CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertExerciseAsync(AdminExerciseUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteExerciseAsync(Guid exerciseId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminMealSuggestionModel>> GetMealSuggestionsAsync(
+        int? suggestedMonth,
+        string? mealType,
+        string? search,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertMealSuggestionAsync(AdminMealSuggestionUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteMealSuggestionAsync(Guid mealSuggestionId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminPlanModel>> GetPlansAsync(CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertPlanAsync(AdminPlanUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeletePlanAsync(Guid planId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminPlanFeatureModel>> GetPlanFeaturesAsync(Guid planId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertPlanFeatureAsync(AdminPlanFeatureUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeletePlanFeatureAsync(Guid planFeatureId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminSplitModel>> GetSplitsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>The split, its days and every prescription row - assembled from three procedures.</summary>
+    Task<AdminSplitDetailModel?> GetSplitDetailAsync(Guid splitId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertSplitAsync(AdminSplitUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteSplitAsync(Guid splitId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminSplitDayModel>> GetSplitDaysAsync(Guid splitId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertSplitDayAsync(AdminSplitDayUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteSplitDayAsync(Guid splitDayId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminSplitDayExerciseModel>> GetSplitDayExercisesAsync(Guid splitId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertSplitDayExerciseAsync(AdminSplitDayExerciseUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteSplitDayExerciseAsync(Guid splitDayExerciseId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminUserSummaryModel>> GetUsersAsync(string? search, int limit, CancellationToken cancellationToken = default);
+}

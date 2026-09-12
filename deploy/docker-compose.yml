@@ -66,6 +66,16 @@ services:
       OpenRouter__ApiKey: "${OPENROUTER_API_KEY:-}"
       OpenRouter__Model: "${OPENROUTER_MODEL:-openai/gpt-4.1}"
       FeatureFlags__DevTiersFree: "false"
+      # Admin console sign-in (Silen.Common/Options/AdminAuthOptions.cs). Two factors:
+      # a PBKDF2-hashed password in dbo.AdminUsers, then a TOTP code checked against
+      # the secret in TotpSecretCipher (encrypted with ENCRYPTION_MASTER_KEY above).
+      # CookieSecure must stay true in production - nginx only serves admin.html to a
+      # request carrying this cookie. Accounts are provisioned by
+      # `docker compose --profile tools run --rm silen-admin-provision`.
+      AdminAuth__CookieSecure: "true"
+      AdminAuth__SessionIdleMinutes: "${ADMIN_SESSION_IDLE_MINUTES:-30}"
+      AdminAuth__LockoutThreshold: "${ADMIN_LOCKOUT_THRESHOLD:-5}"
+      AdminAuth__LockoutMinutes: "${ADMIN_LOCKOUT_MINUTES:-15}"
     ports:
       - "127.0.0.1:${API_PORT:-5010}:8080"   # localhost only — nginx proxies to it
     restart: unless-stopped
@@ -91,6 +101,35 @@ services:
     environment:
       SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
       ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
+
+  # Admin console enrollment / credential rotation. Profile-gated like the backfill
+  # tool above: a plain `docker compose up` never starts it. Run it explicitly, from
+  # the deploy dir on the server:
+  #
+  #   docker compose --profile tools run --rm silen-admin-provision
+  #   # non-interactive variant:
+  #   SILEN_ADMIN_USERNAME=admin SILEN_ADMIN_PASSWORD='...' \
+  #     docker compose --profile tools run --rm silen-admin-provision
+  #
+  # It prints the otpauth:// URI to add to an authenticator app, and re-running it
+  # rotates both factors (dropping every live console session on the way).
+  silen-admin-provision:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.AdminProvision/Dockerfile
+    container_name: silen-admin-provision
+    profiles: ["tools"]
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
+      SILEN_ADMIN_USERNAME: "${SILEN_ADMIN_USERNAME:-}"
+      SILEN_ADMIN_PASSWORD: "${SILEN_ADMIN_PASSWORD:-}"
+    # Masked prompts need a terminal; harmless when the env vars above are used instead.
+    stdin_open: true
+    tty: true
 
 volumes:
   silen-sqldata:

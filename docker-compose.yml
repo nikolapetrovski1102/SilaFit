@@ -4,7 +4,7 @@ services:
     container_name: silen-sqlserver
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "Silen_Dev_Passw0rd!"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
       MSSQL_PID: "Developer"
     ports:
       - "14330:1433"
@@ -31,7 +31,7 @@ services:
       # appsettings.Development.json, which is where FeatureFlags:DevTiersFree
       # and the real AppleAuth bundle-id client id live.
       ASPNETCORE_ENVIRONMENT: "Development"
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=Silen_Dev_Passw0rd!;TrustServerCertificate=True;"
+      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
       # Jwt:Issuer/Audience/SigningKey are intentionally not overridden here -
       # they're picked up from appsettings.Development.json (loaded above via
       # ASPNETCORE_ENVIRONMENT) so dotnet run and docker compose up always

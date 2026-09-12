@@ -44,7 +44,7 @@ ssh -o ConnectTimeout=10 "$SILEN_SSH" 'echo ok' >/dev/null 2>&1 \
   || die "cannot SSH to $SILEN_SSH (check the host / your SSH key / ~/.ssh/config)"
 ok "connected"
 
-ssh "$SILEN_SSH" "mkdir -p '$REMOTE_DIR/backend' '$REMOTE_DIR/database' '$REMOTE_DIR/deploy'"
+ssh "$SILEN_SSH" "mkdir -p '$REMOTE_DIR/backend' '$REMOTE_DIR/database' '$REMOTE_DIR/deploy' '$REMOTE_DIR/website'"
 
 # ---- 1. sync API source ------------------------------------------------------
 log "Uploading backend/ -> $SILEN_SSH:$REMOTE_DIR/backend"
@@ -59,6 +59,17 @@ log "Uploading database/ -> $SILEN_SSH:$REMOTE_DIR/database"
 rsync -az --delete --exclude '.DS_Store' --exclude '._*' \
   "$REPO_ROOT/database/" "$SILEN_SSH:$REMOTE_DIR/database/"
 ok "database uploaded"
+
+# ---- 2b. sync the static site (marketing pages + admin console) -------------
+# nginx serves this directory directly (see nginx-silafit.tappit.click.conf), so
+# this is the whole deploy for anything under website/ - no container rebuild, no
+# API restart. --delete so a removed page doesn't linger on the server; the
+# trailing chmod is what lets the nginx worker (www-data) read it at all.
+log "Uploading website/ -> $SILEN_SSH:$REMOTE_DIR/website"
+rsync -az --delete --exclude '.DS_Store' --exclude '._*' \
+  "$REPO_ROOT/website/" "$SILEN_SSH:$REMOTE_DIR/website/"
+ssh "$SILEN_SSH" "chmod -R a+rX '$REMOTE_DIR/website'"
+ok "website uploaded"
 
 # ---- 3. sync deploy assets (never touches the server's own .env) -----------
 log "Uploading deploy/ -> $SILEN_SSH:$REMOTE_DIR/deploy"

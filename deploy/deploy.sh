@@ -277,11 +277,33 @@ ok "API responding (HTTP $api_ok on /api/plans)"
 
 # ---- 9. nginx site ----------------------------------------------------------
 log "Configuring nginx site for $DOMAIN"
+
+# The vhost now serves the static site out of $REPO_ROOT/website (publish.sh uploads
+# it) and gates admin.html behind an auth_request to the API. Both need the directory
+# to exist and be readable by the nginx worker, or every page 404s.
+mkdir -p "$REPO_ROOT/website"
+chmod -R a+rX "$REPO_ROOT/website"
+if [ -f "$REPO_ROOT/website/index.html" ]; then
+  ok "website/ present on the server"
+else
+  warn "website/ has no index.html yet — run deploy/publish.sh from your machine to upload the site"
+fi
+
 cp "$SCRIPT_DIR/nginx-silafit.tappit.click.conf" /etc/nginx/sites-available/$DOMAIN.conf
 ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/$DOMAIN.conf
 nginx -t
 systemctl reload nginx
-ok "nginx reloaded (HTTP proxy live)"
+ok "nginx reloaded (static site + /api proxy live)"
+
+# Fail here rather than discover in production that the console gate silently
+# isn't enforcing. Ubuntu's nginx ships auth_request, but the module can be absent
+# on a custom build — and without it `nginx -t` still passes while the whole
+# single-choke-point design quietly stops existing.
+if nginx -V 2>&1 | grep -q 'with-http_auth_request_module'; then
+  ok "auth_request module available (admin console gate is enforceable)"
+else
+  warn "nginx has no auth_request module — admin.html cannot be gated by this vhost. Install Ubuntu's nginx package or compile the module in."
+fi
 
 # ---- 10. HTTPS via Let's Encrypt --------------------------------------------
 log "Ensuring HTTPS + nginx TLS block for $DOMAIN"
@@ -294,6 +316,20 @@ log "Ensuring HTTPS + nginx TLS block for $DOMAIN"
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect
 ok "HTTPS certificate + nginx TLS block ensured"
 systemctl reload nginx
+
+# ---- 10b. verify the console gate actually refuses anonymous access --------
+# admin.html must never answer 200 to a request with no session cookie. Checked
+# over HTTPS (certbot just configured it); best-effort, since DNS/TLS can need a
+# moment on a first-ever deploy.
+log "Checking the admin console gate"
+console_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 "https://$DOMAIN/admin.html" 2>/dev/null || true)"
+case "${console_code:-000}" in
+  302|303) ok "anonymous request to /admin.html is redirected to the sign-in page (HTTP $console_code)" ;;
+  401|403) ok "anonymous request to /admin.html is refused (HTTP $console_code)" ;;
+  200)    warn "SERVER /admin.html WITHOUT A SESSION — the gate is not enforcing. Check the auth_request block and that the API answers /api/admin/auth/session with 401." ;;
+  000)    warn "could not reach https://$DOMAIN yet (DNS/TLS may still be settling) — re-check the gate by hand with: curl -skI https://$DOMAIN/admin.html" ;;
+  *)      warn "unexpected HTTP $console_code from /admin.html" ;;
+esac
 
 log "DONE"
 echo "  DB      : SQL Server 2022 (container silen-sqlserver), database $DB_NAME"

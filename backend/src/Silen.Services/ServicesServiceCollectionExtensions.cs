@@ -19,6 +19,7 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IMealPlanningService, MealPlanningService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<ISubscriptionGate, SubscriptionGate>();
+        services.AddScoped<IAdminAuthService, AdminAuthService>();
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();
