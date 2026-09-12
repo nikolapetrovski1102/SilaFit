@@ -1,5 +1,6 @@
 import '../../core/api/api_client.dart';
 import 'auth_result.dart';
+import 'email_verification_start.dart';
 
 /// Talks to `api/auth/*`. Every method returns an [AuthResult] the caller
 /// hands to `AuthController.applySession`.
@@ -14,20 +15,42 @@ class AuthRepository {
         body: {'deviceId': deviceId},
       );
 
-  Future<AuthResult> registerEmail({
+  /// Step 1 of email registration - stashes the pending registration and
+  /// emails a 6-digit code. No account exists until [verifyEmailRegistration]
+  /// confirms that code.
+  Future<EmailVerificationStart> startEmailRegistration({
     required String email,
     required String password,
     String? displayName,
   }) =>
       _client.post(
-        '/auth/register/email',
-        AuthResult.fromJson,
+        '/auth/register/email/start',
+        EmailVerificationStart.fromJson,
         body: {
           'email': email,
           'password': password,
           if (displayName != null && displayName.isNotEmpty)
             'displayName': displayName,
         },
+      );
+
+  /// Step 2 - confirms the emailed code and only then creates the account.
+  Future<AuthResult> verifyEmailRegistration({
+    required String pendingId,
+    required String code,
+  }) =>
+      _client.post(
+        '/auth/register/email/verify',
+        AuthResult.fromJson,
+        body: {'pendingId': pendingId, 'code': code},
+      );
+
+  /// Re-sends a fresh code for an already-started pending registration.
+  Future<EmailVerificationStart> resendEmailVerification(String pendingId) =>
+      _client.post(
+        '/auth/register/email/resend',
+        EmailVerificationStart.fromJson,
+        body: {'pendingId': pendingId},
       );
 
   Future<AuthResult> loginEmail(

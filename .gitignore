@@ -17,6 +17,10 @@ database/**/*.ldf
 .env
 *.local.json
 
+# TDE certificate + private key backup — losing it permanently locks the
+# encrypted database; never commit it, move it to separate secure storage.
+deploy/tde-cert-backup/
+
 # Android signing keystore backup - never commit
 *.jks
 *.keystore

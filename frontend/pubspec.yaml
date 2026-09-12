@@ -16,10 +16,16 @@ dependencies:
   # State management - simple ChangeNotifier + Provider, no code-gen required.
   provider: ^6.1.2
 
-  # Local persistence: device id + JWT session (shared across the app,
-  # see lib/core/session/session_store.dart - the single source of truth
-  # every feature reads from, no per-feature duplicate storage).
+  # Local persistence: non-sensitive prefs only (onboarding flag, cached
+  # appearance mode) - see lib/core/session/session_store.dart. The session
+  # token/deviceId/email/displayName live in flutter_secure_storage instead
+  # (Keychain on iOS, Keystore-backed EncryptedSharedPreferences on Android).
   shared_preferences: ^2.3.2
+
+  # Keychain (iOS) / Keystore-backed EncryptedSharedPreferences (Android) for
+  # the auth token, device id, email, and display name - see
+  # lib/core/session/session_store.dart.
+  flutter_secure_storage: ^9.2.2
 
   # Stable per-install device id used for the device-id login flow.
   uuid: ^4.5.1

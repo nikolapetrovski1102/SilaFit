@@ -8,4 +8,8 @@ public interface IBodyweightProvider
     Task<List<BodyweightEntryModel>> LogAsync(Guid userId, decimal weightKg, CancellationToken cancellationToken = default);
 
     Task<List<BodyweightEntryModel>> GetLatestAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Entries in [fromDateUtc, toDateUtc], oldest first. Used by AnalyticsProvider to
+    /// derive start/end weight now that WeightKg can no longer be aggregated in T-SQL.</summary>
+    Task<List<BodyweightEntryModel>> GetInRangeAsync(Guid userId, DateOnly fromDateUtc, DateOnly toDateUtc, CancellationToken cancellationToken = default);
 }

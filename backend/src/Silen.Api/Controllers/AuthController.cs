@@ -22,11 +22,25 @@ public sealed class AuthController(IAuthService authService, ILogger<AuthControl
         return result.ToActionResult(logger);
     }
 
-    [HttpPost("register/email")]
-    public async Task<IActionResult> RegisterEmail([FromBody] EmailRegisterRequest request, CancellationToken cancellationToken)
+    [HttpPost("register/email/start")]
+    public async Task<IActionResult> StartEmailRegistration([FromBody] EmailRegisterRequest request, CancellationToken cancellationToken)
     {
         request.ExistingUserId = User.GetUserIdOrNull();
-        var result = await authService.RegisterEmailAsync(request, cancellationToken);
+        var result = await authService.StartEmailRegistrationAsync(request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("register/email/verify")]
+    public async Task<IActionResult> VerifyEmailRegistration([FromBody] EmailVerificationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await authService.VerifyEmailRegistrationAsync(request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("register/email/resend")]
+    public async Task<IActionResult> ResendEmailVerification([FromBody] ResendEmailVerificationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await authService.ResendEmailVerificationAsync(request, cancellationToken);
         return result.ToActionResult(logger);
     }
 

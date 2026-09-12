@@ -78,4 +78,67 @@ public sealed class AuthProvider(ISqlExecutor sqlExecutor) : IAuthProvider
             "dbo.usp_Auth_UpdateLastLogin",
             [SqlParameterBuilder.Create("@UserId", userId)],
             cancellationToken);
+
+    public Task UpsertPendingEmailVerificationAsync(
+        Guid pendingId,
+        Guid? existingUserId,
+        string email,
+        byte[] passwordHash,
+        byte[] passwordSalt,
+        string? displayName,
+        byte[] codeHash,
+        byte[] codeSalt,
+        DateTime expiresAtUtc,
+        CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_UpsertPendingEmailVerification",
+            [
+                SqlParameterBuilder.Create("@PendingId", pendingId),
+                SqlParameterBuilder.Create("@ExistingUserId", existingUserId),
+                SqlParameterBuilder.Create("@Email", email),
+                SqlParameterBuilder.Create("@PasswordHash", passwordHash),
+                SqlParameterBuilder.Create("@PasswordSalt", passwordSalt),
+                SqlParameterBuilder.Create("@DisplayName", displayName),
+                SqlParameterBuilder.Create("@CodeHash", codeHash),
+                SqlParameterBuilder.Create("@CodeSalt", codeSalt),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc)
+            ],
+            cancellationToken);
+
+    public Task<PendingEmailVerificationModel?> GetPendingEmailVerificationAsync(Guid pendingId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Auth_GetPendingEmailVerification",
+            [SqlParameterBuilder.Create("@PendingId", pendingId)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, AuthRowMapper.MapPendingVerification, cancellationToken),
+            cancellationToken);
+
+    public Task IncrementPendingEmailVerificationAttemptAsync(Guid pendingId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_IncrementPendingEmailVerificationAttempt",
+            [SqlParameterBuilder.Create("@PendingId", pendingId)],
+            cancellationToken);
+
+    public Task RefreshPendingEmailVerificationAsync(
+        Guid pendingId, byte[] codeHash, byte[] codeSalt, DateTime expiresAtUtc, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_RefreshPendingEmailVerification",
+            [
+                SqlParameterBuilder.Create("@PendingId", pendingId),
+                SqlParameterBuilder.Create("@CodeHash", codeHash),
+                SqlParameterBuilder.Create("@CodeSalt", codeSalt),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc)
+            ],
+            cancellationToken);
+
+    public Task DeletePendingEmailVerificationAsync(Guid pendingId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_DeletePendingEmailVerification",
+            [SqlParameterBuilder.Create("@PendingId", pendingId)],
+            cancellationToken);
+
+    public Task MarkEmailVerifiedAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_MarkEmailVerified",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            cancellationToken);
 }

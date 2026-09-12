@@ -43,3 +43,22 @@ public sealed class AuthResultDto
     public string? Email { get; set; }
     public string? DisplayName { get; set; }
 }
+
+/// <summary>Returned by both register/email/start and .../resend - the client holds onto
+/// <see cref="PendingId"/> and passes it back to .../verify along with the code the user typed.</summary>
+public sealed class EmailVerificationStartResultDto
+{
+    public Guid PendingId { get; set; }
+    public int ExpiresInSeconds { get; set; }
+}
+
+public sealed class EmailVerificationRequest
+{
+    public Guid PendingId { get; set; }
+    public string Code { get; set; } = string.Empty;
+}
+
+public sealed class ResendEmailVerificationRequest
+{
+    public Guid PendingId { get; set; }
+}

@@ -30,4 +30,19 @@ public static class AuthRowMapper
         account.PasswordSalt = reader.GetNullableBytes("PasswordSalt");
         return account;
     }
+
+    public static PendingEmailVerificationModel MapPendingVerification(SqlDataReader reader) => new()
+    {
+        PendingId = reader.GetGuidValue("PendingId"),
+        ExistingUserId = reader.GetNullableGuid("ExistingUserId"),
+        Email = reader.GetStringValue("Email"),
+        PasswordHash = reader.GetNullableBytes("PasswordHash") ?? [],
+        PasswordSalt = reader.GetNullableBytes("PasswordSalt") ?? [],
+        DisplayName = reader.GetNullableString("DisplayName"),
+        CodeHash = reader.GetNullableBytes("CodeHash") ?? [],
+        CodeSalt = reader.GetNullableBytes("CodeSalt") ?? [],
+        AttemptCount = reader.GetInt32Value("AttemptCount"),
+        ExpiresAtUtc = reader.GetDateTimeValue("ExpiresAtUtc"),
+        LastSentAtUtc = reader.GetDateTimeValue("LastSentAtUtc")
+    };
 }

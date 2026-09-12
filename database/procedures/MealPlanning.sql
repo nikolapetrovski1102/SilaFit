@@ -6,6 +6,9 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
+-- TargetCalories/TargetProteinG/TargetCarbsG/TargetFatsG are AES-256-GCM
+-- ciphertext (Silen.Common.Helpers.FieldCipher), encrypted/decrypted at the
+-- MealPlanningProvider layer - see database/schema/025_ColumnEncryptionCutover.sql.
 CREATE OR ALTER PROCEDURE dbo.usp_UserNutritionTargets_Get
     @UserId UNIQUEIDENTIFIER
 AS
@@ -20,10 +23,10 @@ GO
 
 CREATE OR ALTER PROCEDURE dbo.usp_UserNutritionTargets_Upsert
     @UserId UNIQUEIDENTIFIER,
-    @TargetCalories SMALLINT,
-    @TargetProteinG SMALLINT,
-    @TargetCarbsG SMALLINT,
-    @TargetFatsG SMALLINT
+    @TargetCalories VARBINARY(64),
+    @TargetProteinG VARBINARY(64),
+    @TargetCarbsG VARBINARY(64),
+    @TargetFatsG VARBINARY(64)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -48,6 +51,10 @@ BEGIN
 END
 GO
 
+-- Title/CaloriesKcal/ProteinG/CarbsG/FatsG are AES-256-GCM ciphertext,
+-- encrypted/decrypted at the MealPlanningProvider layer. MealType/Status/
+-- PlannedLocalTime/dates stay plaintext - not sensitive, and PlannedLocalTime/
+-- LogDateUtc need to stay queryable in T-SQL.
 CREATE OR ALTER PROCEDURE dbo.usp_MealLogs_GetForDate
     @UserId UNIQUEIDENTIFIER,
     @LogDateUtc DATE
@@ -71,11 +78,11 @@ CREATE OR ALTER PROCEDURE dbo.usp_MealLogs_Upsert
     @UserId UNIQUEIDENTIFIER,
     @LogDateUtc DATE,
     @MealType NVARCHAR(20),
-    @Title NVARCHAR(200),
-    @CaloriesKcal SMALLINT,
-    @ProteinG SMALLINT,
-    @CarbsG SMALLINT,
-    @FatsG SMALLINT,
+    @Title VARBINARY(300),
+    @CaloriesKcal VARBINARY(64),
+    @ProteinG VARBINARY(64),
+    @CarbsG VARBINARY(64),
+    @FatsG VARBINARY(64),
     @Status NVARCHAR(10),
     @PlannedLocalTime TIME(0) = NULL
 AS
@@ -132,8 +139,26 @@ BEGIN
 END
 GO
 
+-- Feeds AnalyticsProvider's AvgCaloriesLogged computation (moved out of
+-- usp_Analytics_GetMonthlySnapshot since CaloriesKcal is no longer readable
+-- in T-SQL) - one row per logged meal, decrypted and averaged in C#.
+CREATE OR ALTER PROCEDURE dbo.usp_MealLogs_GetCaloriesInRange
+    @UserId UNIQUEIDENTIFIER,
+    @FromDateUtc DATE,
+    @ToDateUtc DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT LogDateUtc, CaloriesKcal
+    FROM dbo.MealLogs
+    WHERE UserId = @UserId AND Status = 'Logged' AND LogDateUtc BETWEEN @FromDateUtc AND @ToDateUtc;
+END
+GO
+
 -- Month-matched suggestions first, then evergreen (SuggestedMonth IS NULL)
--- ones, each group by SortOrder.
+-- ones, each group by SortOrder. MealSuggestions is system-authored content,
+-- not user data, so it stays plaintext.
 CREATE OR ALTER PROCEDURE dbo.usp_MealSuggestions_GetForMonth
     @Month TINYINT
 AS

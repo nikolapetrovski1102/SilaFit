@@ -56,6 +56,9 @@ services:
       Jwt__Audience: "SilenApp"
       Jwt__SigningKey: "${JWT_SIGNING_KEY}"
       Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-43200}"
+      # AES-256-GCM key for application-level column encryption (FieldCipher) -
+      # kept out of source control the same way as Jwt__SigningKey, see deploy/.env
+      Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
       # OAuth client ids — leave unset to disable that sign-in method server-side checks.
       GoogleAuth__ClientIds__0: "${GOOGLE_WEB_CLIENT_ID:-}"
       AppleAuth__ClientIds__0: "${APPLE_BUNDLE_ID:-com.nikolapetrovski.silafit}"
@@ -71,6 +74,23 @@ services:
     # swap. Docker OOM-kills the container at the limit and `restart: unless-stopped`
     # brings it back, which is a much faster recovery than a wedged, swap-thrashing host.
     mem_limit: "${API_MEM_LIMIT:-1024m}"
+
+  # One-shot backfill tool for the column-encryption rollout (see
+  # database/schema/024_ColumnEncryptionAdd.sql / 025_ColumnEncryptionCutover.sql).
+  # Never started by a plain `docker compose up` (profile-gated) - deploy.sh
+  # invokes it explicitly, once, between applying 024 and 025.
+  silen-encrypt-backfill:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.EncryptExistingData/Dockerfile
+    container_name: silen-encrypt-backfill
+    profiles: ["tools"]
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
 
 volumes:
   silen-sqldata:

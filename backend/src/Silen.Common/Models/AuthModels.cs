@@ -28,3 +28,23 @@ public sealed class ExternalIdentityPayload
     public string? Email { get; set; }
     public string? DisplayName { get; set; }
 }
+
+/// <summary>
+/// An email/password registration awaiting its emailed code - everything
+/// usp_Auth_RegisterEmailUser will need, held outside dbo.Users until the
+/// code is confirmed. See usp_Auth_UpsertPendingEmailVerification.
+/// </summary>
+public sealed class PendingEmailVerificationModel
+{
+    public Guid PendingId { get; set; }
+    public Guid? ExistingUserId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public byte[] PasswordHash { get; set; } = [];
+    public byte[] PasswordSalt { get; set; } = [];
+    public string? DisplayName { get; set; }
+    public byte[] CodeHash { get; set; } = [];
+    public byte[] CodeSalt { get; set; } = [];
+    public int AttemptCount { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
+    public DateTime LastSentAtUtc { get; set; }
+}

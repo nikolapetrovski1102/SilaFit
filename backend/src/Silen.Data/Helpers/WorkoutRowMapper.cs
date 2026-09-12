@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Silen.Common.Helpers;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -6,10 +7,11 @@ namespace Silen.Data.Helpers;
 /// <summary>Outside helper mapping Bodyweight/Streak/WorkoutSession/Splits/Exercises/Plans rows.</summary>
 public static class WorkoutRowMapper
 {
-    public static BodyweightEntryModel MapBodyweightEntry(SqlDataReader reader) => new()
+    /// <summary>WeightKg is AES-256-GCM ciphertext (see BodyweightProvider) - decrypted here with <paramref name="key"/>.</summary>
+    public static BodyweightEntryModel MapBodyweightEntry(SqlDataReader reader, byte[] key) => new()
     {
         BodyweightLogId = reader.GetGuidValue("BodyweightLogId"),
-        WeightKg = reader.GetDecimalValue("WeightKg"),
+        WeightKg = FieldCipher.DecryptDecimal(reader.GetBytesValue("WeightKg"), key),
         LoggedAtUtc = reader.GetDateTimeValue("LoggedAtUtc")
     };
 

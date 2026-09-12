@@ -342,6 +342,21 @@ class _ActiveWorkoutTrackerScreenState
     _saveDraft();
   }
 
+  /// Drops one set from the current exercise, whether it's still to come or
+  /// already logged - the plan's `targetSets` is only ever a starting seed
+  /// (see `_init`), so working out one fewer set than prescribed, or
+  /// deleting one added by mistake via [_addSet], is just as valid as adding
+  /// one. Always leaves at least one set behind: an exercise with zero sets
+  /// isn't a smaller version of itself, it's a different exercise skipped
+  /// entirely, which isn't what this button is for.
+  bool get _canRemoveSet => _currentSets.length > 1;
+
+  void _removeSet(int index) {
+    if (!_canRemoveSet) return;
+    setState(() => _currentSets.removeAt(index));
+    _saveDraft();
+  }
+
   void _adjustWeight(int index, double directionSign) {
     setState(() {
       final floor = _weightFloorKg;
@@ -632,7 +647,9 @@ class _ActiveWorkoutTrackerScreenState
                                         _barbellEquipment ||
                                     _currentExercise.equipmentType == null,
                                 suggestWeightIncrease: _suggestWeightIncrease,
+                                canRemove: _canRemoveSet,
                                 onLog: () => _logSet(_activeSetIndex!),
+                                onRemove: () => _removeSet(_activeSetIndex!),
                                 onWeightDelta: (sign) =>
                                     _adjustWeight(_activeSetIndex!, sign),
                                 onRepsDelta: (delta) =>
@@ -645,6 +662,9 @@ class _ActiveWorkoutTrackerScreenState
                             : _ExerciseCompleteCard(
                                 key: const ValueKey('complete'),
                                 totalSets: _currentSets.length,
+                                canRemoveSet: _canRemoveSet,
+                                onRemoveLastSet: () =>
+                                    _removeSet(_currentSets.length - 1),
                               ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
@@ -1080,7 +1100,10 @@ class _CurrentSetCard extends StatelessWidget {
   // `_barbellEquipment` on the parent state).
   final bool isBarbell;
   final bool suggestWeightIncrease;
+  // False once this is the exercise's only remaining set - see `_canRemoveSet`.
+  final bool canRemove;
   final VoidCallback onLog;
+  final VoidCallback onRemove;
   final ValueChanged<double> onWeightDelta;
   final ValueChanged<int> onRepsDelta;
   final ValueChanged<double> onWeightDirectKg;
@@ -1096,7 +1119,9 @@ class _CurrentSetCard extends StatelessWidget {
     required this.weightFloorKg,
     required this.isBarbell,
     required this.suggestWeightIncrease,
+    required this.canRemove,
     required this.onLog,
+    required this.onRemove,
     required this.onWeightDelta,
     required this.onRepsDelta,
     required this.onWeightDirectKg,
@@ -1138,28 +1163,54 @@ class _CurrentSetCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Stack(
+          alignment: Alignment.center,
           children: [
-            Text('SET ${setIndex + 1} OF ',
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.onSurfaceVariant)),
-            // The one place a set actually being added is visible in this
-            // current-set-only layout - the new set itself never appears on
-            // screen until it's the active one, so this count pulsing is
-            // Add Set's only on-screen feedback.
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              transitionBuilder: (child, animation) => ScaleTransition(
-                scale: Tween<double>(begin: 0.5, end: 1).animate(
-                    CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
-                child: FadeTransition(opacity: animation, child: child),
-              ),
-              child: Text('$totalSets',
-                  key: ValueKey(totalSets),
-                  style: AppTypography.labelCaps
-                      .copyWith(color: AppColors.onSurfaceVariant)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('SET ${setIndex + 1} OF ',
+                    style: AppTypography.labelCaps
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+                // The one place a set actually being added is visible in this
+                // current-set-only layout - the new set itself never appears on
+                // screen until it's the active one, so this count pulsing is
+                // Add Set's only on-screen feedback.
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  transitionBuilder: (child, animation) => ScaleTransition(
+                    scale: Tween<double>(begin: 0.5, end: 1).animate(
+                        CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+                    child: FadeTransition(opacity: animation, child: child),
+                  ),
+                  child: Text('$totalSets',
+                      key: ValueKey(totalSets),
+                      style: AppTypography.labelCaps
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ),
+              ],
             ),
+            // Pinned to the trailing edge rather than in the centered Row
+            // above, so removing the affordance for the last remaining set
+            // (see `canRemove`) never shifts the "SET X OF Y" text off
+            // center. Hidden rather than disabled in that case - a dead
+            // trash icon here would invite exactly the tap it can't honor.
+            if (canRemove)
+              Positioned(
+                right: 0,
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    onRemove();
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.xxs),
+                    child: Icon(Icons.delete_outline_rounded,
+                        size: 18, color: AppColors.onSurfaceVariant),
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -1234,8 +1285,17 @@ class _CurrentSetCard extends StatelessWidget {
 /// bottom "Finish Exercise"/"Finish Workout" button.
 class _ExerciseCompleteCard extends StatelessWidget {
   final int totalSets;
+  // False once removing the last set would leave the exercise with zero -
+  // mirrors `_CurrentSetCard.canRemove`, same reasoning as `_canRemoveSet`.
+  final bool canRemoveSet;
+  final VoidCallback onRemoveLastSet;
 
-  const _ExerciseCompleteCard({super.key, required this.totalSets});
+  const _ExerciseCompleteCard({
+    super.key,
+    required this.totalSets,
+    required this.canRemoveSet,
+    required this.onRemoveLastSet,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1249,6 +1309,27 @@ class _ExerciseCompleteCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant)),
+        if (canRemoveSet) ...[
+          const SizedBox(height: AppSpacing.sm),
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onRemoveLastSet();
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete_outline_rounded,
+                    size: 16, color: AppColors.onSurfaceVariant),
+                const SizedBox(width: AppSpacing.xxs),
+                Text('Remove last set',
+                    style: AppTypography.bodySm
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

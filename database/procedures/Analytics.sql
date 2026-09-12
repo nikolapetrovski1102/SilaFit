@@ -11,6 +11,14 @@ GO
 -- row. CurrentStreakDays/WeeklyCompliancePercent mirror usp_Streak_GetStatus
 -- (current-state, not scoped to the requested month - a mid-month streak
 -- read is still meaningful context for the AI).
+--
+-- StartWeightKg/EndWeightKg/AvgCaloriesLogged are NOT computed here anymore:
+-- BodyweightLogs.WeightKg and MealLogs.CaloriesKcal are AES-256-GCM
+-- ciphertext (Silen.Common.Helpers.FieldCipher) and can't be aggregated in
+-- T-SQL. AnalyticsProvider fills those three fields in C# instead, via
+-- IBodyweightProvider.GetInRangeAsync / IMealPlanningProvider.GetCaloriesInRangeAsync.
+-- LoggedMealDays stays here since COUNT(DISTINCT LogDateUtc) never touches
+-- an encrypted column.
 CREATE OR ALTER PROCEDURE dbo.usp_Analytics_GetMonthlySnapshot
     @UserId UNIQUEIDENTIFIER,
     @FromDateUtc DATE,
@@ -58,12 +66,8 @@ BEGIN
          FROM DayStatus
          WHERE CalendarDate BETWEEN @WeekStart AND DATEADD(DAY, 6, @WeekStart)) AS WeeklyCompliancePercent,
 
-        bw.StartWeightKg,
-        bw.EndWeightKg,
-
         ISNULL(ml.LoggedMealDays, 0) AS LoggedMealDays,
         DATEDIFF(DAY, @FromDateUtc, @ToDateUtc) + 1 AS TotalDaysInRange,
-        ml.AvgCaloriesLogged,
         nt.TargetCalories
 
     FROM dbo.Users u
@@ -77,18 +81,7 @@ BEGIN
         WHERE UserId = @UserId AND ScheduledDateUtc BETWEEN @FromDateUtc AND @ToDateUtc
     ) ws
     OUTER APPLY (
-        SELECT
-            (SELECT TOP 1 WeightKg FROM dbo.BodyweightLogs
-             WHERE UserId = @UserId AND CAST(LoggedAtUtc AS DATE) BETWEEN @FromDateUtc AND @ToDateUtc
-             ORDER BY LoggedAtUtc ASC) AS StartWeightKg,
-            (SELECT TOP 1 WeightKg FROM dbo.BodyweightLogs
-             WHERE UserId = @UserId AND CAST(LoggedAtUtc AS DATE) BETWEEN @FromDateUtc AND @ToDateUtc
-             ORDER BY LoggedAtUtc DESC) AS EndWeightKg
-    ) bw
-    OUTER APPLY (
-        SELECT
-            COUNT(DISTINCT LogDateUtc) AS LoggedMealDays,
-            AVG(CAST(CaloriesKcal AS DECIMAL(10,2))) AS AvgCaloriesLogged
+        SELECT COUNT(DISTINCT LogDateUtc) AS LoggedMealDays
         FROM dbo.MealLogs
         WHERE UserId = @UserId AND Status = 'Logged' AND LogDateUtc BETWEEN @FromDateUtc AND @ToDateUtc
     ) ml

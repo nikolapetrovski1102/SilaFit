@@ -64,4 +64,38 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
         ServiceExecutor.RunAsync(async () =>
             await splitsProvider.SetActiveAsync(userId, request.SplitId, cancellationToken)
                 ?? throw new NotFoundException($"Split '{request.SplitId}' could not be activated for user '{userId}'.", "That split couldn't be activated."));
+
+    public Task<ServiceResult<ActiveSplitModel?>> AutoAssignRecommendedAsync(Guid userId, string? goal, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            // Never override a split the user already picked for themselves -
+            // this is strictly a first-time default, not a re-recommendation
+            // every time the profile is saved.
+            if (await splitsProvider.GetActiveAsync(userId, cancellationToken) is not null)
+            {
+                return (ActiveSplitModel?)null;
+            }
+
+            if (goal is null)
+            {
+                return null;
+            }
+
+            var splits = await splitsProvider.GetAllAsync(cancellationToken);
+
+            // Prefer a system-default split tagged for this goal; among those,
+            // the lowest SortOrder wins (splits are already curated in that
+            // order). Falls back to any goal-tagged split (still SortOrder
+            // first) if no system default matches, and does nothing at all if
+            // the library has no split for this goal yet.
+            var recommended = splits
+                .Where(s => s.RecommendedGoal == goal)
+                .OrderByDescending(s => s.IsSystemDefault)
+                .ThenBy(s => s.SortOrder)
+                .FirstOrDefault();
+
+            return recommended is null
+                ? null
+                : await splitsProvider.SetActiveAsync(userId, recommended.SplitId, cancellationToken);
+        });
 }

@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silen.Data", "src\Silen.Dat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silen.Services", "src\Silen.Services\Silen.Services.csproj", "{391032AC-F57E-4DA6-AE36-15304DD03CAE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silen.Tools.EncryptExistingData", "src\Silen.Tools.EncryptExistingData\Silen.Tools.EncryptExistingData.csproj", "{DF5F5779-DA70-4C0D-95D7-9475A0892F13}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{391032AC-F57E-4DA6-AE36-15304DD03CAE}.Release|x64.Build.0 = Release|Any CPU
 		{391032AC-F57E-4DA6-AE36-15304DD03CAE}.Release|x86.ActiveCfg = Release|Any CPU
 		{391032AC-F57E-4DA6-AE36-15304DD03CAE}.Release|x86.Build.0 = Release|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Debug|x64.Build.0 = Debug|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Debug|x86.Build.0 = Debug|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Release|x64.ActiveCfg = Release|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Release|x64.Build.0 = Release|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Release|x86.ActiveCfg = Release|Any CPU
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -80,5 +94,6 @@ Global
 		{29A8D8BB-5209-4407-B7C6-C0DC55655CFF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{D7EEE1D0-497B-4DF3-A180-A929BD609E34} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{391032AC-F57E-4DA6-AE36-15304DD03CAE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{DF5F5779-DA70-4C0D-95D7-9475A0892F13} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

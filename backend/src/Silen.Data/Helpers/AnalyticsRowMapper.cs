@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Silen.Common.Helpers;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -7,22 +8,28 @@ namespace Silen.Data.Helpers;
 /// since it's a distinct domain (AI prompt templates + generated reports).</summary>
 public static class AnalyticsRowMapper
 {
-    public static MonthlySnapshotModel MapMonthlySnapshot(SqlDataReader reader) => new()
+    /// <summary>StartWeightKg/EndWeightKg/AvgCaloriesLogged are left at their default (null) here -
+    /// usp_Analytics_GetMonthlySnapshot no longer computes them (BodyweightLogs.WeightKg and
+    /// MealLogs.CaloriesKcal are AES-256-GCM ciphertext); AnalyticsProvider fills them in
+    /// afterwards from IBodyweightProvider/IMealPlanningProvider. TargetCalories IS returned by
+    /// that proc, as ciphertext, so it's decrypted here with <paramref name="key"/>.</summary>
+    public static MonthlySnapshotModel MapMonthlySnapshot(SqlDataReader reader, byte[] key)
     {
-        DisplayName = reader.GetStringValue("DisplayName"),
-        CompletedSessions = reader.GetInt32Value("CompletedSessions"),
-        ScheduledSessions = reader.GetInt32Value("ScheduledSessions"),
-        TotalTonnageKg = reader.GetDecimalValue("TotalTonnageKg"),
-        AvgRpe = reader.GetDecimalValue("AvgRpe"),
-        CurrentStreakDays = reader.GetInt32Value("CurrentStreakDays"),
-        WeeklyCompliancePercent = reader.GetInt32Value("WeeklyCompliancePercent"),
-        StartWeightKg = reader.GetNullableDecimal("StartWeightKg"),
-        EndWeightKg = reader.GetNullableDecimal("EndWeightKg"),
-        LoggedMealDays = reader.GetInt32Value("LoggedMealDays"),
-        TotalDaysInRange = reader.GetInt32Value("TotalDaysInRange"),
-        AvgCaloriesLogged = reader.GetNullableDecimal("AvgCaloriesLogged"),
-        TargetCalories = reader.GetNullableInt16("TargetCalories")
-    };
+        var targetCalories = reader.GetNullableBytes("TargetCalories");
+        return new MonthlySnapshotModel
+        {
+            DisplayName = reader.GetStringValue("DisplayName"),
+            CompletedSessions = reader.GetInt32Value("CompletedSessions"),
+            ScheduledSessions = reader.GetInt32Value("ScheduledSessions"),
+            TotalTonnageKg = reader.GetDecimalValue("TotalTonnageKg"),
+            AvgRpe = reader.GetDecimalValue("AvgRpe"),
+            CurrentStreakDays = reader.GetInt32Value("CurrentStreakDays"),
+            WeeklyCompliancePercent = reader.GetInt32Value("WeeklyCompliancePercent"),
+            LoggedMealDays = reader.GetInt32Value("LoggedMealDays"),
+            TotalDaysInRange = reader.GetInt32Value("TotalDaysInRange"),
+            TargetCalories = targetCalories is null ? null : (short)FieldCipher.DecryptInt(targetCalories, key)
+        };
+    }
 
     public static AiPromptTemplateModel MapPromptTemplate(SqlDataReader reader) => new()
     {

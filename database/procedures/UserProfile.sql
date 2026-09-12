@@ -18,13 +18,18 @@ BEGIN
 END
 GO
 
+-- Gender/AgeYears/HeightCm/WeightKg/Goal are AES-256-GCM ciphertext
+-- (Silen.Common.Helpers.FieldCipher) - encrypted/decrypted at the
+-- UserProfileProvider layer, so these params are opaque VARBINARY here and
+-- the CHECK constraints that used to validate Gender/Goal text now live in
+-- UserProfileService.Validate() instead (see database/schema/025_ColumnEncryptionCutover.sql).
 CREATE OR ALTER PROCEDURE dbo.usp_UserProfile_Upsert
     @UserId UNIQUEIDENTIFIER,
-    @Gender NVARCHAR(10),
-    @AgeYears TINYINT,
-    @HeightCm DECIMAL(5, 1),
-    @WeightKg DECIMAL(5, 1),
-    @Goal NVARCHAR(20)
+    @Gender VARBINARY(100),
+    @AgeYears VARBINARY(100),
+    @HeightCm VARBINARY(100),
+    @WeightKg VARBINARY(100),
+    @Goal VARBINARY(100)
 AS
 BEGIN
     SET NOCOUNT ON;

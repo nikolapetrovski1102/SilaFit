@@ -23,6 +23,7 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();
         services.AddHttpClient<IOpenRouterClient, OpenRouterClient>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         return services;
     }

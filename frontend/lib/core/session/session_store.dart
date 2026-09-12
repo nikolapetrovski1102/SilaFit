@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -29,8 +30,15 @@ class SilenSession {
 
 /// Single source of truth for the device id and the current auth session.
 /// Every feature reads/writes through this instead of touching
-/// SharedPreferences directly - that's the "shared method, no duplicates"
-/// rule applied to persistence.
+/// SharedPreferences/secure storage directly - that's the "shared method, no
+/// duplicates" rule applied to persistence.
+///
+/// The token, device id, email, and display name are the sensitive half of
+/// this state, so they live in [FlutterSecureStorage] (iOS Keychain /
+/// Android Keystore-backed EncryptedSharedPreferences) instead of plain
+/// SharedPreferences - readable off a rooted/jailbroken device or an
+/// unencrypted backup otherwise. The onboarding flag and cached appearance
+/// mode aren't sensitive and stay in plain SharedPreferences.
 class SessionStore {
   static const _deviceIdKey = 'silen.device_id';
   static const _tokenKey = 'silen.token';
@@ -40,6 +48,14 @@ class SessionStore {
   static const _displayNameKey = 'silen.display_name';
   static const _onboardingCompleteKey = 'silen.onboarding_complete';
   static const _appearanceModeKey = 'silen.appearance_mode';
+
+  // encryptedSharedPreferences wraps the Android prefs file with a
+  // Keystore-backed AES key (requires API 23+, see android/app/build.gradle.kts).
+  // iOS defaults to a Keychain item that is not iCloud-synchronized, so it
+  // never leaves the device via iCloud Keychain.
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   SilenSession? _session;
   String? _deviceId;
@@ -65,25 +81,25 @@ class SessionStore {
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
 
-    _deviceId = prefs.getString(_deviceIdKey);
+    _deviceId = await _secureStorage.read(key: _deviceIdKey);
     if (_deviceId == null) {
       _deviceId = const Uuid().v4();
-      await prefs.setString(_deviceIdKey, _deviceId!);
+      await _secureStorage.write(key: _deviceIdKey, value: _deviceId!);
     }
 
     _hasCompletedOnboarding = prefs.getBool(_onboardingCompleteKey) ?? false;
     _cachedAppearanceMode = prefs.getString(_appearanceModeKey);
 
-    final token = prefs.getString(_tokenKey);
-    final userId = prefs.getString(_userIdKey);
-    final tier = prefs.getString(_tierKey);
+    final token = await _secureStorage.read(key: _tokenKey);
+    final userId = await _secureStorage.read(key: _userIdKey);
+    final tier = await _secureStorage.read(key: _tierKey);
     if (token != null && userId != null && tier != null) {
       _session = SilenSession(
         token: token,
         userId: userId,
         accountTier: tier,
-        email: prefs.getString(_emailKey),
-        displayName: prefs.getString(_displayNameKey),
+        email: await _secureStorage.read(key: _emailKey),
+        displayName: await _secureStorage.read(key: _displayNameKey),
       );
     }
   }
@@ -96,19 +112,19 @@ class SessionStore {
 
   Future<void> save(SilenSession session) async {
     _session = session;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, session.token);
-    await prefs.setString(_userIdKey, session.userId);
-    await prefs.setString(_tierKey, session.accountTier);
+    await _secureStorage.write(key: _tokenKey, value: session.token);
+    await _secureStorage.write(key: _userIdKey, value: session.userId);
+    await _secureStorage.write(key: _tierKey, value: session.accountTier);
     if (session.email != null) {
-      await prefs.setString(_emailKey, session.email!);
+      await _secureStorage.write(key: _emailKey, value: session.email!);
     } else {
-      await prefs.remove(_emailKey);
+      await _secureStorage.delete(key: _emailKey);
     }
     if (session.displayName != null) {
-      await prefs.setString(_displayNameKey, session.displayName!);
+      await _secureStorage.write(
+          key: _displayNameKey, value: session.displayName!);
     } else {
-      await prefs.remove(_displayNameKey);
+      await _secureStorage.delete(key: _displayNameKey);
     }
   }
 
@@ -136,11 +152,10 @@ class SessionStore {
 
   Future<void> clear() async {
     _session = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_userIdKey);
-    await prefs.remove(_tierKey);
-    await prefs.remove(_emailKey);
-    await prefs.remove(_displayNameKey);
+    await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _userIdKey);
+    await _secureStorage.delete(key: _tierKey);
+    await _secureStorage.delete(key: _emailKey);
+    await _secureStorage.delete(key: _displayNameKey);
   }
 }

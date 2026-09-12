@@ -14,8 +14,19 @@ public sealed class AuthService(
     IAuthProvider authProvider,
     IGoogleTokenVerifier googleTokenVerifier,
     IAppleTokenVerifier appleTokenVerifier,
+    IEmailSender emailSender,
     IOptions<JwtOptions> jwtOptions) : IAuthService
 {
+    /// <summary>How long an emailed code stays valid.</summary>
+    private static readonly TimeSpan CodeLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>Minimum gap between .../resend calls for the same pending registration.</summary>
+    private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(30);
+
+    /// <summary>Wrong-code guesses allowed before the pending registration must be restarted.</summary>
+    private const int MaxVerificationAttempts = 5;
+
+
     public Task<ServiceResult<AuthResultDto>> LoginWithDeviceAsync(string deviceId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
@@ -39,7 +50,7 @@ public sealed class AuthService(
             };
         });
 
-    public Task<ServiceResult<AuthResultDto>> RegisterEmailAsync(EmailRegisterRequest request, CancellationToken cancellationToken = default) =>
+    public Task<ServiceResult<EmailVerificationStartResultDto>> StartEmailRegistrationAsync(EmailRegisterRequest request, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
@@ -53,10 +64,58 @@ public sealed class AuthService(
                 throw new ConflictException($"Email '{request.Email}' is already registered.", "That email is already in use.");
             }
 
-            var (hash, salt) = PasswordHasher.Hash(request.Password);
+            var (passwordHash, passwordSalt) = PasswordHasher.Hash(request.Password);
+
+            var pendingId = Guid.NewGuid();
+            var code = VerificationCodeGenerator.GenerateCode();
+            var (codeHash, codeSalt) = PasswordHasher.Hash(code);
+            var expiresAtUtc = DateTime.UtcNow.Add(CodeLifetime);
+
+            await authProvider.UpsertPendingEmailVerificationAsync(
+                pendingId, request.ExistingUserId, request.Email, passwordHash, passwordSalt, request.DisplayName,
+                codeHash, codeSalt, expiresAtUtc, cancellationToken);
+
+            var (subject, html) = VerificationEmailTemplate.Build(code);
+            await emailSender.SendAsync(request.Email, subject, html, cancellationToken);
+
+            return new EmailVerificationStartResultDto
+            {
+                PendingId = pendingId,
+                ExpiresInSeconds = (int)CodeLifetime.TotalSeconds
+            };
+        });
+
+    public Task<ServiceResult<AuthResultDto>> VerifyEmailRegistrationAsync(EmailVerificationRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var pending = await authProvider.GetPendingEmailVerificationAsync(request.PendingId, cancellationToken)
+                ?? throw new NotFoundException(
+                    $"No pending email verification for '{request.PendingId}'.", "That verification session has expired. Please start again.");
+
+            if (pending.ExpiresAtUtc < DateTime.UtcNow)
+            {
+                await authProvider.DeletePendingEmailVerificationAsync(pending.PendingId, cancellationToken);
+                throw new ValidationException("Pending email verification code expired.", "That code has expired. Please request a new one.");
+            }
+
+            if (pending.AttemptCount >= MaxVerificationAttempts)
+            {
+                await authProvider.DeletePendingEmailVerificationAsync(pending.PendingId, cancellationToken);
+                throw new UnauthorizedAppException(
+                    "Pending email verification exceeded max attempts.", "Too many incorrect attempts. Please request a new code.");
+            }
+
+            if (!PasswordHasher.Verify(request.Code, pending.CodeHash, pending.CodeSalt))
+            {
+                await authProvider.IncrementPendingEmailVerificationAttemptAsync(pending.PendingId, cancellationToken);
+                throw new ValidationException("Incorrect email verification code.", "That code isn't right. Please try again.");
+            }
 
             var userId = await authProvider.RegisterEmailUserAsync(
-                request.ExistingUserId, request.Email, hash, salt, request.DisplayName, cancellationToken);
+                pending.ExistingUserId, pending.Email, pending.PasswordHash, pending.PasswordSalt, pending.DisplayName, cancellationToken);
+
+            await authProvider.MarkEmailVerifiedAsync(userId, cancellationToken);
+            await authProvider.DeletePendingEmailVerificationAsync(pending.PendingId, cancellationToken);
 
             var user = await authProvider.GetUserByIdAsync(userId, cancellationToken)
                 ?? throw new NotFoundException($"User '{userId}' was registered but could not be re-read.");
@@ -70,6 +129,34 @@ public sealed class AuthService(
                 AccountTier = user.AccountTier.ToString(),
                 Email = user.Email,
                 DisplayName = user.DisplayName
+            };
+        });
+
+    public Task<ServiceResult<EmailVerificationStartResultDto>> ResendEmailVerificationAsync(ResendEmailVerificationRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var pending = await authProvider.GetPendingEmailVerificationAsync(request.PendingId, cancellationToken)
+                ?? throw new NotFoundException(
+                    $"No pending email verification for '{request.PendingId}'.", "That verification session has expired. Please start again.");
+
+            if (DateTime.UtcNow - pending.LastSentAtUtc < ResendCooldown)
+            {
+                throw new ConflictException("Email verification resend requested too soon.", "Please wait a moment before requesting another code.");
+            }
+
+            var code = VerificationCodeGenerator.GenerateCode();
+            var (codeHash, codeSalt) = PasswordHasher.Hash(code);
+            var expiresAtUtc = DateTime.UtcNow.Add(CodeLifetime);
+
+            await authProvider.RefreshPendingEmailVerificationAsync(pending.PendingId, codeHash, codeSalt, expiresAtUtc, cancellationToken);
+
+            var (subject, html) = VerificationEmailTemplate.Build(code);
+            await emailSender.SendAsync(pending.Email, subject, html, cancellationToken);
+
+            return new EmailVerificationStartResultDto
+            {
+                PendingId = pending.PendingId,
+                ExpiresInSeconds = (int)CodeLifetime.TotalSeconds
             };
         });
 

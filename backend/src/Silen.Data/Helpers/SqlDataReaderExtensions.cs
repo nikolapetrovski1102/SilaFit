@@ -91,4 +91,7 @@ public static class SqlDataReaderExtensions
         reader.GetBytes(ordinal, 0, buffer, 0, length);
         return buffer;
     }
+
+    public static byte[] GetBytesValue(this SqlDataReader reader, string column) =>
+        GetNullableBytes(reader, column) ?? throw new InvalidOperationException($"Column '{column}' was unexpectedly NULL.");
 }

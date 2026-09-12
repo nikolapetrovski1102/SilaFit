@@ -17,10 +17,13 @@ import '../plans/plans_screen.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
 
-/// The Settings screen - preferences, units, and account. Matches
-/// `settings_preferences/screen.png`: profile row, appearance toggle, unit
+/// The Settings screen - preferences, units, and account. Originally matched
+/// `settings_preferences/screen.png` (profile row, appearance toggle, unit
 /// toggles, rest timer sound, barbell standard picker, workout reminders,
-/// static wearable-connection chips, subscription upsell, and account links.
+/// static wearable-connection chips, subscription upsell, account links);
+/// the wearable-connection chips were dropped since no real HealthKit/Google
+/// Fit integration backs them - subscription state and every other row here
+/// reflect real session/settings data instead.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -156,18 +159,6 @@ class _SettingsContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        const SectionEyebrow('Connections'),
-        const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: Column(
-            children: [
-              const _ConnectionRow(label: 'Apple Health', connected: true),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              const _ConnectionRow(label: 'Wearable', connected: true),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
         const SectionEyebrow('Subscription & Data'),
         const SizedBox(height: AppSpacing.sm),
         SectionCard(
@@ -177,9 +168,13 @@ class _SettingsContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('SilaFit Free', style: AppTypography.headlineSm),
+                    Text(auth.isRegistered ? 'SilaFit Free' : 'Guest access',
+                        style: AppTypography.headlineSm),
                     const SizedBox(height: 2),
-                    Text('Upgrade for AI insights and predictive forecasts',
+                    Text(
+                        auth.isRegistered
+                            ? 'Upgrade for AI insights and predictive forecasts'
+                            : 'Create an account to unlock plans, AI insights, and forecasts',
                         style: AppTypography.bodySm
                             .copyWith(color: AppColors.onSurfaceVariant)),
                   ],
@@ -189,7 +184,7 @@ class _SettingsContent extends StatelessWidget {
               SizedBox(
                 width: 120,
                 child: SecondaryPillButton(
-                  label: 'Upgrade',
+                  label: auth.isRegistered ? 'Upgrade' : 'Get Started',
                   foregroundColor: AppColors.accent,
                   onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const PlansScreen())),
@@ -616,28 +611,6 @@ class _ReminderTimeRow extends StatelessWidget {
     final hh = picked.hour.toString().padLeft(2, '0');
     final mm = picked.minute.toString().padLeft(2, '0');
     onSelected('$hh:$mm:00');
-  }
-}
-
-/// A static "Connected" chip row - Apple Health / wearable sync are UI-only,
-/// no real HealthKit/Google Fit integration wired up (out of scope).
-class _ConnectionRow extends StatelessWidget {
-  final String label;
-  final bool connected;
-
-  const _ConnectionRow({required this.label, required this.connected});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Text(label, style: AppTypography.bodyMd)),
-        PillChip(
-          label: connected ? 'Connected' : 'Connect',
-          icon: connected ? Icons.check_circle_rounded : null,
-        ),
-      ],
-    );
   }
 }
 

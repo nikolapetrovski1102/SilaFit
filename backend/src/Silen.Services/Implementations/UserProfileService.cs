@@ -9,7 +9,7 @@ using Silen.Services.Abstractions;
 namespace Silen.Services.Implementations;
 
 /// <inheritdoc cref="IUserProfileService"/>
-public sealed class UserProfileService(IUserProfileProvider userProfileProvider) : IUserProfileService
+public sealed class UserProfileService(IUserProfileProvider userProfileProvider, ISplitService splitService) : IUserProfileService
 {
     private static readonly string[] Genders = ["Male", "Female", "Other"];
     private static readonly string[] Goals = ["BuildMuscle", "LoseFat", "MaintainActive"];
@@ -24,7 +24,19 @@ public sealed class UserProfileService(IUserProfileProvider userProfileProvider)
         {
             Validate(request);
 
-            return await userProfileProvider.UpsertAsync(userId, request, cancellationToken);
+            var profile = await userProfileProvider.UpsertAsync(userId, request, cancellationToken);
+
+            // This is the one call site that writes the onboarding goal for the
+            // first time (see `onboarding_controller.dart`'s single `submit()`),
+            // so it's also where a first-time user gets a split picked for them
+            // automatically - best-effort, since a hiccup here (or the split
+            // library having nothing tagged for this goal yet) is no reason to
+            // fail the profile save itself. `AutoAssignRecommendedAsync` is
+            // itself a no-op for anyone who already has an active split, so
+            // this is safe to run on every profile edit, not just the first.
+            await splitService.AutoAssignRecommendedAsync(userId, request.Goal, cancellationToken);
+
+            return profile;
         });
 
     private static void Validate(UpsertUserProfileRequest request)

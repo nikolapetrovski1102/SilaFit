@@ -60,7 +60,32 @@ if [ -z "${JWT_SIGNING_KEY:-}" ]; then
   ok "Generated new JWT signing key -> $ENV_FILE (chmod 600)"
 fi
 
-export SA_PASSWORD JWT_SIGNING_KEY
+# Application-level column encryption master key (Encryption__MasterKeyBase64,
+# Silen.Common.Helpers.FieldCipher — AES-256-GCM). Must decode to exactly 32
+# raw bytes, hence base64 (not hex, unlike JWT_SIGNING_KEY above).
+if [ -z "${ENCRYPTION_MASTER_KEY:-}" ]; then
+  ENCRYPTION_MASTER_KEY="$(openssl rand -base64 32)"
+  printf 'ENCRYPTION_MASTER_KEY=%s\n' "$ENCRYPTION_MASTER_KEY" >> "$ENV_FILE"
+  ok "Generated new column-encryption master key -> $ENV_FILE (chmod 600)"
+fi
+
+# TDE master key password — protects the server-level (master db) master key
+# used to hold the TDE certificate. SQL Server complexity rules, same shape as SA_PASSWORD.
+if [ -z "${TDE_MASTER_KEY_PASSWORD:-}" ]; then
+  TDE_MASTER_KEY_PASSWORD="Sf$(openssl rand -hex 18)#K7m"
+  printf 'TDE_MASTER_KEY_PASSWORD=%s\n' "$TDE_MASTER_KEY_PASSWORD" >> "$ENV_FILE"
+  ok "Generated new TDE master key password -> $ENV_FILE (chmod 600)"
+fi
+
+# TDE certificate private-key backup password — protects the .pvk file backed
+# up to deploy/tde-cert-backup/ (see step 7b below).
+if [ -z "${TDE_CERT_BACKUP_PASSWORD:-}" ]; then
+  TDE_CERT_BACKUP_PASSWORD="Sf$(openssl rand -hex 18)#K7m"
+  printf 'TDE_CERT_BACKUP_PASSWORD=%s\n' "$TDE_CERT_BACKUP_PASSWORD" >> "$ENV_FILE"
+  ok "Generated new TDE certificate backup password -> $ENV_FILE (chmod 600)"
+fi
+
+export SA_PASSWORD JWT_SIGNING_KEY ENCRYPTION_MASTER_KEY TDE_MASTER_KEY_PASSWORD TDE_CERT_BACKUP_PASSWORD
 export GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}"
 export APPLE_BUNDLE_ID="${APPLE_BUNDLE_ID:-com.nikolapetrovski.silafit}"
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
@@ -147,17 +172,28 @@ done
 ok "SQL Server healthy"
 
 # sqlcmd helpers (tools path differs across image versions; env vars avoid quoting issues)
-run_sql() {   # run_sql <db> <query>
+run_sql() {   # run_sql <db> <query> — headers off (-h -1) since callers often
+              # compare the trimmed result numerically (e.g. is_encrypted below)
   docker exec -e SAPW="$SA_PASSWORD" -e DBN="$1" -e QRY="$2" silen-sqlserver /bin/bash -c '
     if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then BIN=/opt/mssql-tools18/bin/sqlcmd; C=-C;
     else BIN=/opt/mssql-tools/bin/sqlcmd; C=; fi
-    "$BIN" -S localhost -U sa -P "$SAPW" $C -b -d "$DBN" -Q "$QRY"'
+    "$BIN" -S localhost -U sa -P "$SAPW" $C -b -h -1 -d "$DBN" -Q "$QRY"'
 }
 run_sql_file() {  # run_sql_file <db> <container_path>
   docker exec -e SAPW="$SA_PASSWORD" -e DBN="$1" -e FIL="$2" silen-sqlserver /bin/bash -c '
     if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then BIN=/opt/mssql-tools18/bin/sqlcmd; C=-C;
     else BIN=/opt/mssql-tools/bin/sqlcmd; C=; fi
     "$BIN" -S localhost -U sa -P "$SAPW" $C -b -d "$DBN" -i "$FIL"'
+}
+
+# One-time backfill for the column-encryption rollout (see step 7's hook
+# below) — builds and runs Silen.Tools.EncryptExistingData in a throwaway
+# container on the compose network, resumable/idempotent by design (only
+# rows whose *Enc column is still NULL get processed).
+run_encryption_backfill() {
+  log "Backfilling AES-256-GCM ciphertext into *Enc columns before cutover"
+  docker compose --profile tools run --rm silen-encrypt-backfill
+  ok "backfill complete"
 }
 
 # ---- 7. create database + apply schema/procedures/seed ----------------------
@@ -169,16 +205,60 @@ log "Creating database [$DB_NAME]"
 run_sql master "IF DB_ID('$DB_NAME') IS NULL CREATE DATABASE [$DB_NAME];"
 ok "database ensured"
 
+# database/manual-migrations/ is intentionally NOT one of these directories —
+# it holds migrations (e.g. 026_ColumnEncryptionCleanup.sql) that must only
+# ever run when a human explicitly invokes them, never swept up here.
 for stage in schema procedures seed; do
   log "Applying database/$stage"
   for f in "$REPO_ROOT/database/$stage"/*.sql; do
-    docker cp "$f" "silen-sqlserver:/tmp/$(basename "$f")"
-    run_sql_file "$DB_NAME" "/tmp/$(basename "$f")" >/dev/null
-    ok "$(basename "$f")"
+    fname="$(basename "$f")"
+
+    # The column-encryption rollout (024/025) needs real data encrypted into
+    # the new *Enc columns BEFORE 025 renames them into place — otherwise the
+    # cutover promotes empty/NULL ciphertext columns over live plaintext data.
+    # Run the backfill tool here, once, right before 025 is applied.
+    if [ "$fname" = "025_ColumnEncryptionCutover.sql" ]; then
+      run_encryption_backfill
+    fi
+
+    docker cp "$f" "silen-sqlserver:/tmp/$fname"
+    run_sql_file "$DB_NAME" "/tmp/$fname" >/dev/null
+    ok "$fname"
   done
 done
 tbl_count="$(run_sql "$DB_NAME" "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables;" | tr -d '[:space:]')"
 ok "tables in $DB_NAME: $tbl_count"
+
+# ---- 7b. Transparent Data Encryption (TDE) ----------------------------------
+log "Ensuring Transparent Data Encryption (TDE) for [$DB_NAME]"
+is_encrypted="$(run_sql master "SET NOCOUNT ON; SELECT ISNULL(DATABASEPROPERTYEX('$DB_NAME','IsEncrypted'),0);" | tr -d '[:space:]')"
+if [ "$is_encrypted" = "1" ]; then
+  ok "TDE already enabled"
+else
+  cert_exists="$(run_sql master "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.certificates WHERE name = 'SilenTdeCert';" | tr -d '[:space:]')"
+  if [ "$cert_exists" = "0" ]; then
+    log "Creating TDE certificate (one-time)"
+    run_sql master "IF NOT EXISTS (SELECT 1 FROM sys.symmetric_keys WHERE name = '##MS_DatabaseMasterKey##') CREATE MASTER KEY ENCRYPTION BY PASSWORD = N'$TDE_MASTER_KEY_PASSWORD';"
+    run_sql master "CREATE CERTIFICATE SilenTdeCert WITH SUBJECT = N'SilenDb TDE certificate';"
+    docker exec silen-sqlserver mkdir -p /var/opt/mssql/tde-backup
+    run_sql master "BACKUP CERTIFICATE SilenTdeCert TO FILE = N'/var/opt/mssql/tde-backup/SilenTdeCert.cer' WITH PRIVATE KEY (FILE = N'/var/opt/mssql/tde-backup/SilenTdeCert.pvk', ENCRYPTION BY PASSWORD = N'$TDE_CERT_BACKUP_PASSWORD');"
+
+    # Copy the certificate + private key OUT of the container/volume onto the
+    # host immediately - they otherwise live only inside silen-sqldata, so a
+    # lost/corrupted volume would take the only copy down with it.
+    mkdir -p "$SCRIPT_DIR/tde-cert-backup"
+    docker cp "silen-sqlserver:/var/opt/mssql/tde-backup/SilenTdeCert.cer" "$SCRIPT_DIR/tde-cert-backup/SilenTdeCert.cer"
+    docker cp "silen-sqlserver:/var/opt/mssql/tde-backup/SilenTdeCert.pvk" "$SCRIPT_DIR/tde-cert-backup/SilenTdeCert.pvk"
+    chmod 600 "$SCRIPT_DIR/tde-cert-backup/"*
+    warn "TDE certificate backed up to $SCRIPT_DIR/tde-cert-backup/ — MOVE THIS TO SEPARATE SECURE STORAGE NOW. Losing it permanently locks the encrypted database (see deploy/README.md)."
+  else
+    ok "SilenTdeCert already exists — reusing"
+  fi
+
+  run_sql "$DB_NAME" "IF NOT EXISTS (SELECT 1 FROM sys.dm_database_encryption_keys WHERE database_id = DB_ID()) CREATE DATABASE ENCRYPTION KEY WITH ALGORITHM = AES_256 ENCRYPTION BY SERVER CERTIFICATE SilenTdeCert;"
+  run_sql "$DB_NAME" "ALTER DATABASE [$DB_NAME] SET ENCRYPTION ON;"
+  ok "TDE enabled on $DB_NAME"
+fi
 
 # ---- 8. build + start API ---------------------------------------------------
 log "Building + starting API container (this compiles the .NET app — may take a few minutes)"

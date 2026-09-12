@@ -1,37 +1,43 @@
 using Microsoft.Data.SqlClient;
+using Silen.Common.Helpers;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
 
 public static class MealPlanningRowMapper
 {
-    public static UserNutritionTargetsModel MapNutritionTargets(SqlDataReader reader) => new()
+    /// <summary>TargetCalories/TargetProteinG/TargetCarbsG/TargetFatsG are AES-256-GCM
+    /// ciphertext (see MealPlanningProvider) - decrypted here with <paramref name="key"/>.</summary>
+    public static UserNutritionTargetsModel MapNutritionTargets(SqlDataReader reader, byte[] key) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
-        TargetCalories = reader.GetInt16Value("TargetCalories"),
-        TargetProteinG = reader.GetInt16Value("TargetProteinG"),
-        TargetCarbsG = reader.GetInt16Value("TargetCarbsG"),
-        TargetFatsG = reader.GetInt16Value("TargetFatsG"),
+        TargetCalories = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetCalories"), key),
+        TargetProteinG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetProteinG"), key),
+        TargetCarbsG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetCarbsG"), key),
+        TargetFatsG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetFatsG"), key),
         UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
     };
 
-    public static MealLogModel MapMealLog(SqlDataReader reader) => new()
+    /// <summary>Title/CaloriesKcal/ProteinG/CarbsG/FatsG are AES-256-GCM ciphertext
+    /// (see MealPlanningProvider) - decrypted here with <paramref name="key"/>.</summary>
+    public static MealLogModel MapMealLog(SqlDataReader reader, byte[] key) => new()
     {
         MealLogId = reader.GetGuidValue("MealLogId"),
         UserId = reader.GetGuidValue("UserId"),
         LogDateUtc = DateOnly.FromDateTime(reader.GetDateTimeValue("LogDateUtc")),
         MealType = reader.GetStringValue("MealType"),
-        Title = reader.GetStringValue("Title"),
-        CaloriesKcal = reader.GetInt16Value("CaloriesKcal"),
-        ProteinG = reader.GetInt16Value("ProteinG"),
-        CarbsG = reader.GetInt16Value("CarbsG"),
-        FatsG = reader.GetInt16Value("FatsG"),
+        Title = FieldCipher.DecryptString(reader.GetBytesValue("Title"), key),
+        CaloriesKcal = (short)FieldCipher.DecryptInt(reader.GetBytesValue("CaloriesKcal"), key),
+        ProteinG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("ProteinG"), key),
+        CarbsG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("CarbsG"), key),
+        FatsG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("FatsG"), key),
         Status = reader.GetStringValue("Status"),
         PlannedLocalTime = reader.IsDBNull(reader.GetOrdinal("PlannedLocalTime")) ? null : reader.GetTimeSpanValue("PlannedLocalTime"),
         LoggedAtUtc = reader.GetNullableDateTime("LoggedAtUtc"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };
 
+    /// <summary>System-authored content (not user data) - stays plaintext.</summary>
     public static MealSuggestionModel MapMealSuggestion(SqlDataReader reader) => new()
     {
         MealSuggestionId = reader.GetGuidValue("MealSuggestionId"),
