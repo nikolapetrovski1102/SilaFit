@@ -16,3 +16,7 @@ database/**/*.ldf
 # Environment/secrets
 .env
 *.local.json
+
+# Android signing keystore backup - never commit
+*.jks
+*.keystore
