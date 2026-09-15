@@ -1,5 +1,5 @@
 {
-  "API_BASE_URL": "https://silafit.tappit.click/api",
-  "GOOGLE_WEB_CLIENT_ID": "REPLACE_WITH_GOOGLE_WEB_CLIENT_ID",
-  "GOOGLE_IOS_CLIENT_ID": "REPLACE_WITH_GOOGLE_IOS_CLIENT_ID"
+  "API_BASE_URL": "https://api.sila.fitness/api",
+  "GOOGLE_WEB_CLIENT_ID": "147120425242-hclquqf2c4ltodqr9ft4kptf0jjottfi.apps.googleusercontent.com",
+  "GOOGLE_IOS_CLIENT_ID": "147120425242-3kf66c8a6totvp70052epe3ceh3eqr1n.apps.googleusercontent.com"
 }

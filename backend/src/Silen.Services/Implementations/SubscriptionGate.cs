@@ -8,12 +8,20 @@ namespace Silen.Services.Implementations;
 public sealed class SubscriptionGate(IPlansProvider plansProvider, IConfiguration configuration) : ISubscriptionGate
 {
     private static readonly HashSet<string> ProPlanCodes = new(StringComparer.OrdinalIgnoreCase) { "PRO", "ADVANCED" };
+    private static readonly HashSet<string> AdvancedPlanCodes = new(StringComparer.OrdinalIgnoreCase) { "ADVANCED" };
 
-    public async Task<bool> HasActiveProAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<bool> HasActiveProAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        HasActivePlanAsync(userId, ProPlanCodes, cancellationToken);
+
+    public Task<bool> HasActiveAdvancedAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        HasActivePlanAsync(userId, AdvancedPlanCodes, cancellationToken);
+
+    private async Task<bool> HasActivePlanAsync(
+        Guid userId, HashSet<string> allowedPlanCodes, CancellationToken cancellationToken)
     {
-        // Dev-only escape hatch: every tier behaves as if Pro is active so Pro-gated features can
-        // be exercised locally without a real purchase. Committed appsettings.json defaults this
-        // to false - only appsettings.Development.json turns it on.
+        // Dev-only escape hatch: every tier behaves as if the highest plan is active so gated
+        // features can be exercised locally without a real purchase. Committed appsettings.json
+        // defaults this to false - only appsettings.Development.json turns it on.
         if (configuration.GetValue("FeatureFlags:DevTiersFree", false))
         {
             return true;
@@ -22,7 +30,8 @@ public sealed class SubscriptionGate(IPlansProvider plansProvider, IConfiguratio
         var subscription = await plansProvider.GetActiveAsync(userId, cancellationToken).ConfigureAwait(false);
         return subscription is not null
             && string.Equals(subscription.Status, "Active", StringComparison.OrdinalIgnoreCase)
+            && (subscription.ExpiresAtUtc is null || subscription.ExpiresAtUtc > DateTime.UtcNow)
             && subscription.PlanCode is not null
-            && ProPlanCodes.Contains(subscription.PlanCode);
+            && allowedPlanCodes.Contains(subscription.PlanCode);
     }
 }

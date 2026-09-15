@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Data.Helpers;
@@ -6,6 +7,13 @@ namespace Silen.Data.Providers;
 
 public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutSessionProvider
 {
+    // camelCase to match the `$.exerciseId`/`$.setNumber`/... paths
+    // `usp_WorkoutSession_Complete`'s OPENJSON call expects.
+    private static readonly JsonSerializerOptions SetLogsJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public Task<(TodaySessionModel? Session, List<TargetExerciseModel> Exercises)> GetTodayScheduledAsync(
         Guid userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
@@ -27,6 +35,7 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
         short? caloriesEstimate,
         decimal? rpeScore,
         decimal? tonnageKg,
+        IReadOnlyList<SetLogEntryModel>? setLogs,
         CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_WorkoutSession_Complete",
@@ -36,7 +45,9 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
                 SqlParameterBuilder.Create("@DurationMinutes", durationMinutes),
                 SqlParameterBuilder.Create("@CaloriesEstimate", caloriesEstimate),
                 SqlParameterBuilder.Create("@RpeScore", rpeScore),
-                SqlParameterBuilder.Create("@TonnageKg", tonnageKg)
+                SqlParameterBuilder.Create("@TonnageKg", tonnageKg),
+                SqlParameterBuilder.Create("@SetLogsJson",
+                    setLogs is { Count: > 0 } ? JsonSerializer.Serialize(setLogs, SetLogsJsonOptions) : null)
             ],
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapCompletion, cancellationToken),
             cancellationToken);
@@ -57,5 +68,16 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
                 var days = await SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapDaySessionStatus, cancellationToken);
                 return (summary, days);
             },
+            cancellationToken);
+
+    public Task<List<PersonalRecordModel>> GetPersonalRecordsAsync(
+        Guid userId, int top, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_WorkoutSession_GetPersonalRecords",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@Top", top)
+            ],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapPersonalRecord, cancellationToken),
             cancellationToken);
 }

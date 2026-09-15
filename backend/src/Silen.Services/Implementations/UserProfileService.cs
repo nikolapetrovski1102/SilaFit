@@ -9,7 +9,10 @@ using Silen.Services.Abstractions;
 namespace Silen.Services.Implementations;
 
 /// <inheritdoc cref="IUserProfileService"/>
-public sealed class UserProfileService(IUserProfileProvider userProfileProvider, ISplitService splitService) : IUserProfileService
+public sealed class UserProfileService(
+    IUserProfileProvider userProfileProvider,
+    ISplitService splitService,
+    IMealPlanningService mealPlanningService) : IUserProfileService
 {
     private static readonly string[] Genders = ["Male", "Female", "Other"];
     private static readonly string[] Goals = ["BuildMuscle", "LoseFat", "MaintainActive"];
@@ -34,13 +37,31 @@ public sealed class UserProfileService(IUserProfileProvider userProfileProvider,
             // fail the profile save itself. `AutoAssignRecommendedAsync` is
             // itself a no-op for anyone who already has an active split, so
             // this is safe to run on every profile edit, not just the first.
-            await splitService.AutoAssignRecommendedAsync(userId, request.Goal, cancellationToken);
+            await splitService.AutoAssignRecommendedAsync(userId, profile, cancellationToken);
+
+            // Targets are derived from the profile (weight/height/age/gender/goal/
+            // activity), so a profile save is the moment they should be refreshed
+            // rather than frozen at onboarding. Best-effort like the split above:
+            // it's a no-op when the user has set targets manually, and a hiccup
+            // here shouldn't fail the profile save itself.
+            await mealPlanningService.RecomputeTargetsAsync(userId, profile, cancellationToken);
 
             return profile;
         });
 
     private static void Validate(UpsertUserProfileRequest request)
     {
+        if (request.TrainingDaysPerWeek is < 1 or > 7)
+            throw new ValidationException("Invalid training days.", "Choose between 1 and 7 training days.");
+        if (request.SessionDurationMinutes is < 15 or > 180)
+            throw new ValidationException("Invalid session duration.", "Choose a workout duration between 15 and 180 minutes.");
+        if (request.TrainingExperience is not null && !new[] { "Beginner", "Intermediate", "Advanced" }.Contains(request.TrainingExperience))
+            throw new ValidationException("Invalid training experience.", "Choose a valid training experience option.");
+        if (request.EquipmentAccess is not null && !new[] { "FullGym", "Dumbbells", "Bodyweight" }.Contains(request.EquipmentAccess))
+            throw new ValidationException("Invalid equipment access.", "Choose a valid equipment access option.");
+        if (request.DailyActivityLevel is not null && !new[] { "Sedentary", "LightlyActive", "Active", "VeryActive" }.Contains(request.DailyActivityLevel))
+            throw new ValidationException("Invalid daily activity.", "Choose a valid daily activity option.");
+
         if (!Genders.Contains(request.Gender))
         {
             throw new ValidationException($"Unsupported gender '{request.Gender}'.", "Choose a valid gender option.");

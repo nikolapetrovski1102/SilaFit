@@ -35,7 +35,12 @@ public sealed class UserProfileProvider : IUserProfileProvider
                 SqlParameterBuilder.Create("@AgeYears", FieldCipher.EncryptInt(request.AgeYears, _key)),
                 SqlParameterBuilder.Create("@HeightCm", FieldCipher.EncryptDecimal(request.HeightCm, _key)),
                 SqlParameterBuilder.Create("@WeightKg", FieldCipher.EncryptDecimal(request.WeightKg, _key)),
-                SqlParameterBuilder.Create("@Goal", FieldCipher.EncryptString(request.Goal, _key))
+                SqlParameterBuilder.Create("@Goal", FieldCipher.EncryptString(request.Goal, _key)),
+                SqlParameterBuilder.Create("@TrainingDaysPerWeek", request.TrainingDaysPerWeek is { } trainingDaysPerWeek ? FieldCipher.EncryptInt(trainingDaysPerWeek, _key) : null),
+                SqlParameterBuilder.Create("@SessionDurationMinutes", request.SessionDurationMinutes is { } sessionDurationMinutes ? FieldCipher.EncryptInt(sessionDurationMinutes, _key) : null),
+                SqlParameterBuilder.Create("@TrainingExperience", request.TrainingExperience is { } trainingExperience ? FieldCipher.EncryptString(trainingExperience, _key) : null),
+                SqlParameterBuilder.Create("@EquipmentAccess", request.EquipmentAccess is { } equipmentAccess ? FieldCipher.EncryptString(equipmentAccess, _key) : null),
+                SqlParameterBuilder.Create("@DailyActivityLevel", request.DailyActivityLevel is { } dailyActivityLevel ? FieldCipher.EncryptString(dailyActivityLevel, _key) : null)
             ],
             async reader => await reader.ReadAsync(cancellationToken) ? UserProfileRowMapper.MapUserProfile(reader, _key) : null,
             cancellationToken) ?? throw new InvalidOperationException("usp_UserProfile_Upsert did not return a row.");

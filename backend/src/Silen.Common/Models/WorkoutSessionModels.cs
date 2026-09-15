@@ -51,3 +51,27 @@ public sealed class DaySessionStatusModel
     public decimal? TonnageKg { get; set; }
     public decimal? RpeScore { get; set; }
 }
+
+/// <summary>One logged set, as sent from the active workout tracker on completion.</summary>
+public sealed class SetLogEntryModel
+{
+    public Guid ExerciseId { get; set; }
+    public byte SetNumber { get; set; }
+    public decimal WeightKg { get; set; }
+    public short Reps { get; set; }
+}
+
+/// <summary>
+/// The heaviest set ever logged for one exercise, plus the heaviest set
+/// before it (null if this is the only set ever logged for that exercise) -
+/// see `usp_WorkoutSession_GetPersonalRecords`.
+/// </summary>
+public sealed class PersonalRecordModel
+{
+    public Guid ExerciseId { get; set; }
+    public string ExerciseName { get; set; } = string.Empty;
+    public decimal WeightKg { get; set; }
+    public short Reps { get; set; }
+    public DateTime AchievedAtUtc { get; set; }
+    public decimal? PreviousBestWeightKg { get; set; }
+}

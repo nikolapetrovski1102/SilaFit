@@ -9,7 +9,7 @@
 #   - Docker Engine + compose plugin
 #   - SQL Server 2022 (Docker) + SilenDb database + schema/procedures/seed
 #   - Silen.Api (.NET 8, Docker) on 127.0.0.1:5010
-#   - nginx reverse proxy for silafit.tappit.click
+#   - nginx reverse proxy for sila.fitness (+ api.sila.fitness)
 #   - Let's Encrypt HTTPS (certbot)
 #
 # Idempotent: safe to re-run. Secrets are generated once and cached in ./.env.
@@ -20,7 +20,8 @@
 set -euo pipefail
 
 # ---- config -----------------------------------------------------------------
-DOMAIN="silafit.tappit.click"
+DOMAIN="sila.fitness"
+API_DOMAIN="api.$DOMAIN"
 LE_EMAIL="nikpetrovski007@gmail.com"
 DB_NAME="SilenDb"
 SWAP_GB=4
@@ -90,6 +91,15 @@ export GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}"
 export APPLE_BUNDLE_ID="${APPLE_BUNDLE_ID:-com.nikolapetrovski.silafit}"
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
 export OPENROUTER_MODEL="${OPENROUTER_MODEL:-openai/gpt-4.1}"
+# Push reminders. PUSH_ENABLED + a Firebase service-account JSON dropped at
+# deploy/secrets/fcm-service-account.json turn on real FCM delivery; with
+# PUSH_ENABLED unset the publisher still composes + records notifications, so
+# the pipeline is safe to deploy before Firebase is wired.
+export NOTIFICATION_PUBLISH_ENABLED="${NOTIFICATION_PUBLISH_ENABLED:-true}"
+export NOTIFICATION_RUN_IN_API="${NOTIFICATION_RUN_IN_API:-false}"
+export PUSH_ENABLED="${PUSH_ENABLED:-false}"
+export PUSH_PROJECT_ID="${PUSH_PROJECT_ID:-}"
+export PUSH_SERVICE_ACCOUNT_PATH="${PUSH_SERVICE_ACCOUNT_PATH:-/secrets/fcm-service-account.json}"
 
 # ---- 2. swap ----------------------------------------------------------------
 log "Ensuring ${SWAP_GB}GB swap"
@@ -198,6 +208,16 @@ run_encryption_backfill() {
   ok "backfill complete"
 }
 
+# ---- 6b. push secrets dir ---------------------------------------------------
+# The API/tool containers mount ./secrets read-only for the Firebase service
+# account. Creating it here (owned by root, 700) keeps `docker compose` from
+# creating it lazily as a root-owned directory mid-run.
+mkdir -p "$SCRIPT_DIR/secrets"
+chmod 700 "$SCRIPT_DIR/secrets"
+if [ ! -s "$SCRIPT_DIR/secrets/fcm-service-account.json" ]; then
+  warn "No deploy/secrets/fcm-service-account.json yet — push reminders will be composed but not delivered (log-only sender). Drop the Firebase service account there and set PUSH_ENABLED=true in $ENV_FILE to enable delivery."
+fi
+
 # ---- 7. create database + apply schema/procedures/seed ----------------------
 # Same three directories, same order, as database/scripts/deploy.sh (local dev) —
 # every file is a plain idempotent .sql script (CREATE ... IF NOT EXISTS, or
@@ -233,7 +253,20 @@ ok "tables in $DB_NAME: $tbl_count"
 
 # ---- 7b. Transparent Data Encryption (TDE) ----------------------------------
 log "Ensuring Transparent Data Encryption (TDE) for [$DB_NAME]"
-is_encrypted="$(run_sql master "SET NOCOUNT ON; SELECT ISNULL(DATABASEPROPERTYEX('$DB_NAME','IsEncrypted'),0);" | tr -d '[:space:]')"
+# DATABASEPROPERTYEX('IsEncrypted') is not a reliable signal here - it can
+# read back NULL/0 even once a database encryption key already exists and
+# ALTER DATABASE ... SET ENCRYPTION ON has already completed (observed on
+# production: PropEx read NULL while sys.dm_database_encryption_keys already
+# showed encryption_state = 3/Encrypted), which made this script re-issue
+# SET ENCRYPTION ON against an already-encrypted database and fail with
+# "Msg 33107 ... Cannot enable database encryption because it is already
+# enabled." sys.dm_database_encryption_keys is the authoritative source (it's
+# already trusted below for the CREATE DATABASE ENCRYPTION KEY guard) - encryption_state
+# 2/3/4/6 (in progress / encrypted / key change in progress / protection
+# change in progress) all mean SET ENCRYPTION ON must not be re-run; state
+# 1 (key exists but database was explicitly decrypted) and no row at all
+# (0) are the only cases where it's safe to (re)enable.
+is_encrypted="$(run_sql master "SET NOCOUNT ON; SELECT ISNULL((SELECT CASE WHEN encryption_state IN (2,3,4,6) THEN 1 ELSE 0 END FROM sys.dm_database_encryption_keys WHERE database_id = DB_ID('$DB_NAME')), 0);" | tr -d '[:space:]')"
 if [ "$is_encrypted" = "1" ]; then
   ok "TDE already enabled"
 else
@@ -278,7 +311,7 @@ done
 ok "API responding (HTTP $api_ok on /api/plans)"
 
 # ---- 9. nginx site ----------------------------------------------------------
-log "Configuring nginx site for $DOMAIN"
+log "Configuring nginx site for $DOMAIN and $API_DOMAIN"
 
 # The vhost now serves the static site out of $REPO_ROOT/website (publish.sh uploads
 # it) and gates admin.html behind an auth_request to the API. Both need the directory
@@ -291,7 +324,7 @@ else
   warn "website/ has no index.html yet — run deploy/publish.sh from your machine to upload the site"
 fi
 
-cp "$SCRIPT_DIR/nginx-silafit.tappit.click.conf" /etc/nginx/sites-available/$DOMAIN.conf
+cp "$SCRIPT_DIR/nginx-sila.fitness.conf" /etc/nginx/sites-available/$DOMAIN.conf
 ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/$DOMAIN.conf
 nginx -t
 systemctl reload nginx
@@ -308,15 +341,24 @@ else
 fi
 
 # ---- 10. HTTPS via Let's Encrypt --------------------------------------------
-log "Ensuring HTTPS + nginx TLS block for $DOMAIN"
+log "Ensuring HTTPS + nginx TLS block for $DOMAIN and $API_DOMAIN"
 # Step 9 above always re-copies nginx-$DOMAIN.conf from the repo, which only has
-# the plain :80 block - so any 443 block certbot appended on a previous run gets
+# the plain :80 blocks - so any 443 block certbot appended on a previous run gets
 # wiped on every redeploy. Always re-running the --nginx installer here (instead
 # of skipping whenever a cert already exists) is what re-adds that 443 block;
 # certbot itself decides whether the cert actually needs reissuing, so this
 # doesn't cost an extra ACME issuance/rate-limit hit once the cert is valid.
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect
-ok "HTTPS certificate + nginx TLS block ensured"
+# Best-effort: DNS for $DOMAIN/$API_DOMAIN might not point at this box yet (or
+# might have moved on, e.g. after a server migration), in which case ACME
+# validation fails by design. Treating that as fatal used to abort the script
+# here, before the monthly-review / notification-publish cron steps, leaving
+# them stale. certbot rolls its nginx edits back on failure, so it is safe to
+# warn and continue.
+if certbot --nginx -d "$DOMAIN" -d "$API_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect; then
+  ok "HTTPS certificate + nginx TLS block ensured"
+else
+  warn "certbot could not (re)issue a certificate for $DOMAIN/$API_DOMAIN — continuing; verify DNS points at this server and TLS is set up correctly."
+fi
 systemctl reload nginx
 
 # ---- 10b. verify the console gate actually refuses anonymous access --------
@@ -332,6 +374,60 @@ case "${console_code:-000}" in
   000)    warn "could not reach https://$DOMAIN yet (DNS/TLS may still be settling) — re-check the gate by hand with: curl -skI https://$DOMAIN/admin.html" ;;
   *)      warn "unexpected HTTP $console_code from /admin.html" ;;
 esac
+
+# ---- 11. monthly review cron ------------------------------------------------
+# Generates + emails the monthly AI progress overview for every active ADVANCED
+# subscriber (see the silen-monthly-review compose service). A system cron entry
+# fits better than a long-running container: it is a short, once-a-month batch.
+# Re-running deploy.sh just rewrites the same two files.
+log "Installing monthly review cron (06:00 on the 1st)"
+cat > "$SCRIPT_DIR/run-monthly-review.sh" <<'WRAPPER'
+#!/usr/bin/env bash
+# Installed by deploy.sh - runs the monthly review batch for the previous month.
+# Output is captured to /var/log/silen-monthly-review.log by the cron entry.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+exec docker compose --profile tools run --rm --build silen-monthly-review
+WRAPPER
+chmod 750 "$SCRIPT_DIR/run-monthly-review.sh"
+
+cat > /etc/cron.d/silen-monthly-review <<CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# m h dom mon dow user command
+0 6 1 * * root $SCRIPT_DIR/run-monthly-review.sh >> /var/log/silen-monthly-review.log 2>&1
+CRON
+chmod 644 /etc/cron.d/silen-monthly-review
+ok "cron installed: /etc/cron.d/silen-monthly-review -> $SCRIPT_DIR/run-monthly-review.sh"
+
+# ---- 12. notification publish cron ------------------------------------------
+# Frequent reminder batch (Silen.Tools.NotificationPublish). Built once here -
+# not with --build in the wrapper - because it runs every five minutes and a
+# per-tick image rebuild would be wasteful. Dedupe keys in dbo.UserNotifications
+# make overlapping ticks harmless.
+log "Building notification publisher image"
+docker compose --profile tools build silen-notification-publish >/dev/null
+ok "silen-notification-publish image built"
+
+log "Installing notification publish cron (every 5 minutes)"
+cat > "$SCRIPT_DIR/run-notification-publish.sh" <<'WRAPPER'
+#!/usr/bin/env bash
+# Installed by deploy.sh - runs the notification publish batch once.
+# Output is captured to /var/log/silen-notification-publish.log by the cron entry.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+exec docker compose --profile tools run --rm silen-notification-publish
+WRAPPER
+chmod 750 "$SCRIPT_DIR/run-notification-publish.sh"
+
+cat > /etc/cron.d/silen-notification-publish <<CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# m h dom mon dow user command
+*/5 * * * * root $SCRIPT_DIR/run-notification-publish.sh >> /var/log/silen-notification-publish.log 2>&1
+CRON
+chmod 644 /etc/cron.d/silen-notification-publish
+ok "cron installed: /etc/cron.d/silen-notification-publish -> $SCRIPT_DIR/run-notification-publish.sh"
 
 log "DONE"
 echo "  DB      : SQL Server 2022 (container silen-sqlserver), database $DB_NAME"

@@ -1,5 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Silen.Common.Options;
 using Silen.Services.Abstractions;
+using Silen.Services.Helpers;
 using Silen.Services.Implementations;
 
 namespace Silen.Services;
@@ -18,13 +21,33 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IMealPlanningService, MealPlanningService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
+        services.AddScoped<IMonthlyReviewService, MonthlyReviewService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<INotificationPublishService, NotificationPublishService>();
         services.AddScoped<ISubscriptionGate, SubscriptionGate>();
+        // Singleton: the "force refresh" cooldown must persist across requests.
+        services.AddSingleton<IAiRefreshThrottle, AiRefreshThrottle>();
         services.AddScoped<IAdminAuthService, AdminAuthService>();
+        services.AddScoped<IAdminRbacService, AdminRbacService>();
+        services.AddScoped<IAdminConsoleService, AdminConsoleService>();
+        services.AddScoped<IAccountService, AccountService>();
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();
         services.AddHttpClient<IOpenRouterClient, OpenRouterClient>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+
+        // Push transport: a real FCM sender when Push:Enabled with a service
+        // account, otherwise a log-only sender that keeps the pipeline working
+        // end to end without credentials.
+        services.AddHttpClient();
+        services.AddScoped<IPushNotificationSender>(sp =>
+        {
+            var pushOptions = sp.GetRequiredService<IOptions<PushNotificationOptions>>().Value;
+            return FcmPushNotificationSender.CanConfigure(pushOptions)
+                ? ActivatorUtilities.CreateInstance<FcmPushNotificationSender>(sp)
+                : ActivatorUtilities.CreateInstance<LoggingPushNotificationSender>(sp);
+        });
 
         return services;
     }

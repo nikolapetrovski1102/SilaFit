@@ -5,6 +5,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/dumbbell_icon.dart';
 import '../../../core/widgets/silen_button.dart';
+import 'onboarding_step_transition.dart';
 
 /// One of the 2 intro carousel slides: Skip top-right, an icon mark in a
 /// circle, headline/subhead, a dot indicator for the slide position, the
@@ -19,6 +20,7 @@ class IntroSlide extends StatelessWidget {
   final VoidCallback onCta;
   final VoidCallback onSkip;
   final VoidCallback onLogin;
+  final VoidCallback? onBack;
 
   const IntroSlide({
     super.key,
@@ -31,6 +33,7 @@ class IntroSlide extends StatelessWidget {
     required this.onCta,
     required this.onSkip,
     required this.onLogin,
+    this.onBack,
   });
 
   @override
@@ -41,29 +44,49 @@ class IntroSlide extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.sm),
-                child: GestureDetector(
-                  onTap: onSkip,
-                  child: Text('Skip',
-                      style: AppTypography.bodyMd
-                          .copyWith(color: AppColors.onSurfaceVariant)),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: Row(
+                children: [
+                  if (onBack != null)
+                    IconButton(
+                      tooltip: 'Back',
+                      onPressed: onBack,
+                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                      color: AppColors.onSurfaceVariant,
+                    )
+                  else
+                    const SizedBox(width: 48, height: 48),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: onSkip,
+                    child: Text('Skip',
+                        style: AppTypography.bodyMd
+                            .copyWith(color: AppColors.onSurfaceVariant)),
+                  ),
+                ],
               ),
             ),
             const Spacer(flex: 3),
-            iconMark,
+            OnboardingStepContentTransition(child: iconMark),
             const Spacer(flex: 2),
-            Text(headline,
-                textAlign: TextAlign.center, style: AppTypography.headlineLg),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              subhead,
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMd
-                  .copyWith(color: AppColors.onSurfaceVariant, height: 1.4),
+            OnboardingStepContentTransition(
+              incomingOffset: 14,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(headline,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.headlineLg),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    subhead,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyMd.copyWith(
+                        color: AppColors.onSurfaceVariant, height: 1.4),
+                  ),
+                ],
+              ),
             ),
             const Spacer(flex: 2),
             _SlideDots(dotIndex: dotIndex, dotCount: dotCount),
@@ -137,7 +160,9 @@ class _SlideDots extends StatelessWidget {
             ],
           ),
           AnimatedPositioned(
-            duration: const Duration(milliseconds: 420),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
             left: activeCenterX - _activeWidth / 2,
             top: 0,
@@ -162,8 +187,10 @@ class _SlideDots extends StatelessWidget {
 class OnboardingIconMark extends StatelessWidget {
   final Widget child;
   final double size;
+  final bool showDot;
 
-  const OnboardingIconMark({super.key, required this.child, this.size = 200});
+  const OnboardingIconMark(
+      {super.key, required this.child, this.size = 200, this.showDot = true});
 
   @override
   Widget build(BuildContext context) {
@@ -181,18 +208,33 @@ class OnboardingIconMark extends StatelessWidget {
               border: Border.all(color: AppColors.outlineVariant),
             ),
             alignment: Alignment.center,
-            child: child,
+            child: MediaQuery.disableAnimationsOf(context)
+                ? child
+                : TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: child,
+                    builder: (context, progress, child) => Opacity(
+                      opacity: progress,
+                      child: Transform.translate(
+                        offset: Offset(0, 8 * (1 - progress)),
+                        child: child,
+                      ),
+                    ),
+                  ),
           ),
-          Positioned(
-            top: size * 0.22,
-            right: size * 0.22,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                  shape: BoxShape.circle, color: AppColors.secondary),
+          if (showDot)
+            Positioned(
+              top: size * 0.22,
+              right: size * 0.22,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle, color: AppColors.secondary),
+              ),
             ),
-          ),
         ],
       ),
     );

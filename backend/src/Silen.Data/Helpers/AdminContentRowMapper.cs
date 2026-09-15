@@ -78,7 +78,7 @@ public static class AdminContentRowMapper
         ProteinG = reader.GetInt16Value("ProteinG"),
         CarbsG = reader.GetInt16Value("CarbsG"),
         FatsG = reader.GetInt16Value("FatsG"),
-        SuggestedMonth = reader.GetNullableInt16("SuggestedMonth") is { } month ? month : null,
+        SuggestedMonth = reader.GetNullableByte("SuggestedMonth") is { } month ? month : null,
         IsSystemDefault = reader.GetBoolValue("IsSystemDefault"),
         SortOrder = reader.GetInt32Value("SortOrder"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
@@ -118,11 +118,30 @@ public static class AdminContentRowMapper
         HeroImageUrl = reader.GetNullableString("HeroImageUrl"),
         RecommendedGoal = reader.GetNullableString("RecommendedGoal"),
         IsSystemDefault = reader.GetBoolValue("IsSystemDefault"),
+        Visibility = reader.GetStringValue("Visibility"),
+        OwnerAdminUserId = reader.GetNullableGuid("OwnerAdminUserId"),
+        OwnerUsername = reader.GetNullableString("OwnerUsername"),
         SortOrder = reader.GetInt32Value("SortOrder"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
         DayCount = reader.GetInt32Value("DayCount"),
         ExerciseCount = reader.GetInt32Value("ExerciseCount"),
-        ActiveUserCount = reader.GetInt32Value("ActiveUserCount")
+        ActiveUserCount = reader.GetInt32Value("ActiveUserCount"),
+        AssignedUserCount = reader.GetInt32Value("AssignedUserCount")
+    };
+
+    public static AdminSplitAssignmentModel MapSplitAssignment(SqlDataReader reader) => new()
+    {
+        SplitId = reader.GetGuidValue("SplitId"),
+        UserId = reader.GetGuidValue("UserId"),
+        DisplayName = reader.GetNullableString("DisplayName"),
+        Email = reader.GetNullableString("Email"),
+        AccountTier = reader.GetStringValue("AccountTier"),
+        AssignedAtUtc = reader.GetDateTimeValue("AssignedAtUtc"),
+        AssignedByUsername = reader.GetNullableString("AssignedByUsername"),
+        IsActive = reader.GetBoolValue("IsActive"),
+        ActivePlanCode = reader.GetNullableString("ActivePlanCode"),
+        BillingCycle = reader.GetNullableString("BillingCycle"),
+        SubscriptionStatus = reader.GetNullableString("SubscriptionStatus")
     };
 
     public static AdminSplitDayModel MapSplitDay(SqlDataReader reader) => new()

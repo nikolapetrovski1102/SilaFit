@@ -12,7 +12,7 @@
   justify-content: center;
   padding: 40px 20px;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .login-bloom { z-index: 0; }
@@ -127,6 +127,8 @@
   transition: color 160ms ease;
 }
 .login-link:hover { color: var(--accent); }
+.login-link:disabled { opacity: 0.55; cursor: default; text-decoration: none; }
+.login-link:disabled:hover { color: var(--on-surface-variant); }
 
 /* ---------- Alerts ---------- */
 /* The tint is composited over the *lightest* surface, not the card: a 10% red

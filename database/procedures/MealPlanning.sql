@@ -15,7 +15,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG, UpdatedAtUtc
+    SELECT UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG, IsManualOverride, UpdatedAtUtc
     FROM dbo.UserNutritionTargets
     WHERE UserId = @UserId;
 END
@@ -26,7 +26,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_UserNutritionTargets_Upsert
     @TargetCalories VARBINARY(64),
     @TargetProteinG VARBINARY(64),
     @TargetCarbsG VARBINARY(64),
-    @TargetFatsG VARBINARY(64)
+    @TargetFatsG VARBINARY(64),
+    @IsManualOverride BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -40,12 +41,13 @@ BEGIN
             TargetProteinG = @TargetProteinG,
             TargetCarbsG = @TargetCarbsG,
             TargetFatsG = @TargetFatsG,
+            IsManualOverride = @IsManualOverride,
             UpdatedAtUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT (UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG)
-        VALUES (@UserId, @TargetCalories, @TargetProteinG, @TargetCarbsG, @TargetFatsG);
+        INSERT (UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG, IsManualOverride)
+        VALUES (@UserId, @TargetCalories, @TargetProteinG, @TargetCarbsG, @TargetFatsG, @IsManualOverride);
 
-    SELECT UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG, UpdatedAtUtc
+    SELECT UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG, IsManualOverride, UpdatedAtUtc
     FROM dbo.UserNutritionTargets
     WHERE UserId = @UserId;
 END
@@ -158,14 +160,15 @@ GO
 
 -- Month-matched suggestions first, then evergreen (SuggestedMonth IS NULL)
 -- ones, each group by SortOrder. MealSuggestions is system-authored content,
--- not user data, so it stays plaintext.
+-- not user data, so it stays plaintext. TOP caps the response as a safety valve
+-- for seeded content that grows over time.
 CREATE OR ALTER PROCEDURE dbo.usp_MealSuggestions_GetForMonth
     @Month TINYINT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT MealSuggestionId, Title, MealType, Description, CaloriesKcal, ProteinG, CarbsG, FatsG,
+    SELECT TOP (500) MealSuggestionId, Title, MealType, Description, CaloriesKcal, ProteinG, CarbsG, FatsG,
            SuggestedMonth, IsSystemDefault, SortOrder
     FROM dbo.MealSuggestions
     WHERE SuggestedMonth = @Month OR SuggestedMonth IS NULL

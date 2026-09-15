@@ -109,6 +109,29 @@ public sealed class AdminRbacProvider(ISqlExecutor sqlExecutor) : IAdminRbacProv
             reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapOperator, cancellationToken),
             cancellationToken);
 
+    public Task<AdminMutationResultModel> CreateOperatorAsync(
+        string username,
+        byte[] passwordHash,
+        byte[] passwordSalt,
+        byte[] totpSecretCipher,
+        string? roleName,
+        AdminActorModel actor,
+        CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_Operator_Create",
+            [
+                SqlParameterBuilder.Create("@Username", username),
+                SqlParameterBuilder.Create("@PasswordHash", passwordHash),
+                SqlParameterBuilder.Create("@PasswordSalt", passwordSalt),
+                SqlParameterBuilder.Create("@TotpSecretCipher", totpSecretCipher),
+                SqlParameterBuilder.Create("@RoleName", roleName),
+                SqlParameterBuilder.Create("@ActorAdminUserId", actor.AdminUserId),
+                SqlParameterBuilder.Create("@ActorUsername", actor.Username),
+                SqlParameterBuilder.Create("@ActorIp", actor.Ip)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
     public Task<AdminMutationResultModel> SetOperatorRoleAsync(string username, string roleName, AdminActorModel actor, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Admin_Operator_SetRole",

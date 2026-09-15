@@ -14,8 +14,12 @@ public interface IAdminAuthService
     /// <summary>Verifies the password and returns a short-lived challenge for the code step.</summary>
     Task<ServiceResult<AdminLoginChallengeDto>> StartLoginAsync(AdminLoginRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>Verifies the authenticator code against a challenge and mints a session.</summary>
+    /// <summary>Verifies the authenticator code (or a previously emailed one) against a challenge and mints a session.</summary>
     Task<ServiceResult<AdminSessionIssuedDto>> VerifyCodeAsync(AdminVerifyCodeRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>"Send email code instead": emails a one-time code to the operator's address on
+    /// file, usable at the same <see cref="VerifyCodeAsync"/> step as their authenticator code.</summary>
+    Task<ServiceResult<AdminEmailCodeSentDto>> SendEmailCodeAsync(AdminSendEmailCodeRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>Resolves a session cookie and slides its idle deadline. This is what nginx calls via auth_request.</summary>
     Task<ServiceResult<AdminSessionDto>> GetSessionAsync(string? sessionToken, CancellationToken cancellationToken = default);

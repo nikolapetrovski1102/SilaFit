@@ -1,4 +1,5 @@
 using Silen.Common.Exceptions;
+using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Common.Options;
 using Silen.Data.Abstractions;
@@ -22,7 +23,7 @@ public static class AdminSignInThrottle
         if (account.LockedUntilUtc is not null && account.LockedUntilUtc > DateTime.UtcNow)
         {
             throw new TooManyRequestsException(
-                $"Admin '{account.Username}' is locked until {account.LockedUntilUtc:O}.",
+                $"Admin tag {LogRedaction.Tag(account.Username)} is locked until {account.LockedUntilUtc:O}.",
                 LockedMessage(account.LockedUntilUtc.Value));
         }
     }
@@ -43,7 +44,7 @@ public static class AdminSignInThrottle
         if (state?.LockedUntilUtc is not null && state.LockedUntilUtc > DateTime.UtcNow)
         {
             throw new TooManyRequestsException(
-                $"Admin '{account.Username}' locked after {state.FailedAttemptCount} failed attempts.",
+                $"Admin tag {LogRedaction.Tag(account.Username)} locked after {state.FailedAttemptCount} failed attempts.",
                 LockedMessage(state.LockedUntilUtc.Value));
         }
     }

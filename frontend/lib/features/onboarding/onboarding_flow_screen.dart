@@ -5,16 +5,21 @@ import '../../core/api/api_client.dart';
 import '../../core/session/session_store.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/login_screen.dart';
+import '../notifications/notifications_repository.dart';
+import '../notifications/push_messaging_service.dart';
 import '../../root_shell.dart';
 import 'onboarding_controller.dart';
 import 'onboarding_repository.dart';
+import 'widgets/age_wheel_picker.dart';
 import 'widgets/intro_slide.dart';
 import 'widgets/notification_permission_screen.dart';
 import 'widgets/numeric_wheel_picker.dart';
+import 'widgets/onboarding_step_transition.dart';
 import 'widgets/option_row_selector.dart';
 import 'widgets/question_scaffold.dart';
+import 'widgets/training_preference_question.dart';
 
-/// The first-launch flow: 2 intro slides, 5 answer questions, then a
+/// The first-launch flow: 2 intro slides, 10 answer questions, then a
 /// notification-permission screen. Owns its own [OnboardingController] -
 /// nothing outside this flow needs the in-progress answers - and hands off
 /// into [RootShell] once it's done, however the user got there (finished,
@@ -25,8 +30,11 @@ class OnboardingFlowScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) =>
-          OnboardingController(OnboardingRepository(ctx.read<ApiClient>())),
+      create: (ctx) => OnboardingController(
+        OnboardingRepository(ctx.read<ApiClient>()),
+        ctx.read<NotificationsRepository>(),
+        pushMessaging: ctx.read<PushMessagingService>(),
+      ),
       child: const _OnboardingFlowView(),
     );
   }
@@ -45,9 +53,17 @@ class _OnboardingFlowView extends StatelessWidget {
 
   Future<void> _skip(BuildContext context) => _enterApp(context);
 
-  Future<void> _finish(BuildContext context) async {
+  Future<void> _finish(BuildContext context, bool notificationsAllowed) async {
     final controller = context.read<OnboardingController>();
-    await controller.submit();
+    final saved = await controller.submit();
+    if (!context.mounted) return;
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(controller.lastError ?? 'Please complete your profile.'),
+      ));
+      return;
+    }
+    await controller.submitNotificationOptIn(notificationsAllowed);
     if (!context.mounted) return;
     await _enterApp(context);
   }
@@ -67,31 +83,55 @@ class _OnboardingFlowView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 360),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          // Each child (incoming and outgoing) gets its own controller in
-          // AnimatedSwitcher - the outgoing one runs in reverse - so this is
-          // how a single builder tells which side of the swap it's drawing
-          // and pushes it the right way: forward nav pulls the new step in
-          // from the right while the old one recedes left, back nav mirrors
-          // it, like a real navigation stack rather than a plain crossfade.
-          final incoming = animation.status != AnimationStatus.reverse;
-          final sign = (incoming ? 1 : -1) * controller.lastDirection;
-          final offset = Tween<Offset>(
-            begin: Offset(0.22 * sign, 0),
-            end: Offset.zero,
-          ).animate(animation);
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: offset, child: child),
-          );
-        },
-        child: KeyedSubtree(
-          key: ValueKey(controller.step),
-          child: _buildStep(context, controller),
+      body: ClipRect(
+        child: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 360),
+          reverseDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 280),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeIn,
+          layoutBuilder: (currentChild, previousChildren) => Stack(
+            fit: StackFit.expand,
+            children: [
+              for (final child in previousChildren)
+                ExcludeSemantics(child: IgnorePointer(child: child)),
+              if (currentChild != null) currentChild,
+            ],
+          ),
+          // Screen navigation stays route-like and predictable. The softer
+          // fade/fall treatment is supplied to opted-in content descendants,
+          // never to the background, navigation chrome or bottom CTA.
+          transitionBuilder: (child, animation) {
+            return AnimatedBuilder(
+              animation: animation,
+              child: child,
+              builder: (context, child) {
+                final incoming = animation.status != AnimationStatus.reverse;
+                final progress = animation.value.clamp(0.0, 1.0);
+                final direction = controller.lastDirection.toDouble();
+                final horizontalOffset = incoming
+                    ? direction * (1 - progress)
+                    : -direction * (1 - progress);
+                return Transform.translate(
+                  offset: Offset(
+                    MediaQuery.sizeOf(context).width * horizontalOffset,
+                    0,
+                  ),
+                  child: OnboardingStepTransitionScope(
+                    animation: animation,
+                    child: child!,
+                  ),
+                );
+              },
+            );
+          },
+          child: KeyedSubtree(
+            key: ValueKey(controller.step),
+            child: _buildStep(context, controller),
+          ),
         ),
       ),
     );
@@ -103,8 +143,7 @@ class _OnboardingFlowView extends StatelessWidget {
         return IntroSlide(
           iconMark: const DumbbellIconMark(),
           headline: 'Track every rep.\nSee real progress.',
-          subhead:
-              'Personalized splits, meal planning, and AI powered monthly insights, built for serious progress.',
+          subhead: 'Workouts, meals, and progress in one place.',
           dotIndex: 0,
           dotCount: 2,
           ctaLabel: 'Get started',
@@ -116,13 +155,14 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.intro2:
         return IntroSlide(
           iconMark: const BarChartIconMark(),
-          headline: 'Splits built around you.',
+          headline: 'Make it your plan.',
           subhead:
-              'Push, pull, legs, or full body: follow a structured split and watch your strength curve climb week over week.',
+              'Answer a few quick questions to find workouts that fit your life.',
           dotIndex: 1,
           dotCount: 2,
           ctaLabel: 'Continue',
           onCta: controller.goNext,
+          onBack: controller.goBack,
           onSkip: () => _skip(context),
           onLogin: () => _goToLogin(context),
         );
@@ -137,6 +177,11 @@ class _OnboardingFlowView extends StatelessWidget {
             options: const ['Male', 'Female', 'Other'],
             selected: controller.gender,
             onSelected: controller.selectGender,
+            iconFor: (value) => const {
+              'Male': Icons.male_rounded,
+              'Female': Icons.female_rounded,
+              'Other': Icons.transgender_rounded,
+            }[value],
           ),
           ctaLabel: 'Continue',
           onCta: controller.canContinue ? controller.goNext : null,
@@ -147,14 +192,13 @@ class _OnboardingFlowView extends StatelessWidget {
           onBack: controller.goBack,
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
-          headline: 'How old are you?',
+          headline: 'What is your age?',
           body: Center(
-            child: NumericWheelPicker(
+            child: AgeWheelPicker(
               value: controller.ageYears,
               min: 13,
               max: 100,
               onChanged: controller.setAge,
-              suffixLabel: 'years',
             ),
           ),
           ctaLabel: 'Continue',
@@ -220,18 +264,34 @@ class _OnboardingFlowView extends StatelessWidget {
             labelFor: (value) => _goalLabels[value] ?? value,
             selected: controller.goal,
             onSelected: controller.selectGoal,
+            iconFor: (value) => const {
+              'BuildMuscle': Icons.fitness_center_rounded,
+              'LoseFat': Icons.local_fire_department_rounded,
+              'MaintainActive': Icons.directions_walk_rounded,
+            }[value],
           ),
           ctaLabel: 'Continue',
           onCta: controller.canContinue ? controller.goNext : null,
         );
 
+      case OnboardingStep.trainingDays:
+      case OnboardingStep.trainingExperience:
+      case OnboardingStep.equipmentAccess:
+      case OnboardingStep.dailyActivity:
+        return TrainingPreferenceQuestion(
+          controller: controller,
+          step: controller.step,
+          progressStep: controller.questionProgressStep!,
+          progressStepCount: controller.questionStepCount,
+          onBack: controller.goBack,
+          onNext: controller.goNext,
+        );
+
       case OnboardingStep.notifications:
         return NotificationPermissionScreen(
           onBack: controller.goBack,
-          progressStep: controller.questionProgressStep!,
-          progressStepCount: controller.questionStepCount,
           isSubmitting: controller.isSubmitting,
-          onFinish: () => _finish(context),
+          onFinish: (allowed) => _finish(context, allowed),
         );
     }
   }
@@ -241,7 +301,7 @@ class _OnboardingFlowView extends StatelessWidget {
 const _goalLabels = {
   'BuildMuscle': 'Build muscle',
   'LoseFat': 'Lose fat',
-  'MaintainActive': 'Maintain and stay active',
+  'MaintainActive': 'Stay active',
 };
 
 // Display-only unit conversion for the height/weight pickers - canonical

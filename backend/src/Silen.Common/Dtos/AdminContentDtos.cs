@@ -70,6 +70,19 @@ public sealed class AdminSplitUpsertRequest
     public string? HeroImageUrl { get; set; }
     public string? RecommendedGoal { get; set; }
     public int SortOrder { get; set; }
+
+    /// <summary>'Private' | 'Public' | 'Shared'. Left blank, the service defaults a
+    /// new/changed split to Private so a trainer's work is never published by accident.
+    /// Ignored on update of someone else's split (the procedure refuses that first).</summary>
+    public string Visibility { get; set; } = string.Empty;
+}
+
+/// <summary>Trainer hands one split to one app user. SetActive also makes it their program.</summary>
+public sealed class AdminSplitAssignRequest
+{
+    public Guid SplitId { get; set; }
+    public Guid UserId { get; set; }
+    public bool SetActive { get; set; }
 }
 
 public sealed class AdminSplitDayUpsertRequest
@@ -92,4 +105,24 @@ public sealed class AdminSplitDayExerciseUpsertRequest
     public int TargetSets { get; set; }
     public int TargetRepsLow { get; set; }
     public int TargetRepsHigh { get; set; }
+}
+
+/// <summary>
+/// Super-admin only: regenerate one app user's logs with a generated month of
+/// history so the monthly overview has something to show. Replaces the user's
+/// existing workouts/meals/hydration/bodyweight and grants a yearly subscription.
+/// </summary>
+public sealed class AdminMockDataRequest
+{
+    public Guid UserId { get; set; }
+
+    /// <summary>"Advanced" or "Pro" - see Silen.Common.Models.MockDataProfiles.
+    /// Blank defaults to Advanced.</summary>
+    public string Profile { get; set; } = string.Empty;
+
+    /// <summary>Days of history ending today. Defaults to 30, capped at 365.</summary>
+    public int Days { get; set; } = 30;
+
+    /// <summary>Optional RNG seed, for a reproducible run. Null means "any".</summary>
+    public int? Seed { get; set; }
 }

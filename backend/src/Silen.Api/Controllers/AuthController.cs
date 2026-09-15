@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Silen.Common.Dtos;
 using Silen.Common.Helpers;
 using Silen.Services.Abstractions;
@@ -13,6 +14,7 @@ namespace Silen.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/auth")]
+[EnableRateLimiting(RateLimitPolicies.Auth)]
 public sealed class AuthController(IAuthService authService, ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("device")]

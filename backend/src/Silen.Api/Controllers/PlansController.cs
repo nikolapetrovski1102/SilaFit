@@ -18,6 +18,14 @@ public sealed class PlansController(IPlanService planService, ILogger<PlansContr
         return result.ToActionResult(logger);
     }
 
+    [HttpGet("current")]
+    [Authorize]
+    public async Task<IActionResult> GetCurrent(CancellationToken cancellationToken)
+    {
+        var result = await planService.GetCurrentAsync(User.GetUserId(), cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
     [HttpPost("purchase")]
     [Authorize(Policy = AuthorizationPolicies.RequireLinkedAccount)]
     public async Task<IActionResult> Purchase([FromBody] PurchaseRequest request, CancellationToken cancellationToken)

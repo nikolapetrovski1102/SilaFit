@@ -45,14 +45,23 @@ public interface IAdminContentProvider
 
     Task<AdminMutationResultModel> DeletePlanFeatureAsync(Guid planFeatureId, AdminActorModel actor, CancellationToken cancellationToken = default);
 
-    Task<List<AdminSplitModel>> GetSplitsAsync(CancellationToken cancellationToken = default);
+    Task<List<AdminSplitModel>> GetSplitsAsync(Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default);
 
     /// <summary>The split, its days and every prescription row - assembled from three procedures.</summary>
-    Task<AdminSplitDetailModel?> GetSplitDetailAsync(Guid splitId, CancellationToken cancellationToken = default);
+    Task<AdminSplitDetailModel?> GetSplitDetailAsync(Guid splitId, Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default);
 
-    Task<AdminMutationResultModel> UpsertSplitAsync(AdminSplitUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+    Task<AdminMutationResultModel> UpsertSplitAsync(AdminSplitUpsertRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
 
-    Task<AdminMutationResultModel> DeleteSplitAsync(Guid splitId, AdminActorModel actor, CancellationToken cancellationToken = default);
+    Task<AdminMutationResultModel> DeleteSplitAsync(Guid splitId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
+
+    /// <summary>The clients a split is currently assigned to, with their plan context.</summary>
+    Task<List<AdminSplitAssignmentModel>> GetSplitAssignmentsAsync(Guid splitId, CancellationToken cancellationToken = default);
+
+    /// <summary>Grants one user visibility, optionally making the split their active program.</summary>
+    Task<AdminMutationResultModel> AssignSplitAsync(AdminSplitAssignRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes a user's access; clears it as their active split if it was.</summary>
+    Task<AdminMutationResultModel> RemoveSplitAssignmentAsync(Guid splitId, Guid userId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
 
     Task<List<AdminSplitDayModel>> GetSplitDaysAsync(Guid splitId, CancellationToken cancellationToken = default);
 

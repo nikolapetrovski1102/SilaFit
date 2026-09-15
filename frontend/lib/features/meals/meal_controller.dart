@@ -22,20 +22,31 @@ class MealController extends ChangeNotifier {
   ResourceState<List<MealSuggestion>> suggestionsState =
       const ResourceState.loading();
 
+  // App-wide provider: guard the day and the suggestions independently so a
+  // remount/retry can't refetch one the other screen already loaded.
+  bool _dayLoading = false;
+  bool _suggestionsLoading = false;
+
   MealController(this._repository);
 
   DateTime get selectedDate => _selectedDate;
 
-  Future<void> load() =>
-      Future.wait([_loadFor(_selectedDate), _loadSuggestions()]);
+  Future<void> load({bool force = false}) => Future.wait([
+        _loadFor(_selectedDate, force: force),
+        _loadSuggestions(force: force),
+      ]);
 
   /// Public re-entry point for [_loadSuggestions] - used by
   /// MealSuggestionsScreen, which only needs the suggestions half of [load]
   /// (the day/targets half is already loaded and shared via this same
   /// controller instance).
-  Future<void> loadSuggestions() => _loadSuggestions();
+  Future<void> loadSuggestions({bool force = false}) =>
+      _loadSuggestions(force: force);
 
-  Future<void> _loadSuggestions() async {
+  Future<void> _loadSuggestions({bool force = false}) async {
+    if (_suggestionsLoading) return;
+    if (!force && suggestionsState.hasData) return;
+    _suggestionsLoading = true;
     suggestionsState = const ResourceState.loading();
     notifyListeners();
     try {
@@ -45,14 +56,23 @@ class MealController extends ChangeNotifier {
       suggestionsState = ResourceState.error(e.userMessage);
     } catch (_) {
       suggestionsState = const ResourceState.error(ApiException.genericMessage);
+    } finally {
+      _suggestionsLoading = false;
     }
     notifyListeners();
   }
 
-  Future<void> selectDate(DateTime date) => _loadFor(date);
+  Future<void> selectDate(DateTime date) {
+    // Tapping the already-selected day pill is a no-op, not a refetch.
+    if (_isSameDay(date, _selectedDate)) return Future.value();
+    return _loadFor(date, force: true);
+  }
 
-  Future<void> _loadFor(DateTime date) async {
+  Future<void> _loadFor(DateTime date, {bool force = false}) async {
+    if (_dayLoading) return;
+    if (!force && _isSameDay(date, _selectedDate) && state.hasData) return;
     _selectedDate = date;
+    _dayLoading = true;
     state = const ResourceState.loading();
     notifyListeners();
     try {
@@ -62,9 +82,14 @@ class MealController extends ChangeNotifier {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);
+    } finally {
+      _dayLoading = false;
     }
     notifyListeners();
   }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   /// Flips a planned meal to logged (or edits a logged one) - optimistic
   /// locally, reconciled with the server's recomputed day totals after.
@@ -82,7 +107,7 @@ class MealController extends ChangeNotifier {
 
     try {
       await _repository.updateLog(optimisticMeal);
-      await _loadFor(_selectedDate);
+      await _loadFor(_selectedDate, force: true);
     } on ApiException catch (e) {
       state = ResourceState.data(current);
       actionError = e.userMessage;
@@ -114,7 +139,7 @@ class MealController extends ChangeNotifier {
         fatsG: fatsG,
         status: logNow ? 'Logged' : 'Planned',
       );
-      await _loadFor(_selectedDate);
+      await _loadFor(_selectedDate, force: true);
       return true;
     } on ApiException catch (e) {
       actionError = e.userMessage;
@@ -129,7 +154,7 @@ class MealController extends ChangeNotifier {
     if (state.data == null) return;
     try {
       await _repository.deleteLog(mealLogId);
-      await _loadFor(_selectedDate);
+      await _loadFor(_selectedDate, force: true);
     } on ApiException catch (e) {
       actionError = e.userMessage;
       notifyListeners();

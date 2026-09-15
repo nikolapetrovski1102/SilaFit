@@ -52,4 +52,15 @@ public static class AnalyticsRowMapper
         ResultJson = reader.GetStringValue("ResultJson"),
         GeneratedAtUtc = reader.GetDateTimeValue("GeneratedAtUtc")
     };
+
+    public static WeeklyAnalyticsReportModel MapWeeklyReport(SqlDataReader reader) => new()
+    {
+        ReportId = reader.GetGuidValue("ReportId"),
+        UserId = reader.GetGuidValue("UserId"),
+        ReportYear = reader.GetInt16Value("ReportYear"),
+        ReportWeek = reader.GetByteValue("ReportWeek"),
+        SnapshotJson = reader.GetStringValue("SnapshotJson"),
+        ResultJson = reader.GetStringValue("ResultJson"),
+        GeneratedAtUtc = reader.GetDateTimeValue("GeneratedAtUtc")
+    };
 }

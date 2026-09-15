@@ -48,6 +48,12 @@ public static class SqlDataReaderExtensions
     public static byte GetByteValue(this SqlDataReader reader, string column) =>
         reader.GetByte(reader.GetOrdinal(column));
 
+    public static byte? GetNullableByte(this SqlDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? null : reader.GetByte(ordinal);
+    }
+
     public static decimal GetDecimalValue(this SqlDataReader reader, string column) =>
         reader.GetDecimal(reader.GetOrdinal(column));
 

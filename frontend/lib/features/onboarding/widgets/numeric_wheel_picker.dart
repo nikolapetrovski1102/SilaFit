@@ -11,8 +11,7 @@ double _lerp(double a, double b, double t) => a + (b - a) * t;
 /// The horizontal drag-to-scrub numeric picker used for age/height/weight: a
 /// continuous filmstrip of values that grow and brighten as they near
 /// the center, a momentum fling that keeps spinning and decelerates after a
-/// flick, and a magnetic spring settle with a little landing "pop" on the
-/// value that comes to rest - plus a tick-mark ruler underneath that trails
+/// flick, and a quick settle without overshoot - plus a tick-mark ruler that trails
 /// the numbers at a slower parallax speed for a sense of depth. Optionally
 /// preceded by a unit-toggle pill pair (cm/ft, kg/lb) - display conversion
 /// only, the caller's [value]/[onChanged] stay in whatever unit is active.
@@ -22,6 +21,10 @@ class NumericWheelPicker extends StatefulWidget {
   final int max;
   final ValueChanged<int> onChanged;
   final Color? valueColor;
+
+  /// Smaller sizes let decimal measurements fit without overlapping neighbours.
+  final double valueFontSize;
+  final double neighborFontSize;
   final String? suffixLabel;
   final String Function(int value)? displayFormatter;
   final List<String>? unitOptions;
@@ -35,6 +38,8 @@ class NumericWheelPicker extends StatefulWidget {
     required this.max,
     required this.onChanged,
     this.valueColor,
+    this.valueFontSize = 88,
+    this.neighborFontSize = 34,
     this.suffixLabel,
     this.displayFormatter,
     this.unitOptions,
@@ -48,10 +53,10 @@ class NumericWheelPicker extends StatefulWidget {
 
 class _NumericWheelPickerState extends State<NumericWheelPicker>
     with TickerProviderStateMixin {
-  static const _pxPerUnit = 58.0;
+  static const _pxPerUnit = 72.0;
   static const _viewportWidth = 320.0;
-  static const _filmHeight = 152.0;
-  static const _slotRadius = 2; // slots rendered on each side of center
+  static const _filmHeight = 172.0;
+  static const _slotRadius = 1; // slots rendered on each side of center
 
   // Extra px of spacing straddling the centered value only - the two gaps
   // nearest the selection read as deliberately roomier than the rest of the
@@ -72,10 +77,10 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
   double _settleFrom = 0;
   late final AnimationController _settle = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 200),
+    duration: const Duration(milliseconds: 420),
   )..addListener(() {
       setState(() => _dragOffsetPx =
-          _settleFrom * (1 - Curves.easeOutCubic.transform(_settle.value)));
+          _settleFrom * (1 - Curves.easeOutQuint.transform(_settle.value)));
     });
 
   // Drives momentum after a fast flick: an unbounded controller animated
@@ -91,26 +96,10 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
       _flingLastValue = v;
     });
 
-  // A brief, crisp scale tick on whichever value just landed in center -
-  // felt more than seen, confirming the pick without any wobble.
-  late final AnimationController _pop = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 140),
-  )..addListener(() => setState(() {}));
-
-  @override
-  void didUpdateWidget(covariant NumericWheelPicker oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) {
-      _pop.forward(from: 0);
-    }
-  }
-
   @override
   void dispose() {
     _settle.dispose();
     _fling.dispose();
-    _pop.dispose();
     super.dispose();
   }
 
@@ -152,7 +141,7 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
   void _onDragEnd(DragEndDetails details) {
     _isDragging = false;
     final velocity = details.primaryVelocity ?? 0;
-    if (velocity.abs() > 180) {
+    if (velocity.abs() > 220) {
       _startFling(velocity);
     } else {
       _settleNow();
@@ -167,12 +156,15 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
   void _startFling(double velocity) {
     _flingLastValue = 0;
     _fling.value = 0;
-    _fling.animateWith(FrictionSimulation(0.05, 0, velocity)).whenComplete(() {
+    final softenedVelocity = velocity.clamp(-1800.0, 1800.0);
+    _fling
+        .animateWith(FrictionSimulation(0.025, 0, softenedVelocity))
+        .whenComplete(() {
       if (!_isDragging) _settleNow();
     });
   }
 
-  void _settleNow([_]) {
+  void _settleNow() {
     if (_dragOffsetPx == 0) return;
     _settleFrom = _dragOffsetPx;
     _settle.forward(from: 0);
@@ -190,7 +182,7 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
   double _slotX(double u) {
     final sign = u < 0 ? -1.0 : 1.0;
     final a = u.abs();
-    final firstGap = _pxPerUnit + _centerGapExtra;
+    const firstGap = _pxPerUnit + _centerGapExtra;
     return sign * (a <= 1 ? a * firstGap : firstGap + (a - 1) * _pxPerUnit);
   }
 
@@ -201,31 +193,21 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
     final u = offset + _dragOffsetPx / _pxPerUnit;
     final x = _slotX(u);
     final t = (1 - u.abs()).clamp(0.0, 1.0);
-    final fontSize = _lerp(30, 76, t);
+    final fontSize = _lerp(widget.neighborFontSize, widget.valueFontSize, t);
     final color = Color.lerp(
         AppColors.onSurfaceVariant, widget.valueColor ?? AppColors.accent, t)!;
-
-    // The value resting at dead center also carries a brief, crisp scale
-    // tick timed to when it actually lands, not to the drag itself - decays
-    // monotonically to 1.0 rather than oscillating, so it reads as a firm
-    // confirmation rather than a bounce.
-    final popT = Curves.easeOut.transform(_pop.value.clamp(0.0, 1.0));
-    final popScale = offset == 0 ? 1 + (1 - popT) * 0.06 : 1.0;
 
     return Transform.translate(
       offset: Offset(x, _lerp(10, 0, t)),
       child: Opacity(
-        opacity: _lerp(0.28, 1.0, t),
-        child: Transform.scale(
-          scale: popScale,
-          child: Text(
-            _format(v),
-            textAlign: TextAlign.center,
-            style: AppTypography.displayStatXl.copyWith(
-              fontSize: fontSize,
-              letterSpacing: -0.03 * fontSize,
-              color: color,
-            ),
+        opacity: _lerp(0.14, 1.0, t),
+        child: Text(
+          _format(v),
+          textAlign: TextAlign.center,
+          style: AppTypography.displayStatXl.copyWith(
+            fontSize: fontSize,
+            letterSpacing: -0.03 * fontSize,
+            color: color,
           ),
         ),
       ),
@@ -310,33 +292,55 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
   }
 }
 
+/// A tape-measure ruler: soft, rounded ticks (every 5th slightly taller,
+/// like inch marks) at low contrast, with a bold accent bar fixed at center
+/// marking the current value - the bar stays put while the whole tick row
+/// slides beneath it as the value changes. Sized and spaced generously so it
+/// reads as a deliberate control rather than a thin decorative line.
 class _TickRuler extends StatelessWidget {
   final double width;
 
   const _TickRuler({required this.width});
 
+  static const _tickCount = 25;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
-      height: 28,
+      height: 48,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Container(width: width, height: 1, color: AppColors.outlineVariant),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(21, (i) {
-              final isCenter = i == 10;
+            children: List.generate(_tickCount, (i) {
+              final isMajor = i % 5 == 0;
               return Container(
-                width: 2,
-                height: isCenter ? 24 : 12,
+                width: 2.5,
+                height: isMajor ? 26 : 14,
                 decoration: BoxDecoration(
-                  color: isCenter ? AppColors.accent : AppColors.outlineVariant,
-                  borderRadius: BorderRadius.circular(1),
+                  color: AppColors.outlineVariant
+                      .withValues(alpha: isMajor ? 0.9 : 0.45),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               );
             }),
+          ),
+          Container(
+            width: 6,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(3),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accent.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -356,39 +360,49 @@ class _UnitTogglePills extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (final option in options) ...[
-          GestureDetector(
-            onTap: () {
-              if (option != selected) HapticFeedback.selectionClick();
-              onSelected(option);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              decoration: BoxDecoration(
-                color: option == selected
-                    ? AppColors.accent
-                    : AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(AppRadius.full),
-              ),
-              child: Text(
-                option,
-                style: AppTypography.labelSm.copyWith(
-                  color: option == selected
-                      ? AppColors.onAccent
-                      : AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+    return Container(
+      width: double.infinity,
+      height: 52,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Row(
+        children: [
+          for (final option in options)
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  if (option != selected) HapticFeedback.selectionClick();
+                  onSelected(option);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: option == selected
+                        ? AppColors.accent
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppRadius.inset),
+                  ),
+                  child: AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
+                    style: AppTypography.labelSm.copyWith(
+                      color: option == selected
+                          ? AppColors.onAccent
+                          : AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    child: Text(option),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.xs),
         ],
-      ],
+      ),
     );
   }
 }

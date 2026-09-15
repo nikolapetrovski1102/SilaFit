@@ -5,6 +5,7 @@ using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Services.Abstractions;
+using Silen.Services.Helpers;
 
 namespace Silen.Services.Implementations;
 
@@ -23,9 +24,19 @@ public sealed class MealPlanningService(
     private const short FallbackTargetCarbsG = 220;
     private const short FallbackTargetFatsG = 70;
 
-    // No activity-level question in onboarding today, so a single moderate
-    // multiplier stands in for everyone - revisit if that question is added.
-    private const double ActivityMultiplier = 1.55;
+    // Mifflin-St Jeor activity multipliers, keyed by the onboarding
+    // DailyActivityLevel answer. The default (1.55, "moderately active") is used
+    // for profiles that predate the activity question and have no answer.
+    private const double DefaultActivityMultiplier = 1.55;
+
+    private static double ActivityMultiplierFor(string? dailyActivityLevel) => dailyActivityLevel switch
+    {
+        "Sedentary" => 1.2,
+        "LightlyActive" => 1.375,
+        "Active" => 1.55,
+        "VeryActive" => 1.725,
+        _ => DefaultActivityMultiplier
+    };
 
     public Task<ServiceResult<MealDayDto>> GetDayAsync(Guid userId, DateOnly logDateUtc, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -82,10 +93,29 @@ public sealed class MealPlanningService(
                 throw new ValidationException($"Invalid target calories '{request.TargetCalories}'.", "Enter a valid daily calorie target.");
             }
 
+            // Explicit user edit: pin it so a later profile save doesn't recompute
+            // over the top of a choice they made deliberately.
+            request.IsManualOverride = true;
             return await mealPlanningProvider.UpsertTargetsAsync(userId, request, cancellationToken);
         });
 
-    public Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(int? month, CancellationToken cancellationToken = default) =>
+    public Task<ServiceResult<UserNutritionTargetsModel>> RecomputeTargetsAsync(Guid userId, UserProfileModel profile, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var existing = await mealPlanningProvider.GetTargetsAsync(userId, cancellationToken);
+
+            // Auto-derived targets track the profile (weight/height/age/gender/
+            // goal/activity); a manually set target is the user's and is left
+            // untouched until they change it themselves.
+            if (existing is { IsManualOverride: true })
+            {
+                return existing;
+            }
+
+            return await SeedTargetsFromProfileAsync(userId, profile, cancellationToken);
+        });
+
+    public Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(Guid userId, int? month, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
             var resolvedMonth = month ?? DateTime.UtcNow.Month;
@@ -94,7 +124,15 @@ public sealed class MealPlanningService(
                 throw new ValidationException($"Invalid month '{resolvedMonth}'.", "That's not a valid month.");
             }
 
-            return await mealPlanningProvider.GetSuggestionsForMonthAsync(resolvedMonth, cancellationToken);
+            var suggestions = await mealPlanningProvider.GetSuggestionsForMonthAsync(resolvedMonth, cancellationToken);
+
+            // The user's targets already encode height/weight/age/gender/goal/
+            // activity, so scoring suggestions against them is what makes the
+            // library personal without re-deriving the Mifflin-St Jeor math here.
+            var targets = await GetOrCreateTargetsAsync(userId, cancellationToken);
+            var profile = await userProfileProvider.GetAsync(userId, cancellationToken);
+
+            return MealRecommendationScorer.Rank(suggestions, targets, profile?.Goal);
         });
 
     /// <summary>
@@ -111,7 +149,14 @@ public sealed class MealPlanningService(
         }
 
         var profile = await userProfileProvider.GetAsync(userId, cancellationToken);
+        return await SeedTargetsFromProfileAsync(userId, profile, cancellationToken);
+    }
+
+    private async Task<UserNutritionTargetsModel> SeedTargetsFromProfileAsync(Guid userId, UserProfileModel? profile, CancellationToken cancellationToken)
+    {
         var request = ComputeInitialTargets(profile);
+        request.IsManualOverride = false;
+
         return await mealPlanningProvider.UpsertTargetsAsync(userId, request, cancellationToken);
     }
 
@@ -139,7 +184,7 @@ public sealed class MealPlanningService(
             _ => -78
         };
 
-        var tdee = bmr * ActivityMultiplier;
+        var tdee = bmr * ActivityMultiplierFor(profile.DailyActivityLevel);
 
         var calorieTarget = profile.Goal switch
         {
@@ -148,16 +193,25 @@ public sealed class MealPlanningService(
             _ => tdee
         };
 
-        var proteinG = weightKg * 2;
-        var fatsG = calorieTarget * 0.25 / 9;
-        var carbsG = (calorieTarget - (proteinG * 4) - (fatsG * 9)) / 4;
+        // Clamp calories first so the macro split below is derived from the
+        // number we actually return and therefore reconciles with it, even for
+        // extreme height/weight/age combinations.
+        var clampedCalories = Math.Clamp(Math.Round(calorieTarget), 1200, 6000);
+
+        // 2 g/kg protein, fat at 25% of calories, carbs absorb the rest. Protein
+        // is capped so it can never crowd out carbs (which would otherwise go
+        // negative and leave the macro totals summing above the calorie target).
+        var fatsG = Math.Clamp(Math.Round(clampedCalories * 0.25 / 9), 0, 300);
+        var proteinBudgetG = Math.Max(clampedCalories - (fatsG * 9), 0) / 4;
+        var proteinG = Math.Clamp(Math.Round(Math.Min(weightKg * 2, proteinBudgetG)), 0, 400);
+        var carbsG = Math.Clamp(Math.Round(Math.Max((clampedCalories - (proteinG * 4) - (fatsG * 9)) / 4, 0)), 0, 800);
 
         return new UpsertNutritionTargetsRequest
         {
-            TargetCalories = (short)Math.Clamp(Math.Round(calorieTarget), 1200, 6000),
-            TargetProteinG = (short)Math.Clamp(Math.Round(proteinG), 0, 400),
-            TargetCarbsG = (short)Math.Clamp(Math.Round(Math.Max(carbsG, 0)), 0, 800),
-            TargetFatsG = (short)Math.Clamp(Math.Round(fatsG), 0, 300)
+            TargetCalories = (short)clampedCalories,
+            TargetProteinG = (short)proteinG,
+            TargetCarbsG = (short)carbsG,
+            TargetFatsG = (short)fatsG
         };
     }
 }

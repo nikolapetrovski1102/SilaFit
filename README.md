@@ -15,7 +15,7 @@ plan, or otherwise persist anything long-term.
 backend/    ASP.NET Core API (Silen.Api, Silen.Services, Silen.Common, ...)
 database/   schema/, procedures/, seed/ .sql scripts + deploy.sh
 frontend/   Flutter app
-deploy/     production deploy to Hetzner (silafit.tappit.click) — see deploy/README.md
+deploy/     production deploy to Hetzner (sila.fitness) — see deploy/README.md
 docs/       (reserved for design/architecture notes)
 docker-compose.yml   SQL Server + API, wired together for local dev
 ```
@@ -89,3 +89,11 @@ Notes:
 - Progress analytics are rule-based on real logged data (streaks, compliance, hydration/weight
   trends) — there is no external LLM call, and the narrative text is a template filled with
   those real numbers, not fabricated content.
+- Push reminders are delivered by `NotificationPublishService`, driven by a frequent
+  (`Silen.Tools.NotificationPublish`, every 5 minutes on the server) batch. Scheduling is
+  done in each user's own stored timezone, never the server's — the timezone is captured at
+  onboarding and refreshed on every app open. Messages are short, varied and personality-led
+  (gym time, log-your-sets, calories/meal ideas, motivation), with a quiet-then-comeback
+  backoff when a user stops engaging. Delivery uses FCM HTTP v1 when configured and falls back
+  to a log-only sender otherwise, so the pipeline works before Firebase is wired. See
+  `deploy/README.md` ("Push reminders").

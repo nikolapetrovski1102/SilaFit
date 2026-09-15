@@ -145,10 +145,13 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
 
     /* -------------------------------- splits -------------------------------- */
 
-    public Task<List<AdminSplitModel>> GetSplitsAsync(CancellationToken cancellationToken = default) =>
+    public Task<List<AdminSplitModel>> GetSplitsAsync(Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Admin_Splits_GetAll",
-            [],
+            [
+                SqlParameterBuilder.Create("@ViewerAdminUserId", viewerAdminUserId),
+                SqlParameterBuilder.Create("@IncludeAll", includeAll)
+            ],
             reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapSplit, cancellationToken),
             cancellationToken);
 
@@ -157,9 +160,9 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
     /// carries the counts, and the other two are also used on their own by the day
     /// and prescription editors.
     /// </summary>
-    public async Task<AdminSplitDetailModel?> GetSplitDetailAsync(Guid splitId, CancellationToken cancellationToken = default)
+    public async Task<AdminSplitDetailModel?> GetSplitDetailAsync(Guid splitId, Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default)
     {
-        var splits = await GetSplitsAsync(cancellationToken);
+        var splits = await GetSplitsAsync(viewerAdminUserId, includeAll, cancellationToken);
         var split = splits.FirstOrDefault(candidate => candidate.SplitId == splitId);
 
         if (split is null)
@@ -175,7 +178,7 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
         };
     }
 
-    public Task<AdminMutationResultModel> UpsertSplitAsync(AdminSplitUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+    public Task<AdminMutationResultModel> UpsertSplitAsync(AdminSplitUpsertRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Admin_Split_Upsert",
             [
@@ -188,15 +191,53 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
                 SqlParameterBuilder.Create("@HeroImageUrl", request.HeroImageUrl),
                 SqlParameterBuilder.Create("@RecommendedGoal", request.RecommendedGoal),
                 SqlParameterBuilder.Create("@SortOrder", request.SortOrder),
+                SqlParameterBuilder.Create("@Visibility", request.Visibility),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
                 .. AdminActorParameters.Build(actor)
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
 
-    public Task<AdminMutationResultModel> DeleteSplitAsync(Guid splitId, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+    public Task<AdminMutationResultModel> DeleteSplitAsync(Guid splitId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Admin_Split_Delete",
-            [SqlParameterBuilder.Create("@SplitId", splitId), .. AdminActorParameters.Build(actor)],
+            [
+                SqlParameterBuilder.Create("@SplitId", splitId),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<List<AdminSplitAssignmentModel>> GetSplitAssignmentsAsync(Guid splitId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_SplitAssignments_GetForSplit",
+            [SqlParameterBuilder.Create("@SplitId", splitId)],
+            reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapSplitAssignment, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> AssignSplitAsync(AdminSplitAssignRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_SplitAssignment_Assign",
+            [
+                SqlParameterBuilder.Create("@SplitId", request.SplitId),
+                SqlParameterBuilder.Create("@UserId", request.UserId),
+                SqlParameterBuilder.Create("@SetActive", request.SetActive),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> RemoveSplitAssignmentAsync(Guid splitId, Guid userId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_SplitAssignment_Remove",
+            [
+                SqlParameterBuilder.Create("@SplitId", splitId),
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
 

@@ -2,29 +2,30 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/silen_button.dart';
-import 'intro_slide.dart';
+import 'onboarding_step_transition.dart';
 
-/// The closing screen of the flow: bell icon mark, "Stay on track" pitch,
+/// The closing screen of the flow: animated bell, "Stay on track" pitch,
 /// a real OS notification-permission prompt behind "Allow notifications",
 /// and a "Not now" skip - either path finishes onboarding the same way.
 class NotificationPermissionScreen extends StatelessWidget {
   final VoidCallback onBack;
-  final int progressStep;
-  final int progressStepCount;
   final bool isSubmitting;
-  final VoidCallback onFinish;
+
+  /// True when the OS permission was actually granted (or the platform has no
+  /// prompt to grant), false for "Not now"/denied - the caller saves the
+  /// timezone + opt-in either way, just with a different enabled flag.
+  final ValueChanged<bool> onFinish;
 
   const NotificationPermissionScreen({
     super.key,
     required this.onBack,
-    required this.progressStep,
-    required this.progressStepCount,
     required this.isSubmitting,
     required this.onFinish,
   });
@@ -36,17 +37,20 @@ class NotificationPermissionScreen extends StatelessWidget {
       kIsWeb || Platform.isAndroid || Platform.isIOS || Platform.isWindows;
 
   Future<void> _requestAndFinish() async {
+    var granted = true;
     if (_supportsNotificationPermission) {
-      await Permission.notification.request();
+      final status = await Permission.notification.request();
+      granted = status.isGranted;
     }
-    onFinish();
+    onFinish(granted);
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -65,52 +69,53 @@ class NotificationPermissionScreen extends StatelessWidget {
                         size: 18, color: AppColors.onSurface),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: LayoutBuilder(builder: (context, constraints) {
-                    return Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(AppRadius.full),
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 450),
-                          curve: Curves.easeOutCubic,
-                          width: constraints.maxWidth *
-                              (progressStep / progressStepCount).clamp(0, 1),
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.accent,
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
               ],
             ),
-            const Spacer(flex: 3),
-            Center(
-              child: OnboardingIconMark(
-                child: Icon(Icons.notifications_outlined,
-                    size: 72, color: AppColors.accent),
+            Expanded(
+              flex: 6,
+              child: OnboardingStepContentTransition(
+                child: Semantics(
+                  image: true,
+                  label: 'Ringing notification bell',
+                  child: Center(
+                    child: FractionallySizedBox(
+                      widthFactor: 0.96,
+                      heightFactor: 0.96,
+                      child: ColorFiltered(
+                        colorFilter: ColorFilter.mode(
+                          AppColors.accent,
+                          BlendMode.srcIn,
+                        ),
+                        child: Lottie.asset(
+                          'assets/lottie_animations/ringtone.json',
+                          fit: BoxFit.contain,
+                          repeat: !MediaQuery.disableAnimationsOf(context),
+                          animate: !MediaQuery.disableAnimationsOf(context),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            OnboardingStepContentTransition(
+              incomingOffset: 14,
+              child: Column(
+                children: [
+                  Text('Stay on track',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.headlineLg),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Get a nudge on workout days and reminders when it’s time to log your progress.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyMd.copyWith(
+                        color: AppColors.onSurfaceVariant, height: 1.4),
+                  ),
+                ],
               ),
             ),
             const Spacer(flex: 2),
-            Text('Stay on track',
-                textAlign: TextAlign.center, style: AppTypography.headlineLg),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Get a nudge on workout days and reminders when it’s time to log your progress.',
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMd
-                  .copyWith(color: AppColors.onSurfaceVariant, height: 1.4),
-            ),
-            const Spacer(flex: 3),
             PrimaryPillButton(
               label: 'Allow notifications',
               isLoading: isSubmitting,
@@ -119,7 +124,7 @@ class NotificationPermissionScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Center(
               child: GestureDetector(
-                onTap: isSubmitting ? null : onFinish,
+                onTap: isSubmitting ? null : () => onFinish(false),
                 child: Text('Not now',
                     style: AppTypography.bodyMd
                         .copyWith(color: AppColors.onSurfaceVariant)),

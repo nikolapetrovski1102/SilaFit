@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#172d30" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5eedd" media="(prefers-color-scheme: light)" />
+  <title>SilaFit Press Kit</title>
+  <meta name="description" content="SilaFit brand assets, boilerplate description, and media contact." />
+  <link rel="canonical" href="https://sila.fitness/press.html" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
+  <link rel="stylesheet" href="css/base.css?v=20260915-teal" />
+  <link rel="stylesheet" href="css/site.css" />
+  <link rel="stylesheet" href="css/legal.css" />
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) {}
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <style>
+    .press-assets { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-top: 16px; }
+    .press-asset { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; border: 1px solid var(--surface-highest); border-radius: var(--r-card); background: var(--surface-low); text-align: center; }
+    .press-asset img { width: 64px; height: 64px; object-fit: contain; }
+    .press-asset span { font-size: 13px; color: var(--on-surface-variant); }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav__inner">
+      <a class="nav__logo" href="index.html">
+        <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit logo" />
+        SilaFit
+      </a>
+      <nav class="nav__links">
+        <a href="about.html">About</a>
+        <a href="careers.html">Careers</a>
+      </nav>
+      <div class="nav__cta">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" title="Switch color theme">
+          <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+          <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+        </button>
+        <a class="btn btn--primary btn--sm" href="mailto:press@sila.fitness">Media contact</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="legal-hero">
+      <div class="legal-hero__content">
+        <div class="eyebrow eyebrow--accent">Press kit</div>
+        <h1>Brand assets & boilerplate.</h1>
+        <p>Logos, icons, and a short description for anyone writing about SilaFit.</p>
+      </div>
+    </section>
+
+    <section class="legal-main">
+      <div class="legal-layout">
+        <section class="legal-section">
+          <h2>Boilerplate</h2>
+          <p>SilaFit is a Precision Kinetic fitness app pairing workout telemetry with adaptive meal planning — AI-assisted training splits, PR prediction, hydration and bodyweight tracking, and nutrition targets that adjust to training load.</p>
+        </section>
+
+        <section class="legal-section">
+          <h2>Logo & app icon</h2>
+          <p>Right-click (or long-press) any asset below to save it. Please don't alter the mark's shape or colors.</p>
+          <div class="press-assets">
+            <div class="press-asset">
+              <img src="assets/img/branding/app_icon.png" alt="SilaFit app icon" />
+              <span>App icon</span>
+            </div>
+            <div class="press-asset">
+              <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit app icon, transparent background" />
+              <span>Icon (transparent)</span>
+            </div>
+            <div class="press-asset">
+              <img src="assets/img/mascot/lifting.png" alt="SilaFit mascot lifting a barbell" />
+              <span>Mascot — lifting</span>
+            </div>
+            <div class="press-asset">
+              <img src="assets/img/mascot/celebrating.png" alt="SilaFit mascot celebrating" />
+              <span>Mascot — celebrating</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="legal-section">
+          <h2>Media contact</h2>
+          <p>For interviews, screenshots, or anything else, reach us at <a class="legal-link" href="mailto:press@sila.fitness">press@sila.fitness</a>.</p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer__grid">
+        <div class="footer__brand">
+          <a class="nav__logo" href="index.html">
+            <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit logo" />
+            SilaFit
+          </a>
+          <p>Precision Kinetic fitness tracking — AI-assisted splits, adaptive nutrition, and streaks that respect recovery.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="index.html#nutrition">Meal planning</a></li>
+            <li><a href="index.html#splits">Training splits</a></li>
+            <li><a href="index.html#pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Company</h4>
+          <ul>
+            <li><a href="about.html">About</a></li>
+            <li><a href="index.html#community">Community</a></li>
+            <li><a href="support.html">Support</a></li>
+            <li><a href="careers.html">Careers</a></li>
+            <li><a href="press.html">Press kit</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="privacy.html">Privacy policy</a></li>
+            <li><a href="terms.html">Terms of service</a></li>
+            <li><a href="delete-account.html">Delete my account</a></li>
+            <li><a href="admin.html">Admin dashboard</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 SilaFit. Precision Kinetic design system.</span>
+        <div class="footer__status">
+          <span class="footer__status-dot"></span>
+          <span>All systems operational</span>
+        </div>
+        <span>Made for lifters, by lifters.</span>
+      </div>
+    </div>
+  </footer>
+  <script src="js/theme.js"></script>
+</body>
+</html>

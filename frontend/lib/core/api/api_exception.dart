@@ -11,6 +11,10 @@ class ApiException implements Exception {
   bool get isUnauthorized => statusCode == 401;
   bool get isForbidden => statusCode == 403;
 
+  /// 422 - the request was well-formed but there isn't enough logged history yet to act on it
+  /// (currently: AnalyticsController's monthly review before a month has real activity logged).
+  bool get isInsufficientData => statusCode == 422;
+
   static const String genericMessage = 'Something went wrong';
 
   @override

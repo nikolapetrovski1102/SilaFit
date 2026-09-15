@@ -7,6 +7,12 @@ public sealed class UserNutritionTargetsModel
     public short TargetProteinG { get; set; }
     public short TargetCarbsG { get; set; }
     public short TargetFatsG { get; set; }
+
+    /// <summary>True when the user set these targets themselves; false when they
+    /// were derived from the profile. Auto targets get recomputed when the profile
+    /// changes, manual ones are left alone.</summary>
+    public bool IsManualOverride { get; set; }
+
     public DateTime UpdatedAtUtc { get; set; }
 }
 
@@ -45,4 +51,11 @@ public sealed class MealSuggestionModel
     public byte? SuggestedMonth { get; set; }
     public bool IsSystemDefault { get; set; }
     public int SortOrder { get; set; }
+
+    /// <summary>Computed by MealPlanningService from the caller's nutrition targets (which
+    /// derive from their profile), not a DB column. 0-100, higher is a better fit.</summary>
+    public int MatchScore { get; set; }
+
+    /// <summary>Plain-language explanation of <see cref="MatchScore"/>, shown in the UI.</summary>
+    public string? MatchReason { get; set; }
 }

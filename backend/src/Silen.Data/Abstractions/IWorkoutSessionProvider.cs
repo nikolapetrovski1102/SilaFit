@@ -14,8 +14,13 @@ public interface IWorkoutSessionProvider
         short? caloriesEstimate,
         decimal? rpeScore,
         decimal? tonnageKg,
+        IReadOnlyList<SetLogEntryModel>? setLogs,
         CancellationToken cancellationToken = default);
 
     Task<(RangeSummaryModel Summary, List<DaySessionStatusModel> Days)> GetRangeSummaryAsync(
         Guid userId, DateTime fromDateUtc, DateTime toDateUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>The heaviest set ever logged per exercise, most recently achieved first - see `usp_WorkoutSession_GetPersonalRecords`.</summary>
+    Task<List<PersonalRecordModel>> GetPersonalRecordsAsync(
+        Guid userId, int top, CancellationToken cancellationToken = default);
 }

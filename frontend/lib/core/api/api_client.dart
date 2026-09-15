@@ -31,13 +31,14 @@ class ApiClient {
       {Map<String, String>? query}) {
     final uri =
         Uri.parse('${ApiConfig.baseUrl}$path').replace(queryParameters: query);
-    return _send(() => _http.get(uri, headers: _headers()), parse);
+    return _send(path, () => _http.get(uri, headers: _headers()), parse);
   }
 
   Future<T> post<T>(String path, T Function(dynamic json) parse,
       {Object? body}) {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     return _send(
+        path,
         () =>
             _http.post(uri, headers: _headers(), body: jsonEncode(body ?? {})),
         parse);
@@ -47,14 +48,20 @@ class ApiClient {
       {Object? body}) {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     return _send(
+        path,
         () =>
             _http.put(uri, headers: _headers(), body: jsonEncode(body ?? {})),
         parse);
   }
 
-  Future<T> delete<T>(String path, T Function(dynamic json) parse) {
+  Future<T> delete<T>(String path, T Function(dynamic json) parse,
+      {Object? body}) {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
-    return _send(() => _http.delete(uri, headers: _headers()), parse);
+    return _send(
+        path,
+        () => _http.delete(uri,
+            headers: _headers(), body: jsonEncode(body ?? {})),
+        parse);
   }
 
   Map<String, String> _headers() {
@@ -64,8 +71,9 @@ class ApiClient {
     return headers;
   }
 
-  Future<T> _send<T>(Future<http.Response> Function() request,
-      T Function(dynamic json) parse) async {
+  Future<T> _send<T>(String path, Future<http.Response> Function() request,
+      T Function(dynamic json) parse,
+      {bool isRetry = false}) async {
     late final http.Response response;
     try {
       response = await request().timeout(_requestTimeout);
@@ -90,7 +98,14 @@ class ApiClient {
         (response.statusCode >= 200 && response.statusCode < 300);
 
     if (!success) {
-      if (response.statusCode == 401) {
+      if (response.statusCode == 401 && !path.startsWith('/auth/')) {
+        // The access token expired. Re-run the idempotent device login and
+        // retry once, so a short-lived token is invisible in normal use. A 401
+        // from an /auth/ endpoint is a failed credential, not a dead session,
+        // so it must not clear the guest session the way this used to.
+        if (!isRetry && await _trySilentDeviceReauth()) {
+          return _send(path, request, parse, isRetry: true);
+        }
         await sessionStore.clear();
       }
       final message =
@@ -102,6 +117,49 @@ class ApiClient {
       return parse(envelope?['data']);
     } catch (_) {
       throw const ApiException(ApiException.genericMessage);
+    }
+  }
+
+  /// Best-effort re-auth for an expired token using the stored device id.
+  /// Returns true only when the server re-issued a token for the *same* user,
+  /// so this can never silently swap the account underneath the UI.
+  Future<bool> _trySilentDeviceReauth() async {
+    final current = sessionStore.current;
+    if (current == null) return false;
+
+    try {
+      final deviceId = await sessionStore.deviceId();
+      if (deviceId.isEmpty) return false;
+
+      final response = await _http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/auth/device'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'deviceId': deviceId}),
+          )
+          .timeout(_requestTimeout);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) return false;
+
+      final data =
+          (jsonDecode(response.body) as Map<String, dynamic>)['data']
+              as Map<String, dynamic>?;
+      final token = data?['token'] as String?;
+      final userId = data?['userId'] as String?;
+      if (token == null || token.isEmpty || userId != current.userId) {
+        return false;
+      }
+
+      await sessionStore.save(SilenSession(
+        token: token,
+        userId: current.userId,
+        accountTier: (data?['accountTier'] as String?) ?? current.accountTier,
+        email: data?['email'] as String?,
+        displayName: data?['displayName'] as String?,
+      ));
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }

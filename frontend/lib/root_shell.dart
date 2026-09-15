@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'core/platform/device_timezone.dart';
 import 'core/theme/app_colors.dart';
 import 'core/widgets/bottom_nav_bar.dart';
 import 'features/auth/account_gate.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/meals/meal_planning_screen.dart';
+import 'features/notifications/notifications_repository.dart';
 import 'features/progress/progress_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/today/today_screen.dart';
@@ -27,12 +30,18 @@ class RootShell extends StatefulWidget {
   State<RootShell> createState() => _RootShellState();
 }
 
-class _RootShellState extends State<RootShell> {
+class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const _tabSwitchDuration = Duration(milliseconds: 320);
   static const _tabSwitchCurve = Curves.easeInOutCubic;
 
   final _pageController = PageController();
   int _index = 0;
+
+  // The interaction ping exists to say "the user is here", so rapid
+  // background/resume cycling doesn't need a request each time. Throttled to
+  // one report per window; genuinely long absences still land.
+  static const _interactionMinGap = Duration(seconds: 30);
+  DateTime? _lastInteractionReportUtc;
 
   static const _screens = [
     TodayScreen(),
@@ -42,16 +51,55 @@ class _RootShellState extends State<RootShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportInteraction());
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reportInteraction();
+    }
+  }
+
+  /// Tells the server the user is actually here (and refreshes the timezone).
+  /// This is what keeps the reminder backoff honest: a few quiet days pause
+  /// normal reminders, then a single comeback message fires. Best-effort - the
+  /// app must never block on it.
+  void _reportInteraction() {
+    if (!mounted) return;
+    final now = DateTime.now();
+    if (_lastInteractionReportUtc != null &&
+        now.difference(_lastInteractionReportUtc!) < _interactionMinGap) {
+      return;
+    }
+    _lastInteractionReportUtc = now;
+    final repository = context.read<NotificationsRepository>();
+    unawaited(repository
+        .recordInteraction(timeZoneId: deviceTimeZoneId())
+        .catchError((_) {}));
   }
 
   /// Tap path (bottom nav): gate *before* the page starts moving, so a
   /// declined gate never shows so much as a peek of Progress.
   Future<void> _onTabSelected(int index) async {
+    // ignore: avoid_print
+    print('[TAB] onTabSelected($index), current=$_index');
     if (index == _index) return;
-    if (index == 1 && !await _ensureProgressUnlocked()) return;
+    if (index == 1 && !await _ensureProgressUnlocked()) {
+      // ignore: avoid_print
+      print('[TAB] onTabSelected($index) gate declined, staying put');
+      return;
+    }
     if (!mounted) return;
     await _pageController.animateToPage(index,
         duration: _tabSwitchDuration, curve: _tabSwitchCurve);
@@ -61,10 +109,14 @@ class _RootShellState extends State<RootShell> {
   /// this fires, so the gate can only run after the fact - if it's
   /// declined, slide straight back to where the swipe started.
   void _onPageChanged(int index) {
+    // ignore: avoid_print
+    print('[TAB] onPageChanged($index), previous=$_index');
     final previous = _index;
     HapticFeedback.selectionClick();
     setState(() => _index = index);
     if (index == 1 && !context.read<AuthController>().isRegistered) {
+      // ignore: avoid_print
+      print('[TAB] onPageChanged triggering gate for index 1');
       _ensureProgressUnlocked().then((unlocked) {
         if (!unlocked && mounted) {
           _pageController.animateToPage(previous,
@@ -100,7 +152,7 @@ class _RootShellState extends State<RootShell> {
       // the status bar/notch) instead of being inset like real content.
       body: Stack(
         children: [
-          const Positioned.fill(child: _AmbientBackdrop()),
+          const Positioned.fill(child: SilenAmbientBackdrop()),
           SafeArea(
             bottom: false,
             child: PageView(
@@ -141,7 +193,8 @@ class _AnimatedTabState extends State<_AnimatedTab>
     vsync: this,
     duration: const Duration(milliseconds: 380),
   );
-  late final _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+  late final _fade =
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut);
   late final _rise = Tween<Offset>(
     begin: const Offset(0, 0.03),
     end: Offset.zero,
@@ -186,27 +239,42 @@ class _AnimatedTabState extends State<_AnimatedTab>
 
 /// Soft ambient glow behind every tab - two blurred accent-color blobs
 /// pinned off-screen at opposite corners, so the flat page background reads
-/// as atmosphere rather than a single flat fill. Uses [AppColors.accent]
-/// directly, so it's the lime glow in dark mode and the burgundy one in
-/// light mode automatically - no separate light/dark handling needed here.
+/// as atmosphere rather than a single flat fill. Resolves the accent from the
+/// inherited [Theme], rather than [AppColors]'s ambient static value, so this
+/// layer is explicitly rebuilt when the app's brightness changes.
 ///
 /// Static (nothing here ever animates), so [RepaintBoundary] lets Flutter
 /// rasterize it once and reuse that layer rather than reprocessing the blur
 /// every frame - cheap even though the blur radius itself is large.
 /// [IgnorePointer] keeps it from stealing any taps meant for the real
 /// content stacked on top of it.
-class _AmbientBackdrop extends StatelessWidget {
-  const _AmbientBackdrop();
+class SilenAmbientBackdrop extends StatelessWidget {
+  const SilenAmbientBackdrop({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const IgnorePointer(
+    final brightness = Theme.of(context).brightness;
+    final accent = AppColors.paletteFor(brightness).accent;
+
+    return IgnorePointer(
       child: RepaintBoundary(
+        // A theme switch must discard the cached blurred layer. Without a
+        // color-dependent key, the boundary can retain pixels rasterized for
+        // the previous palette even after the surrounding UI has changed.
+        key: ValueKey(accent),
         child: ClipRect(
           child: Stack(
             children: [
-              Positioned(top: -140, right: -120, child: _GlowBlob(diameter: 340)),
-              Positioned(bottom: -160, left: -130, child: _GlowBlob(diameter: 380)),
+              Positioned(
+                top: -140,
+                right: -120,
+                child: _GlowBlob(diameter: 340, color: accent),
+              ),
+              Positioned(
+                bottom: -160,
+                left: -130,
+                child: _GlowBlob(diameter: 380, color: accent),
+              ),
             ],
           ),
         ),
@@ -217,8 +285,9 @@ class _AmbientBackdrop extends StatelessWidget {
 
 class _GlowBlob extends StatelessWidget {
   final double diameter;
+  final Color color;
 
-  const _GlowBlob({required this.diameter});
+  const _GlowBlob({required this.diameter, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -233,7 +302,7 @@ class _GlowBlob extends StatelessWidget {
         height: diameter,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.accent.withOpacity(0.28),
+          color: color.withOpacity(0.28),
         ),
       ),
     );

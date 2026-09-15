@@ -55,7 +55,7 @@ services:
       Jwt__Issuer: "SilenApi"
       Jwt__Audience: "SilenApp"
       Jwt__SigningKey: "${JWT_SIGNING_KEY}"
-      Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-43200}"
+      Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-10080}"
       # AES-256-GCM key for application-level column encryption (FieldCipher) -
       # kept out of source control the same way as Jwt__SigningKey, see deploy/.env
       Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
@@ -76,8 +76,33 @@ services:
       AdminAuth__SessionIdleMinutes: "${ADMIN_SESSION_IDLE_MINUTES:-30}"
       AdminAuth__LockoutThreshold: "${ADMIN_LOCKOUT_THRESHOLD:-5}"
       AdminAuth__LockoutMinutes: "${ADMIN_LOCKOUT_MINUTES:-15}"
+      # SMTP - powers email verification codes and the monthly progress emails.
+      # Leave SMTP_HOST blank to disable outbound email.
+      Smtp__Host: "${SMTP_HOST:-}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__Username: "${SMTP_USERNAME:-}"
+      Smtp__Password: "${SMTP_PASSWORD:-}"
+      Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
+      Smtp__FromName: "${SMTP_FROM_NAME:-SilaFit}"
+      # App Store / Play Store review demo account. When both are set, registering
+      # with REVIEWER_BYPASS_EMAIL gets this fixed code instead of a random emailed
+      # one, so reviewers can sign in without inbox access. Leave both blank outside
+      # of an active review.
+      ReviewerBypass__Email: "${REVIEWER_BYPASS_EMAIL:-}"
+      ReviewerBypass__Code: "${REVIEWER_BYPASS_CODE:-}"
+      # Push reminders (Silen.Services -> NotificationPublishService). By default
+      # the publisher runs from the frequent cron entry below, not in the API
+      # (RunInApi=false) - flip NOTIFICATION_RUN_IN_API=true to host it here
+      # instead. Push__Enabled + a service-account file turn on real FCM sends;
+      # without them the service still composes + records notifications.
+      NotificationPublish__RunInApi: "${NOTIFICATION_RUN_IN_API:-false}"
+      Push__Enabled: "${PUSH_ENABLED:-false}"
+      Push__ProjectId: "${PUSH_PROJECT_ID:-}"
+      Push__ServiceAccountJsonPath: "${PUSH_SERVICE_ACCOUNT_PATH:-/secrets/fcm-service-account.json}"
     ports:
       - "127.0.0.1:${API_PORT:-5010}:8080"   # localhost only — nginx proxies to it
+    volumes:
+      - ./secrets:/secrets:ro
     restart: unless-stopped
     # Backstop like the db service's mem_limit above: without a ceiling, a leak can
     # let the API eat all host RAM and push everything (including SQL Server) into
@@ -107,8 +132,8 @@ services:
   # the deploy dir on the server:
   #
   #   docker compose --profile tools run --rm silen-admin-provision
-  #   # non-interactive variant:
-  #   SILEN_ADMIN_USERNAME=admin SILEN_ADMIN_PASSWORD='...' \
+  #   # non-interactive variant, optionally with a recovery email:
+  #   SILEN_ADMIN_USERNAME=admin SILEN_ADMIN_PASSWORD='...' SILEN_ADMIN_EMAIL='...' \
   #     docker compose --profile tools run --rm silen-admin-provision
   #
   # It prints the otpauth:// URI to add to an authenticator app, and re-running it
@@ -127,9 +152,117 @@ services:
       ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
       SILEN_ADMIN_USERNAME: "${SILEN_ADMIN_USERNAME:-}"
       SILEN_ADMIN_PASSWORD: "${SILEN_ADMIN_PASSWORD:-}"
+      # Optional recovery email - enables "send email code instead" at sign-in
+      # (via the API's own SMTP_* settings above). Leave blank to skip.
+      SILEN_ADMIN_EMAIL: "${SILEN_ADMIN_EMAIL:-}"
     # Masked prompts need a terminal; harmless when the env vars above are used instead.
     stdin_open: true
     tty: true
+
+  # Monthly review batch: generates + emails the monthly AI overview ("what
+  # improved / what to improve / how to continue") for every active ADVANCED
+  # subscriber. Profile-gated like the other tools, so a plain
+  # `docker compose up` never starts it - deploy.sh installs a cron entry that
+  # runs it on the 1st of each month for the previous month.
+  #
+  # Run it by hand (e.g. a backfill) with:
+  #   docker compose --profile tools run --rm --build silen-monthly-review
+  # Forward tool flags after `--`, e.g. a no-email backfill of August 2026:
+  #   docker compose --profile tools run --rm silen-monthly-review -- --year=2026 --month=8 --dry-run
+  silen-monthly-review:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.MonthlyReview/Dockerfile
+    container_name: silen-monthly-review
+    profiles: ["tools"]
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: "Production"
+      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      # AES-256-GCM key: the report snapshot decrypts bodyweight/meal columns
+      # the same way the API does, so it must match ENCRYPTION_MASTER_KEY.
+      Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
+      # OpenRouter - required: an unset key means every user fails to generate.
+      OpenRouter__ApiKey: "${OPENROUTER_API_KEY:-}"
+      OpenRouter__Model: "${OPENROUTER_MODEL:-openai/gpt-4.1}"
+      # SMTP - when Smtp__Host is blank the batch still generates + stores each
+      # report but sends no email (deliveries are recorded as 'Generated').
+      Smtp__Host: "${SMTP_HOST:-}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__Username: "${SMTP_USERNAME:-}"
+      Smtp__Password: "${SMTP_PASSWORD:-}"
+      Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
+      Smtp__FromName: "${SMTP_FROM_NAME:-SilaFit}"
+      MonthlyReview__PlanCode: "${MONTHLY_REVIEW_PLAN_CODE:-ADVANCED}"
+      MonthlyReview__SendEmails: "${MONTHLY_REVIEW_SEND_EMAILS:-true}"
+      # Non-paying pass: stats teaser + upgrade CTA (no AI call). Set false to
+      # keep the batch paying-subscribers-only again.
+      MonthlyReview__SendUpsellEmails: "${MONTHLY_REVIEW_SEND_UPSELL_EMAILS:-true}"
+      MonthlyReview__UpsellMinTrackedUnits: "${MONTHLY_REVIEW_UPSELL_MIN_TRACKED_UNITS:-1}"
+      MonthlyReview__UpgradeUrl: "${MONTHLY_REVIEW_UPGRADE_URL:-https://sila.fitness/#pricing}"
+
+  # Notification publish batch: decides, per opted-in user and in that user's
+  # own timezone, which reminder is due (gym time, log-your-sets, calories/meal
+  # idea, motivation, or the comeback message) and pushes it. Profile-gated like
+  # the other tools; deploy.sh builds it once and installs a cron entry that runs
+  # it every five minutes. Dedupe keys make overlapping runs harmless.
+  #
+  # Run it by hand with:
+  #   docker compose --profile tools run --rm --build silen-notification-publish
+  # Testing one user, writing nothing:
+  #   docker compose --profile tools run --rm silen-notification-publish -- --user=<guid> --dry-run
+  silen-notification-publish:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.NotificationPublish/Dockerfile
+    container_name: silen-notification-publish
+    profiles: ["tools"]
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: "Production"
+      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      NotificationPublish__Enabled: "${NOTIFICATION_PUBLISH_ENABLED:-true}"
+      NotificationPublish__RunInApi: "false"
+      # Monthly "unlock your review" push to non-paying users, on the 1st at
+      # 09:00 local (the usual SendWindowMinutes applies). Dedupe keeps it to
+      # once per local month. Set false to disable just this category.
+      NotificationPublish__MonthlyReviewUpsellEnabled: "${NOTIFICATION_MONTHLY_UPSELL_ENABLED:-true}"
+      NotificationPublish__MonthlyReviewUpsellDayOfMonth: "${NOTIFICATION_MONTHLY_UPSELL_DAY:-1}"
+      NotificationPublish__MonthlyReviewUpsellLocalTime: "${NOTIFICATION_MONTHLY_UPSELL_TIME:-09:00}"
+      Push__Enabled: "${PUSH_ENABLED:-false}"
+      Push__ProjectId: "${PUSH_PROJECT_ID:-}"
+      Push__ServiceAccountJsonPath: "${PUSH_SERVICE_ACCOUNT_PATH:-/secrets/fcm-service-account.json}"
+    volumes:
+      - ./secrets:/secrets:ro
+
+  # Mock-data seeder (Silen.Tools.SeedMockData). Fills one existing user's
+  # workouts/meals/hydration/bodyweight with a generated month of realistic
+  # history, so the Today/Progress/monthly screens have something to show, or
+  # creates/reuses the silen-demo-* Guest accounts by device id. Profile-gated
+  # like the other tools, so a plain `docker compose up` never starts it.
+  #
+  # Run it by hand, from the deploy dir on the server:
+  #   docker compose --profile tools run --rm --build silen-seed-mock-data -- --email=you@example.com
+  #   docker compose --profile tools run --rm silen-seed-mock-data -- --user-id=<guid> --days=30
+  #
+  # Re-running replaces that user's logs (wipe-and-regenerate), so it is safe to
+  # repeat while iterating. Run --help via the tool for the full flag list.
+  silen-seed-mock-data:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.SeedMockData/Dockerfile
+    container_name: silen-seed-mock-data
+    profiles: ["tools"]
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
 
 volumes:
   silen-sqldata:

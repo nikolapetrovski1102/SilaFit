@@ -17,4 +17,11 @@ public sealed class ProgressController(IProgressService progressService, ILogger
         var result = await progressService.GetOverviewAsync(User.GetUserId(), days, cancellationToken);
         return result.ToActionResult(logger);
     }
+
+    [HttpGet("personal-records")]
+    public async Task<IActionResult> GetPersonalRecords([FromQuery] int top, CancellationToken cancellationToken)
+    {
+        var result = await progressService.GetPersonalRecordsAsync(User.GetUserId(), top, cancellationToken);
+        return result.ToActionResult(logger);
+    }
 }

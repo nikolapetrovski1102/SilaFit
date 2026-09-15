@@ -1,11 +1,18 @@
 /* ============================================================
    SilaFit admin dashboard — views, CRUD, toasts.
-   All mutations go through SilaStore (js/data.js), which
-   persists to localStorage — the marketing site reads the same
-   store, so edits here go live there immediately.
+   Every mutation here goes through window.SilaAdminAuth (js/admin-auth.js),
+   which talks to the real cookie-authenticated API and, through it, the real
+   SQL Server database — there is no local store behind this file. Each
+   content screen is gated by the exact content.* permission its API calls
+   require; the sidebar hides a tab the signed-in operator can't use, and a
+   403 that slips through anyway (e.g. a permission revoked mid-session)
+   surfaces as a toast rather than a crash.
    ============================================================ */
 (function () {
   'use strict';
+
+  var auth = window.SilaAdminAuth;
+  if (!auth) return;
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
@@ -18,9 +25,29 @@
 
   function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
 
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  /* Closed sets mirrored from Silen.Services.Helpers.AdminContentFieldRules —
+     the API is the real gate, this is just so the selects only offer values
+     that will actually be accepted. */
+  var MUSCLE_GROUPS = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core'];
+  var MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  var SPLIT_CATEGORIES = ['PushPullLegs', 'UpperLower', 'FullBody', 'ArnoldSplit', 'PHUL', 'PHAT', 'BroSplit', 'Circuit', 'Powerlifting', 'Calisthenics', 'GluteFocus'];
+  var SPLIT_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
+  var RECOMMENDED_GOALS = ['BuildMuscle', 'LoseFat', 'MaintainActive'];
+  /* Mirrors Silen.Services.Helpers.AdminContentFieldRules.SplitVisibilities:
+     Private = owner only, Public = every app user, Shared = assigned users. */
+  var SPLIT_VISIBILITIES = ['Private', 'Public', 'Shared'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
   /* ---------------- Toasts ---------------- */
   function toast(message, isError) {
     var stack = $('#toastStack');
+    if (!stack) return;
     var el = document.createElement('div');
     el.className = 'toast' + (isError ? ' toast--error' : '');
     el.innerHTML = '<span class="dot"></span>' + esc(message);
@@ -31,6 +58,12 @@
       el.style.transform = 'translateY(8px)';
       setTimeout(function () { el.remove(); }, 220);
     }, 2600);
+  }
+
+  /* A failed call that isn't a 401 (session already handled elsewhere) gets a toast. */
+  function toastOnFailure(result, fallback) {
+    if (!result.ok && result.status !== 401) toast(result.message || fallback, true);
+    return result.ok;
   }
 
   /* ---------------- Modal ---------------- */
@@ -120,285 +153,439 @@
     });
   });
 
-  /* ---------------- Sidebar counts ---------------- */
-  function refreshCounts() {
-    $('#countMealPlans').textContent = SilaStore.mealPlans.all().length;
-    $('#countSuggestions').textContent = SilaStore.mealSuggestions.all().length;
-    $('#countExercises').textContent = SilaStore.exercises.all().length;
-    $('#countPlans').textContent = SilaStore.plans.all().length;
-    $('#countUsers').textContent = SilaStore.users.all().length;
+  /* ================================================================
+     Permissions — gates which of this file's own nav tabs show, and
+     which of its own loaders run. The API enforces the same permission
+     on every request regardless of what the sidebar shows.
+     ================================================================ */
+  var myPermissions = [];
+  function has(permission) { return myPermissions.indexOf(permission) > -1; }
+
+  var CONTENT_NAV_IDS = ['navSplits', 'navSuggestions', 'navExercises', 'navPlans', 'navUsers'];
+
+  function applyContentNavGating() {
+    CONTENT_NAV_IDS.forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.hidden = !has(btn.getAttribute('data-permission'));
+    });
   }
+
+  /* ================================================================
+     State caches — populated by each view's loader, read by Overview.
+     ================================================================ */
+  var exercisesCache = [];
+  var suggestionsCache = [];
+  var plansCache = [];
+  var splitsCache = [];
+  var usersCache = [];
 
   /* ================================================================
      OVERVIEW
      ================================================================ */
   function renderOverview() {
-    var users = SilaStore.users.all();
-    var paid = users.filter(function (u) { return u.plan !== 'FREE' && u.status === 'Active'; });
-    var plans = SilaStore.plans.all();
-    var mrr = paid.reduce(function (sum, u) {
-      var p = plans.find(function (x) { return x.code === u.plan; });
-      return sum + (p ? p.monthlyPrice : 0);
-    }, 0);
-
     $('#overviewDate').textContent = new Date().toLocaleDateString('en-GB', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
     });
-    $('#statUsers').textContent = users.length;
-    $('#statSubs').textContent = paid.length;
-    $('#statMeals').textContent = SilaStore.mealSuggestions.all().length;
-    $('#statMealsDelta').textContent = '▲ ' + SilaStore.mealPlans.all().length + ' active weekly plans';
-    $('#statMrr').textContent = '€' + mrr.toFixed(2);
 
-    /* Bar chart — 12 weeks of plausible demo volume, current week accented. */
-    var weeks = [214, 248, 231, 265, 289, 276, 302, 318, 295, 334, 351, 342];
-    var max = Math.max.apply(null, weeks);
-    $('#workoutChart').innerHTML = weeks.map(function (v, i) {
-      var h = Math.round((v / max) * 100);
-      var isNow = i === weeks.length - 1;
-      return (
-        '<div class="bar-chart__col">' +
-          '<div class="bar-chart__bar' + (isNow ? ' is-accent' : '') + '" style="height:' + h + '%">' +
-            '<span class="tip">' + v + ' workouts</span>' +
-          '</div>' +
-          '<span class="bar-chart__label">W' + (i + 1) + '</span>' +
-        '</div>'
-      );
-    }).join('');
+    if (has('users.read')) {
+      $('#statUsers').textContent = usersCache.length;
+      $('#statUsersDelta').textContent = usersCache.filter(function (u) { return u.isActive; }).length + ' active';
+    } else {
+      $('#statUsers').textContent = '—';
+      $('#statUsersDelta').textContent = 'Requires users.read';
+    }
 
-    /* Activity feed — derived from recent store content. */
-    var newestMeal = SilaStore.mealSuggestions.all().slice(-1)[0];
-    var newestPlan = SilaStore.mealPlans.all().slice(-1)[0];
-    var items = [
-      { icon: 'lime', text: '<b>Elena R.</b> completed <b>Push Day A</b> — 14 sets, new bench PR', time: '12 min' },
-      { icon: 'gold', text: '<b>Marko P.</b> upgraded to <b>Advanced Tier</b>', time: '1 h' },
-      newestMeal ? { icon: '', text: 'Meal suggestion <b>' + esc(newestMeal.title) + '</b> is live for ' + esc(SilaStore.MONTHS[newestMeal.month - 1]), time: '3 h' } : null,
-      newestPlan ? { icon: 'lime', text: 'Weekly plan <b>' + esc(newestPlan.name) + '</b> ' + (newestPlan.isPublished ? 'published' : 'saved as draft'), time: '5 h' } : null,
-      { icon: '', text: '<b>Viktor S.</b> hit a <b>201-day streak</b> 🔥', time: '8 h' },
-      { icon: 'gold', text: 'AI monthly analytics report generated for 46 Pro users', time: '1 d' }
+    if (has('users.read') && has('content.plans.read')) {
+      var paid = usersCache.filter(function (u) { return u.subscriptionStatus === 'Active' && u.activePlanCode; });
+      var mrr = paid.reduce(function (sum, u) {
+        var p = plansCache.find(function (x) { return x.code === u.activePlanCode; });
+        if (!p) return sum;
+        return sum + (u.billingCycle === 'Yearly' ? p.yearlyPrice / 12 : p.monthlyPrice);
+      }, 0);
+      $('#statSubs').textContent = paid.length;
+      $('#statSubsDelta').textContent = usersCache.length ? Math.round(paid.length / usersCache.length * 100) + '% of users' : '';
+      $('#statMrr').textContent = '€' + mrr.toFixed(2);
+    } else {
+      $('#statSubs').textContent = '—';
+      $('#statSubsDelta').textContent = 'Requires users.read + content.plans.read';
+      $('#statMrr').textContent = '—';
+    }
+
+    if (has('content.suggestions.read')) {
+      $('#statMeals').textContent = suggestionsCache.length;
+      var monthTagged = suggestionsCache.filter(function (s) { return s.suggestedMonth; }).length;
+      $('#statMealsDelta').textContent = monthTagged + ' tagged to a month';
+    } else {
+      $('#statMeals').textContent = '—';
+      $('#statMealsDelta').textContent = 'Requires content.suggestions.read';
+    }
+
+    var libraryRows = [
+      has('content.splits.read') ? { label: 'Splits', value: splitsCache.length, sub: splitsCache.reduce(function (s, x) { return s + x.dayCount; }, 0) + ' days total', view: 'splits' } : null,
+      has('content.exercises.read') ? { label: 'Exercises', value: exercisesCache.length, sub: 'reference library', view: 'exercises' } : null,
+      has('content.suggestions.read') ? { label: 'Meal suggestions', value: suggestionsCache.length, sub: 'app + landing strip', view: 'suggestions' } : null,
+      has('content.plans.read') ? { label: 'Subscription plans', value: plansCache.length, sub: plansCache.reduce(function (s, x) { return s + x.activeSubscriberCount; }, 0) + ' active subs', view: 'plans' } : null
     ].filter(Boolean);
 
-    $('#activityList').innerHTML = items.map(function (it) {
+    $('#libraryStatsList').innerHTML = libraryRows.length ? libraryRows.map(function (r) {
       return (
         '<div class="activity-item">' +
-          '<div class="activity-item__icon ' + it.icon + '">' +
-            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/></svg>' +
-          '</div>' +
-          '<div class="body-md" style="font-size:13.5px">' + it.text + '</div>' +
-          '<time>' + it.time + '</time>' +
+          '<div class="body-md" style="font-size:13.5px;flex:1">' + esc(r.label) + '<div class="row-sub">' + esc(r.sub) + '</div></div>' +
+          '<time style="font-weight:700;color:var(--high-emphasis);font-size:15px;">' + r.value + '</time>' +
         '</div>'
       );
-    }).join('');
+    }).join('') : '<div class="empty-state" style="padding:24px"><div class="body-sm">No content permissions granted to this operator.</div></div>';
+
+    if (has('audit.read') && auth.getRecentAudit) {
+      auth.getRecentAudit(6).then(function (result) {
+        if (!result.ok) { $('#activityList').innerHTML = ''; return; }
+        var entries = result.data || [];
+        $('#activityList').innerHTML = entries.length ? entries.map(function (e) {
+          return (
+            '<div class="activity-item">' +
+              '<div class="activity-item__icon">' +
+                '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/></svg>' +
+              '</div>' +
+              '<div class="body-md" style="font-size:13.5px"><b>' + esc(e.username) + '</b> ' + esc(e.action) + ' — ' + esc(e.entityType) + (e.summary ? ' · ' + esc(e.summary) : '') + '</div>' +
+              '<time>' + fmtDate(e.createdAtUtc) + '</time>' +
+            '</div>'
+          );
+        }).join('') : '<div class="empty-state" style="padding:24px"><div class="body-sm">Nothing logged yet.</div></div>';
+      });
+    } else {
+      $('#activityList').innerHTML = '<div class="empty-state" style="padding:24px"><div class="body-sm">Recent activity needs the audit.read permission.</div></div>';
+    }
   }
 
   /* ================================================================
-     MEAL PLANS — weekly templates with a day-by-day editor
+     SPLITS — day-by-day workout templates
      ================================================================ */
-  var mealPlanGoalFilter = 'all';
+  var splitCategoryFilter = 'all';
 
-  function renderMealPlanFilters() {
-    var pills = [{ id: 'all', label: 'All goals' }].concat(
-      SilaStore.GOALS.map(function (g) { return { id: g, label: SilaStore.GOAL_LABELS[g] }; })
-    );
-    $('#mealPlanFilters').innerHTML = pills.map(function (p) {
-      return '<button class="filter-pill' + (mealPlanGoalFilter === p.id ? ' is-active' : '') + '" data-goal="' + p.id + '">' + p.label + '</button>';
-    }).join('');
-    $$('#mealPlanFilters .filter-pill').forEach(function (b) {
-      b.addEventListener('click', function () {
-        mealPlanGoalFilter = b.getAttribute('data-goal');
-        renderMealPlans();
-      });
+  function renderSplitFilters() {
+    var sel = $('#splitCategoryFilter');
+    sel.innerHTML = '<option value="all">All categories</option>' +
+      SPLIT_CATEGORIES.map(function (c) {
+        return '<option value="' + c + '"' + (splitCategoryFilter === c ? ' selected' : '') + '>' + c + '</option>';
+      }).join('');
+  }
+
+  function loadSplits() {
+    return auth.getSplits().then(function (result) {
+      if (!toastOnFailure(result, 'Could not load splits.')) return;
+      splitsCache = result.data || [];
+      renderSplits();
     });
   }
 
-  function planDayAverage(plan) {
-    var totals = { kcal: 0, p: 0, c: 0, f: 0 };
-    var days = 0;
-    (plan.days || []).forEach(function (d) {
-      if (!d.meals.length) return;
-      days++;
-      d.meals.forEach(function (m) {
-        totals.kcal += m.caloriesKcal; totals.p += m.proteinG; totals.c += m.carbsG; totals.f += m.fatsG;
-      });
-    });
-    if (!days) return totals;
-    return {
-      kcal: Math.round(totals.kcal / days), p: Math.round(totals.p / days),
-      c: Math.round(totals.c / days), f: Math.round(totals.f / days)
-    };
-  }
-
-  function renderMealPlans() {
-    renderMealPlanFilters();
-    var plans = SilaStore.mealPlans.all().filter(function (p) {
-      return mealPlanGoalFilter === 'all' || p.goal === mealPlanGoalFilter;
+  function renderSplits() {
+    renderSplitFilters();
+    var splits = splitsCache.filter(function (s) {
+      return splitCategoryFilter === 'all' || s.category === splitCategoryFilter;
     });
 
-    var grid = $('#mealPlanGrid');
-    if (!plans.length) {
+    var grid = $('#splitGrid');
+    if (!grid) return;
+    if (!splits.length) {
       grid.innerHTML =
         '<div class="card empty-state" style="grid-column:1/-1">' +
           '<img src="assets/img/mascot/ready.png" alt="Mascot ready" />' +
-          '<div class="headline-sm">No plans for this filter</div>' +
-          '<p class="body-sm">Create a weekly template and it will show up here.</p>' +
+          '<div class="headline-sm">No splits yet</div>' +
+          '<p class="body-sm">Create a split, then add its days and exercises.</p>' +
         '</div>';
       return;
     }
 
-    grid.innerHTML = plans.map(function (p) {
-      var avg = planDayAverage(p);
+    grid.innerHTML = splits.map(function (s) {
+      /* A trainer only ever gets the controls for splits they own (canManage is
+         computed server-side from ownership + content.splits.manage_all). */
+      var actions = s.canManage ? (
+        '<button class="icon-btn" data-edit-split="' + s.splitId + '" title="Edit details">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
+        '</button>' +
+        '<button class="icon-btn icon-btn--danger" data-del-split="' + s.splitId + '" title="Delete">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
+        '</button>'
+      ) : '';
+
+      var foot = '';
+      if (s.canManage) {
+        foot += '<button class="btn btn--secondary btn--sm" data-manage-days="' + s.splitId + '">Manage days</button>';
+        if (has('content.splits.assign')) {
+          foot += '<button class="btn btn--primary btn--sm" data-assign-split="' + s.splitId + '">Assign to clients</button>';
+        }
+      }
+
       return (
         '<article class="card mp-card">' +
           '<div class="mp-card__head">' +
-            '<span class="chip ' + (p.isPublished ? 'chip--accent' : '') + '">' + (p.isPublished ? 'Published' : 'Draft') + '</span>' +
-            '<span class="chip chip--gold">' + esc(SilaStore.GOAL_LABELS[p.goal] || p.goal) + '</span>' +
+            '<span class="chip chip--accent">' + esc(s.level) + '</span>' +
+            '<span class="chip chip--gold">' + esc(s.category) + '</span>' +
+            (s.isSystemDefault ? '<span class="chip">System</span>' : '') +
             '<span class="spacer"></span>' +
-            '<div class="row-actions">' +
-              '<button class="icon-btn" data-edit-plan="' + p.id + '" title="Edit">' +
-                '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
-              '</button>' +
-              '<button class="icon-btn icon-btn--danger" data-del-plan="' + p.id + '" title="Delete">' +
-                '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
-              '</button>' +
-            '</div>' +
+            '<div class="row-actions">' + actions + '</div>' +
           '</div>' +
           '<div>' +
-            '<div class="headline-sm">' + esc(p.name) + '</div>' +
-            '<div class="mp-card__desc" style="margin-top:6px">' + esc(p.description || '') + '</div>' +
+            '<div class="headline-sm">' + esc(s.name) + '</div>' +
+            '<div class="mp-card__desc" style="margin-top:6px">' + esc(s.description || '') + '</div>' +
           '</div>' +
           '<div class="mp-card__targets">' +
-            '<span class="chip">avg ' + avg.kcal + ' kcal</span>' +
-            '<span class="chip">P ' + avg.p + 'g</span>' +
-            '<span class="chip">C ' + avg.c + 'g</span>' +
-            '<span class="chip">F ' + avg.f + 'g</span>' +
+            '<span class="chip">' + esc(s.visibility || 'Public') + '</span>' +
+            '<span class="chip">' + s.durationDays + ' days</span>' +
+            '<span class="chip">' + s.dayCount + ' scheduled</span>' +
+            '<span class="chip">' + s.exerciseCount + ' exercises</span>' +
+            (s.ownerUsername ? '<span class="chip">by ' + esc(s.ownerUsername) + '</span>' : '') +
+            (s.recommendedGoal ? '<span class="chip">' + esc(s.recommendedGoal) + '</span>' : '') +
+            (s.assignedUserCount ? '<span class="chip chip--gold">' + s.assignedUserCount + ' assigned</span>' : '') +
+            (s.activeUserCount ? '<span class="chip chip--accent">' + s.activeUserCount + ' active users</span>' : '') +
           '</div>' +
-          '<div class="mp-card__foot">' +
-            '<button class="btn btn--secondary btn--sm" data-edit-plan="' + p.id + '">Edit week</button>' +
-            '<button class="btn btn--ghost btn--sm" data-toggle-publish="' + p.id + '">' + (p.isPublished ? 'Unpublish' : 'Publish') + '</button>' +
-          '</div>' +
+          (foot ? '<div class="mp-card__foot">' + foot + '</div>' : '') +
         '</article>'
       );
     }).join('');
 
-    $$('[data-edit-plan]').forEach(function (b) {
-      b.addEventListener('click', function () { openMealPlanEditor(b.getAttribute('data-edit-plan')); });
+    $$('[data-edit-split]').forEach(function (b) {
+      b.addEventListener('click', function () { openSplitEditor(b.getAttribute('data-edit-split')); });
     });
-    $$('[data-del-plan]').forEach(function (b) {
+    $$('[data-manage-days]').forEach(function (b) {
+      b.addEventListener('click', function () { openSplitDaysEditor(b.getAttribute('data-manage-days')); });
+    });
+    $$('[data-assign-split]').forEach(function (b) {
+      b.addEventListener('click', function () { openSplitAssignments(b.getAttribute('data-assign-split')); });
+    });
+    $$('[data-del-split]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var plan = SilaStore.mealPlans.get(b.getAttribute('data-del-plan'));
-        confirmDelete('Delete "' + plan.name + '"?', 'The whole 7-day template will be removed.', function () {
-          SilaStore.mealPlans.remove(plan.id);
-          toast('Meal plan deleted');
-          refreshAll();
+        var s = splitsCache.find(function (x) { return x.splitId === b.getAttribute('data-del-split'); });
+        if (!s) return;
+        confirmDelete('Delete "' + s.name + '"?', 'Refused while any user has this split active.', function () {
+          auth.deleteSplit(s.splitId).then(function (result) {
+            if (!toastOnFailure(result, 'Could not delete split.')) return;
+            toast((result.data && result.data.message) || 'Split deleted.');
+            loadSplits();
+          });
         });
-      });
-    });
-    $$('[data-toggle-publish]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var plan = SilaStore.mealPlans.get(b.getAttribute('data-toggle-publish'));
-        SilaStore.mealPlans.update(plan.id, { isPublished: !plan.isPublished });
-        toast(plan.isPublished ? 'Plan unpublished' : 'Plan published — live in the app');
-        refreshAll();
       });
     });
   }
 
-  /* ----- Weekly editor modal ----- */
-  var DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-  function openMealPlanEditor(planId) {
-    var isNew = !planId;
-    var plan = isNew
-      ? {
-          name: '', goal: 'LoseFat', description: '', isPublished: false,
-          targets: { calories: 2000, proteinG: 150, carbsG: 200, fatsG: 65 },
-          days: DAYS.map(function (d) { return { day: d, meals: [] }; })
-        }
-      : JSON.parse(JSON.stringify(SilaStore.mealPlans.get(planId)));
-
-    var activeDay = 0;
+  function openSplitEditor(splitId) {
+    var isNew = !splitId;
+    var s = isNew
+      ? { name: '', category: SPLIT_CATEGORIES[0], level: SPLIT_LEVELS[0], durationDays: 7, description: '', heroImageUrl: '', recommendedGoal: '', visibility: 'Private', sortOrder: 0 }
+      : splitsCache.find(function (x) { return x.splitId === splitId; });
+    if (!isNew && !s) return;
 
     var backdrop = openModal(
-      modalHead(isNew ? 'New meal plan' : 'Edit meal plan') +
+      modalHead(isNew ? 'New split' : 'Edit split') +
       '<div class="form-grid">' +
-        '<div class="field field--full"><label>Plan name</label>' +
-          '<input class="input" id="mpName" value="' + esc(plan.name) + '" placeholder="Lean Cut — 2000 kcal" /></div>' +
-        '<div class="field"><label>Goal</label>' +
-          '<select class="select" id="mpGoal">' +
-            SilaStore.GOALS.map(function (g) {
-              return '<option value="' + g + '"' + (plan.goal === g ? ' selected' : '') + '>' + SilaStore.GOAL_LABELS[g] + '</option>';
-            }).join('') +
+        '<div class="field field--full"><label>Name</label>' +
+          '<input class="input" id="spName" value="' + esc(s.name) + '" placeholder="Push Pull Legs — 6 Day" /></div>' +
+        '<div class="field"><label>Category</label>' +
+          '<select class="select" id="spCategory">' +
+            SPLIT_CATEGORIES.map(function (c) { return '<option' + (s.category === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
           '</select></div>' +
-        '<div class="field"><label>Daily kcal target</label>' +
-          '<input class="input" type="number" id="mpKcal" value="' + plan.targets.calories + '" /></div>' +
+        '<div class="field"><label>Level</label>' +
+          '<select class="select" id="spLevel">' +
+            SPLIT_LEVELS.map(function (l) { return '<option' + (s.level === l ? ' selected' : '') + '>' + l + '</option>'; }).join('') +
+          '</select></div>' +
+        '<div class="field"><label>Visibility</label>' +
+          '<select class="select" id="spVisibility">' +
+            SPLIT_VISIBILITIES.map(function (v) { return '<option' + (s.visibility === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+          '</select></div>' +
+        '<div class="field field--full"><span class="label-sm" style="color:var(--on-surface-variant)">' +
+          'Private: only you. Public: every app user. Shared: only the clients you assign it to.' +
+        '</span></div>' +
+        '<div class="field"><label>Duration (days)</label><input class="input" type="number" min="1" max="14" id="spDuration" value="' + s.durationDays + '" /></div>' +
+        '<div class="field"><label>Recommended goal</label>' +
+          '<select class="select" id="spGoal">' +
+            '<option value="">No specific goal</option>' +
+            RECOMMENDED_GOALS.map(function (g) { return '<option' + (s.recommendedGoal === g ? ' selected' : '') + '>' + g + '</option>'; }).join('') +
+          '</select></div>' +
         '<div class="field field--full"><label>Description</label>' +
-          '<textarea class="textarea" id="mpDesc" placeholder="Who is this week for?">' + esc(plan.description || '') + '</textarea></div>' +
-        '<div class="field"><label>Protein target (g)</label><input class="input" type="number" id="mpP" value="' + plan.targets.proteinG + '" /></div>' +
-        '<div class="field"><label>Carbs target (g)</label><input class="input" type="number" id="mpC" value="' + plan.targets.carbsG + '" /></div>' +
-        '<div class="field"><label>Fats target (g)</label><input class="input" type="number" id="mpF" value="' + plan.targets.fatsG + '" /></div>' +
-        '<div class="field" style="flex-direction:row;align-items:center;gap:12px;padding-top:22px;">' +
-          '<label class="switch"><input type="checkbox" id="mpPublished"' + (plan.isPublished ? ' checked' : '') + ' /><span class="track"></span></label>' +
-          '<span class="label-sm">Published (visible in app)</span>' +
-        '</div>' +
+          '<textarea class="textarea" id="spDesc" placeholder="Who is this split for?">' + esc(s.description || '') + '</textarea></div>' +
+        '<div class="field field--full"><label>Hero image URL</label><input class="input" id="spHero" value="' + esc(s.heroImageUrl || '') + '" placeholder="https://…" /></div>' +
       '</div>' +
-
-      '<div class="eyebrow" style="margin-top:24px;">Weekly schedule</div>' +
-      '<div class="week-tabs" id="weekTabs"></div>' +
-      '<div id="dayEditor"></div>' +
-
       '<div class="modal__actions">' +
         '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
-        '<button class="btn btn--primary" id="mpSave">' + (isNew ? 'Create plan' : 'Save changes') + '</button>' +
+        '<button class="btn btn--primary" id="spSave">' + (isNew ? 'Create split' : 'Save changes') + '</button>' +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    $('#spSave').addEventListener('click', function () {
+      var payload = {
+        splitId: isNew ? null : s.splitId,
+        name: $('#spName').value.trim(),
+        category: $('#spCategory').value,
+        level: $('#spLevel').value,
+        durationDays: num($('#spDuration').value),
+        description: $('#spDesc').value.trim(),
+        heroImageUrl: $('#spHero').value.trim(),
+        recommendedGoal: $('#spGoal').value || null,
+        visibility: $('#spVisibility').value,
+        sortOrder: s.sortOrder || 0
+      };
+      if (!payload.name) { toast('Give the split a name first', true); return; }
+      auth.saveSplit(payload).then(function (result) {
+        if (!toastOnFailure(result, 'Could not save split.')) return;
+        toast((result.data && result.data.message) || 'Split saved.');
+        closeModal();
+        loadSplits().then(function () {
+          if (isNew && result.data && result.data.id) openSplitDaysEditor(result.data.id);
+        });
+      });
+    });
+  }
+
+  /* ----- Days + exercise-prescription editor ----- */
+  function openSplitDaysEditor(splitId) {
+    var detail = null;
+    var activeDayId = null; /* null when a brand-new, unsaved day is selected */
+    var draftDay = null;
+
+    var backdrop = openModal(
+      modalHead('Manage days') +
+      '<div class="week-tabs" id="splitDayTabs"></div>' +
+      '<div id="splitDayBody"></div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Close</button>' +
       '</div>',
       true
     );
     wireClose(backdrop);
 
-    function syncMeta() {
-      plan.name = $('#mpName').value.trim();
-      plan.goal = $('#mpGoal').value;
-      plan.description = $('#mpDesc').value.trim();
-      plan.targets = { calories: num($('#mpKcal').value), proteinG: num($('#mpP').value), carbsG: num($('#mpC').value), fatsG: num($('#mpF').value) };
-      plan.isPublished = $('#mpPublished').checked;
-    }
-
-    function renderTabs() {
-      $('#weekTabs').innerHTML = plan.days.map(function (d, i) {
-        var kcal = d.meals.reduce(function (s, m) { return s + m.caloriesKcal; }, 0);
-        return '<button class="week-tab' + (i === activeDay ? ' is-active' : '') + '" data-day="' + i + '" title="' + kcal + ' kcal planned">' +
-          d.day.slice(0, 3) + '</button>';
-      }).join('');
-      $$('#weekTabs .week-tab').forEach(function (b) {
-        b.addEventListener('click', function () {
-          collectDay();
-          activeDay = parseInt(b.getAttribute('data-day'), 10);
+    function load() {
+      return auth.getSplitDetail(splitId).then(function (result) {
+        if (!toastOnFailure(result, 'Could not load the split.')) { closeModal(); return; }
+        detail = result.data;
+        detail.days.sort(function (a, b) { return a.dayIndex - b.dayIndex; });
+        if (draftDay) {
           renderTabs();
-          renderDay();
-        });
+          renderDayBody();
+          return;
+        }
+        if (!activeDayId && detail.days.length) activeDayId = detail.days[0].splitDayId;
+        if (activeDayId && !detail.days.some(function (d) { return d.splitDayId === activeDayId; })) {
+          activeDayId = detail.days.length ? detail.days[0].splitDayId : null;
+        }
+        renderTabs();
+        renderDayBody();
       });
     }
 
-    function renderDay() {
-      var d = plan.days[activeDay];
-      var totals = { kcal: 0, p: 0, c: 0, f: 0 };
-      d.meals.forEach(function (m) { totals.kcal += m.caloriesKcal; totals.p += m.proteinG; totals.c += m.carbsG; totals.f += m.fatsG; });
+    function renderTabs() {
+      var tabs = detail.days.map(function (d) {
+        var isActive = !draftDay && d.splitDayId === activeDayId;
+        return '<button class="week-tab' + (isActive ? ' is-active' : '') + '" data-day-id="' + d.splitDayId + '">' +
+          'Day ' + d.dayIndex + (d.isRestDay ? ' · rest' : '') + '</button>';
+      }).join('');
+      tabs += '<button class="week-tab' + (draftDay ? ' is-active' : '') + '" id="addDayTab">+ Add day</button>';
+      $('#splitDayTabs').innerHTML = tabs;
 
-      var slots = d.meals.map(function (m, i) {
+      $$('#splitDayTabs [data-day-id]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          draftDay = null;
+          activeDayId = b.getAttribute('data-day-id');
+          renderTabs();
+          renderDayBody();
+        });
+      });
+      $('#addDayTab').addEventListener('click', function () {
+        var nextIndex = detail.days.reduce(function (m, d) { return Math.max(m, d.dayIndex); }, 0) + 1;
+        draftDay = { splitDayId: null, splitId: splitId, dayIndex: nextIndex, title: '', focusLabel: '', estimatedMinutes: 45, isRestDay: false };
+        renderTabs();
+        renderDayBody();
+      });
+    }
+
+    function currentDay() {
+      if (draftDay) return draftDay;
+      return detail.days.find(function (d) { return d.splitDayId === activeDayId; }) || null;
+    }
+
+    function renderDayBody() {
+      var day = currentDay();
+      if (!day) {
+        $('#splitDayBody').innerHTML = '<div class="empty-state" style="padding:24px"><div class="body-sm">No days yet — add one to get started.</div></div>';
+        return;
+      }
+
+      var dayExercises = day.splitDayId
+        ? detail.dayExercises.filter(function (e) { return e.splitDayId === day.splitDayId; }).sort(function (a, b) { return a.sortOrder - b.sortOrder; })
+        : [];
+
+      $('#splitDayBody').innerHTML =
+        '<div class="form-grid" style="margin-top:16px;">' +
+          '<div class="field field--full"><label>Title</label><input class="input" id="dayTitle" value="' + esc(day.title) + '" placeholder="Push — Chest, Shoulders, Triceps" /></div>' +
+          '<div class="field"><label>Focus label</label><input class="input" id="dayFocus" value="' + esc(day.focusLabel || '') + '" placeholder="Chest & shoulders" /></div>' +
+          '<div class="field"><label>Estimated minutes</label><input class="input" type="number" id="dayMinutes" value="' + day.estimatedMinutes + '" /></div>' +
+          '<div class="field" style="flex-direction:row;align-items:center;gap:12px;padding-top:22px;">' +
+            '<label class="switch"><input type="checkbox" id="dayRest"' + (day.isRestDay ? ' checked' : '') + ' /><span class="track"></span></label>' +
+            '<span class="label-sm">Rest day</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal__actions" style="justify-content:flex-start;gap:8px;">' +
+          '<button class="btn btn--primary btn--sm" id="daySave">' + (day.splitDayId ? 'Save day' : 'Add day') + '</button>' +
+          (day.splitDayId ? '<button class="btn btn--danger btn--sm" id="dayDelete">Delete day</button>' : '') +
+        '</div>' +
+        (day.splitDayId ? (
+          '<div class="eyebrow" style="margin-top:20px;">Exercises</div>' +
+          '<div id="dayExerciseRows"></div>' +
+          '<div class="meal-slot" id="dayExerciseAddRow"></div>'
+        ) : '<p class="body-sm" style="margin-top:12px;">Save the day first, then add exercises to it.</p>');
+
+      $('#daySave').addEventListener('click', function () {
+        var payload = {
+          splitDayId: day.splitDayId,
+          splitId: splitId,
+          dayIndex: day.dayIndex,
+          title: $('#dayTitle').value.trim(),
+          focusLabel: $('#dayFocus').value.trim(),
+          estimatedMinutes: num($('#dayMinutes').value),
+          isRestDay: $('#dayRest').checked
+        };
+        if (!payload.title && !payload.isRestDay) { toast('Give the day a title, or mark it a rest day', true); return; }
+        auth.saveSplitDay(payload).then(function (result) {
+          if (!toastOnFailure(result, 'Could not save day.')) return;
+          toast((result.data && result.data.message) || 'Day saved.');
+          draftDay = null;
+          if (result.data && result.data.id) activeDayId = result.data.id;
+          load();
+          loadSplits();
+        });
+      });
+
+      var deleteBtn = $('#dayDelete');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+          confirmDelete('Delete this day?', 'Every exercise prescription on it is removed too.', function () {
+            auth.deleteSplitDay(day.splitDayId).then(function (result) {
+              if (!toastOnFailure(result, 'Could not delete day.')) return;
+              toast((result.data && result.data.message) || 'Day removed.');
+              activeDayId = null;
+              load();
+              loadSplits();
+            });
+          });
+        });
+      }
+
+      if (day.splitDayId) renderExerciseRows(day, dayExercises);
+    }
+
+    function renderExerciseRows(day, dayExercises) {
+      $('#dayExerciseRows').innerHTML = dayExercises.map(function (ex) {
         return (
-          '<div class="meal-slot">' +
+          '<div class="meal-slot" data-exercise-row="' + ex.splitDayExerciseId + '">' +
             '<div class="meal-slot__grid">' +
-              '<div class="field"><label>Type</label>' +
-                '<select class="select" data-meal="' + i + '" data-k="type">' +
-                  SilaStore.MEAL_TYPES.map(function (t) {
-                    return '<option' + (m.type === t ? ' selected' : '') + '>' + t + '</option>';
-                  }).join('') +
-                '</select></div>' +
-              '<div class="field"><label>Meal</label><input class="input" data-meal="' + i + '" data-k="title" value="' + esc(m.title) + '" placeholder="Meal title" /></div>' +
-              '<div class="field"><label>Kcal</label><input class="input" type="number" data-meal="' + i + '" data-k="caloriesKcal" value="' + m.caloriesKcal + '" /></div>' +
-              '<div class="field"><label>P</label><input class="input" type="number" data-meal="' + i + '" data-k="proteinG" value="' + m.proteinG + '" /></div>' +
-              '<div class="field"><label>C</label><input class="input" type="number" data-meal="' + i + '" data-k="carbsG" value="' + m.carbsG + '" /></div>' +
-              '<div class="field"><label>F</label><input class="input" type="number" data-meal="' + i + '" data-k="fatsG" value="' + m.fatsG + '" /></div>' +
-              '<button class="icon-btn icon-btn--danger" data-remove-meal="' + i + '" title="Remove" style="margin-bottom:1px">' +
+              '<div class="field field--full"><label>Exercise</label><input class="input" value="' + esc(ex.exerciseName) + ' (' + esc(ex.muscleGroup) + ')" disabled /></div>' +
+              '<div class="field"><label>Sets</label><input class="input" type="number" min="1" data-ex-field="targetSets" value="' + ex.targetSets + '" /></div>' +
+              '<div class="field"><label>Reps low</label><input class="input" type="number" min="1" data-ex-field="targetRepsLow" value="' + ex.targetRepsLow + '" /></div>' +
+              '<div class="field"><label>Reps high</label><input class="input" type="number" min="1" data-ex-field="targetRepsHigh" value="' + ex.targetRepsHigh + '" /></div>' +
+              '<button class="icon-btn" data-save-exercise-row title="Save">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>' +
+              '</button>' +
+              '<button class="icon-btn icon-btn--danger" data-remove-exercise-row title="Remove">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
               '</button>' +
             '</div>' +
@@ -406,64 +593,211 @@
         );
       }).join('');
 
-      $('#dayEditor').innerHTML =
-        (slots || '<div class="empty-state" style="padding:24px"><img src="assets/img/mascot/ready.png" style="width:80px" alt="" /><div class="body-sm">No meals for ' + esc(d.day) + ' yet.</div></div>') +
-        '<div class="day-total">' +
-          '<span>Day total: <b>' + totals.kcal + ' kcal</b></span>' +
-          '<span>P <b>' + totals.p + 'g</b></span>' +
-          '<span>C <b>' + totals.c + 'g</b></span>' +
-          '<span>F <b>' + totals.f + 'g</b></span>' +
-          '<span style="margin-left:auto">Target ' + plan.targets.calories + ' kcal</span>' +
-        '</div>' +
-        '<button class="btn btn--secondary btn--sm" id="addMealBtn" style="margin-top:10px;width:100%">+ Add meal to ' + esc(d.day) + '</button>';
-
-      $('#addMealBtn').addEventListener('click', function () {
-        collectDay();
-        d.meals.push({ type: 'Breakfast', title: '', caloriesKcal: 0, proteinG: 0, carbsG: 0, fatsG: 0 });
-        renderDay();
+      $$('[data-exercise-row]').forEach(function (row) {
+        var id = row.getAttribute('data-exercise-row');
+        var ex = dayExercises.find(function (e) { return e.splitDayExerciseId === id; });
+        $('[data-save-exercise-row]', row).addEventListener('click', function () {
+          var payload = {
+            splitDayExerciseId: id,
+            splitDayId: day.splitDayId,
+            exerciseId: ex.exerciseId,
+            sortOrder: ex.sortOrder,
+            targetSets: num($('[data-ex-field="targetSets"]', row).value),
+            targetRepsLow: num($('[data-ex-field="targetRepsLow"]', row).value),
+            targetRepsHigh: num($('[data-ex-field="targetRepsHigh"]', row).value)
+          };
+          auth.saveSplitDayExercise(payload).then(function (result) {
+            if (!toastOnFailure(result, 'Could not save exercise.')) return;
+            toast('Exercise updated.');
+            load();
+            loadSplits();
+          });
+        });
+        $('[data-remove-exercise-row]', row).addEventListener('click', function () {
+          confirmDelete('Remove ' + ex.exerciseName + '?', 'It comes off this day only.', function () {
+            auth.deleteSplitDayExercise(id).then(function (result) {
+              if (!toastOnFailure(result, 'Could not remove exercise.')) return;
+              toast('Exercise removed.');
+              load();
+              loadSplits();
+            });
+          });
+        });
       });
-      $$('[data-remove-meal]', $('#dayEditor')).forEach(function (b) {
-        b.addEventListener('click', function () {
-          collectDay();
-          d.meals.splice(parseInt(b.getAttribute('data-remove-meal'), 10), 1);
-          renderDay();
+
+      var options = exercisesCache.slice().sort(function (a, b) { return a.name.localeCompare(b.name); })
+        .map(function (e) { return '<option value="' + e.exerciseId + '">' + esc(e.name) + ' (' + esc(e.muscleGroup) + ')</option>'; }).join('');
+
+      $('#dayExerciseAddRow').innerHTML =
+        '<div class="meal-slot__grid">' +
+          '<div class="field field--full"><label>Add exercise</label><select class="select" id="addExSelect">' + options + '</select></div>' +
+          '<div class="field"><label>Sets</label><input class="input" type="number" min="1" id="addExSets" value="3" /></div>' +
+          '<div class="field"><label>Reps low</label><input class="input" type="number" min="1" id="addExRepsLow" value="8" /></div>' +
+          '<div class="field"><label>Reps high</label><input class="input" type="number" min="1" id="addExRepsHigh" value="12" /></div>' +
+          '<button class="btn btn--secondary btn--sm" id="addExBtn">Add</button>' +
+        '</div>';
+
+      if (!options) {
+        $('#dayExerciseAddRow').innerHTML = '<p class="body-sm">Add exercises to the library first.</p>';
+        return;
+      }
+
+      $('#addExBtn').addEventListener('click', function () {
+        var payload = {
+          splitDayExerciseId: null,
+          splitDayId: day.splitDayId,
+          exerciseId: $('#addExSelect').value,
+          sortOrder: dayExercises.length,
+          targetSets: num($('#addExSets').value),
+          targetRepsLow: num($('#addExRepsLow').value),
+          targetRepsHigh: num($('#addExRepsHigh').value)
+        };
+        auth.saveSplitDayExercise(payload).then(function (result) {
+          if (!toastOnFailure(result, 'Could not add exercise.')) return;
+          toast('Exercise added.');
+          load();
+          loadSplits();
         });
       });
     }
 
-    function collectDay() {
-      var d = plan.days[activeDay];
-      $$('#dayEditor [data-meal]').forEach(function (input) {
-        var i = parseInt(input.getAttribute('data-meal'), 10);
-        var k = input.getAttribute('data-k');
-        if (!d.meals[i]) return;
-        d.meals[i][k] = (k === 'title' || k === 'type') ? input.value : num(input.value);
+    load();
+  }
+
+  /* ----- Assigning a split to specific clients ----- */
+  function openSplitAssignments(splitId) {
+    var split = splitsCache.find(function (x) { return x.splitId === splitId; });
+    if (!split) return;
+
+    var assignments = [];
+    var users = [];
+    var search = '';
+
+    var backdrop = openModal(
+      modalHead('Assign "' + split.name + '"') +
+      '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
+        'Assigned clients can see this split in the app. Tick "make it their active split" to set it as their program right away.' +
+      '</p>' +
+      '<div class="eyebrow">Assigned clients</div>' +
+      '<div id="assignList"></div>' +
+      '<div class="eyebrow" style="margin:20px 0 10px;">Add a client</div>' +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Search users</label>' +
+          '<input class="input" id="assignSearch" placeholder="Name or email…" /></div>' +
+        '<div class="field field--full"><label>Client (plan shown so you can see who is paying)</label>' +
+          '<select class="select" id="assignUser"></select></div>' +
+        '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
+          '<label class="switch"><input type="checkbox" id="assignActive" /><span class="track"></span></label>' +
+          '<span class="label-sm">Make it their active split</span>' +
+        '</div>' +
+      '</div>' +
+      '<div id="assignHint"></div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Close</button>' +
+        '<button class="btn btn--primary" id="assignSave">Assign</button>' +
+      '</div>',
+      true
+    );
+    wireClose(backdrop);
+
+    function planLabel(x) {
+      if (x.subscriptionStatus === 'Active' && x.activePlanCode) {
+        return x.activePlanCode + (x.billingCycle ? ' · ' + x.billingCycle : '');
+      }
+      if (x.activePlanCode) return x.activePlanCode + ' · ' + (x.subscriptionStatus || 'inactive');
+      return x.accountTier === 'Guest' ? 'No account' : 'No paid plan';
+    }
+
+    function renderUserOptions() {
+      var assignedIds = assignments.map(function (a) { return a.userId; });
+      var q = search.toLowerCase();
+      var available = users.filter(function (u) {
+        if (assignedIds.indexOf(u.userId) > -1) return false;
+        if (!q) return true;
+        return ((u.displayName || '') + ' ' + (u.email || '')).toLowerCase().indexOf(q) > -1;
+      });
+
+      var sel = $('#assignUser');
+      sel.innerHTML = available.map(function (u) {
+        return '<option value="' + u.userId + '">' +
+          esc((u.displayName || u.email || u.userId) + ' — ' + planLabel(u)) + '</option>';
+      }).join('');
+
+      $('#assignHint').innerHTML = available.length ? '' :
+        '<p class="body-sm" style="color:var(--on-surface-variant)">' +
+          (users.length ? 'No matching unassigned clients.' : 'No users available (the user list needs users.read).') +
+        '</p>';
+      $('#assignSave').disabled = !available.length;
+    }
+
+    function renderAssignments() {
+      $('#assignList').innerHTML = assignments.length ? assignments.map(function (a) {
+        return (
+          '<div class="activity-item">' +
+            '<div class="body-md" style="font-size:13.5px;flex:1">' +
+              '<b>' + esc(a.displayName || a.email || a.userId) + '</b>' +
+              '<div class="row-sub">' + esc(a.email || '') + ' · ' + esc(planLabel(a)) +
+                (a.isActive ? ' · <span class="chip chip--accent">Active split</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<button class="icon-btn icon-btn--danger" data-unassign="' + a.userId + '" title="Unassign">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
+            '</button>' +
+          '</div>'
+        );
+      }).join('') : '<div class="empty-state" style="padding:16px"><div class="body-sm">Not assigned to anyone yet.</div></div>';
+
+      $$('[data-unassign]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var userId = b.getAttribute('data-unassign');
+          var a = assignments.find(function (x) { return x.userId === userId; });
+          if (!a) return;
+          confirmDelete('Unassign ' + (a.displayName || a.email || 'this client') + '?',
+            'They lose access; if it was their active split it is cleared.', function () {
+              auth.removeSplitAssignment(splitId, userId).then(function (result) {
+                if (!toastOnFailure(result, 'Could not unassign.')) return;
+                toast('Client unassigned.');
+                load();
+                loadSplits();
+              });
+            });
+        });
       });
     }
 
-    $('#mpSave').addEventListener('click', function () {
-      syncMeta();
-      collectDay();
-      if (!plan.name) { toast('Give the plan a name first', true); return; }
-      /* Drop empty meal slots (no title). */
-      plan.days.forEach(function (d) {
-        d.meals = d.meals.filter(function (m) { return m.title.trim().length > 0; });
+    function load() {
+      return Promise.all([
+        auth.getSplitAssignments(splitId),
+        auth.getUsers('', 200)
+      ]).then(function (results) {
+        var assignmentResult = results[0];
+        var userResult = results[1];
+        if (!toastOnFailure(assignmentResult, 'Could not load assignments.')) { closeModal(); return; }
+        assignments = assignmentResult.data || [];
+        users = userResult && userResult.ok ? (userResult.data || []) : [];
+        renderAssignments();
+        renderUserOptions();
       });
-      if (isNew) {
-        SilaStore.mealPlans.create(plan);
-        toast('Meal plan "' + plan.name + '" created');
-      } else {
-        var patch = JSON.parse(JSON.stringify(plan));
-        delete patch.id;
-        SilaStore.mealPlans.update(planId, patch);
-        toast('Meal plan saved');
-      }
-      closeModal();
-      refreshAll();
+    }
+
+    $('#assignSearch').addEventListener('input', function () {
+      search = $('#assignSearch').value.trim();
+      renderUserOptions();
     });
 
-    renderTabs();
-    renderDay();
+    $('#assignSave').addEventListener('click', function () {
+      var userId = $('#assignUser').value;
+      if (!userId) { toast('Pick a client first', true); return; }
+      auth.assignSplit(splitId, userId, $('#assignActive').checked).then(function (result) {
+        if (!toastOnFailure(result, 'Could not assign split.')) return;
+        toast((result.data && result.data.message) || 'Split assigned.');
+        $('#assignActive').checked = false;
+        load();
+        loadSplits();
+      });
+    });
+
+    load();
   }
 
   /* ================================================================
@@ -475,7 +809,7 @@
   function renderSuggestionFilters() {
     var sel = $('#suggestionMonthFilter');
     sel.innerHTML = '<option value="0">All months</option>' +
-      SilaStore.MONTHS.map(function (m, i) {
+      MONTHS.map(function (m, i) {
         return '<option value="' + (i + 1) + '"' + (suggestionMonth === i + 1 ? ' selected' : '') + '>' + m + '</option>';
       }).join('');
   }
@@ -494,15 +828,20 @@
     );
   }
 
+  function loadSuggestions() {
+    return auth.getMealSuggestions({
+      suggestedMonth: suggestionMonth || null,
+      search: suggestionQuery || null
+    }).then(function (result) {
+      if (!toastOnFailure(result, 'Could not load meal suggestions.')) return;
+      suggestionsCache = result.data || [];
+      renderSuggestions();
+    });
+  }
+
   function renderSuggestions() {
     renderSuggestionFilters();
-    var rows = SilaStore.mealSuggestions.all().filter(function (s) {
-      var matchesMonth = !suggestionMonth || s.month === suggestionMonth;
-      var matchesQuery = !suggestionQuery ||
-        s.title.toLowerCase().indexOf(suggestionQuery) > -1 ||
-        (s.description || '').toLowerCase().indexOf(suggestionQuery) > -1;
-      return matchesMonth && matchesQuery;
-    }).sort(function (a, b) { return a.month - b.month; });
+    var rows = suggestionsCache.slice().sort(function (a, b) { return (a.suggestedMonth || 99) - (b.suggestedMonth || 99); });
 
     var head =
       '<thead><tr>' +
@@ -515,17 +854,17 @@
         '<tr>' +
           '<td><div class="row-title">' + esc(s.title) + '</div><div class="row-sub">' + esc(s.description || '') + '</div></td>' +
           '<td><span class="chip">' + esc(s.mealType) + '</span></td>' +
-          '<td class="label-sm">' + esc(SilaStore.MONTHS[s.month - 1] || '—') + '</td>' +
+          '<td class="label-sm">' + (s.suggestedMonth ? esc(MONTHS[s.suggestedMonth - 1]) : '—') + '</td>' +
           '<td class="num accent-text" style="font-weight:600">' + s.caloriesKcal + '</td>' +
           '<td class="num">' + s.proteinG + 'g</td>' +
           '<td class="num">' + s.carbsG + 'g</td>' +
           '<td class="num">' + s.fatsG + 'g</td>' +
           '<td>' + macroMini(s) + '</td>' +
           '<td><div class="row-actions">' +
-            '<button class="icon-btn" data-edit-suggestion="' + s.id + '" title="Edit">' +
+            '<button class="icon-btn" data-edit-suggestion="' + s.mealSuggestionId + '" title="Edit">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
             '</button>' +
-            '<button class="icon-btn icon-btn--danger" data-del-suggestion="' + s.id + '" title="Delete">' +
+            '<button class="icon-btn icon-btn--danger" data-del-suggestion="' + s.mealSuggestionId + '" title="Delete">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
             '</button>' +
           '</div></td>' +
@@ -542,11 +881,14 @@
     });
     $$('[data-del-suggestion]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var s = SilaStore.mealSuggestions.get(b.getAttribute('data-del-suggestion'));
+        var s = suggestionsCache.find(function (x) { return x.mealSuggestionId === b.getAttribute('data-del-suggestion'); });
+        if (!s) return;
         confirmDelete('Delete "' + s.title + '"?', 'It disappears from the app strip and the landing page.', function () {
-          SilaStore.mealSuggestions.remove(s.id);
-          toast('Suggestion deleted');
-          refreshAll();
+          auth.deleteMealSuggestion(s.mealSuggestionId).then(function (result) {
+            if (!toastOnFailure(result, 'Could not delete suggestion.')) return;
+            toast((result.data && result.data.message) || 'Suggestion deleted.');
+            loadSuggestions();
+          });
         });
       });
     });
@@ -555,8 +897,9 @@
   function openSuggestionEditor(id) {
     var isNew = !id;
     var s = isNew
-      ? { title: '', mealType: 'Lunch', description: '', caloriesKcal: 400, proteinG: 30, carbsG: 40, fatsG: 12, month: new Date().getMonth() + 1 }
-      : SilaStore.mealSuggestions.get(id);
+      ? { title: '', mealType: 'Lunch', description: '', caloriesKcal: 400, proteinG: 30, carbsG: 40, fatsG: 12, suggestedMonth: new Date().getMonth() + 1, sortOrder: 0 }
+      : suggestionsCache.find(function (x) { return x.mealSuggestionId === id; });
+    if (!isNew && !s) return;
 
     var backdrop = openModal(
       modalHead(isNew ? 'New meal suggestion' : 'Edit suggestion') +
@@ -565,11 +908,12 @@
           '<input class="input" id="sgTitle" value="' + esc(s.title) + '" placeholder="Grilled Chicken Caesar Salad" /></div>' +
         '<div class="field"><label>Meal type</label>' +
           '<select class="select" id="sgType">' +
-            SilaStore.MEAL_TYPES.map(function (t) { return '<option' + (s.mealType === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+            MEAL_TYPES.map(function (t) { return '<option' + (s.mealType === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
           '</select></div>' +
         '<div class="field"><label>Suggested month</label>' +
           '<select class="select" id="sgMonth">' +
-            SilaStore.MONTHS.map(function (m, i) { return '<option value="' + (i + 1) + '"' + (s.month === i + 1 ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
+            '<option value="0">Not tied to a month</option>' +
+            MONTHS.map(function (m, i) { return '<option value="' + (i + 1) + '"' + (s.suggestedMonth === i + 1 ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
           '</select></div>' +
         '<div class="field field--full"><label>Description</label>' +
           '<textarea class="textarea" id="sgDesc" placeholder="Ingredients, portions, vibe…">' + esc(s.description || '') + '</textarea></div>' +
@@ -586,28 +930,32 @@
     wireClose(backdrop);
 
     $('#sgSave').addEventListener('click', function () {
-      var data = {
+      var monthValue = num($('#sgMonth').value);
+      var payload = {
+        mealSuggestionId: isNew ? null : s.mealSuggestionId,
         title: $('#sgTitle').value.trim(),
         mealType: $('#sgType').value,
-        month: num($('#sgMonth').value),
+        suggestedMonth: monthValue || null,
         description: $('#sgDesc').value.trim(),
         caloriesKcal: num($('#sgKcal').value),
         proteinG: num($('#sgP').value),
         carbsG: num($('#sgC').value),
-        fatsG: num($('#sgF').value)
+        fatsG: num($('#sgF').value),
+        sortOrder: s.sortOrder || 0
       };
-      if (!data.title) { toast('Title is required', true); return; }
-      if (isNew) { SilaStore.mealSuggestions.create(data); toast('Suggestion added — live on the site'); }
-      else { SilaStore.mealSuggestions.update(id, data); toast('Suggestion updated'); }
-      closeModal();
-      refreshAll();
+      if (!payload.title) { toast('Title is required', true); return; }
+      auth.saveMealSuggestion(payload).then(function (result) {
+        if (!toastOnFailure(result, 'Could not save suggestion.')) return;
+        toast((result.data && result.data.message) || 'Suggestion saved.');
+        closeModal();
+        loadSuggestions();
+      });
     });
   }
 
   /* ================================================================
      EXERCISES — table CRUD
      ================================================================ */
-  var MUSCLES = ['chest', 'back', 'shoulders', 'arms', 'legs', 'core'];
   var EQUIPMENT = ['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Kettlebell', 'Bodyweight'];
   var exerciseQuery = '';
   var exerciseMuscle = 'all';
@@ -615,32 +963,41 @@
   function renderExerciseFilters() {
     var sel = $('#exerciseMuscleFilter');
     sel.innerHTML = '<option value="all">All muscles</option>' +
-      MUSCLES.map(function (m) {
+      MUSCLE_GROUPS.map(function (m) {
         return '<option value="' + m + '"' + (exerciseMuscle === m ? ' selected' : '') + '>' + m[0].toUpperCase() + m.slice(1) + '</option>';
       }).join('');
   }
 
+  function loadExercises() {
+    return auth.getExercises().then(function (result) {
+      if (!toastOnFailure(result, 'Could not load exercises.')) return;
+      exercisesCache = result.data || [];
+      renderExercises();
+    });
+  }
+
   function renderExercises() {
     renderExerciseFilters();
-    var rows = SilaStore.exercises.all().filter(function (e) {
+    var rows = exercisesCache.filter(function (e) {
       var matchesMuscle = exerciseMuscle === 'all' || e.muscleGroup === exerciseMuscle;
       var matchesQuery = !exerciseQuery || e.name.toLowerCase().indexOf(exerciseQuery) > -1;
       return matchesMuscle && matchesQuery;
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
 
-    var head = '<thead><tr><th>Exercise</th><th>Muscle</th><th>Equipment</th><th>Type</th><th></th></tr></thead>';
+    var head = '<thead><tr><th>Exercise</th><th>Muscle</th><th>Equipment</th><th>Type</th><th class="num">In use</th><th></th></tr></thead>';
     var body = rows.map(function (e) {
       return (
         '<tr>' +
           '<td><div class="row-title">' + esc(e.name) + '</div></td>' +
           '<td><span class="chip">' + esc(e.muscleGroup) + '</span></td>' +
-          '<td class="label-sm">' + esc(e.equipment) + '</td>' +
+          '<td class="label-sm">' + esc(e.equipmentType || '—') + '</td>' +
           '<td>' + (e.isCompound ? '<span class="chip chip--accent">Compound</span>' : '<span class="chip">Isolation</span>') + '</td>' +
+          '<td class="num">' + e.usageCount + '</td>' +
           '<td><div class="row-actions">' +
-            '<button class="icon-btn" data-edit-exercise="' + e.id + '" title="Edit">' +
+            '<button class="icon-btn" data-edit-exercise="' + e.exerciseId + '" title="Edit">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
             '</button>' +
-            '<button class="icon-btn icon-btn--danger" data-del-exercise="' + e.id + '" title="Delete">' +
+            '<button class="icon-btn icon-btn--danger" data-del-exercise="' + e.exerciseId + '" title="Delete">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
             '</button>' +
           '</div></td>' +
@@ -649,7 +1006,7 @@
     }).join('');
 
     $('#exercisesTable').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="5"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No exercises match</div></div></td></tr>') +
+      (body || '<tr><td colspan="6"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No exercises match</div></div></td></tr>') +
       '</tbody>';
 
     $$('[data-edit-exercise]').forEach(function (b) {
@@ -657,11 +1014,14 @@
     });
     $$('[data-del-exercise]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var e = SilaStore.exercises.get(b.getAttribute('data-del-exercise'));
-        confirmDelete('Delete "' + e.name + '"?', 'Splits referencing it keep their sets but lose the link.', function () {
-          SilaStore.exercises.remove(e.id);
-          toast('Exercise deleted');
-          refreshAll();
+        var e = exercisesCache.find(function (x) { return x.exerciseId === b.getAttribute('data-del-exercise'); });
+        if (!e) return;
+        confirmDelete('Delete "' + e.name + '"?', 'Refused while any split day still references it.', function () {
+          auth.deleteExercise(e.exerciseId).then(function (result) {
+            if (!toastOnFailure(result, 'Could not delete exercise.')) return;
+            toast((result.data && result.data.message) || 'Exercise deleted.');
+            loadExercises();
+          });
         });
       });
     });
@@ -669,7 +1029,10 @@
 
   function openExerciseEditor(id) {
     var isNew = !id;
-    var e = isNew ? { name: '', muscleGroup: 'chest', equipment: 'Barbell', isCompound: true } : SilaStore.exercises.get(id);
+    var e = isNew
+      ? { name: '', muscleGroup: MUSCLE_GROUPS[0], equipmentType: EQUIPMENT[0], isCompound: true, demoVideoUrl: '' }
+      : exercisesCache.find(function (x) { return x.exerciseId === id; });
+    if (!isNew && !e) return;
 
     var backdrop = openModal(
       modalHead(isNew ? 'New exercise' : 'Edit exercise') +
@@ -678,12 +1041,13 @@
           '<input class="input" id="exName" value="' + esc(e.name) + '" placeholder="Barbell High-Bar Back Squat" /></div>' +
         '<div class="field"><label>Muscle group</label>' +
           '<select class="select" id="exMuscle">' +
-            MUSCLES.map(function (m) { return '<option' + (e.muscleGroup === m ? ' selected' : '') + '>' + m[0].toUpperCase() + m.slice(1) + '</option>'; }).join('') +
+            MUSCLE_GROUPS.map(function (m) { return '<option value="' + m + '"' + (e.muscleGroup === m ? ' selected' : '') + '>' + m[0].toUpperCase() + m.slice(1) + '</option>'; }).join('') +
           '</select></div>' +
         '<div class="field"><label>Equipment</label>' +
           '<select class="select" id="exEquip">' +
-            EQUIPMENT.map(function (q) { return '<option' + (e.equipment === q ? ' selected' : '') + '>' + q + '</option>'; }).join('') +
+            EQUIPMENT.map(function (q) { return '<option' + (e.equipmentType === q ? ' selected' : '') + '>' + q + '</option>'; }).join('') +
           '</select></div>' +
+        '<div class="field field--full"><label>Demo video URL</label><input class="input" id="exVideo" value="' + esc(e.demoVideoUrl || '') + '" placeholder="https://…" /></div>' +
         '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
           '<label class="switch"><input type="checkbox" id="exCompound"' + (e.isCompound ? ' checked' : '') + ' /><span class="track"></span></label>' +
           '<span class="label-sm">Compound movement</span>' +
@@ -697,30 +1061,38 @@
     wireClose(backdrop);
 
     $('#exSave').addEventListener('click', function () {
-      var data = {
+      var payload = {
+        exerciseId: isNew ? null : e.exerciseId,
         name: $('#exName').value.trim(),
         muscleGroup: $('#exMuscle').value,
-        equipment: $('#exEquip').value,
-        isCompound: $('#exCompound').checked
+        equipmentType: $('#exEquip').value,
+        isCompound: $('#exCompound').checked,
+        demoVideoUrl: $('#exVideo').value.trim()
       };
-      if (!data.name) { toast('Name is required', true); return; }
-      if (isNew) { SilaStore.exercises.create(data); toast('Exercise added to library'); }
-      else { SilaStore.exercises.update(id, data); toast('Exercise updated'); }
-      closeModal();
-      refreshAll();
+      if (!payload.name) { toast('Name is required', true); return; }
+      auth.saveExercise(payload).then(function (result) {
+        if (!toastOnFailure(result, 'Could not save exercise.')) return;
+        toast((result.data && result.data.message) || 'Exercise saved.');
+        closeModal();
+        loadExercises();
+      });
     });
   }
 
   /* ================================================================
-     SUBSCRIPTION PLANS — card editor with feature lists
+     SUBSCRIPTION PLANS — card editor; features are their own rows
      ================================================================ */
+  function loadPlans() {
+    return auth.getPlans().then(function (result) {
+      if (!toastOnFailure(result, 'Could not load plans.')) return;
+      plansCache = result.data || [];
+      renderSubPlans();
+    });
+  }
+
   function renderSubPlans() {
     var grid = $('#subPlanGrid');
-    grid.innerHTML = SilaStore.plans.all().map(function (p) {
-      var features = (p.features || []).map(function (f) {
-        return '<li class="' + (f.highlighted ? 'is-highlighted' : '') + '" style="display:flex;gap:10px;font-size:14px;color:var(--on-surface)">' +
-          '<span style="color:' + (f.highlighted ? 'var(--accent)' : 'var(--outline)') + '">✓</span>' + esc(f.text) + '</li>';
-      }).join('');
+    grid.innerHTML = plansCache.map(function (p) {
       return (
         '<article class="card subplan-card' + (p.isFeatured ? ' is-featured' : '') + '">' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
@@ -728,10 +1100,10 @@
             (p.isFeatured ? '<span class="label-sm gold-text">Featured</span>' : '') +
             '<span class="spacer" style="flex:1"></span>' +
             '<div class="row-actions">' +
-              '<button class="icon-btn" data-edit-subplan="' + p.id + '" title="Edit">' +
+              '<button class="icon-btn" data-edit-subplan="' + p.planId + '" title="Edit">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
               '</button>' +
-              '<button class="icon-btn icon-btn--danger" data-del-subplan="' + p.id + '" title="Delete">' +
+              '<button class="icon-btn icon-btn--danger" data-del-subplan="' + p.planId + '" title="Delete">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
               '</button>' +
             '</div>' +
@@ -742,7 +1114,7 @@
             '<span><b style="color:var(--high-emphasis);font-size:20px">€' + p.monthlyPrice.toFixed(2) + '</b> <span class="body-sm">/mo</span></span>' +
             '<span><b style="color:var(--high-emphasis);font-size:20px">€' + p.yearlyPrice.toFixed(2) + '</b> <span class="body-sm">/yr</span></span>' +
           '</div>' +
-          '<ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:6px;">' + features + '</ul>' +
+          '<div class="body-sm">' + p.featureCount + ' feature' + (p.featureCount === 1 ? '' : 's') + ' · ' + p.activeSubscriberCount + ' active subscriber' + (p.activeSubscriberCount === 1 ? '' : 's') + '</div>' +
         '</article>'
       );
     }).join('');
@@ -752,11 +1124,14 @@
     });
     $$('[data-del-subplan]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var p = SilaStore.plans.get(b.getAttribute('data-del-subplan'));
-        confirmDelete('Delete "' + p.name + '"?', 'The pricing section on the site updates immediately.', function () {
-          SilaStore.plans.remove(p.id);
-          toast('Plan deleted');
-          refreshAll();
+        var p = plansCache.find(function (x) { return x.planId === b.getAttribute('data-del-subplan'); });
+        if (!p) return;
+        confirmDelete('Delete "' + p.name + '"?', 'Refused while the plan has active subscribers.', function () {
+          auth.deletePlan(p.planId).then(function (result) {
+            if (!toastOnFailure(result, 'Could not delete plan.')) return;
+            toast((result.data && result.data.message) || 'Plan deleted.');
+            loadPlans();
+          });
         });
       });
     });
@@ -765,8 +1140,11 @@
   function openSubPlanEditor(id) {
     var isNew = !id;
     var p = isNew
-      ? { code: 'NEW', name: '', tagline: '', monthlyPrice: 0, yearlyPrice: 0, isFeatured: false, features: [{ text: '', highlighted: false }] }
-      : JSON.parse(JSON.stringify(SilaStore.plans.get(id)));
+      ? { code: '', name: '', tagline: '', monthlyPrice: 0, yearlyPrice: 0, isFeatured: false, sortOrder: 0 }
+      : plansCache.find(function (x) { return x.planId === id; });
+    if (!isNew && !p) return;
+
+    var features = [];
 
     var backdrop = openModal(
       modalHead(isNew ? 'New subscription plan' : 'Edit plan') +
@@ -781,9 +1159,9 @@
           '<span class="label-sm">Featured plan (gold highlight on the site)</span>' +
         '</div>' +
       '</div>' +
-      '<div class="eyebrow" style="margin:20px 0 10px;">Feature list</div>' +
+      '<div class="eyebrow" style="margin:20px 0 10px;">Feature list' + (isNew ? ' (save the plan first)' : '') + '</div>' +
       '<div id="featureRows"></div>' +
-      '<button class="btn btn--secondary btn--sm" id="addFeatureBtn" style="margin-top:10px;width:100%">+ Add feature</button>' +
+      (isNew ? '' : '<button class="btn btn--secondary btn--sm" id="addFeatureBtn" style="margin-top:10px;width:100%">+ Add feature</button>') +
       '<div class="modal__actions">' +
         '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
         '<button class="btn btn--primary" id="spSave">' + (isNew ? 'Create plan' : 'Save changes') + '</button>' +
@@ -792,58 +1170,95 @@
     wireClose(backdrop);
 
     function renderFeatures() {
-      $('#featureRows').innerHTML = p.features.map(function (f, i) {
+      $('#featureRows').innerHTML = features.length ? features.map(function (f) {
         return (
-          '<div class="feature-row" style="margin-bottom:8px;">' +
-            '<input class="input" data-feature="' + i + '" value="' + esc(f.text) + '" placeholder="Feature text…" />' +
-            '<label class="switch" title="Highlighted"><input type="checkbox" data-feature-hl="' + i + '"' + (f.highlighted ? ' checked' : '') + ' /><span class="track"></span></label>' +
-            '<button class="icon-btn icon-btn--danger" data-feature-del="' + i + '" title="Remove">' +
+          '<div class="feature-row" style="margin-bottom:8px;" data-feature-row="' + f.planFeatureId + '">' +
+            '<input class="input" data-feature-text value="' + esc(f.featureText) + '" placeholder="Feature text…" />' +
+            '<label class="switch" title="Highlighted"><input type="checkbox" data-feature-hl' + (f.isHighlighted ? ' checked' : '') + ' /><span class="track"></span></label>' +
+            '<button class="icon-btn" data-feature-save title="Save">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>' +
+            '</button>' +
+            '<button class="icon-btn icon-btn--danger" data-feature-del title="Remove">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
             '</button>' +
           '</div>'
         );
-      }).join('');
+      }).join('') : (isNew ? '' : '<p class="body-sm">No features yet.</p>');
 
-      $$('[data-feature]', $('#featureRows')).forEach(function (input) {
-        input.addEventListener('input', function () {
-          p.features[num(input.getAttribute('data-feature'))].text = input.value;
+      $$('[data-feature-row]', $('#featureRows')).forEach(function (row) {
+        var fid = row.getAttribute('data-feature-row');
+        var f = features.find(function (x) { return x.planFeatureId === fid; });
+        $('[data-feature-save]', row).addEventListener('click', function () {
+          var payload = {
+            planFeatureId: fid,
+            planId: p.planId,
+            featureText: $('[data-feature-text]', row).value.trim(),
+            sortOrder: f.sortOrder,
+            isHighlighted: $('[data-feature-hl]', row).checked
+          };
+          if (!payload.featureText) { toast('Feature text can\'t be empty', true); return; }
+          auth.savePlanFeature(payload).then(function (result) {
+            if (!toastOnFailure(result, 'Could not save feature.')) return;
+            toast('Feature saved.');
+            loadFeatures();
+          });
         });
-      });
-      $$('[data-feature-hl]', $('#featureRows')).forEach(function (input) {
-        input.addEventListener('change', function () {
-          p.features[num(input.getAttribute('data-feature-hl'))].highlighted = input.checked;
-        });
-      });
-      $$('[data-feature-del]', $('#featureRows')).forEach(function (b) {
-        b.addEventListener('click', function () {
-          p.features.splice(num(b.getAttribute('data-feature-del')), 1);
-          renderFeatures();
+        $('[data-feature-del]', row).addEventListener('click', function () {
+          auth.deletePlanFeature(fid).then(function (result) {
+            if (!toastOnFailure(result, 'Could not remove feature.')) return;
+            toast('Feature removed.');
+            loadFeatures();
+          });
         });
       });
     }
 
-    $('#addFeatureBtn').addEventListener('click', function () {
-      p.features.push({ text: '', highlighted: false });
-      renderFeatures();
-    });
+    function loadFeatures() {
+      if (isNew) return;
+      auth.getPlanFeatures(p.planId).then(function (result) {
+        if (!toastOnFailure(result, 'Could not load features.')) return;
+        features = result.data || [];
+        renderFeatures();
+      });
+    }
+
+    var addFeatureBtn = $('#addFeatureBtn');
+    if (addFeatureBtn) {
+      addFeatureBtn.addEventListener('click', function () {
+        auth.savePlanFeature({ planFeatureId: null, planId: p.planId, featureText: 'New feature', sortOrder: features.length, isHighlighted: false })
+          .then(function (result) {
+            if (!toastOnFailure(result, 'Could not add feature.')) return;
+            loadFeatures();
+          });
+      });
+    }
 
     $('#spSave').addEventListener('click', function () {
-      var data = {
-        code: $('#spCode').value.trim().toUpperCase() || 'PLAN',
+      var payload = {
+        planId: isNew ? null : p.planId,
+        code: $('#spCode').value.trim().toUpperCase(),
         name: $('#spName').value.trim(),
         tagline: $('#spTagline').value.trim(),
         monthlyPrice: parseFloat($('#spMonthly').value) || 0,
         yearlyPrice: parseFloat($('#spYearly').value) || 0,
         isFeatured: $('#spFeatured').checked,
-        features: p.features.filter(function (f) { return f.text.trim().length > 0; })
+        sortOrder: p.sortOrder || 0
       };
-      if (!data.name) { toast('Name is required', true); return; }
-      if (isNew) { SilaStore.plans.create(data); toast('Plan created — live in pricing'); }
-      else { SilaStore.plans.update(id, data); toast('Plan updated'); }
-      closeModal();
-      refreshAll();
+      if (!payload.name || !payload.code) { toast('Code and name are required', true); return; }
+      auth.savePlan(payload).then(function (result) {
+        if (!toastOnFailure(result, 'Could not save plan.')) return;
+        toast((result.data && result.data.message) || 'Plan saved.');
+        if (isNew && result.data && result.data.id) {
+          closeModal();
+          loadPlans().then(function () { openSubPlanEditor(result.data.id); });
+        } else {
+          closeModal();
+          loadPlans();
+        }
+      });
     });
 
+    loadFeatures();
     renderFeatures();
   }
 
@@ -852,60 +1267,126 @@
      ================================================================ */
   var userQuery = '';
 
-  function renderUsers() {
-    var allUsers = SilaStore.users.all();
-    var rows = allUsers.filter(function (u) {
-      return !userQuery ||
-        u.name.toLowerCase().indexOf(userQuery) > -1 ||
-        u.email.toLowerCase().indexOf(userQuery) > -1;
+  function loadUsers() {
+    return auth.getUsers(userQuery || null, 200).then(function (result) {
+      if (!toastOnFailure(result, 'Could not load users.')) return;
+      usersCache = result.data || [];
+      renderUsers();
+      renderOverview();
     });
+  }
 
-    /* KPI mini-cards */
+  function renderUsers() {
+    var allUsers = usersCache;
+
     var kpiRow = $('#userKpiRow');
     if (kpiRow) {
-      var active = allUsers.filter(function (u) { return u.status === 'Active'; }).length;
-      var paid = allUsers.filter(function (u) { return u.plan !== 'FREE' && u.status === 'Active'; }).length;
-      var maxStreak = allUsers.reduce(function (m, u) { return Math.max(m, u.streak); }, 0);
-      var avgStreak = allUsers.length ? Math.round(allUsers.reduce(function (s, u) { return s + u.streak; }, 0) / allUsers.length) : 0;
+      var active = allUsers.filter(function (u) { return u.isActive; }).length;
+      var paid = allUsers.filter(function (u) { return u.subscriptionStatus === 'Active' && u.activePlanCode; }).length;
       kpiRow.innerHTML = [
-        { label: 'Active users', val: active, sub: (allUsers.length - active) + ' churned' },
-        { label: 'Paid subscribers', val: paid, sub: Math.round(paid / allUsers.length * 100) + '% conversion' },
-        { label: 'Longest streak', val: maxStreak + ' d', sub: 'personal best' },
-        { label: 'Avg. streak', val: avgStreak + ' d', sub: 'across all users' }
+        { label: 'Active users', val: active, sub: (allUsers.length - active) + ' inactive' },
+        { label: 'Paid subscribers', val: paid, sub: allUsers.length ? Math.round(paid / allUsers.length * 100) + '% conversion' : '—' },
+        { label: 'Total users', val: allUsers.length, sub: 'matching current search' }
       ].map(function (k) {
         return '<div class="user-kpi"><div class="user-kpi__label">' + k.label + '</div><div class="user-kpi__val">' + k.val + '</div><div class="user-kpi__sub">' + k.sub + '</div></div>';
       }).join('');
     }
 
-    var head = '<thead><tr><th>User</th><th>Plan</th><th class="num">Streak</th><th>Joined</th><th>Status</th></tr></thead>';
-    var body = rows.map(function (u) {
-      var planChip = u.plan === 'FREE' ? '<span class="chip">Free</span>'
-        : u.plan === 'PRO' ? '<span class="chip chip--gold">Pro</span>'
-        : '<span class="chip chip--accent">Advanced</span>';
-      var streakBar = u.streak > 0
-        ? '<div style="display:flex;align-items:center;gap:6px;"><span class="num">' + u.streak + ' d</span><div style="width:' + Math.min(u.streak, 60) + 'px;height:4px;border-radius:2px;background:var(--accent);opacity:0.5;"></div></div>'
-        : '<span class="num" style="color:var(--outline);">0 d</span>';
+    /* The mock-data action is destructive, so it is hidden unless the operator holds
+       users.mock_data (super-admin only). The API enforces the same permission. */
+    var canSeed = has('users.mock_data');
+
+    var head = '<thead><tr><th>User</th><th>Plan</th><th>Billing</th><th>Joined</th><th>Status</th>' +
+      (canSeed ? '<th></th>' : '') + '</tr></thead>';
+    var body = allUsers.map(function (u) {
+      var name = u.displayName || u.email || 'Unnamed user';
+      var planChip = !u.activePlanCode ? '<span class="chip">Free</span>' : '<span class="chip chip--gold">' + esc(u.activePlanCode) + '</span>';
       return (
         '<tr>' +
           '<td>' +
             '<div style="display:flex;align-items:center;gap:10px;">' +
-              '<div style="width:32px;height:32px;border-radius:50%;background:var(--surface-high);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--on-surface-variant);flex:none;">' + esc(u.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase()) + '</div>' +
-              '<div><div class="row-title">' + esc(u.name) + '</div><div class="row-sub">' + esc(u.email) + '</div></div>' +
+              '<div style="width:32px;height:32px;border-radius:50%;background:var(--surface-high);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--on-surface-variant);flex:none;">' + esc(name.split(' ').map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase()) + '</div>' +
+              '<div><div class="row-title">' + esc(name) + '</div><div class="row-sub">' + esc(u.email || '—') + '</div></div>' +
             '</div>' +
           '</td>' +
           '<td>' + planChip + '</td>' +
-          '<td>' + streakBar + '</td>' +
-          '<td class="label-sm">' + esc(u.joined) + '</td>' +
-          '<td>' + (u.status === 'Active'
+          '<td class="label-sm">' + esc(u.billingCycle || '—') + '</td>' +
+          '<td class="label-sm">' + fmtDate(u.createdAtUtc) + '</td>' +
+          '<td>' + (u.isActive
             ? '<span class="chip chip--accent">Active</span>'
-            : '<span class="chip chip--error">Churned</span>') + '</td>' +
+            : '<span class="chip chip--error">Inactive</span>') + '</td>' +
+          (canSeed
+            ? '<td style="text-align:right;white-space:nowrap;"><button class="btn btn--secondary btn--sm" data-mock-user="' + esc(u.userId) + '">Mock data</button></td>'
+            : '') +
         '</tr>'
       );
     }).join('');
 
     $('#usersTable').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="5"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No users match</div></div></td></tr>') +
+      (body || '<tr><td colspan="' + (canSeed ? 6 : 5) + '"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No users match</div></div></td></tr>') +
     '</tbody>';
+
+    if (canSeed) {
+      $$('#usersTable [data-mock-user]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var userId = btn.getAttribute('data-mock-user');
+          var user = allUsers.find(function (u) { return u.userId === userId; });
+          if (user) openMockDataModal(user);
+        });
+      });
+    }
+  }
+
+  /* Super-admin only: generate a month of history for one user so the monthly
+     overview can be exercised. Warns first - it replaces their logs and grants a
+     yearly subscription. */
+  function openMockDataModal(user) {
+    var label = user.displayName || user.email || 'this user';
+    var backdrop = openModal(
+      modalHead('Generate mock data') +
+      '<p class="body-sm">Fills <b>' + esc(label) + '</b> with a generated month of workouts, meals, hydration and bodyweight, so the monthly overview has something to show.</p>' +
+      '<p class="body-sm" style="margin-top:8px;color:var(--error);">This replaces their existing logs and grants a yearly subscription. It cannot be undone.</p>' +
+      '<div class="form-grid" style="margin-top:14px;">' +
+        '<div class="field field--full"><label>Profile</label>' +
+          '<select class="select" id="mockProfile">' +
+            '<option value="Advanced">Advanced — heavier split, tighter adherence</option>' +
+            '<option value="Pro">Pro — simpler split, looser adherence</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="field"><label>Days of history</label>' +
+          '<input class="input" id="mockDays" type="number" min="1" max="365" value="30" />' +
+        '</div>' +
+        '<div class="field"><label>Random seed (optional)</label>' +
+          '<input class="input" id="mockSeedInput" type="number" placeholder="Any" />' +
+        '</div>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
+        '<button class="btn btn--primary" id="mockSeedBtn">Generate</button>' +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    $('#mockSeedBtn').addEventListener('click', function () {
+      var profile = $('#mockProfile').value;
+      var days = num($('#mockDays').value) || 30;
+      var seedValue = $('#mockSeedInput').value;
+      var seed = seedValue === '' ? null : num(seedValue);
+      var btn = $('#mockSeedBtn');
+      btn.disabled = true;
+      btn.textContent = 'Generating…';
+
+      auth.seedUserMockData(user.userId, profile, days, seed).then(function (result) {
+        if (!toastOnFailure(result, 'Could not generate mock data.')) {
+          btn.disabled = false;
+          btn.textContent = 'Generate';
+          return;
+        }
+        toast((result.data && result.data.message) || 'Mock data generated.');
+        closeModal();
+        loadUsers();
+      });
+    });
   }
 
   /* ================================================================
@@ -931,10 +1412,10 @@
   }
 
   /* ================================================================
-     Create dispatch + search wiring + refresh
+     Create dispatch + search wiring + init
      ================================================================ */
   function openCreate(kind) {
-    if (kind === 'mealPlan') openMealPlanEditor(null);
+    if (kind === 'split') openSplitEditor(null);
     else if (kind === 'suggestion') openSuggestionEditor(null);
     else if (kind === 'exercise') openExerciseEditor(null);
     else if (kind === 'plan') openSubPlanEditor(null);
@@ -944,13 +1425,20 @@
     b.addEventListener('click', function () { openCreate(b.getAttribute('data-open-create')); });
   });
 
+  var splitCategorySelect = $('#splitCategoryFilter');
+  if (splitCategorySelect) {
+    splitCategorySelect.addEventListener('change', function (e) {
+      splitCategoryFilter = e.target.value;
+      renderSplits();
+    });
+  }
   $('#suggestionSearch').addEventListener('input', function (e) {
     suggestionQuery = e.target.value.trim().toLowerCase();
-    renderSuggestions();
+    loadSuggestions();
   });
   $('#suggestionMonthFilter').addEventListener('change', function (e) {
     suggestionMonth = num(e.target.value);
-    renderSuggestions();
+    loadSuggestions();
   });
   $('#exerciseSearch').addEventListener('input', function (e) {
     exerciseQuery = e.target.value.trim().toLowerCase();
@@ -962,26 +1450,27 @@
   });
   $('#userSearch').addEventListener('input', function (e) {
     userQuery = e.target.value.trim().toLowerCase();
-    renderUsers();
+    loadUsers();
   });
 
-  $('#resetStoreBtn').addEventListener('click', function () {
-    confirmDelete('Reset all content to seed data?', 'Every edit you made in this dashboard will be lost.', function () {
-      SilaStore.resetToSeed();
-      toast('Store reset to seed data');
-      refreshAll();
-    });
-  });
+  /* ================================================================
+     Init — read the session's permissions, gate this file's own nav
+     tabs, then load only what the operator may see.
+     ================================================================ */
+  auth.session().then(function (result) {
+    if (!result.ok || !result.data) return; // 401/offline: leave every gated tab hidden.
 
-  function refreshAll() {
-    refreshCounts();
+    myPermissions = result.data.permissions || [];
+    applyContentNavGating();
     renderOverview();
-    renderMealPlans();
-    renderSuggestions();
-    renderExercises();
-    renderSubPlans();
-    renderUsers();
-  }
 
-  refreshAll();
+    var loaders = [];
+    if (has('content.splits.read')) loaders.push(loadSplits());
+    if (has('content.suggestions.read')) loaders.push(loadSuggestions());
+    if (has('content.exercises.read')) loaders.push(loadExercises());
+    if (has('content.plans.read')) loaders.push(loadPlans());
+    if (has('users.read')) loaders.push(loadUsers());
+
+    Promise.all(loaders).then(renderOverview);
+  });
 })();

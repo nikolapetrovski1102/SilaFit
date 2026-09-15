@@ -35,6 +35,21 @@ public interface IAdminRbacProvider
 
     Task<List<AdminOperatorModel>> GetOperatorsAsync(bool includeInactive, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Creates a brand-new operator account. Only ever inserts - an existing
+    /// username comes back as <see cref="AdminWriteOutcome.Conflict"/>, never a
+    /// silent credential rotation. <paramref name="roleName"/> is optional; leaving
+    /// it null creates an operator with no role (deny-all until assigned one).
+    /// </summary>
+    Task<AdminMutationResultModel> CreateOperatorAsync(
+        string username,
+        byte[] passwordHash,
+        byte[] passwordSalt,
+        byte[] totpSecretCipher,
+        string? roleName,
+        AdminActorModel actor,
+        CancellationToken cancellationToken = default);
+
     Task<AdminMutationResultModel> SetOperatorRoleAsync(string username, string roleName, AdminActorModel actor, CancellationToken cancellationToken = default);
 
     Task<AdminMutationResultModel> SetOperatorActiveAsync(string username, bool isActive, AdminActorModel actor, CancellationToken cancellationToken = default);

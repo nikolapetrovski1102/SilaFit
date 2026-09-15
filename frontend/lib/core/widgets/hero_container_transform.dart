@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_spacing.dart';
+import 'swipe_down_to_close.dart';
 
 /// Hand-rolled "container transform": a tapped element's Hero grows to
 /// become part of the new screen, crossfading its own content into the
@@ -30,7 +31,8 @@ Route<T> heroExpandRoute<T>({
   return PageRouteBuilder<T>(
     transitionDuration: transitionDuration,
     reverseTransitionDuration: reverseTransitionDuration,
-    pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+    pageBuilder: (context, animation, secondaryAnimation) =>
+        SwipeDownToClose(child: builder(context)),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
         opacity:

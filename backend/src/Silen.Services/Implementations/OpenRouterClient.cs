@@ -52,9 +52,10 @@ public sealed class OpenRouterClient(HttpClient httpClient, IOptions<OpenRouterO
         var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            // Never log the upstream body: it can echo prompt content. The status
+            // code is enough to tell an outage from a rejected request.
             throw new ConflictException(
-                $"OpenRouter API returned {(int)response.StatusCode}: {errorBody}",
+                $"OpenRouter API returned status {(int)response.StatusCode}.",
                 "AI insights are temporarily unavailable. Please try again shortly.");
         }
 

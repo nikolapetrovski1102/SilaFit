@@ -22,9 +22,12 @@ BEGIN
 
     -- RoleId/RoleName ride along because the login path needs to know which
     -- permission set this operator will be resolved against (see AdminRbac.sql).
+    -- The EmailOtp* columns are the "send email code instead" second factor -
+    -- see usp_Admin_SetEmailOtp.
     SELECT u.AdminUserId, u.Username, u.PasswordHash, u.PasswordSalt, u.TotpSecretCipher,
            u.FailedAttemptCount, u.LockedUntilUtc, u.LastLoginAtUtc, u.PasswordChangedAtUtc,
-           u.CreatedAtUtc, u.IsActive, u.RoleId, r.Name AS RoleName
+           u.CreatedAtUtc, u.IsActive, u.RoleId, r.Name AS RoleName,
+           u.Email, u.EmailOtpCodeHash, u.EmailOtpCodeSalt, u.EmailOtpExpiresAtUtc, u.EmailOtpLastSentAtUtc
     FROM dbo.AdminUsers u
     LEFT JOIN dbo.AdminRoles r ON r.RoleId = u.RoleId
     WHERE u.Username = @Username;
@@ -39,7 +42,8 @@ BEGIN
 
     SELECT u.AdminUserId, u.Username, u.PasswordHash, u.PasswordSalt, u.TotpSecretCipher,
            u.FailedAttemptCount, u.LockedUntilUtc, u.LastLoginAtUtc, u.PasswordChangedAtUtc,
-           u.CreatedAtUtc, u.IsActive, u.RoleId, r.Name AS RoleName
+           u.CreatedAtUtc, u.IsActive, u.RoleId, r.Name AS RoleName,
+           u.Email, u.EmailOtpCodeHash, u.EmailOtpCodeSalt, u.EmailOtpExpiresAtUtc, u.EmailOtpLastSentAtUtc
     FROM dbo.AdminUsers u
     LEFT JOIN dbo.AdminRoles r ON r.RoleId = u.RoleId
     WHERE u.AdminUserId = @AdminUserId;
@@ -54,7 +58,11 @@ CREATE OR ALTER PROCEDURE dbo.usp_Admin_UpsertAccount
     @Username NVARCHAR(100),
     @PasswordHash VARBINARY(256),
     @PasswordSalt VARBINARY(128),
-    @TotpSecretCipher VARBINARY(256)
+    @TotpSecretCipher VARBINARY(256),
+    -- NULL means "leave whatever email is already on file alone" - the tool's
+    -- --keep-totp-style default for a plain credential rotation. Pass an empty
+    -- string to explicitly clear it.
+    @Email NVARCHAR(256) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -70,8 +78,8 @@ BEGIN
     BEGIN
         SET @AdminUserId = NEWID();
 
-        INSERT INTO dbo.AdminUsers (AdminUserId, Username, PasswordHash, PasswordSalt, TotpSecretCipher)
-        VALUES (@AdminUserId, @Username, @PasswordHash, @PasswordSalt, @TotpSecretCipher);
+        INSERT INTO dbo.AdminUsers (AdminUserId, Username, PasswordHash, PasswordSalt, TotpSecretCipher, Email)
+        VALUES (@AdminUserId, @Username, @PasswordHash, @PasswordSalt, @TotpSecretCipher, NULLIF(@Email, N''));
     END
     ELSE
     BEGIN
@@ -82,7 +90,8 @@ BEGIN
             FailedAttemptCount = 0,
             LockedUntilUtc = NULL,
             PasswordChangedAtUtc = SYSUTCDATETIME(),
-            IsActive = 1
+            IsActive = 1,
+            Email = CASE WHEN @Email IS NULL THEN Email ELSE NULLIF(@Email, N'') END
         WHERE AdminUserId = @AdminUserId;
 
         DELETE FROM dbo.AdminSessions WHERE AdminUserId = @AdminUserId;
@@ -120,6 +129,9 @@ BEGIN
 END
 GO
 
+-- Also burns the email-OTP fields whether or not this sign-in actually used
+-- one, so a stale mailed code never verifies twice and a leftover row can't
+-- outlive the session it belonged to.
 CREATE OR ALTER PROCEDURE dbo.usp_Admin_RecordSuccessfulLogin
     @AdminUserId UNIQUEIDENTIFIER
 AS
@@ -129,7 +141,51 @@ BEGIN
     UPDATE dbo.AdminUsers
     SET FailedAttemptCount = 0,
         LockedUntilUtc = NULL,
-        LastLoginAtUtc = SYSUTCDATETIME()
+        LastLoginAtUtc = SYSUTCDATETIME(),
+        EmailOtpCodeHash = NULL,
+        EmailOtpCodeSalt = NULL,
+        EmailOtpExpiresAtUtc = NULL,
+        EmailOtpLastSentAtUtc = NULL
+    WHERE AdminUserId = @AdminUserId;
+END
+GO
+
+-- Sets the "send email code instead" second factor onto the row for the emailed
+-- code AdminAuthService just generated. @Email is re-passed and checked rather
+-- than trusted from an earlier read, so this can never silently write a code
+-- for an account whose email was cleared between the two calls.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_SetEmailOtp
+    @AdminUserId UNIQUEIDENTIFIER,
+    @Email NVARCHAR(256),
+    @CodeHash VARBINARY(256),
+    @CodeSalt VARBINARY(128),
+    @ExpiresAtUtc DATETIME2(3)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.AdminUsers
+    SET EmailOtpCodeHash = @CodeHash,
+        EmailOtpCodeSalt = @CodeSalt,
+        EmailOtpExpiresAtUtc = @ExpiresAtUtc,
+        EmailOtpLastSentAtUtc = SYSUTCDATETIME()
+    WHERE AdminUserId = @AdminUserId
+      AND Email = @Email;
+END
+GO
+
+-- Standalone email set/clear for the provisioning tool's --set-email, kept
+-- separate from usp_Admin_UpsertAccount so an operator's recovery address can
+-- be changed without rotating their password/TOTP secret or dropping sessions.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_SetEmail
+    @AdminUserId UNIQUEIDENTIFIER,
+    @Email NVARCHAR(256) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.AdminUsers
+    SET Email = NULLIF(@Email, N'')
     WHERE AdminUserId = @AdminUserId;
 END
 GO

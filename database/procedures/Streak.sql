@@ -18,8 +18,14 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
-    -- 1900-01-01 (day 0) was a Monday, so this is DATEFIRST-independent.
-    DECLARE @WeekStart DATE = DATEADD(WEEK, DATEDIFF(WEEK, 0, @Today), 0);
+    -- Monday of the current week. DATEDIFF(WEEK, ...) is NOT DATEFIRST-
+    -- independent despite appearances (it buckets by @@DATEFIRST's week
+    -- boundary, so on a server with the US-English default of 7/Sunday it
+    -- rolls @Today straight into *next* week whenever @Today is a Sunday -
+    -- e.g. 2026-09-13 came back as 2026-09-14). DATEDIFF(DAY, ...) has no
+    -- such dependency, and since 1900-01-01 (day 0) was a Monday, the day
+    -- offset mod 7 is a fixed 0=Mon..6=Sun regardless of server settings.
+    DECLARE @WeekStart DATE = DATEADD(DAY, -(DATEDIFF(DAY, 0, @Today) % 7), @Today);
 
     ;WITH Calendar AS (
         SELECT @Today AS CalendarDate
@@ -46,9 +52,9 @@ BEGIN
     )
     SELECT
         (SELECT COUNT(*) FROM Ranked WHERE Rn < ISNULL((SELECT BreakRn FROM FirstBreak), 999)) AS CurrentStreakDays,
-        (SELECT CAST(ROUND(100.0 * SUM(IsCompleted) / 7.0, 0) AS INT)
+        ISNULL((SELECT CAST(ROUND(100.0 * SUM(IsCompleted) / 7.0, 0) AS INT)
          FROM DayStatus
-         WHERE CalendarDate BETWEEN @WeekStart AND DATEADD(DAY, 6, @WeekStart)) AS WeeklyCompliancePercent
+         WHERE CalendarDate BETWEEN @WeekStart AND DATEADD(DAY, 6, @WeekStart)), 0) AS WeeklyCompliancePercent
     OPTION (MAXRECURSION 100);
 
     SELECT

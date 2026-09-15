@@ -813,3 +813,50 @@ SELECT
     1
 WHERE NOT EXISTS (SELECT 1 FROM dbo.AiPromptTemplates t WHERE t.TemplateKey = N'MonthlyAnalytics');
 GO
+
+---------------------------------------------------------------------------
+-- AI prompt template: weekly analytics report (Advanced only)
+---------------------------------------------------------------------------
+-- The weekly counterpart of MonthlyAnalytics above - same placeholder contract
+-- (see AnalyticsService.BuildUserPrompt), but scoped to a 7-day ISO week and
+-- asked to write a "focusForNextWeek" instead of a "focusForNextMonth".
+INSERT INTO dbo.AiPromptTemplates (TemplateKey, SystemPrompt, UserPromptTemplate, Model, IsActive)
+SELECT
+    N'WeeklyAnalytics',
+    N'You are Silen''s in-house strength & conditioning coach. You write concise, encouraging, ' +
+    N'data-grounded weekly progress check-ins for a fitness-tracking app''s top-tier subscribers. ' +
+    N'Only comment on the numbers you are given - never invent data points. Keep language direct ' +
+    N'and specific, avoid generic filler, and always respond with strict JSON matching the ' +
+    N'requested schema and nothing else.',
+    N'Write this week''s progress check-in for {{DisplayName}} covering {{PeriodLabel}}.' + CHAR(10) + CHAR(10) +
+    N'Training:' + CHAR(10) +
+    N'- Completed sessions: {{CompletedSessions}} of {{ScheduledSessions}} scheduled' + CHAR(10) +
+    N'- Total tonnage lifted: {{TotalTonnageKg}} kg' + CHAR(10) +
+    N'- Average session RPE: {{AvgRpe}}' + CHAR(10) +
+    N'- Current daily streak: {{CurrentStreakDays}} days' + CHAR(10) +
+    N'- This week''s compliance: {{WeeklyCompliancePercent}}%' + CHAR(10) + CHAR(10) +
+    N'Bodyweight trend: {{WeightTrendSummary}}' + CHAR(10) +
+    N'Nutrition adherence: {{NutritionAdherenceSummary}}' + CHAR(10) + CHAR(10) +
+    N'This is a weekly check-in, so keep it short and actionable - a handful of wins, the one or ' +
+    N'two things worth adjusting next week, and one concrete habit. Return strict JSON with this ' +
+    N'exact shape: {"strengths": string[], ' +
+    N'"improvements": [{"area": string, "recommendation": string, "priority": "Low"|"Medium"|"High"}], ' +
+    N'"focusForNextWeek": string}. List 1-3 strengths and 1-3 improvements grounded only in the ' +
+    N'data above.',
+    N'openai/gpt-4.1',
+    1
+WHERE NOT EXISTS (SELECT 1 FROM dbo.AiPromptTemplates t WHERE t.TemplateKey = N'WeeklyAnalytics');
+GO
+
+---------------------------------------------------------------------------
+-- Advanced plan feature: weekly AI overview (top tier only)
+---------------------------------------------------------------------------
+INSERT INTO dbo.PlanFeatures (PlanId, FeatureText, SortOrder, IsHighlighted)
+SELECT p.PlanId, N'Weekly AI Overview with meal & split suggestions', 6, 1
+FROM dbo.SubscriptionPlans p
+WHERE p.Code = N'ADVANCED'
+  AND NOT EXISTS (
+      SELECT 1 FROM dbo.PlanFeatures pf
+      WHERE pf.PlanId = p.PlanId AND pf.FeatureText = N'Weekly AI Overview with meal & split suggestions'
+  );
+GO

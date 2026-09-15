@@ -1,0 +1,4 @@
+services:
+  silen-api:
+    environment:
+      AllowedHosts: "sila.fitness;api.sila.fitness;silafit.tappit.click;localhost;127.0.0.1"

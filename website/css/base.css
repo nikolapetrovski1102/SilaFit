@@ -28,38 +28,38 @@
   color-scheme: dark;
 
   /* Surfaces (AppPalette.dark) */
-  --background: #0f1512;
-  --surface-lowest: #0a0f0d;
-  --surface-low: #171d1a;
-  --surface: #1b211e;
-  --surface-high: #252b28;
-  --surface-highest: #303633;
-  --surface-bright: #343b37;
+  --background: #172d30;
+  --surface-lowest: #102629;
+  --surface-low: #233a39;
+  --surface: #2b423f;
+  --surface-high: #314948;
+  --surface-highest: #385145;
+  --surface-bright: #435e50;
 
   /* Text */
-  --on-surface: #dee4df;
-  --on-surface-variant: #c6c9af;
+  --on-surface: #f3f7f4;
+  --on-surface-variant: #b9c5c0;
   --high-emphasis: #ffffff;
-  --outline: #8f937b;
-  --outline-variant: #454935;
+  --outline: #879a93;
+  --outline-variant: #3d5551;
 
-  /* Lime accent (Precision Kinetic primary) */
-  --accent: #d0f043;
-  --on-accent: #1d2900;
-  --accent-container: #d0f043;
-  --on-accent-container: #3a4a00;
-  --accent-dim: rgba(208, 240, 67, 0.14);
+  /* Soft chartreuse accent (primary) */
+  --accent: #defb92;
+  --on-accent: #1b2a14;
+  --accent-container: #defb92;
+  --on-accent-container: #263716;
+  --accent-dim: rgba(222, 251, 146, 0.14);
 
-  /* Gold secondary (Pro tier) */
-  --secondary: #e6c367;
-  --secondary-container: #735800;
-  --on-secondary-container: #f6d173;
-  --secondary-dim: rgba(230, 195, 103, 0.14);
+  /* Warm orange secondary (Pro tier) */
+  --secondary: #eeaf51;
+  --secondary-container: #67461c;
+  --on-secondary-container: #ffe0aa;
+  --secondary-dim: rgba(238, 175, 81, 0.14);
 
-  /* Tertiary pale blue (carbs) */
-  --tertiary-container: #c7e7fa;
-  --tertiary: #c7e7fa;
-  --tertiary-dim: rgba(199, 231, 250, 0.12);
+  /* Tertiary sky blue (carbs) */
+  --tertiary-container: #71c2e6;
+  --tertiary: #71c2e6;
+  --tertiary-dim: rgba(113, 194, 230, 0.12);
 
   /* Status */
   --error: #ffb4ab;
@@ -67,62 +67,62 @@
   --error-dim-strong: rgba(255, 180, 171, 0.2);
 
   /* Macro bar triad — mirrors the app's protein/carbs/fats colours */
-  --macro-protein: #d0f043;
-  --macro-carbs: #c7e7fa;
-  --macro-fats: #e6c367;
+  --macro-protein: #defb92;
+  --macro-carbs: #71c2e6;
+  --macro-fats: #eeaf51;
 
   /* Chrome: sticky nav, admin topbar, table headers */
-  --chrome-bg: rgba(15, 21, 18, 0.72);
-  --chrome-bg-solid: rgba(10, 15, 13, 0.9);
-  --chrome-border: rgba(208, 240, 67, 0.06);
-  --chrome-border-strong: rgba(208, 240, 67, 0.08);
-  --chrome-shadow: 0 1px 0 rgba(208, 240, 67, 0.08);
-  --menu-bg: rgba(27, 33, 30, 0.97);
-  --topbar-bg: rgba(15, 21, 18, 0.6);
-  --th-bg: rgba(23, 29, 26, 0.6);
-  --row-hover: rgba(37, 43, 40, 0.35);
+  --chrome-bg: rgba(23, 45, 48, 0.72);
+  --chrome-bg-solid: rgba(16, 38, 41, 0.9);
+  --chrome-border: rgba(222, 251, 146, 0.06);
+  --chrome-border-strong: rgba(222, 251, 146, 0.08);
+  --chrome-shadow: 0 1px 0 rgba(222, 251, 146, 0.08);
+  --menu-bg: rgba(43, 66, 63, 0.97);
+  --topbar-bg: rgba(23, 45, 48, 0.6);
+  --th-bg: rgba(35, 58, 57, 0.6);
+  --row-hover: rgba(49, 73, 72, 0.35);
   --hover-tint: rgba(255, 255, 255, 0.04);
 
   /* Floating glass panels (hero cards) */
-  --glass-bg: rgba(37, 43, 40, 0.85);
+  --glass-bg: rgba(49, 73, 72, 0.85);
   --glass-border: rgba(255, 255, 255, 0.06);
   --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 
   /* Overlays */
-  --scrim: rgba(10, 15, 13, 0.78);
-  --overlay-scrim: rgba(10, 15, 13, 0.6);
+  --scrim: rgba(16, 38, 41, 0.78);
+  --overlay-scrim: rgba(16, 38, 41, 0.6);
   --sidebar-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
 
   /* Accent shades that aren't 1:1 with the palette roles */
-  --accent-hover: #ddf564;
-  --accent-gradient: linear-gradient(135deg, #d0f043 0%, #a8d000 100%);
-  --accent-edge: rgba(208, 240, 67, 0.12);
-  --accent-hairline: rgba(208, 240, 67, 0.08);
-  --accent-hairline-strong: rgba(208, 240, 67, 0.2);
-  --accent-soft: rgba(208, 240, 67, 0.4);
-  --accent-wash: rgba(208, 240, 67, 0.04);
-  --accent-glow: rgba(208, 240, 67, 0.5);
-  --secondary-edge: rgba(230, 195, 103, 0.15);
-  --secondary-hairline: rgba(230, 195, 103, 0.25);
-  --card-shadow-featured: 0 0 0 1px rgba(230, 195, 103, 0.25), 0 32px 64px rgba(0, 0, 0, 0.3);
+  --accent-hover: #e7ffaa;
+  --accent-gradient: linear-gradient(135deg, #defb92 0%, #b8df67 100%);
+  --accent-edge: rgba(222, 251, 146, 0.12);
+  --accent-hairline: rgba(222, 251, 146, 0.08);
+  --accent-hairline-strong: rgba(222, 251, 146, 0.2);
+  --accent-soft: rgba(222, 251, 146, 0.4);
+  --accent-wash: rgba(222, 251, 146, 0.04);
+  --accent-glow: rgba(222, 251, 146, 0.5);
+  --secondary-edge: rgba(238, 175, 81, 0.15);
+  --secondary-hairline: rgba(238, 175, 81, 0.25);
+  --card-shadow-featured: 0 0 0 1px rgba(238, 175, 81, 0.25), 0 32px 64px rgba(0, 0, 0, 0.3);
 
   /* Mock device frames + photography treatments */
-  --phone-ring: 0 0 0 1px rgba(208, 240, 67, 0.08);
+  --phone-ring: 0 0 0 1px rgba(222, 251, 146, 0.08);
   --phone-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
-  --phone-glow: 0 0 60px rgba(208, 240, 67, 0.06);
-  --carousel-shadow: 0 0 0 1px rgba(208, 240, 67, 0.06), 0 32px 64px rgba(0, 0, 0, 0.5);
-  --shot-fade: rgba(15, 21, 18, 0.7);
+  --phone-glow: 0 0 60px rgba(222, 251, 146, 0.06);
+  --carousel-shadow: 0 0 0 1px rgba(222, 251, 146, 0.06), 0 32px 64px rgba(0, 0, 0, 0.5);
+  --shot-fade: rgba(23, 45, 48, 0.7);
 
   /* Ambient blooms + hero glow */
-  --bloom-primary: rgba(208, 240, 67, 0.07);
-  --bloom-secondary: rgba(230, 195, 103, 0.06);
-  --bloom-tertiary: rgba(199, 231, 250, 0.05);
-  --hero-glow-1: rgba(208, 240, 67, 0.05);
-  --hero-glow-2: rgba(230, 195, 103, 0.04);
+  --bloom-primary: rgba(222, 251, 146, 0.07);
+  --bloom-secondary: rgba(238, 175, 81, 0.06);
+  --bloom-tertiary: rgba(113, 194, 230, 0.05);
+  --hero-glow-1: rgba(222, 251, 146, 0.05);
+  --hero-glow-2: rgba(238, 175, 81, 0.04);
 
   /* Text/controls sitting on top of the accent (CTA banner) */
-  --on-accent-muted: rgba(29, 41, 0, 0.7);
-  --on-accent-hover: #141f00;
+  --on-accent-muted: rgba(27, 42, 20, 0.7);
+  --on-accent-hover: #12200d;
   --on-accent-dim: rgba(0, 0, 0, 0.15);
 
   /* Radius (AppRadius) */
@@ -443,7 +443,7 @@ input, select, textarea { font-family: var(--font); }
   appearance: none;
   /* Chevron baked into a data URI, so it can't read a token — the
      light-mode override below swaps it for the warm ink variant. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c6c9af' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23b9c5c0' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
   padding-right: 36px;

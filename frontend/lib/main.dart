@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,16 +9,20 @@ import 'core/api/api_client.dart';
 import 'core/session/session_store.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'features/account/account_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/auth_repository.dart';
 import 'features/meals/meal_controller.dart';
 import 'features/meals/meal_repository.dart';
+import 'features/notifications/notifications_repository.dart';
+import 'features/notifications/push_messaging_service.dart';
 import 'features/onboarding/onboarding_flow_screen.dart';
 import 'features/plans/plans_controller.dart';
 import 'features/plans/plans_repository.dart';
 import 'features/progress/analytics_controller.dart';
 import 'features/progress/analytics_repository.dart';
 import 'features/progress/progress_controller.dart';
+import 'features/progress/weekly_analytics_controller.dart';
 import 'features/progress/progress_repository.dart';
 import 'features/settings/settings_controller.dart';
 import 'features/settings/settings_repository.dart';
@@ -25,8 +32,9 @@ import 'features/today/today_controller.dart';
 import 'features/today/today_repository.dart';
 import 'root_shell.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const SilenApp());
 }
 
@@ -41,6 +49,10 @@ class SilenApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final sessionStore = SessionStore();
     final apiClient = ApiClient(sessionStore: sessionStore);
+    final notificationsRepository = NotificationsRepository(apiClient);
+    // App-scoped so the FCM token-refresh subscription lives as long as the
+    // app does; every registration path goes through this one instance.
+    final pushMessagingService = PushMessagingService(notificationsRepository);
 
     return MultiProvider(
       providers: [
@@ -54,6 +66,9 @@ class SilenApp extends StatelessWidget {
         Provider(create: (_) => PlansRepository(apiClient)),
         Provider(create: (_) => SettingsRepository(apiClient)),
         Provider(create: (_) => MealRepository(apiClient)),
+        Provider.value(value: notificationsRepository),
+        Provider.value(value: pushMessagingService),
+        Provider(create: (_) => AccountRepository(apiClient)),
         ChangeNotifierProvider(
             create: (ctx) =>
                 AuthController(ctx.read<AuthRepository>(), sessionStore)
@@ -68,6 +83,9 @@ class SilenApp extends StatelessWidget {
         ChangeNotifierProvider(
             create: (ctx) =>
                 AnalyticsController(ctx.read<AnalyticsRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) =>
+                WeeklyAnalyticsController(ctx.read<AnalyticsRepository>())),
         ChangeNotifierProvider(
             create: (ctx) => PlansController(ctx.read<PlansRepository>())),
         ChangeNotifierProvider(
@@ -153,6 +171,7 @@ class _AppRoot extends StatefulWidget {
 
 class _AppRootState extends State<_AppRoot> {
   bool _settingsLoadTriggered = false;
+  bool _pushSyncTriggered = false;
 
   @override
   Widget build(BuildContext context) {
@@ -173,6 +192,12 @@ class _AppRootState extends State<_AppRoot> {
         if (!sessionStore.hasCompletedOnboarding) {
           return const OnboardingFlowScreen();
         }
+        // Returning device: re-store the FCM token once the session exists, so
+        // a token that rotated while the app was closed is not left stale.
+        if (!_pushSyncTriggered) {
+          _pushSyncTriggered = true;
+          Future.microtask(context.read<PushMessagingService>().syncToken);
+        }
         return const RootShell();
       },
     );
@@ -180,10 +205,10 @@ class _AppRootState extends State<_AppRoot> {
 }
 
 /// Mirrors the native splash screen (see `flutter_native_splash` config in
-/// `pubspec.yaml`) on first frame, then keeps the same mark on-screen with
-/// a looping "Kinetic Pulse" animation - rings expanding out from the mark
-/// plus a bouncing dot trio in place of a generic spinner - for however
-/// long the bootstrap login actually takes.
+/// `pubspec.yaml`) on first frame, then keeps the same mark on-screen -
+/// at the same size and position it holds natively - while a soft blurred
+/// circle drifts behind it for however long the bootstrap login actually
+/// takes, instead of a conventional loader.
 class _SplashScreen extends StatefulWidget {
   const _SplashScreen();
 
@@ -193,20 +218,20 @@ class _SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<_SplashScreen>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
+  late final AnimationController _roam;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(
+    _roam = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
+      duration: const Duration(seconds: 7),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _roam.dispose();
     super.dispose();
   }
 
@@ -215,102 +240,44 @@ class _SplashScreenState extends State<_SplashScreen>
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 220,
-              height: 220,
-              child: AnimatedBuilder(
-                animation: _pulse,
-                builder: (context, child) => Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    _PulseRing(t: _pulse.value, phase: 0),
-                    _PulseRing(t: _pulse.value, phase: 0.5),
-                    child!,
-                  ],
-                ),
-                child: Image.asset('assets/branding/app_icon_transparent.png',
-                    width: 120, height: 120),
-              ),
-            ),
-            const SizedBox(height: 28),
-            AnimatedBuilder(
-              animation: _pulse,
-              builder: (context, _) => _LoadingDots(t: _pulse.value),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One ring of the pulse - expands out from the mark and fades as it goes,
-/// looping on the parent controller's 0-1 [t] offset by [phase] so two
-/// rings launch half a cycle apart instead of in lockstep.
-class _PulseRing extends StatelessWidget {
-  const _PulseRing({required this.t, required this.phase});
-
-  final double t;
-  final double phase;
-
-  @override
-  Widget build(BuildContext context) {
-    final local = (t + phase) % 1.0;
-    final eased = Curves.easeOut.transform(local);
-    return Opacity(
-      opacity: (1 - eased) * 0.5,
-      child: Container(
-        width: 120 + eased * 90,
-        height: 120 + eased * 90,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.accent, width: 1.5),
-        ),
-      ),
-    );
-  }
-}
-
-/// Three dots bouncing in sequence, standing in for a generic
-/// [CircularProgressIndicator] with something more on-brand.
-class _LoadingDots extends StatelessWidget {
-  const _LoadingDots({required this.t});
-
-  final double t;
-
-  static double _bounce(double phase) {
-    final triangle = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
-    return Curves.easeInOut.transform(triangle);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (i) {
-        final bounce = _bounce((t + i * 0.2) % 1.0);
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Opacity(
-            opacity: 0.35 + bounce * 0.65,
-            child: Transform.scale(
-              scale: 0.6 + bounce * 0.4,
-              child: Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.accent,
-                ),
-              ),
-            ),
+        child: SizedBox(
+          width: 220,
+          height: 220,
+          child: AnimatedBuilder(
+            animation: _roam,
+            builder: (context, child) {
+              final angle = _roam.value * 2 * math.pi;
+              final drift = Offset(
+                math.cos(angle) * 44,
+                math.sin(angle * 1.3) * 36,
+              );
+              return Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  Transform.translate(
+                    offset: drift,
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                      child: Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.accent.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  child!,
+                ],
+              );
+            },
+            child: Image.asset('assets/branding/app_icon_transparent.png',
+                width: 120, height: 120),
           ),
-        );
-      }),
+        ),
+      ),
     );
   }
 }

@@ -147,6 +147,45 @@ public sealed class AdminSplitModel
     public int DayCount { get; set; }
     public int ExerciseCount { get; set; }
     public int ActiveUserCount { get; set; }
+
+    /// <summary>'Private' | 'Public' | 'Shared' - see WorkoutSplits.Visibility.</summary>
+    public string Visibility { get; set; } = "Public";
+
+    /// <summary>The console operator who authored the split; null for shipped/system content.</summary>
+    public Guid? OwnerAdminUserId { get; set; }
+
+    public string? OwnerUsername { get; set; }
+
+    /// <summary>How many app users this split has been assigned to.</summary>
+    public int AssignedUserCount { get; set; }
+
+    /// <summary>
+    /// Computed by the service per request: true when the signed-in operator may
+    /// edit/delete/assign this split (owns it, or holds content.splits.manage_all).
+    /// The console uses it to hide mutation buttons rather than letting a trainer
+    /// click one and eat a 409.
+    /// </summary>
+    public bool CanManage { get; set; }
+}
+
+/// <summary>One client a split has been assigned to, with just enough account context
+/// (plan/status) for the trainer to see who is actually paying - never any logs.</summary>
+public sealed class AdminSplitAssignmentModel
+{
+    public Guid SplitId { get; set; }
+    public Guid UserId { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+    public string AccountTier { get; set; } = string.Empty;
+    public DateTime AssignedAtUtc { get; set; }
+    public string? AssignedByUsername { get; set; }
+
+    /// <summary>True when this split is currently the user's active program.</summary>
+    public bool IsActive { get; set; }
+
+    public string? ActivePlanCode { get; set; }
+    public string? BillingCycle { get; set; }
+    public string? SubscriptionStatus { get; set; }
 }
 
 public sealed class AdminSplitDayModel

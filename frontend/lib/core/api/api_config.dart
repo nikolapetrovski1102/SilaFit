@@ -17,8 +17,8 @@ class ApiConfig {
   /// issues the ID token for (what the backend's `GoogleAuth:ClientIds`
   /// validates against) and what `GoogleSignIn.serverClientId` must be set
   /// to for `account.authentication.idToken` to actually populate on any
-  /// platform, iOS included. See `frontend/env/README.md` for how to create
-  /// it - ships as a placeholder until real Google Cloud credentials exist.
+  /// platform, iOS included. See `frontend/env/README.md` for how it was
+  /// created.
   static const String googleWebClientId =
       String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 

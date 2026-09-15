@@ -42,6 +42,15 @@ public static class AdminContentFieldRules
         "BuildMuscle", "LoseFat", "MaintainActive"
     };
 
+    /// <summary>
+    /// Who an app user the split is not assigned to may be shown it. Mirrors the
+    /// CK_WorkoutSplits_Visibility constraint added in schema 031.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SplitVisibilities = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "Private", "Public", "Shared"
+    };
+
     /// <summary>Rejects anything outside <paramref name="allowed"/>, naming the field and the alternatives.</summary>
     public static void ThrowIfUnknown(string? value, IReadOnlySet<string> allowed, string fieldName)
     {

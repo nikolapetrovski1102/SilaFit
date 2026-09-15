@@ -10,9 +10,16 @@ class SplitsController extends ChangeNotifier {
 
   ResourceState<List<WorkoutSplit>> state = const ResourceState.loading();
 
+  // App-wide provider: skip a repeat load when we already have the catalogue,
+  // and never overlap two loads. `force` is the explicit refresh path.
+  bool _isLoading = false;
+
   SplitsController(this._repository);
 
-  Future<void> load() async {
+  Future<void> load({bool force = false}) async {
+    if (_isLoading) return;
+    if (!force && state.hasData) return;
+    _isLoading = true;
     state = const ResourceState.loading();
     notifyListeners();
     try {
@@ -22,6 +29,8 @@ class SplitsController extends ChangeNotifier {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);
+    } finally {
+      _isLoading = false;
     }
     notifyListeners();
   }
@@ -40,7 +49,12 @@ class SplitDetailController extends ChangeNotifier {
 
   SplitDetailController(this._repository, this.splitId);
 
-  Future<void> load() async {
+  bool _isLoading = false;
+
+  Future<void> load({bool force = false}) async {
+    if (_isLoading) return;
+    if (!force && state.hasData) return;
+    _isLoading = true;
     state = const ResourceState.loading();
     notifyListeners();
     try {
@@ -50,6 +64,8 @@ class SplitDetailController extends ChangeNotifier {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);
+    } finally {
+      _isLoading = false;
     }
     notifyListeners();
   }

@@ -9,6 +9,7 @@ import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
 import '../auth/account_gate.dart';
 import '../progress/analytics_controller.dart';
+import '../progress/weekly_analytics_controller.dart';
 import 'plans_controller.dart';
 import 'plans_models.dart';
 
@@ -37,11 +38,12 @@ class _PlansScreenState extends State<PlansScreen> {
     final ok = await _controller.purchase(plan.planId);
     if (!mounted) return;
     if (ok) {
-      // The app-lifetime AnalyticsController otherwise only ever checks
+      // The app-lifetime AnalyticsControllers otherwise only ever check
       // entitlement once, in ProgressScreen's initState - without this, a
-      // fresh purchase leaves the AI Monthly Report card looking locked
-      // until the app is restarted.
-      context.read<AnalyticsController>().load();
+      // fresh purchase leaves the AI Monthly/Weekly Review cards looking
+      // locked until the app is restarted.
+      context.read<AnalyticsController>().load(force: true);
+      context.read<WeeklyAnalyticsController>().load(force: true);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Upgraded to ${plan.name}.')));
     } else if (_controller.actionError != null) {
@@ -63,7 +65,7 @@ class _PlansScreenState extends State<PlansScreen> {
         builder: (context, _) {
           return SafeArea(
             child: RefreshIndicator(
-              onRefresh: _controller.load,
+              onRefresh: () => _controller.load(force: true),
               color: AppColors.accent,
               backgroundColor: AppColors.surfaceContainer,
               child: SingleChildScrollView(
@@ -71,13 +73,25 @@ class _PlansScreenState extends State<PlansScreen> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.marginMobile,
                     vertical: AppSpacing.sm),
-                child: ResourceBuilder<List<PlanCatalogEntry>>(
-                  state: _controller.state,
-                  onRetry: _controller.load,
-                  builder: (context, catalog) => _PlansContent(
-                      controller: _controller,
-                      catalog: catalog,
-                      onPurchase: _purchase),
+                // Header + billing toggle don't need the catalogue, so they
+                // stay visible even when that fetch is slow or fails -
+                // only the plan cards themselves (which do need it) sit
+                // behind the ResourceBuilder below.
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PlansHeader(controller: _controller),
+                    const SizedBox(height: AppSpacing.lg),
+                    ResourceBuilder<List<PlanCatalogEntry>>(
+                      state: _controller.state,
+                      onRetry: _controller.load,
+                      builder: (context, catalog) => _PlanCards(
+                          controller: _controller,
+                          catalog: catalog,
+                          onPurchase: _purchase),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                 ),
               ),
             ),
@@ -88,12 +102,42 @@ class _PlansScreenState extends State<PlansScreen> {
   }
 }
 
-class _PlansContent extends StatelessWidget {
+class _PlansHeader extends StatelessWidget {
+  final PlansController controller;
+
+  const _PlansHeader({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const PillChip(
+            label: 'System Telemetry & Access',
+            icon: Icons.bolt_rounded,
+            selected: true),
+        const SizedBox(height: AppSpacing.sm),
+        Text('Choose Your Protocol',
+            style: AppTypography.headlineLg.copyWith(fontSize: 26),
+            textAlign: TextAlign.center),
+        const SizedBox(height: 4),
+        Text(
+          'Transparent pricing. Upgrade or cancel anytime.',
+          style: AppTypography.bodySm,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _BillingToggle(controller: controller),
+      ],
+    );
+  }
+}
+
+class _PlanCards extends StatelessWidget {
   final PlansController controller;
   final List<PlanCatalogEntry> catalog;
   final ValueChanged<SubscriptionPlan> onPurchase;
 
-  const _PlansContent(
+  const _PlanCards(
       {required this.controller,
       required this.catalog,
       required this.onPurchase});
@@ -106,33 +150,11 @@ class _PlansContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Column(
-          children: [
-            const PillChip(
-                label: 'System Telemetry & Access',
-                icon: Icons.bolt_rounded,
-                selected: true),
-            const SizedBox(height: AppSpacing.sm),
-            Text('Choose Your Protocol',
-                style: AppTypography.headlineLg.copyWith(fontSize: 26),
-                textAlign: TextAlign.center),
-            const SizedBox(height: 4),
-            Text(
-              'Transparent pricing. Upgrade or cancel anytime.',
-              style: AppTypography.bodySm,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _BillingToggle(controller: controller),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
         for (final entry in sorted) ...[
           _PlanCard(
               entry: entry, controller: controller, onPurchase: onPurchase),
           const SizedBox(height: AppSpacing.sm),
         ],
-        const SizedBox(height: AppSpacing.md),
       ],
     );
   }
@@ -245,7 +267,8 @@ class _PlanCard extends StatelessWidget {
                             horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                             color: AppColors.accent,
-                            borderRadius: BorderRadius.circular(AppRadius.full)),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.full)),
                         child: Text('MOST POPULAR',
                             style: AppTypography.labelCaps.copyWith(
                                 color: AppColors.onAccent, fontSize: 9)),

@@ -19,8 +19,11 @@ COPY src/Silen.Common/ src/Silen.Common/
 COPY src/Silen.Tools.AdminProvision/ src/Silen.Tools.AdminProvision/
 RUN dotnet publish src/Silen.Tools.AdminProvision/Silen.Tools.AdminProvision.csproj -c Release -o /app
 
-# Console tool only - no ASP.NET Kestrel/hosting needed, unlike Silen.Api's runtime image.
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
+# Console tool - no Kestrel/hosting, but Silen.Common carries a
+# <FrameworkReference Include="Microsoft.AspNetCore.App" /> (see its .csproj),
+# so anything referencing it still needs the ASP.NET Core shared framework at
+# runtime, not just dotnet/runtime - same base image as Silen.Api's own.
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
 

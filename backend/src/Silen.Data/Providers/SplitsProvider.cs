@@ -6,18 +6,18 @@ namespace Silen.Data.Providers;
 
 public sealed class SplitsProvider(ISqlExecutor sqlExecutor) : ISplitsProvider
 {
-    public Task<List<WorkoutSplitModel>> GetAllAsync(CancellationToken cancellationToken = default) =>
+    public Task<List<WorkoutSplitModel>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Splits_GetAll",
-            [],
+            [SqlParameterBuilder.Create("@UserId", userId)],
             reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapSplit, cancellationToken),
             cancellationToken);
 
     public Task<(WorkoutSplitModel? Split, List<SplitDayModel> Days, List<SplitDayExerciseModel> Exercises)> GetDetailAsync(
-        Guid splitId, CancellationToken cancellationToken = default) =>
+        Guid splitId, Guid? userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Splits_GetDetail",
-            [SqlParameterBuilder.Create("@SplitId", splitId)],
+            [SqlParameterBuilder.Create("@SplitId", splitId), SqlParameterBuilder.Create("@UserId", userId)],
             async reader =>
             {
                 var split = await SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapSplit, cancellationToken);
@@ -29,10 +29,14 @@ public sealed class SplitsProvider(ISqlExecutor sqlExecutor) : ISplitsProvider
             },
             cancellationToken);
 
-    public Task<ActiveSplitModel?> SetActiveAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default) =>
+    public Task<ActiveSplitModel?> SetActiveAsync(Guid userId, Guid splitId, bool isAutoAssigned = false, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_UserActiveSplit_Set",
-            [SqlParameterBuilder.Create("@UserId", userId), SqlParameterBuilder.Create("@SplitId", splitId)],
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@SplitId", splitId),
+                SqlParameterBuilder.Create("@IsAutoAssigned", isAutoAssigned)
+            ],
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapActiveSplit, cancellationToken),
             cancellationToken);
 

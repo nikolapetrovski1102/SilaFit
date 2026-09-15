@@ -17,6 +17,16 @@ public sealed class CompleteWorkoutRequest
     public short? CaloriesEstimate { get; set; }
     public decimal? RpeScore { get; set; }
     public decimal? TonnageKg { get; set; }
+    /// <summary>The set-by-set log behind real Personal Records - null for an older client build.</summary>
+    public List<SetLogRequest>? SetLogs { get; set; }
+}
+
+public sealed class SetLogRequest
+{
+    public Guid ExerciseId { get; set; }
+    public byte SetNumber { get; set; }
+    public decimal WeightKg { get; set; }
+    public short Reps { get; set; }
 }
 
 /// <summary>

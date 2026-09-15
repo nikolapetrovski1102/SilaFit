@@ -40,6 +40,15 @@ services:
       # auto-substitutes ${VAR} from it) - never commit real values here.
       OpenRouter__ApiKey: "${OPENROUTER_API_KEY}"
       GoogleAuth__ClientIds__0: "${GOOGLE_WEB_CLIENT_ID}"
+      # Push reminders (local dev). The publisher runs inside the API here so
+      # reminders actually fire while the dev stack is up; production uses the
+      # cron tool instead. The Firebase service account is bind-mounted below.
+      NotificationPublish__RunInApi: "${NOTIFICATION_RUN_IN_API:-true}"
+      Push__Enabled: "${PUSH_ENABLED:-false}"
+      Push__ProjectId: "${PUSH_PROJECT_ID:-}"
+      Push__ServiceAccountJsonPath: "/secrets/fcm-service-account.json"
+    volumes:
+      - ./deploy/secrets:/secrets:ro
     ports:
       - "5080:8080"
 

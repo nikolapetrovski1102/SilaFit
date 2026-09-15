@@ -133,6 +133,19 @@ class MealSuggestion {
   final int carbsG;
   final int fatsG;
 
+  /// The library's curated position, used only as a stable tie-breaker when
+  /// two meals score identically in `meal_recommendation.dart`.
+  final int sortOrder;
+
+  /// Person-fit score (0-100) computed server-side against the caller's own
+  /// nutrition targets, which derive from their height/weight/age/gender/goal.
+  /// Null on payloads that predate this field (or in tests), where ranking
+  /// falls back to pure day/time fit.
+  final int? matchScore;
+
+  /// Plain-language explanation of [matchScore], shown in the UI.
+  final String? matchReason;
+
   const MealSuggestion({
     required this.mealSuggestionId,
     required this.title,
@@ -142,6 +155,9 @@ class MealSuggestion {
     required this.proteinG,
     required this.carbsG,
     required this.fatsG,
+    this.sortOrder = 0,
+    this.matchScore,
+    this.matchReason,
   });
 
   factory MealSuggestion.fromJson(dynamic json) {
@@ -155,6 +171,9 @@ class MealSuggestion {
       proteinG: map['proteinG'] as int? ?? 0,
       carbsG: map['carbsG'] as int? ?? 0,
       fatsG: map['fatsG'] as int? ?? 0,
+      sortOrder: map['sortOrder'] as int? ?? 0,
+      matchScore: map['matchScore'] as int?,
+      matchReason: map['matchReason'] as String?,
     );
   }
 }

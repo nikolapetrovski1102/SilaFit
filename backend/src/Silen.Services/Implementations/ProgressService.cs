@@ -40,4 +40,21 @@ public sealed class ProgressService(
                 Insights = ProgressInsightGenerator.Generate(summary, streakStatus)
             };
         });
+
+    public Task<ServiceResult<List<PersonalRecordDto>>> GetPersonalRecordsAsync(Guid userId, int top, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var effectiveTop = top <= 0 ? 5 : top;
+            var records = await workoutSessionProvider.GetPersonalRecordsAsync(userId, effectiveTop, cancellationToken);
+
+            return records.Select(r => new PersonalRecordDto
+            {
+                ExerciseId = r.ExerciseId,
+                ExerciseName = r.ExerciseName,
+                WeightKg = r.WeightKg,
+                Reps = r.Reps,
+                AchievedAtUtc = r.AchievedAtUtc,
+                PreviousBestWeightKg = r.PreviousBestWeightKg
+            }).ToList();
+        });
 }

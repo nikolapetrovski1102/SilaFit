@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,12 +8,14 @@ import '../../core/api/api_client.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/widgets/silen_button.dart';
 import '../onboarding/onboarding_repository.dart';
+import '../onboarding/widgets/onboarding_step_transition.dart';
 import '../onboarding/widgets/question_scaffold.dart';
 import 'auth_controller.dart';
 import 'complete_profile_flow.dart';
 import 'login_screen.dart';
+import 'widgets/auth_blob_background.dart';
+import 'widgets/oauth_sign_in_buttons.dart';
 import 'widgets/otp_code_field.dart';
 
 /// Registration entry point. Google/Apple sign-up stays a single tap, right
@@ -40,6 +40,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameFocusNode = FocusNode();
+  bool _nameFieldFocused = false;
 
   final _otpController = OtpCodeFieldController();
 
@@ -56,10 +58,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   _RegisterStep get _step => _RegisterStep.values[_stepIndex];
 
   @override
+  void initState() {
+    super.initState();
+    _nameFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() => _nameFieldFocused = _nameFocusNode.hasFocus);
+    });
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _nameFocusNode.dispose();
     _resendTimer?.cancel();
     super.dispose();
   }
@@ -164,7 +176,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final profile = await repository.getProfile();
       if (!profile.isComplete && mounted) {
         await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => const CompleteProfileFlow()),
+          MaterialPageRoute(builder: (_) => CompleteProfileFlow(initialProfile: profile)),
         );
       }
     } catch (_) {
@@ -218,30 +230,70 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // language instead of a bar-plus-title.
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 320),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        // See OnboardingFlowScreen's identical builder for why each side
-        // needs its own sign: AnimatedSwitcher hands the outgoing child an
-        // animation running in reverse, so this is what makes the swap read
-        // as forward/back navigation instead of a plain crossfade.
-        transitionBuilder: (child, animation) {
-          final incoming = animation.status != AnimationStatus.reverse;
-          final sign = (incoming ? 1 : -1) * _lastDirection;
-          final offset = Tween<Offset>(
-            begin: Offset(0.22 * sign, 0),
-            end: Offset.zero,
-          ).animate(animation);
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: offset, child: child),
-          );
-        },
-        child: KeyedSubtree(
-          key: ValueKey(_stepIndex),
-          child: _buildStep(auth),
-        ),
+      body: Stack(
+        children: [
+          // Present from the first frame (not faded in), and re-laid-out -
+          // via AuthBlobBackground's own AnimatedAlign, an ease-in/ease-out
+          // glide - only when _stepIndex changes, i.e. on Continue/Back
+          // through the email wizard. The OAuth-only name step never
+          // advances past index 0, so a Google/Apple sign-up never moves it.
+          Positioned.fill(child: AuthBlobBackground(layout: _stepIndex)),
+          ClipRect(
+            child: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 360),
+              reverseDuration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 280),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeIn,
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  for (final child in previousChildren)
+                    ExcludeSemantics(child: IgnorePointer(child: child)),
+                  if (currentChild != null) currentChild,
+                ],
+              ),
+              // Same two-tier motion as OnboardingFlowScreen: the whole step
+              // slides page-like via Transform.translate, while descendants
+              // that opt in via OnboardingStepContentTransition
+              // (QuestionScaffold's headline/body) get an additional
+              // fade/fall - navigation chrome (back button, step counter,
+              // CTA) stays solid instead of sliding with everything else.
+              transitionBuilder: (child, animation) {
+                return AnimatedBuilder(
+                  animation: animation,
+                  child: child,
+                  builder: (context, child) {
+                    final incoming =
+                        animation.status != AnimationStatus.reverse;
+                    final progress = animation.value.clamp(0.0, 1.0);
+                    final direction = _lastDirection.toDouble();
+                    final horizontalOffset = incoming
+                        ? direction * (1 - progress)
+                        : -direction * (1 - progress);
+                    return Transform.translate(
+                      offset: Offset(
+                        MediaQuery.sizeOf(context).width * horizontalOffset,
+                        0,
+                      ),
+                      child: OnboardingStepTransitionScope(
+                        animation: animation,
+                        child: child!,
+                      ),
+                    );
+                  },
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey(_stepIndex),
+                child: _buildStep(auth),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -254,35 +306,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
           progressStep: 1,
           progressStepCount: _stepCount,
           headline: 'Lock in your progress',
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Your guest history carries over automatically.',
-                  style: AppTypography.bodyMd
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                TextField(
-                  controller: _nameController,
-                  style: AppTypography.bodyMd,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                      hintText: 'Display name (optional)'),
-                  onSubmitted: (_) => _continueFromName(),
-                ),
-              ],
-            ),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Your guest history carries over automatically.',
+                style: AppTypography.bodyMd
+                    .copyWith(color: AppColors.onSurfaceVariant),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              TextField(
+                controller: _nameController,
+                focusNode: _nameFocusNode,
+                style: AppTypography.bodyMd,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                    hintText: 'Display name (optional)'),
+                onSubmitted: (_) => _continueFromName(),
+              ),
+            ],
           ),
           ctaLabel: 'Continue',
           onCta: _continueFromName,
-          belowCta: _AlternateSignupBlock(
+          hideBelowCta: _nameFieldFocused,
+          belowCta: OAuthSignInButtons(
             isBusy: auth.isBusy,
             onGoogle: () => _withGoogle(auth),
             onApple: () => _withApple(auth),
-            onLogin: _goToLogin,
           ),
+          footer: _LoginLink(onTap: _goToLogin),
         );
 
       case _RegisterStep.email:
@@ -291,27 +343,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
           progressStep: 2,
           progressStepCount: _stepCount,
           headline: "What's your email?",
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _emailController,
-                  style: AppTypography.bodyMd,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autofocus: true,
-                  decoration: const InputDecoration(hintText: 'Email'),
-                  onSubmitted: (_) => _continueFromEmail(),
-                ),
-                if (_fieldError != null) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(_fieldError!,
-                      style: AppTypography.bodySm
-                          .copyWith(color: AppColors.error)),
-                ],
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _emailController,
+                style: AppTypography.bodyMd,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofocus: true,
+                decoration: const InputDecoration(hintText: 'Email'),
+                onSubmitted: (_) => _continueFromEmail(),
+              ),
+              if (_fieldError != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(_fieldError!,
+                    style: AppTypography.bodySm
+                        .copyWith(color: AppColors.error)),
               ],
-            ),
+            ],
           ),
           ctaLabel: 'Continue',
           onCta: _continueFromEmail,
@@ -323,29 +373,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
           progressStep: 3,
           progressStepCount: _stepCount,
           headline: 'Choose a password',
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _passwordController,
-                  style: AppTypography.bodyMd,
-                  obscureText: true,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(hintText: 'Password'),
-                  onSubmitted: (_) => _submitPassword(auth),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  _fieldError ?? 'At least 8 characters.',
-                  style: AppTypography.bodySm.copyWith(
-                      color: _fieldError != null
-                          ? AppColors.error
-                          : AppColors.onSurfaceVariant),
-                ),
-              ],
-            ),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _passwordController,
+                style: AppTypography.bodyMd,
+                obscureText: true,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(hintText: 'Password'),
+                onSubmitted: (_) => _submitPassword(auth),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                _fieldError ?? 'At least 8 characters.',
+                style: AppTypography.bodySm.copyWith(
+                    color: _fieldError != null
+                        ? AppColors.error
+                        : AppColors.onSurfaceVariant),
+              ),
+            ],
           ),
           ctaLabel: 'Create Account',
           ctaLoading: auth.isBusy,
@@ -358,24 +406,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
           progressStep: 4,
           progressStepCount: _stepCount,
           headline: 'Check your email',
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Enter the 6-digit code we sent to '
-                  '${_emailController.text.trim()}.',
-                  style: AppTypography.bodyMd
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                OtpCodeField(
-                  controller: _otpController,
-                  onChanged: (value) => setState(() => _code = value),
-                  onCompleted: (_) => _submitCode(auth),
-                ),
-              ],
-            ),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Enter the 6-digit code we sent to '
+                '${_emailController.text.trim()}.',
+                style: AppTypography.bodyMd
+                    .copyWith(color: AppColors.onSurfaceVariant),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              OtpCodeField(
+                controller: _otpController,
+                onChanged: (value) => setState(() => _code = value),
+                onCompleted: (_) => _submitCode(auth),
+              ),
+            ],
           ),
           ctaLabel: 'Verify',
           ctaLoading: auth.isBusy,
@@ -402,71 +448,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
-/// The Google/Apple/"already have an account" block shown under the name
-/// step's CTA - unlike email, both OAuth paths create the account (or link
-/// it to the current guest) in a single tap, with no further wizard steps.
-class _AlternateSignupBlock extends StatelessWidget {
-  final bool isBusy;
-  final VoidCallback onGoogle;
-  final VoidCallback onApple;
-  final VoidCallback onLogin;
+/// "Already have an account? Log in" - kept as its own always-visible
+/// footer (separate from the OAuth buttons) so it stays on screen even
+/// while the name field's focus collapses the OAuth row out of the way.
+class _LoginLink extends StatelessWidget {
+  final VoidCallback onTap;
 
-  const _AlternateSignupBlock({
-    required this.isBusy,
-    required this.onGoogle,
-    required this.onApple,
-    required this.onLogin,
-  });
+  const _LoginLink({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
+    return GestureDetector(
+      onTap: onTap,
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          style:
+              AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
           children: [
-            Expanded(child: Divider(color: AppColors.outlineVariant)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-              child: Text('OR', style: AppTypography.labelCaps),
+            const TextSpan(text: 'Already have an account? '),
+            TextSpan(
+              text: 'Log in',
+              style: TextStyle(
+                  color: AppColors.accent, fontWeight: FontWeight.w600),
             ),
-            Expanded(child: Divider(color: AppColors.outlineVariant)),
           ],
         ),
-        const SizedBox(height: AppSpacing.lg),
-        SecondaryPillButton(
-          label: 'Continue with Google',
-          icon: Icons.g_mobiledata_rounded,
-          onPressed: isBusy ? null : onGoogle,
-        ),
-        if (!kIsWeb && Platform.isIOS) ...[
-          const SizedBox(height: AppSpacing.sm),
-          SecondaryPillButton(
-            label: 'Continue with Apple',
-            icon: Icons.apple_rounded,
-            onPressed: isBusy ? null : onApple,
-          ),
-        ],
-        const SizedBox(height: AppSpacing.lg),
-        GestureDetector(
-          onTap: onLogin,
-          child: RichText(
-            text: TextSpan(
-              style: AppTypography.bodyMd
-                  .copyWith(color: AppColors.onSurfaceVariant),
-              children: [
-                const TextSpan(text: 'Already have an account? '),
-                TextSpan(
-                  text: 'Log in',
-                  style: TextStyle(
-                      color: AppColors.secondary,
-                      fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

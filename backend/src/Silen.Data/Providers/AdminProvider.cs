@@ -26,6 +26,7 @@ public sealed class AdminProvider(ISqlExecutor sqlExecutor) : IAdminProvider
         byte[] passwordHash,
         byte[] passwordSalt,
         byte[] totpSecretCipher,
+        string? email = null,
         CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Admin_UpsertAccount",
@@ -33,9 +34,37 @@ public sealed class AdminProvider(ISqlExecutor sqlExecutor) : IAdminProvider
                 SqlParameterBuilder.Create("@Username", username),
                 SqlParameterBuilder.Create("@PasswordHash", passwordHash),
                 SqlParameterBuilder.Create("@PasswordSalt", passwordSalt),
-                SqlParameterBuilder.Create("@TotpSecretCipher", totpSecretCipher)
+                SqlParameterBuilder.Create("@TotpSecretCipher", totpSecretCipher),
+                SqlParameterBuilder.Create("@Email", email)
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, r => r.GetGuidValue("AdminUserId"), cancellationToken),
+            cancellationToken);
+
+    public Task SetEmailAsync(Guid adminUserId, string? email, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Admin_SetEmail",
+            [
+                SqlParameterBuilder.Create("@AdminUserId", adminUserId),
+                SqlParameterBuilder.Create("@Email", email)
+            ],
+            cancellationToken);
+
+    public Task SetEmailOtpAsync(
+        Guid adminUserId,
+        string email,
+        byte[] codeHash,
+        byte[] codeSalt,
+        DateTime expiresAtUtc,
+        CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Admin_SetEmailOtp",
+            [
+                SqlParameterBuilder.Create("@AdminUserId", adminUserId),
+                SqlParameterBuilder.Create("@Email", email),
+                SqlParameterBuilder.Create("@CodeHash", codeHash),
+                SqlParameterBuilder.Create("@CodeSalt", codeSalt),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc)
+            ],
             cancellationToken);
 
     public Task<AdminLockoutStateModel?> RecordFailedLoginAsync(

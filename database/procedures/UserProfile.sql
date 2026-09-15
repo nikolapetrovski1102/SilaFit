@@ -12,7 +12,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT UserId, Gender, AgeYears, HeightCm, WeightKg, Goal, CreatedAtUtc, UpdatedAtUtc
+    SELECT UserId, Gender, AgeYears, HeightCm, WeightKg, Goal, TrainingDaysPerWeek, SessionDurationMinutes, TrainingExperience, EquipmentAccess, DailyActivityLevel, CreatedAtUtc, UpdatedAtUtc
     FROM dbo.UserProfiles
     WHERE UserId = @UserId;
 END
@@ -29,7 +29,12 @@ CREATE OR ALTER PROCEDURE dbo.usp_UserProfile_Upsert
     @AgeYears VARBINARY(100),
     @HeightCm VARBINARY(100),
     @WeightKg VARBINARY(100),
-    @Goal VARBINARY(100)
+    @Goal VARBINARY(100),
+    @TrainingDaysPerWeek VARBINARY(100) = NULL,
+    @SessionDurationMinutes VARBINARY(100) = NULL,
+    @TrainingExperience VARBINARY(100) = NULL,
+    @EquipmentAccess VARBINARY(100) = NULL,
+    @DailyActivityLevel VARBINARY(100) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -44,12 +49,17 @@ BEGIN
             HeightCm = @HeightCm,
             WeightKg = @WeightKg,
             Goal = @Goal,
+            TrainingDaysPerWeek = COALESCE(@TrainingDaysPerWeek, target.TrainingDaysPerWeek),
+            SessionDurationMinutes = COALESCE(@SessionDurationMinutes, target.SessionDurationMinutes),
+            TrainingExperience = COALESCE(@TrainingExperience, target.TrainingExperience),
+            EquipmentAccess = COALESCE(@EquipmentAccess, target.EquipmentAccess),
+            DailyActivityLevel = COALESCE(@DailyActivityLevel, target.DailyActivityLevel),
             UpdatedAtUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT (UserId, Gender, AgeYears, HeightCm, WeightKg, Goal)
-        VALUES (@UserId, @Gender, @AgeYears, @HeightCm, @WeightKg, @Goal);
+        INSERT (UserId, Gender, AgeYears, HeightCm, WeightKg, Goal, TrainingDaysPerWeek, SessionDurationMinutes, TrainingExperience, EquipmentAccess, DailyActivityLevel)
+        VALUES (@UserId, @Gender, @AgeYears, @HeightCm, @WeightKg, @Goal, @TrainingDaysPerWeek, @SessionDurationMinutes, @TrainingExperience, @EquipmentAccess, @DailyActivityLevel);
 
-    SELECT UserId, Gender, AgeYears, HeightCm, WeightKg, Goal, CreatedAtUtc, UpdatedAtUtc
+    SELECT UserId, Gender, AgeYears, HeightCm, WeightKg, Goal, TrainingDaysPerWeek, SessionDurationMinutes, TrainingExperience, EquipmentAccess, DailyActivityLevel, CreatedAtUtc, UpdatedAtUtc
     FROM dbo.UserProfiles
     WHERE UserId = @UserId;
 END

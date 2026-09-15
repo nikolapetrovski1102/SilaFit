@@ -29,6 +29,7 @@ class TodayRepository {
     int? caloriesEstimate,
     double? rpeScore,
     double? tonnageKg,
+    List<SetLogEntry>? setLogs,
   }) =>
       _client.post(
         '/today/workout/complete',
@@ -39,6 +40,8 @@ class TodayRepository {
           if (caloriesEstimate != null) 'caloriesEstimate': caloriesEstimate,
           if (rpeScore != null) 'rpeScore': rpeScore,
           if (tonnageKg != null) 'tonnageKg': tonnageKg,
+          if (setLogs != null && setLogs.isNotEmpty)
+            'setLogs': setLogs.map((s) => s.toJson()).toList(),
         },
       );
 }

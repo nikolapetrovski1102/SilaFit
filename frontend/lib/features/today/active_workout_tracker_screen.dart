@@ -6,12 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/live_workout/live_workout_notifier.dart';
+import '../../core/live_workout/live_workout_snapshot.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_dialog.dart';
 import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/silen_button.dart';
+import '../notifications/notifications_repository.dart';
 import '../settings/settings_controller.dart';
 import 'active_workout_draft_store.dart';
 import 'exercise_memory_store.dart';
@@ -34,15 +37,15 @@ const _barbellEquipment = 'Barbell';
 /// not a pair, so its logged weight is already the total load.
 const _bilateralDumbbellEquipment = 'Dumbbell';
 
-/// One set's local draft state. The backend has no set-by-set logging
-/// endpoint (only whole-session completion) - only the final aggregate
-/// (duration/tonnage) is ever sent to the server, in
-/// [TodayController.completeWorkout], exactly as the old
-/// `complete_workout_screen.dart` already did. The set table itself is kept
-/// alive across app kills/backgrounding by mirroring it into an
-/// [ActiveWorkoutDraft] on every change (see `_saveDraft`), but that's
-/// on-device only, purely to resume this screen - it's never itself sent
-/// to the backend.
+/// One set's local draft state. Every *completed* set is flattened and sent
+/// to the server alongside the session aggregate in
+/// [TodayController.completeWorkout] (see [_finishWorkout]), landing in
+/// `dbo.WorkoutSetLogs` - the source of truth the Progress screen's Personal
+/// Records card is built from. The set table itself is also kept alive
+/// across app kills/backgrounding by mirroring it into an
+/// [ActiveWorkoutDraft] on every change (see `_saveDraft`), but that mirror
+/// is on-device only, purely to resume this screen - it's a separate copy
+/// from the one that gets sent to the backend on finish.
 ///
 /// [weightKg] is always the source of truth in kilograms, regardless of
 /// [UserSettings.weightUnit] - the unit only ever affects display/step
@@ -69,7 +72,8 @@ const _kgToLb = 2.20462;
 /// first, so a lb-preference lifter sees real lb plate sizes rather than a
 /// kg breakdown with a unit label slapped on. Returns an empty list if the
 /// target is at or below the bar itself.
-List<double> _plateBreakdown(double totalWeightKg, double barbellKg, String unit) {
+List<double> _plateBreakdown(
+    double totalWeightKg, double barbellKg, String unit) {
   final isLb = unit == 'lb';
   final total = isLb ? totalWeightKg * _kgToLb : totalWeightKg;
   final bar = isLb ? barbellKg * _kgToLb : barbellKg;
@@ -113,8 +117,8 @@ class ActiveWorkoutTrackerScreen extends StatefulWidget {
       _ActiveWorkoutTrackerScreenState();
 }
 
-class _ActiveWorkoutTrackerScreenState
-    extends State<ActiveWorkoutTrackerScreen> {
+class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
+    with WidgetsBindingObserver {
   late List<List<_SetDraft>> _setsByExercise;
   int _exerciseIndex = 0;
 
@@ -140,10 +144,63 @@ class _ActiveWorkoutTrackerScreenState
 
   bool _isFinishing = false;
 
+  // Guards [_reconcileLoggedSets] against overlapping drains - the ticker and
+  // a lifecycle resume can both fire while a platform-channel round-trip is in
+  // flight, and replaying the same taps twice would double-log sets. Callers
+  // get the in-flight future rather than a no-op, so awaiting a drain (e.g.
+  // before finishing) always waits for the tap that triggered it.
+  Future<void>? _reconcileInFlight;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_init());
+  }
+
+  /// A tap made with the app backgrounded has no ticker running to catch it,
+  /// so the resume transition is also a drain point.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_reconcileLoggedSets());
+    }
+  }
+
+  /// Replays any "Log set" taps the native live surface recorded that haven't
+  /// been turned into real sets yet - see
+  /// [LiveWorkoutNotifier.drainLoggedSets]. The surface refreshes itself
+  /// instantly when tapped; this is what persists the corresponding set into
+  /// the workout draft.
+  ///
+  /// Called on resume (a tap made with the app backgrounded), on every ticker
+  /// tick (a tap made while the app is open but the surface is what the user
+  /// is looking at), and once at the end of [_init] (a tap made while the app
+  /// was fully killed and is only now cold-starting back into this session).
+  Future<void> _reconcileLoggedSets() {
+    final inFlight = _reconcileInFlight;
+    if (inFlight != null) return inFlight;
+    final tracked =
+        _drainLoggedSets().whenComplete(() => _reconcileInFlight = null);
+    _reconcileInFlight = tracked;
+    return tracked;
+  }
+
+  Future<void> _drainLoggedSets() async {
+    if (!_ready) return;
+    final sessionId = widget.session.workoutSessionId;
+    if (sessionId == null || sessionId.isEmpty) return;
+    final pending =
+        await LiveWorkoutNotifier.instance.drainLoggedSets(sessionId);
+    if (!mounted) return;
+    // Replay against whatever is still the active set at drain time - bounded
+    // by _activeSetIndex rather than blindly looping `pending` times, so a
+    // stray extra tap can never log past the last real set.
+    for (var i = 0; i < pending; i++) {
+      final active = _activeSetIndex;
+      if (active == null) break;
+      _logSet(active);
+    }
   }
 
   /// Seeds the set table from the day's prescribed exercises, then checks
@@ -161,22 +218,20 @@ class _ActiveWorkoutTrackerScreenState
     // plans a set ("what did I do last time").
     final memory = await ExerciseMemoryStore.instance.loadAll();
 
-    final freshSets = widget.exercises
-        .map((exercise) {
-          final remembered = memory[exercise.exerciseId];
-          return List.generate(
-            exercise.targetSets <= 0 ? 1 : exercise.targetSets,
-            (_) => _SetDraft(
-              weightKg: remembered?.weightKg ??
-                  _weightFloorKgFor(exercise.equipmentType),
-              reps: remembered?.reps ??
-                  ((exercise.targetRepsLow + exercise.targetRepsHigh) / 2)
-                      .round()
-                      .clamp(1, 999),
-            ),
-          );
-        })
-        .toList();
+    final freshSets = widget.exercises.map((exercise) {
+      final remembered = memory[exercise.exerciseId];
+      return List.generate(
+        exercise.targetSets <= 0 ? 1 : exercise.targetSets,
+        (_) => _SetDraft(
+          weightKg:
+              remembered?.weightKg ?? _weightFloorKgFor(exercise.equipmentType),
+          reps: remembered?.reps ??
+              ((exercise.targetRepsLow + exercise.targetRepsHigh) / 2)
+                  .round()
+                  .clamp(1, 999),
+        ),
+      );
+    }).toList();
 
     final sessionId = widget.session.workoutSessionId;
     final draft = sessionId == null
@@ -202,23 +257,39 @@ class _ActiveWorkoutTrackerScreenState
               .toList()
           : freshSets;
       _exerciseIndex = draftMatchesShape ? draft.exerciseIndex : 0;
-      _startedAtUtc = draftMatchesShape ? draft.startedAtUtc : DateTime.now().toUtc();
+      _startedAtUtc =
+          draftMatchesShape ? draft.startedAtUtc : DateTime.now().toUtc();
       _elapsed = DateTime.now().toUtc().difference(_startedAtUtc);
       _ready = true;
     });
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() => _elapsed = DateTime.now().toUtc().difference(_startedAtUtc));
-      }
+      if (!mounted) return;
+      setState(
+          () => _elapsed = DateTime.now().toUtc().difference(_startedAtUtc));
+      // A "Log set" tap on the native surface while the app itself is open
+      // has no lifecycle transition to piggyback on, so the ticker is also
+      // the poll that turns those taps into logged sets. Cheap when there is
+      // nothing pending (one channel call that returns 0).
+      unawaited(_reconcileLoggedSets());
     });
     // Persist immediately so Home can offer "Continue Workout" as soon as
     // this screen has been opened once, even before a set is logged - the
     // elapsed timer is already running by then.
     _saveDraft();
+    // Surface the session on the Lock Screen / Dynamic Island / Android
+    // notification tray for the whole time it's in progress. The elapsed
+    // clock is computed natively from `_startedAtUtc`, so this only needs to
+    // fire on state changes, not on every ticker tick.
+    unawaited(LiveWorkoutNotifier.instance.start(_liveSnapshot));
+    // Cold-start case: a "Log set" tap landed while the app was fully killed
+    // (not just backgrounded), so there's no resume transition to catch it -
+    // this screen re-opening from the restored draft is the only signal.
+    unawaited(_reconcileLoggedSets());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     super.dispose();
   }
@@ -227,9 +298,23 @@ class _ActiveWorkoutTrackerScreenState
   /// device storage, so the workout survives the app being backgrounded or
   /// killed. A no-op when the session has no id (nothing meaningful to key
   /// the draft on) - same guard `_finishWorkout` already uses.
+  ///
+  /// The heartbeat is throttled separately from the local draft save: saving is
+  /// cheap and must happen on every change, but the server ping only needs to
+  /// mean "still active". Without this, every weight/rep stepper tap issued its
+  /// own `POST /notifications/workout-heartbeat`.
+  static const _heartbeatMinGap = Duration(seconds: 10);
+  DateTime? _lastHeartbeatUtc;
+
   void _saveDraft() {
     final sessionId = widget.session.workoutSessionId;
     if (sessionId == null) return;
+    final now = DateTime.now();
+    if (_lastHeartbeatUtc == null ||
+        now.difference(_lastHeartbeatUtc!) >= _heartbeatMinGap) {
+      _lastHeartbeatUtc = now;
+      unawaited(_sendWorkoutHeartbeat(sessionId));
+    }
     unawaited(ActiveWorkoutDraftStore.instance.save(ActiveWorkoutDraft(
       workoutSessionId: sessionId,
       exerciseIndex: _exerciseIndex,
@@ -247,9 +332,43 @@ class _ActiveWorkoutTrackerScreenState
     )));
   }
 
+  /// Fire-and-forget "still in the gym" ping. Fires whenever the draft is
+  /// saved (screen open, set logged, exercise advanced), which is exactly the
+  /// activity signal the server needs to time a set-logging nudge around real
+  /// idle gaps. Best-effort; a failure never affects the workout.
+  Future<void> _sendWorkoutHeartbeat(String sessionId) async {
+    try {
+      await context
+          .read<NotificationsRepository>()
+          .sendWorkoutHeartbeat(workoutSessionId: sessionId);
+    } catch (_) {
+      // Intentionally swallowed.
+    }
+  }
+
   List<_SetDraft> get _currentSets => _setsByExercise[_exerciseIndex];
   TargetExercise get _currentExercise => widget.exercises[_exerciseIndex];
   bool get _isLastExercise => _exerciseIndex == widget.exercises.length - 1;
+
+  /// Current session state in the shape the native live surfaces expect (see
+  /// [LiveWorkoutNotifier]). Built fresh on every read so it always mirrors
+  /// whatever `_setsByExercise`/`_exerciseIndex` are at the moment a set is
+  /// logged or the exercise advances.
+  LiveWorkoutSnapshot get _liveSnapshot => LiveWorkoutSnapshot(
+        sessionId: widget.session.workoutSessionId ?? '',
+        exerciseName: _currentExercise.name,
+        exerciseNumber: _exerciseIndex + 1,
+        exerciseCount: widget.exercises.length,
+        completedSets: _completedSetsInCurrentExercise,
+        totalSets: _currentSets.length,
+        startedAtUtc: _startedAtUtc,
+      );
+
+  /// Fire-and-forget push of the current snapshot into an already-visible live
+  /// surface - a no-op when the platform has none, or when the OS dropped it.
+  void _syncLiveWorkout() {
+    unawaited(LiveWorkoutNotifier.instance.update(_liveSnapshot));
+  }
 
   /// kg per tap: a quarter-plate-per-side jump in whichever unit is active
   /// (2.5 kg, or 5 lb converted back to kg for storage) rather than a fixed
@@ -269,7 +388,8 @@ class _ActiveWorkoutTrackerScreenState
           ? _barbellStandardKg
           : _weightStepKg;
 
-  double get _weightFloorKg => _weightFloorKgFor(_currentExercise.equipmentType);
+  double get _weightFloorKg =>
+      _weightFloorKgFor(_currentExercise.equipmentType);
 
   /// The current exercise's first not-yet-logged set - the only set this
   /// screen ever shows. `null` once every set is logged (see
@@ -296,7 +416,8 @@ class _ActiveWorkoutTrackerScreenState
   /// is considered to have moved easily enough that the upcoming set should
   /// go up in weight - the prescribed top of the rep range when there is
   /// one, or a flat 12 (per the user's own example) otherwise.
-  int get _repsSuggestingHeavier => _hasRealRepTarget ? _currentExercise.targetRepsHigh : 12;
+  int get _repsSuggestingHeavier =>
+      _hasRealRepTarget ? _currentExercise.targetRepsHigh : 12;
 
   /// True right as a new set becomes active if the set just before it hit
   /// the rep ceiling above - the minimalist progressive-overload nudge
@@ -323,6 +444,7 @@ class _ActiveWorkoutTrackerScreenState
       }
     });
     _saveDraft();
+    _syncLiveWorkout();
     // Fire-and-forget, like `_saveDraft` - remembers this exercise's weight
     // and reps for next time (see `ExerciseMemoryStore`), independent of
     // whether this whole workout ever gets finished.
@@ -340,6 +462,7 @@ class _ActiveWorkoutTrackerScreenState
           reps: last?.reps ?? _currentExercise.targetRepsLow,
         )));
     _saveDraft();
+    _syncLiveWorkout();
   }
 
   /// Drops one set from the current exercise, whether it's still to come or
@@ -355,6 +478,7 @@ class _ActiveWorkoutTrackerScreenState
     if (!_canRemoveSet) return;
     setState(() => _currentSets.removeAt(index));
     _saveDraft();
+    _syncLiveWorkout();
   }
 
   void _adjustWeight(int index, double directionSign) {
@@ -405,10 +529,37 @@ class _ActiveWorkoutTrackerScreenState
     return total;
   }
 
+  /// Flattens every *completed* set across all exercises into the wire
+  /// shape the backend's `usp_WorkoutSession_Complete` expects, so real PRs
+  /// can be computed server-side (see `dbo.WorkoutSetLogs`). Set numbers are
+  /// 1-based and, unlike [_totalTonnageKg], the weight here is never doubled
+  /// for a bilateral dumbbell set - a raw log records what was actually on
+  /// each dumbbell, since the doubling is a display/aggregate concern, not
+  /// how the lift itself is logged.
+  List<SetLogEntry> get _completedSetLogs {
+    final logs = <SetLogEntry>[];
+    for (var i = 0; i < _setsByExercise.length; i++) {
+      final exerciseId = widget.exercises[i].exerciseId;
+      var setNumber = 0;
+      for (final set in _setsByExercise[i]) {
+        setNumber++;
+        if (!set.completed) continue;
+        logs.add(SetLogEntry(
+          exerciseId: exerciseId,
+          setNumber: setNumber,
+          weightKg: set.weightKg,
+          reps: set.reps,
+        ));
+      }
+    }
+    return logs;
+  }
+
   Future<void> _onPrimaryAction() async {
     if (!_isLastExercise) {
       setState(() => _exerciseIndex++);
       _saveDraft();
+      _syncLiveWorkout();
       return;
     }
     await _finishWorkout();
@@ -417,15 +568,25 @@ class _ActiveWorkoutTrackerScreenState
   Future<void> _finishWorkout() async {
     final sessionId = widget.session.workoutSessionId;
     if (sessionId == null) {
+      unawaited(LiveWorkoutNotifier.instance.stop());
       Navigator.of(context).pop();
       return;
     }
+    // Fold in any surface taps that haven't been replayed yet before
+    // snapshotting the completed sets below - otherwise a set logged from the
+    // Lock Screen in the last second would be dropped from the submission.
+    // Drained twice so a tap that lands while the first drain is in flight is
+    // still picked up; the second pass is a cheap no-op when nothing is left.
+    await _reconcileLoggedSets();
+    await _reconcileLoggedSets();
+    if (!mounted) return;
     setState(() => _isFinishing = true);
     final durationMinutes = _elapsed.inMinutes < 1 ? 1 : _elapsed.inMinutes;
     final ok = await widget.controller.completeWorkout(
       workoutSessionId: sessionId,
       durationMinutes: durationMinutes,
       tonnageKg: _totalTonnageKg > 0 ? _totalTonnageKg : null,
+      setLogs: _completedSetLogs,
     );
     if (!mounted) return;
     setState(() => _isFinishing = false);
@@ -437,6 +598,8 @@ class _ActiveWorkoutTrackerScreenState
       // below depends on the clear having finished, and awaiting it would
       // just be one more async gap to guard `context` against.
       unawaited(ActiveWorkoutDraftStore.instance.clear());
+      // Session is logged - the live surface has nothing left to track.
+      unawaited(LiveWorkoutNotifier.instance.stop());
       // Streak-milestone heuristic: no per-set PR-detection data exists
       // server-side, so a "proud" moment is approximated client-side as
       // hitting a 7-day streak multiple; every other finish is "celebrating".
@@ -455,8 +618,8 @@ class _ActiveWorkoutTrackerScreenState
       if (!mounted) return;
       Navigator.of(context).pop();
     } else if (widget.controller.actionError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.controller.actionError!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.controller.actionError!)));
     }
   }
 
@@ -488,6 +651,10 @@ class _ActiveWorkoutTrackerScreenState
     // sets already logged are exactly what "Continue Workout" on Home will
     // hand back. `_saveDraft` has already been keeping this current after
     // every set/weight/rep change, so there's nothing left to persist here.
+    // Stop before popping instead of relying solely on dispose: this gives
+    // the platform channel time to receive the command while the Flutter
+    // engine and route are definitely still alive.
+    await LiveWorkoutNotifier.instance.stop();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -529,178 +696,183 @@ class _ActiveWorkoutTrackerScreenState
             ),
           ),
           SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-                  AppSpacing.sm, AppSpacing.marginMobile, 0),
-              child: _TelemetryBar(
-                onClose: _confirmExit,
-                elapsedLabel: _formatElapsed(_elapsed),
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.marginMobile),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                              begin: const Offset(0.04, 0), end: Offset.zero)
-                          .animate(animation),
-                      child: child,
-                    ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                      AppSpacing.sm, AppSpacing.marginMobile, 0),
+                  child: _TelemetryBar(
+                    onClose: _confirmExit,
+                    elapsedLabel: _formatElapsed(_elapsed),
                   ),
-                  child: Column(
-                    key: ValueKey(_exerciseIndex),
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: AppSpacing.sm),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.marginMobile),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 280),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                                  begin: const Offset(0.04, 0),
+                                  end: Offset.zero)
+                              .animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: Column(
+                        key: ValueKey(_exerciseIndex),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: Text(
-                                'EXERCISE ${_exerciseIndex + 1} OF ${widget.exercises.length}',
-                                style: AppTypography.labelCaps
-                                    .copyWith(color: AppColors.accent)),
+                          const SizedBox(height: AppSpacing.sm),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                    'EXERCISE ${_exerciseIndex + 1} OF ${widget.exercises.length}',
+                                    style: AppTypography.labelCaps
+                                        .copyWith(color: AppColors.accent)),
+                              ),
+                              if (_currentExercise.demoVideoUrl != null)
+                                _WatchDemoChip(
+                                  isVideo: _isVideoUrl(
+                                      _currentExercise.demoVideoUrl!),
+                                  onTap: () => showExerciseVideoSheet(
+                                    context,
+                                    url: _currentExercise.demoVideoUrl!,
+                                    exerciseName: _currentExercise.name,
+                                  ),
+                                ),
+                            ],
                           ),
-                          if (_currentExercise.demoVideoUrl != null)
-                            _WatchDemoChip(
-                              isVideo: _isVideoUrl(_currentExercise.demoVideoUrl!),
-                              onTap: () => showExerciseVideoSheet(
-                                context,
-                                url: _currentExercise.demoVideoUrl!,
-                                exerciseName: _currentExercise.name,
+                          const SizedBox(height: 4),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // The exercise name as the screen's title - the
+                              // largest, first thing read on the page, same
+                              // headline weight Home gives its own title.
+                              Expanded(
+                                child: Text(_currentExercise.name,
+                                    style: AppTypography.headlineLg
+                                        .copyWith(fontSize: 32)),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              // One gapped ring segment per set, sweeping
+                              // smoothly to full whenever `_logSet` completes
+                              // one - a glanceable "how far into this exercise
+                              // am I" that doesn't need its own progress bar.
+                              _SetProgressRing(
+                                totalSets: _currentSets.length,
+                                completedSets: _completedSetsInCurrentExercise,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            // The set count in the target is the *live* count
+                            // (grows with Add Set), not the plan's static
+                            // targetSets - and the whole target only shows up
+                            // when the plan actually prescribed a rep range.
+                            _hasRealRepTarget
+                                ? '${_currentExercise.muscleGroup} · Target ${_currentSets.length} × ${_currentExercise.targetRepsLow}-${_currentExercise.targetRepsHigh} reps'
+                                : _currentExercise.muscleGroup,
+                            style: AppTypography.bodyMd
+                                .copyWith(color: AppColors.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: AppSpacing.xxxl),
+                          // Only the current set - no list of upcoming or past
+                          // sets to scan past. Keyed on the active set (or the
+                          // "all done" state) so logging a set, or adding a new
+                          // one once the exercise was fully logged, animates
+                          // forward instead of just swapping numbers in place.
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 320),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.96, end: 1)
+                                    .animate(animation),
+                                child: child,
                               ),
                             ),
+                            child: _activeSetIndex != null
+                                ? _CurrentSetCard(
+                                    key: ValueKey('set-$_activeSetIndex'),
+                                    setIndex: _activeSetIndex!,
+                                    totalSets: _currentSets.length,
+                                    set: _currentSets[_activeSetIndex!],
+                                    weightUnit: _weightUnit,
+                                    barbellStandardKg: _barbellStandardKg,
+                                    weightFloorKg: _weightFloorKg,
+                                    isBarbell: _currentExercise.equipmentType ==
+                                            _barbellEquipment ||
+                                        _currentExercise.equipmentType == null,
+                                    suggestWeightIncrease:
+                                        _suggestWeightIncrease,
+                                    canRemove: _canRemoveSet,
+                                    onLog: () => _logSet(_activeSetIndex!),
+                                    onRemove: () =>
+                                        _removeSet(_activeSetIndex!),
+                                    onWeightDelta: (sign) =>
+                                        _adjustWeight(_activeSetIndex!, sign),
+                                    onRepsDelta: (delta) =>
+                                        _adjustReps(_activeSetIndex!, delta),
+                                    onWeightDirectKg: (kg) =>
+                                        _setWeightDirect(_activeSetIndex!, kg),
+                                    onRepsDirect: (reps) =>
+                                        _setRepsDirect(_activeSetIndex!, reps),
+                                  )
+                                : _ExerciseCompleteCard(
+                                    key: const ValueKey('complete'),
+                                    totalSets: _currentSets.length,
+                                    canRemoveSet: _canRemoveSet,
+                                    onRemoveLastSet: () =>
+                                        _removeSet(_currentSets.length - 1),
+                                  ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // The exercise name as the screen's title - the
-                          // largest, first thing read on the page, same
-                          // headline weight Home gives its own title.
-                          Expanded(
-                            child: Text(_currentExercise.name,
-                                style: AppTypography.headlineLg
-                                    .copyWith(fontSize: 32)),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          // One gapped ring segment per set, sweeping
-                          // smoothly to full whenever `_logSet` completes
-                          // one - a glanceable "how far into this exercise
-                          // am I" that doesn't need its own progress bar.
-                          _SetProgressRing(
-                            totalSets: _currentSets.length,
-                            completedSets: _completedSetsInCurrentExercise,
-                          ),
-                        ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                      AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SecondaryPillButton(
+                            label: 'Add Set', onPressed: _addSet),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        // The set count in the target is the *live* count
-                        // (grows with Add Set), not the plan's static
-                        // targetSets - and the whole target only shows up
-                        // when the plan actually prescribed a rep range.
-                        _hasRealRepTarget
-                            ? '${_currentExercise.muscleGroup} · Target ${_currentSets.length} × ${_currentExercise.targetRepsLow}-${_currentExercise.targetRepsHigh} reps'
-                            : _currentExercise.muscleGroup,
-                        style: AppTypography.bodyMd
-                            .copyWith(color: AppColors.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: AppSpacing.xxxl),
-                      // Only the current set - no list of upcoming or past
-                      // sets to scan past. Keyed on the active set (or the
-                      // "all done" state) so logging a set, or adding a new
-                      // one once the exercise was fully logged, animates
-                      // forward instead of just swapping numbers in place.
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 320),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(
-                            scale: Tween<double>(begin: 0.96, end: 1)
-                                .animate(animation),
-                            child: child,
-                          ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        flex: 2,
+                        child: PrimaryPillButton(
+                          label: _isLastExercise
+                              ? 'Finish Workout'
+                              : 'Finish Exercise',
+                          icon: _isLastExercise
+                              ? Icons.check_rounded
+                              : Icons.arrow_forward_rounded,
+                          isLoading: _isFinishing,
+                          onPressed: _onPrimaryAction,
                         ),
-                        child: _activeSetIndex != null
-                            ? _CurrentSetCard(
-                                key: ValueKey('set-$_activeSetIndex'),
-                                setIndex: _activeSetIndex!,
-                                totalSets: _currentSets.length,
-                                set: _currentSets[_activeSetIndex!],
-                                weightUnit: _weightUnit,
-                                barbellStandardKg: _barbellStandardKg,
-                                weightFloorKg: _weightFloorKg,
-                                isBarbell: _currentExercise.equipmentType ==
-                                        _barbellEquipment ||
-                                    _currentExercise.equipmentType == null,
-                                suggestWeightIncrease: _suggestWeightIncrease,
-                                canRemove: _canRemoveSet,
-                                onLog: () => _logSet(_activeSetIndex!),
-                                onRemove: () => _removeSet(_activeSetIndex!),
-                                onWeightDelta: (sign) =>
-                                    _adjustWeight(_activeSetIndex!, sign),
-                                onRepsDelta: (delta) =>
-                                    _adjustReps(_activeSetIndex!, delta),
-                                onWeightDirectKg: (kg) =>
-                                    _setWeightDirect(_activeSetIndex!, kg),
-                                onRepsDirect: (reps) =>
-                                    _setRepsDirect(_activeSetIndex!, reps),
-                              )
-                            : _ExerciseCompleteCard(
-                                key: const ValueKey('complete'),
-                                totalSets: _currentSets.length,
-                                canRemoveSet: _canRemoveSet,
-                                onRemoveLastSet: () =>
-                                    _removeSet(_currentSets.length - 1),
-                              ),
                       ),
-                      const SizedBox(height: AppSpacing.sm),
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-                  AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SecondaryPillButton(
-                        label: 'Add Set', onPressed: _addSet),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    flex: 2,
-                    child: PrimaryPillButton(
-                      label: _isLastExercise
-                          ? 'Finish Workout'
-                          : 'Finish Exercise',
-                      icon: _isLastExercise
-                          ? Icons.check_rounded
-                          : Icons.arrow_forward_rounded,
-                      isLoading: _isFinishing,
-                      onPressed: _onPrimaryAction,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
           ),
         ],
       ),
@@ -727,14 +899,16 @@ class _TelemetryBar extends StatelessWidget {
           child: SizedBox(
             width: 40,
             height: 40,
-            child: Icon(Icons.close_rounded, size: 20, color: AppColors.onSurface),
+            child:
+                Icon(Icons.close_rounded, size: 20, color: AppColors.onSurface),
           ),
         ),
         const Spacer(),
         Icon(Icons.timer_outlined, size: 16, color: AppColors.onSurfaceVariant),
         const SizedBox(width: 6),
         Text(elapsedLabel,
-            style: AppTypography.numericUnit.copyWith(color: AppColors.onSurface)),
+            style:
+                AppTypography.numericUnit.copyWith(color: AppColors.onSurface)),
         const Spacer(),
         // Balances the close button's width so the elapsed time stays
         // visually centered now that nothing sits to its right.
@@ -778,12 +952,8 @@ class _WatchDemoChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-                isVideo
-                    ? Icons.play_circle_fill_rounded
-                    : Icons.image_rounded,
-                size: 16,
-                color: AppColors.accent),
+            Icon(isVideo ? Icons.play_circle_fill_rounded : Icons.image_rounded,
+                size: 16, color: AppColors.accent),
             const SizedBox(width: 4),
             Text(isVideo ? 'Watch form' : 'View form',
                 style: AppTypography.labelCaps
@@ -808,7 +978,8 @@ Future<void> showExerciseVideoSheet(
     isScrollControlled: true,
     backgroundColor: AppColors.surfaceContainer,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
     builder: (_) => _ExerciseVideoSheet(url: url, exerciseName: exerciseName),
   );
 }
@@ -832,7 +1003,9 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
   @override
   void initState() {
     super.initState();
-    if (!_isVideo) return; // Image case is handled entirely by Image.network in build().
+    if (!_isVideo) {
+      return; // Image case is handled entirely by Image.network in build().
+    }
     final uri = Uri.tryParse(widget.url);
     if (uri == null) {
       _failed = true;
@@ -840,20 +1013,17 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
     }
     final controller = VideoPlayerController.networkUrl(uri);
     _controller = controller;
-    controller
-        .initialize()
-        .then((_) {
-          if (!mounted) return;
-          controller
-            ..setLooping(true)
-            ..setVolume(0)
-            ..play();
-          setState(() {});
-        })
-        .catchError((_) {
-          if (!mounted) return;
-          setState(() => _failed = true);
-        });
+    controller.initialize().then((_) {
+      if (!mounted) return;
+      controller
+        ..setLooping(true)
+        ..setVolume(0)
+        ..play();
+      setState(() {});
+    }).catchError((_) {
+      if (!mounted) return;
+      setState(() => _failed = true);
+    });
   }
 
   @override
@@ -936,13 +1106,15 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
                                     width: 24,
                                     height: 24,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2.5, color: AppColors.accent),
+                                        strokeWidth: 2.5,
+                                        color: AppColors.accent),
                                   ),
                                 )
                               : GestureDetector(
-                                  onTap: () => setState(() => controller.value.isPlaying
-                                      ? controller.pause()
-                                      : controller.play()),
+                                  onTap: () => setState(() =>
+                                      controller.value.isPlaying
+                                          ? controller.pause()
+                                          : controller.play()),
                                   child: Stack(
                                     alignment: Alignment.bottomRight,
                                     children: [
@@ -957,7 +1129,8 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
-                                              color: Colors.black.withOpacity(0.45),
+                                              color: Colors.black
+                                                  .withOpacity(0.45),
                                             ),
                                             child: Icon(
                                               _muted
@@ -995,7 +1168,8 @@ class _SetProgressRing extends StatelessWidget {
   final int totalSets;
   final int completedSets;
 
-  const _SetProgressRing({required this.totalSets, required this.completedSets});
+  const _SetProgressRing(
+      {required this.totalSets, required this.completedSets});
 
   @override
   Widget build(BuildContext context) {
@@ -1180,7 +1354,8 @@ class _CurrentSetCard extends StatelessWidget {
                   duration: const Duration(milliseconds: 260),
                   transitionBuilder: (child, animation) => ScaleTransition(
                     scale: Tween<double>(begin: 0.5, end: 1).animate(
-                        CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+                        CurvedAnimation(
+                            parent: animation, curve: Curves.easeOutBack)),
                     child: FadeTransition(opacity: animation, child: child),
                   ),
                   child: Text('$totalSets',
@@ -1407,9 +1582,8 @@ class _StepperButton extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: onTap == null
-              ? Colors.transparent
-              : AppColors.surfaceContainer,
+          color:
+              onTap == null ? Colors.transparent : AppColors.surfaceContainer,
         ),
         child: Icon(icon,
             size: size * 0.44,
@@ -1446,7 +1620,8 @@ Future<double?> _showQuickEntrySheet(
     isScrollControlled: true,
     backgroundColor: AppColors.surfaceContainer,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
     builder: (sheetContext) {
       return Padding(
         padding: EdgeInsets.fromLTRB(
@@ -1484,7 +1659,8 @@ Future<double?> _showQuickEntrySheet(
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadius.inset),
-                        borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+                        borderSide:
+                            BorderSide(color: AppColors.accent, width: 1.5),
                       ),
                     ),
                   ),
@@ -1517,4 +1693,3 @@ Future<double?> _showQuickEntrySheet(
     },
   );
 }
-

@@ -10,12 +10,13 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
-import '../../core/widgets/slim_action_row.dart';
 import '../plans/plans_screen.dart';
 import 'analytics_controller.dart';
 import 'analytics_models.dart';
+import 'monthly_overview_screen.dart';
 import 'progress_controller.dart';
 import 'progress_models.dart';
+import 'weekly_analytics_controller.dart';
 
 /// The AI-narrated progress screen. Registered-tier only - the caller
 /// (RootShell) runs it through AccountGate before this ever mounts.
@@ -29,16 +30,19 @@ class ProgressScreen extends StatefulWidget {
 class _ProgressScreenState extends State<ProgressScreen> {
   late final ProgressController _controller;
   late final AnalyticsController _analyticsController;
+  late final WeeklyAnalyticsController _weeklyAnalyticsController;
 
   @override
   void initState() {
     super.initState();
     _controller = context.read<ProgressController>();
     _analyticsController = context.read<AnalyticsController>();
+    _weeklyAnalyticsController = context.read<WeeklyAnalyticsController>();
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
     Future.microtask(_analyticsController.load);
+    Future.microtask(_weeklyAnalyticsController.load);
   }
 
   @override
@@ -46,28 +50,34 @@ class _ProgressScreenState extends State<ProgressScreen> {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        return RefreshIndicator(
-          onRefresh: _controller.load,
-          color: AppColors.accent,
-          backgroundColor: AppColors.surfaceContainer,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            // Bottom padding clears the floating nav pill (now that
-            // RootShell's Scaffold extends its body under it) plus the
-            // usual breathing room, so the last card scrolls up past the
-            // pill instead of staying hidden beneath it.
-            padding: EdgeInsets.fromLTRB(
-                AppSpacing.marginMobile,
-                AppSpacing.lg,
-                AppSpacing.marginMobile,
-                AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
-            child: ResourceBuilder<ProgressOverview>(
-              state: _controller.state,
-              onRetry: _controller.load,
-              builder: (context, overview) =>
-                  _ProgressContent(controller: _controller, overview: overview),
-            ),
-          ),
+        return LayoutBuilder(
+          builder: (context, viewport) {
+            return RefreshIndicator(
+              onRefresh: () => _controller.load(force: true),
+              color: AppColors.accent,
+              backgroundColor: AppColors.surfaceContainer,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                // Bottom padding clears the floating nav pill (now that
+                // RootShell's Scaffold extends its body under it) plus the
+                // usual breathing room, so the last card scrolls up past the
+                // pill instead of staying hidden beneath it.
+                padding: EdgeInsets.fromLTRB(
+                    AppSpacing.marginMobile,
+                    AppSpacing.lg,
+                    AppSpacing.marginMobile,
+                    AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
+                // Header, timeframe pills, and the independently-loaded PR /
+                // AI review sections don't need `overview` - only
+                // `_StrengthProgressCard` and `_YourInsightCard` do. Gating
+                // all of that behind one ResourceBuilder used to blank the
+                // whole screen (title included) whenever the overview call
+                // alone was slow or failed; now a stalled/errored overview
+                // only empties its own two cards.
+                child: _ProgressContent(controller: _controller),
+              ),
+            );
+          },
         );
       },
     );
@@ -76,12 +86,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
 class _ProgressContent extends StatelessWidget {
   final ProgressController controller;
-  final ProgressOverview overview;
 
-  const _ProgressContent({required this.controller, required this.overview});
+  const _ProgressContent({required this.controller});
 
   static const _timeframes = [
-    (7, '7D'),
     (30, '1M'),
     (90, '3M'),
     (180, '6M'),
@@ -92,105 +100,62 @@ class _ProgressContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionEyebrow('Performance Analytics', color: AppColors.accent),
+        SectionEyebrow('Performance', color: AppColors.accent),
         const SizedBox(height: 4),
-        Text('Progression & Metrics', style: AppTypography.headlineLg),
+        Text('Your progress', style: AppTypography.headlineLg),
         const SizedBox(height: AppSpacing.md),
-        SizedBox(
-          height: 36,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _timeframes.length,
-            separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.xs),
-            itemBuilder: (context, i) {
-              final (days, label) = _timeframes[i];
-              return PillChip(
+        Row(
+          children: [
+            for (final (days, label) in _timeframes) ...[
+              PillChip(
                 label: label,
                 selected: controller.days == days,
                 onTap: () => controller.setDays(days),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        _TrendChartCard(controller: controller, overview: overview),
-        const SizedBox(height: AppSpacing.lg),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: AppSpacing.sm,
-          mainAxisSpacing: AppSpacing.sm,
-          childAspectRatio: 1.5,
-          children: [
-            _StatTile(
-                label: 'STREAK',
-                value: '${overview.currentStreakDays}',
-                suffix: 'days'),
-            _StatTile(
-                label: 'COMPLIANCE',
-                value: '${overview.weeklyCompliancePercent}',
-                suffix: '%'),
-            _StatTile(
-                label: 'SESSIONS',
-                value: '${overview.completedSessions}',
-                suffix: '/ ${overview.scheduledSessions}'),
-            _StatTile(
-                label: 'TONNAGE',
-                value: overview.totalTonnageKg.toStringAsFixed(0),
-                suffix: 'kg'),
-            _StatTile(
-                label: 'AVG RPE',
-                value: overview.avgRpe > 0
-                    ? overview.avgRpe.toStringAsFixed(1)
-                    : '-',
-                suffix: '/ 10'),
-            _StatTile(
-                label: 'PEAK WEEK',
-                value: _weeklyBuckets(overview.heatmap)
-                    .fold<double>(0, (max, b) => b.totalTonnageKg > max ? b.totalTonnageKg : max)
-                    .toStringAsFixed(0),
-                suffix: 'kg'),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+            ],
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
-        _InsightsCard(insights: overview.insights),
+        // Only these two cards depend on `controller.state` (the overview
+        // call) - scoping the ResourceBuilder to just them means a slow or
+        // failed overview fetch no longer blanks the header/pills above or
+        // the independently-loaded PR / AI review sections below.
+        ResourceBuilder<ProgressOverview>(
+          state: controller.state,
+          onRetry: controller.load,
+          builder: (context, overview) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _StrengthProgressCard(overview: overview),
+              const SizedBox(height: AppSpacing.lg),
+              _YourInsightCard(
+                  insight: overview.insights.isNotEmpty
+                      ? overview.insights.first
+                      : null),
+            ],
+          ),
+        ),
         const SizedBox(height: AppSpacing.lg),
-        const _AiInsightsSection(),
+        _PersonalRecordsCard(controller: controller),
         const SizedBox(height: AppSpacing.lg),
-        const _ProForecastCard(),
+        const _AiMonthlyReviewSection(),
         const SizedBox(height: AppSpacing.lg),
-        const SectionEyebrow('Consistency Matrix'),
-        const SizedBox(height: AppSpacing.sm),
-        _HeatmapGrid(days: overview.heatmap),
+        const _AiWeeklyReviewSection(),
         const SizedBox(height: AppSpacing.lg),
       ],
     );
   }
 }
 
-/// One calendar week's worth of the heatmap, reduced to the three series the
-/// hero chart can plot: completed-session count (always available), summed
-/// tonnage, and average RPE (both only as real as what WorkoutSessions
-/// actually logged - no per-exercise 1RM history exists to chart instead).
+/// One calendar week's worth of the heatmap, reduced to summed tonnage - the
+/// only series the hero card can honestly plot as "strength progress"; no
+/// per-exercise 1RM history exists to derive a truer strength curve from.
 class _WeekBucket {
   final DateTime start;
-  final int completedCount;
   final double totalTonnageKg;
-  final double? avgRpe;
 
-  const _WeekBucket({
-    required this.start,
-    required this.completedCount,
-    required this.totalTonnageKg,
-    required this.avgRpe,
-  });
-
-  double valueFor(TrendMetric metric) => switch (metric) {
-        TrendMetric.sessions => completedCount.toDouble(),
-        TrendMetric.volume => totalTonnageKg,
-        TrendMetric.rpe => avgRpe ?? 0,
-      };
+  const _WeekBucket({required this.start, required this.totalTonnageKg});
 }
 
 List<_WeekBucket> _weeklyBuckets(List<HeatmapDay> days) {
@@ -198,20 +163,11 @@ List<_WeekBucket> _weeklyBuckets(List<HeatmapDay> days) {
   final sorted = [...days]..sort((a, b) => a.date.compareTo(b.date));
   final buckets = <_WeekBucket>[];
   DateTime? bucketStart;
-  var count = 0;
   var tonnage = 0.0;
-  final rpeValues = <double>[];
 
   void flush() {
     if (bucketStart == null) return;
-    buckets.add(_WeekBucket(
-      start: bucketStart,
-      completedCount: count,
-      totalTonnageKg: tonnage,
-      avgRpe: rpeValues.isEmpty
-          ? null
-          : rpeValues.reduce((a, b) => a + b) / rpeValues.length,
-    ));
+    buckets.add(_WeekBucket(start: bucketStart, totalTonnageKg: tonnage));
   }
 
   for (final day in sorted) {
@@ -219,87 +175,55 @@ List<_WeekBucket> _weeklyBuckets(List<HeatmapDay> days) {
     if (day.date.difference(bucketStart).inDays >= 7) {
       flush();
       bucketStart = day.date;
-      count = 0;
       tonnage = 0;
-      rpeValues.clear();
     }
-    if (day.status == 'Completed') count++;
     if (day.tonnageKg != null) tonnage += day.tonnageKg!;
-    if (day.rpeScore != null) rpeValues.add(day.rpeScore!);
   }
   flush();
   return buckets;
 }
 
-extension on TrendMetric {
-  String get headerLabel => switch (this) {
-        TrendMetric.sessions => 'SESSIONS COMPLETED',
-        TrendMetric.volume => 'TOTAL VOLUME',
-        TrendMetric.rpe => 'AVERAGE RPE',
-      };
-
-  String get pillLabel => switch (this) {
-        TrendMetric.sessions => 'Sessions',
-        TrendMetric.volume => 'Volume',
-        TrendMetric.rpe => 'RPE',
-      };
-
-  String get unit => switch (this) {
-        TrendMetric.sessions => 'sessions',
-        TrendMetric.volume => 'kg',
-        TrendMetric.rpe => 'RPE',
-      };
+/// Percent change from the first to the last weekly bucket - `null` when
+/// there isn't enough range to compare, or the starting point was zero.
+double? _percentChange(List<_WeekBucket> buckets) {
+  if (buckets.length < 2) return null;
+  final first = buckets.first.totalTonnageKg;
+  final last = buckets.last.totalTonnageKg;
+  if (first <= 0) return null;
+  return (last - first) / first * 100;
 }
 
-class _TrendChartCard extends StatelessWidget {
-  final ProgressController controller;
+class _StrengthProgressCard extends StatelessWidget {
   final ProgressOverview overview;
 
-  const _TrendChartCard({required this.controller, required this.overview});
+  const _StrengthProgressCard({required this.overview});
 
   @override
   Widget build(BuildContext context) {
     final buckets = _weeklyBuckets(overview.heatmap);
-    final metric = controller.metric;
+    final pct = _percentChange(buckets);
 
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(metric.headerLabel,
-                        style: AppTypography.labelCaps
-                            .copyWith(color: AppColors.onSurfaceVariant)),
-                    const SizedBox(height: 2),
-                    _TrendHeaderValue(overview: overview, metric: metric),
-                  ],
-                ),
-              ),
-              if (buckets.length > 1)
-                _TrendBadge(buckets: buckets, metric: metric),
-            ],
-          ),
+          const SectionEyebrow('Strength Progress'),
           const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              for (final m in TrendMetric.values) ...[
-                _MetricPill(
-                  label: m.pillLabel,
-                  selected: metric == m,
-                  onTap: () => controller.setMetric(m),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-              ],
-            ],
+          Text(
+            pct == null
+                ? '--'
+                : '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+            style: AppTypography.displayStatMobile.copyWith(
+                color: pct == null
+                    ? AppColors.onSurfaceVariant
+                    : (pct >= 0 ? AppColors.accent : AppColors.error)),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          if (buckets.isEmpty)
+          const SizedBox(height: 2),
+          Text('Overall strength',
+              style: AppTypography.bodySm
+                  .copyWith(color: AppColors.onSurfaceVariant)),
+          const SizedBox(height: AppSpacing.md),
+          if (buckets.length < 2)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
@@ -307,101 +231,7 @@ class _TrendChartCard extends StatelessWidget {
                       style: AppTypography.bodySm)),
             )
           else
-            SizedBox(
-                height: 160,
-                child: _TrendChart(buckets: buckets, metric: metric)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrendHeaderValue extends StatelessWidget {
-  final ProgressOverview overview;
-  final TrendMetric metric;
-
-  const _TrendHeaderValue({required this.overview, required this.metric});
-
-  @override
-  Widget build(BuildContext context) {
-    final (value, suffix) = switch (metric) {
-      TrendMetric.sessions => (
-          '${overview.completedSessions}',
-          'of ${overview.scheduledSessions}'
-        ),
-      TrendMetric.volume => (overview.totalTonnageKg.toStringAsFixed(0), 'kg lifted'),
-      TrendMetric.rpe => (overview.avgRpe.toStringAsFixed(1), '/ 10 intensity'),
-    };
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Text(value, style: AppTypography.displayStatMobile),
-        const SizedBox(width: 4),
-        Text(suffix,
-            style: AppTypography.numericUnit
-                .copyWith(color: AppColors.onSurfaceVariant)),
-      ],
-    );
-  }
-}
-
-class _MetricPill extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _MetricPill(
-      {required this.label, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 6),
-        decoration: BoxDecoration(
-            color: selected ? AppColors.accent : AppColors.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(AppRadius.full)),
-        child: Text(label,
-            style: AppTypography.labelSm.copyWith(
-                color: selected ? AppColors.onAccent : AppColors.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
-      ),
-    );
-  }
-}
-
-class _TrendBadge extends StatelessWidget {
-  final List<_WeekBucket> buckets;
-  final TrendMetric metric;
-
-  const _TrendBadge({required this.buckets, required this.metric});
-
-  @override
-  Widget build(BuildContext context) {
-    final delta = buckets.last.valueFor(metric) - buckets.first.valueFor(metric);
-    final up = delta >= 0;
-    final deltaLabel = metric == TrendMetric.sessions
-        ? delta.round().toString()
-        : delta.toStringAsFixed(1);
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
-      decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(AppRadius.full)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(up ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-              size: 14, color: AppColors.accent),
-          const SizedBox(width: 4),
-          Text('${delta >= 0 ? '+' : ''}$deltaLabel / wk',
-              style: AppTypography.labelSm
-                  .copyWith(color: AppColors.accent, fontWeight: FontWeight.w600)),
+            SizedBox(height: 140, child: _TrendChart(buckets: buckets)),
         ],
       ),
     );
@@ -410,22 +240,18 @@ class _TrendBadge extends StatelessWidget {
 
 class _TrendChart extends StatelessWidget {
   final List<_WeekBucket> buckets;
-  final TrendMetric metric;
 
-  const _TrendChart({required this.buckets, required this.metric});
+  const _TrendChart({required this.buckets});
 
   @override
   Widget build(BuildContext context) {
     final spots = [
       for (var i = 0; i < buckets.length; i++)
-        FlSpot(i.toDouble(), buckets[i].valueFor(metric)),
+        FlSpot(i.toDouble(), buckets[i].totalTonnageKg),
     ];
     final maxValue =
-        buckets.map((b) => b.valueFor(metric)).reduce((a, b) => a > b ? a : b);
-    final maxY = metric == TrendMetric.rpe
-        ? 10.0
-        : (maxValue <= 0 ? 1.0 : maxValue * 1.2);
-    final labelEvery = (buckets.length / 5).ceil().clamp(1, buckets.length);
+        buckets.map((b) => b.totalTonnageKg).reduce((a, b) => a > b ? a : b);
+    final maxY = maxValue <= 0 ? 1.0 : maxValue * 1.2;
 
     return LineChart(
       LineChartData(
@@ -450,11 +276,13 @@ class _TrendChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              interval: labelEvery.toDouble(),
+              // Only the first and last week get a date label - the mockup
+              // shows a plain start/end range under the sparkline, not a
+              // tick per week.
+              interval: 1,
               getTitlesWidget: (value, meta) {
                 final i = value.round();
-                if (i < 0 || i >= buckets.length) return const SizedBox.shrink();
-                if (i != buckets.length - 1 && i % labelEvery != 0) {
+                if (i != 0 && i != buckets.length - 1) {
                   return const SizedBox.shrink();
                 }
                 final isLast = i == buckets.length - 1;
@@ -464,8 +292,7 @@ class _TrendChart extends StatelessWidget {
                     DateFormat('MMM d').format(buckets[i].start),
                     style: AppTypography.labelCaps.copyWith(
                         fontSize: 10,
-                        color:
-                            isLast ? AppColors.accent : AppColors.outline),
+                        color: isLast ? AppColors.accent : AppColors.outline),
                   ),
                 );
               },
@@ -478,7 +305,7 @@ class _TrendChart extends StatelessWidget {
             getTooltipItems: (touchedSpots) => [
               for (final spot in touchedSpots)
                 LineTooltipItem(
-                  '${metric == TrendMetric.sessions ? spot.y.round() : spot.y.toStringAsFixed(1)} ${metric.unit}\n${DateFormat('MMM d').format(buckets[spot.x.round()].start)}',
+                  '${spot.y.toStringAsFixed(0)} kg\n${DateFormat('MMM d').format(buckets[spot.x.round()].start)}',
                   AppTypography.labelSm.copyWith(color: AppColors.onSurface),
                 ),
             ],
@@ -498,9 +325,7 @@ class _TrendChart extends StatelessWidget {
                 final isLast = index == spots.length - 1;
                 return FlDotCirclePainter(
                   radius: isLast ? 5 : 3,
-                  color: isLast
-                      ? AppColors.accent
-                      : AppColors.surfaceContainer,
+                  color: isLast ? AppColors.accent : AppColors.surfaceContainer,
                   strokeColor: isLast ? AppColors.accent : AppColors.outline,
                   strokeWidth: 1.5,
                 );
@@ -524,29 +349,74 @@ class _TrendChart extends StatelessWidget {
   }
 }
 
-class _InsightsCard extends StatelessWidget {
-  final List<String> insights;
+String _formatPrWeight(double kg) =>
+    kg % 1 == 0 ? kg.toStringAsFixed(0) : kg.toStringAsFixed(1);
 
-  const _InsightsCard({required this.insights});
+/// Real per-exercise Personal Records - the heaviest set ever logged for
+/// each exercise (see `usp_WorkoutSession_GetPersonalRecords`), sourced from
+/// [ProgressController.prsState] rather than mock data. That state loads
+/// independently of the overview (see the controller), so this card has its
+/// own loading/error/empty rendering instead of gating on the page's
+/// [ResourceBuilder].
+class _PersonalRecordsCard extends StatelessWidget {
+  final ProgressController controller;
+
+  const _PersonalRecordsCard({required this.controller});
 
   @override
   Widget build(BuildContext context) {
+    final state = controller.prsState;
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionEyebrow('Insights', color: AppColors.accent),
-          const SizedBox(height: AppSpacing.sm),
-          if (insights.isEmpty)
-            Text('Log a few more sessions to unlock your first insight.',
-                style: AppTypography.bodySm)
+          const SectionEyebrow('Personal Records'),
+          const SizedBox(height: AppSpacing.md),
+          if (state.isLoading)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppColors.accent),
+                ),
+              ),
+            )
+          else if (state.error != null)
+            Text(state.error!, style: AppTypography.bodySm)
+          else if (state.data == null || state.data!.isEmpty)
+            Text('Log a set during a workout to start tracking PRs.',
+                style: AppTypography.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant))
           else
-            for (final line in insights)
+            for (final record in state.data!)
               Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(line,
-                    style: AppTypography.bodySm
-                        .copyWith(color: AppColors.onSurface)),
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Icon(Icons.emoji_events_rounded,
+                        size: 18, color: AppColors.secondary),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(record.exerciseName,
+                          style: AppTypography.bodyMd,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    Text(
+                        '${_formatPrWeight(record.weightKg)} kg × ${record.reps}',
+                        style: AppTypography.numericUnit
+                            .copyWith(fontWeight: FontWeight.w600)),
+                    if (record.deltaKg != null && record.deltaKg! > 0) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      Text('+${_formatPrWeight(record.deltaKg!)}',
+                          style: AppTypography.labelSm
+                              .copyWith(color: AppColors.accent)),
+                    ],
+                  ],
+                ),
               ),
         ],
       ),
@@ -554,69 +424,151 @@ class _InsightsCard extends StatelessWidget {
   }
 }
 
-/// The real, AI-generated monthly report (Pro/Advanced only) - distinct from
-/// the rule-based `_InsightsCard` above and the still-unbuilt `_ProForecastCard`
-/// teaser below. Reads `AnalyticsController` directly via `context.watch`
-/// rather than threading its state through `_ProgressContent`'s constructor.
-class _AiInsightsSection extends StatelessWidget {
-  const _AiInsightsSection();
+class _YourInsightCard extends StatelessWidget {
+  final String? insight;
+
+  const _YourInsightCard({required this.insight});
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      background: AppColors.surfaceContainerLow,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionEyebrow('Your Insight', color: AppColors.accent),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '"${insight ?? 'Log a few more sessions to unlock your first insight.'}"',
+            style: AppTypography.bodyLg.copyWith(
+                color: AppColors.onSurface, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// AI Monthly Review entry point - a locked upsell button for Free tier
+/// (matching the design's "AI MONTHLY REVIEW · PRO" bracket button), or the
+/// real generated report inline for Pro once it has data.
+class _AiMonthlyReviewSection extends StatelessWidget {
+  const _AiMonthlyReviewSection();
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AnalyticsController>();
 
     if (controller.requiresUpgrade) {
-      return const _AiInsightsLockedCard();
+      return const _AiReviewUpsellButton(
+          label: 'AI MONTHLY REVIEW', tier: 'PRO');
     }
 
     final state = controller.state;
+
+    if (controller.notEnoughData) {
+      return _AiRecapNotice(
+        title: 'AI Monthly Review',
+        icon: Icons.insights_outlined,
+        message: state.error != null && state.error!.isNotEmpty
+            ? state.error!
+            : "Log a bit more this month and your AI review will unlock once there's enough to analyze.",
+        isRefreshing: controller.isRefreshing,
+        onRefresh: controller.refresh,
+      );
+    }
+
     if (state.error != null && state.error!.isNotEmpty) {
-      return SectionCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _AiInsightsHeader(controller: controller),
-            const SizedBox(height: AppSpacing.sm),
-            Text(state.error!, style: AppTypography.bodySm),
-          ],
-        ),
+      return _AiRecapNotice(
+        title: 'AI Monthly Review',
+        message: state.error!,
+        isRefreshing: controller.isRefreshing,
+        onRefresh: controller.refresh,
       );
     }
 
     if (!state.hasData) {
-      return SectionCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _AiInsightsHeader(controller: controller),
-            const SizedBox(height: AppSpacing.lg),
-            Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: AppColors.accent),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-        ),
+      return _AiRecapLoading(
+        title: 'AI Monthly Review',
+        isRefreshing: controller.isRefreshing,
+        onRefresh: controller.refresh,
       );
     }
 
-    final analytics = state.data!;
+    return _AiRecapCard(
+      title: 'AI Monthly Review',
+      analytics: state.data!,
+      isRefreshing: controller.isRefreshing,
+      onRefresh: controller.refresh,
+    );
+  }
+}
+
+class _AiInsightsHeader extends StatelessWidget {
+  final String title;
+  final bool isRefreshing;
+  final VoidCallback onRefresh;
+
+  const _AiInsightsHeader({
+    required this.title,
+    required this.isRefreshing,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        SectionEyebrow(title, color: AppColors.accent),
+        IconButton(
+          onPressed: isRefreshing ? null : onRefresh,
+          icon: isRefreshing
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.onSurfaceVariant))
+              : Icon(Icons.refresh_rounded,
+                  size: 18, color: AppColors.onSurfaceVariant),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          splashRadius: 18,
+        ),
+      ],
+    );
+  }
+}
+
+/// The inline AI recap card, shared by the monthly (Pro) and weekly (Advanced)
+/// sections - both report shapes satisfy [AnalyticsRecap], so the same body
+/// works and only the title/link copy differ.
+class _AiRecapCard extends StatelessWidget {
+  final String title;
+  final AnalyticsRecap analytics;
+  final bool isRefreshing;
+  final VoidCallback onRefresh;
+
+  const _AiRecapCard({
+    required this.title,
+    required this.analytics,
+    required this.isRefreshing,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final periodWord = analytics.isWeekly ? 'week' : 'month';
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _AiInsightsHeader(controller: controller),
+          _AiInsightsHeader(
+              title: title, isRefreshing: isRefreshing, onRefresh: onRefresh),
           const SizedBox(height: 2),
-          Text(
-            DateFormat('MMMM yyyy')
-                .format(DateTime(analytics.year, analytics.month)),
-            style: AppTypography.labelCaps
-                .copyWith(color: AppColors.onSurfaceVariant),
-          ),
+          Text(analytics.periodLabel,
+              style: AppTypography.labelCaps
+                  .copyWith(color: AppColors.onSurfaceVariant)),
           const SizedBox(height: AppSpacing.sm),
           if (analytics.strengths.isNotEmpty) ...[
             Text('STRENGTHS',
@@ -641,47 +593,124 @@ class _AiInsightsSection extends StatelessWidget {
               _ImprovementTile(improvement: improvement),
             const SizedBox(height: AppSpacing.xs),
           ],
-          if (analytics.focusForNextMonth.isNotEmpty) ...[
-            Text('FOCUS FOR NEXT MONTH',
+          if (analytics.focusText.isNotEmpty) ...[
+            Text('FOCUS FOR NEXT ${periodWord.toUpperCase()}',
                 style: AppTypography.labelCaps
                     .copyWith(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: 6),
-            Text(analytics.focusForNextMonth,
+            Text(analytics.focusText,
                 style:
                     AppTypography.bodySm.copyWith(color: AppColors.onSurface)),
           ],
+          const SizedBox(height: AppSpacing.md),
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                fullscreenDialog: true,
+                builder: (routeContext) => MonthlyOverviewScreen(
+                  analytics: analytics,
+                  onDone: () => Navigator.of(routeContext).pop(),
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                    'View full ${analytics.isWeekly ? 'weekly' : 'monthly'} recap',
+                    style: AppTypography.labelSm.copyWith(
+                        color: AppColors.accent, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward_rounded,
+                    size: 14, color: AppColors.accent),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _AiInsightsHeader extends StatelessWidget {
-  final AnalyticsController controller;
+/// Shared non-report state for both AI recap sections - the "not enough data"
+/// encouraging card and the generic error card.
+class _AiRecapNotice extends StatelessWidget {
+  final String title;
+  final String message;
+  final bool isRefreshing;
+  final VoidCallback onRefresh;
+  final IconData? icon;
 
-  const _AiInsightsHeader({required this.controller});
+  const _AiRecapNotice({
+    required this.title,
+    required this.message,
+    required this.isRefreshing,
+    required this.onRefresh,
+    this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        SectionEyebrow('AI Monthly Report', color: AppColors.accent),
-        IconButton(
-          onPressed: controller.isRefreshing ? null : controller.refresh,
-          icon: controller.isRefreshing
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.onSurfaceVariant))
-              : Icon(Icons.refresh_rounded,
-                  size: 18, color: AppColors.onSurfaceVariant),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          splashRadius: 18,
-        ),
-      ],
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AiInsightsHeader(
+              title: title, isRefreshing: isRefreshing, onRefresh: onRefresh),
+          const SizedBox(height: AppSpacing.sm),
+          if (icon == null)
+            Text(message, style: AppTypography.bodySm)
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 18, color: AppColors.onSurfaceVariant),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(message,
+                      style: AppTypography.bodySm
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared loading state for both AI recap sections.
+class _AiRecapLoading extends StatelessWidget {
+  final String title;
+  final bool isRefreshing;
+  final VoidCallback onRefresh;
+
+  const _AiRecapLoading({
+    required this.title,
+    required this.isRefreshing,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AiInsightsHeader(
+              title: title, isRefreshing: isRefreshing, onRefresh: onRefresh),
+          const SizedBox(height: AppSpacing.lg),
+          Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2.5, color: AppColors.accent),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ),
     );
   }
 }
@@ -717,8 +746,7 @@ class _ImprovementTile extends StatelessWidget {
                         .copyWith(fontWeight: FontWeight.w600)),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                     color: _priorityColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(AppRadius.full)),
@@ -730,150 +758,113 @@ class _ImprovementTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(improvement.recommendation,
-              style:
-                  AppTypography.bodySm.copyWith(color: AppColors.onSurface)),
+              style: AppTypography.bodySm.copyWith(color: AppColors.onSurface)),
         ],
       ),
     );
   }
 }
 
-/// Locked upsell teaser for a Free-tier user - the same slim single-row
-/// pattern as Home's `AiInsightsTeaserCard` (icon, label, value, trailing
-/// "PRO" pill) rather than a full card, so every Pro teaser in the app reads
-/// as one consistent shape instead of Progress inventing its own heavier one.
-class _AiInsightsLockedCard extends StatelessWidget {
-  const _AiInsightsLockedCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return SlimActionRow(
-      icon: Icons.insights_rounded,
-      iconColor: AppColors.secondary,
-      iconBackground: AppColors.secondary.withOpacity(0.16),
-      label: 'AI MONTHLY REPORT',
-      value: 'Unlock strengths, improvements & focus for the month',
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          AppColors.secondaryContainer.withOpacity(0.18),
-          AppColors.surfaceContainer,
-        ],
-      ),
-      borderColor: AppColors.secondary.withOpacity(0.3),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-            color: AppColors.secondary,
-            borderRadius: BorderRadius.circular(AppRadius.full)),
-        child: Text('PRO',
-            style: AppTypography.labelCaps
-                .copyWith(color: AppColors.onAccent, fontSize: 9)),
-      ),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PlansScreen()),
-      ),
-    );
-  }
-}
-
-/// Static, locked-look "predictive forecast" teaser - like the Today AI
-/// overview teaser, no real forecasting model backs this, it's a Pro
-/// merchandising row that routes into Plans. Same slim shape as
-/// `_AiInsightsLockedCard` above so the two Pro upsells on this screen read
-/// as a matched pair rather than two differently-built cards.
-class _ProForecastCard extends StatelessWidget {
-  const _ProForecastCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return SlimActionRow(
-      icon: Icons.model_training_rounded,
-      iconColor: AppColors.secondary,
-      iconBackground: AppColors.secondary.withOpacity(0.16),
-      label: 'PREDICTIVE FORECAST',
-      value: 'Unlock a projected training curve & load forecast',
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          AppColors.secondaryContainer.withOpacity(0.18),
-          AppColors.surfaceContainer,
-        ],
-      ),
-      borderColor: AppColors.secondary.withOpacity(0.3),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-            color: AppColors.secondary,
-            borderRadius: BorderRadius.circular(AppRadius.full)),
-        child: Text('PRO',
-            style: AppTypography.labelCaps
-                .copyWith(color: AppColors.onAccent, fontSize: 9)),
-      ),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PlansScreen()),
-      ),
-    );
-  }
-}
-
-class _HeatmapGrid extends StatelessWidget {
-  final List<HeatmapDay> days;
-
-  const _HeatmapGrid({required this.days});
-
-  @override
-  Widget build(BuildContext context) {
-    return SectionCard(
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (final day in days)
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                  color: AppColors.forSessionStatus(day.status),
-                  borderRadius: BorderRadius.circular(4)),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
+/// Locked upsell button for a user below the required tier - the bracketed
+/// "AI MONTHLY REVIEW · PRO" / "WEEKLY AI REVIEW · ADVANCED" pill, routing
+/// into Plans.
+class _AiReviewUpsellButton extends StatelessWidget {
   final String label;
-  final String value;
-  final String suffix;
+  final String tier;
 
-  const _StatTile(
-      {required this.label, required this.value, required this.suffix});
+  const _AiReviewUpsellButton({required this.label, required this.tier});
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      background: AppColors.surfaceContainerLow,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(label, style: AppTypography.labelCaps),
-          const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value, style: AppTypography.metricMd),
-              const SizedBox(width: 4),
-              Text(suffix, style: AppTypography.bodySm),
-            ],
-          ),
-        ],
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PlansScreen()),
       ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(color: AppColors.secondary.withOpacity(0.4)),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome_rounded,
+                size: 16, color: AppColors.secondary),
+            const SizedBox(width: AppSpacing.xs),
+            Text(label,
+                style: AppTypography.labelCaps
+                    .copyWith(color: AppColors.secondary)),
+            const SizedBox(width: AppSpacing.xs),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  borderRadius: BorderRadius.circular(AppRadius.full)),
+              child: Text(tier,
+                  style: AppTypography.labelCaps
+                      .copyWith(color: AppColors.onAccent, fontSize: 9)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Advanced-only weekly AI review entry point. A Pro user sees the locked
+/// "WEEKLY AI REVIEW · ADVANCED" upsell; an Advanced user gets the inline
+/// weekly report, whose full recap appends the meal/split suggestion slides.
+class _AiWeeklyReviewSection extends StatelessWidget {
+  const _AiWeeklyReviewSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<WeeklyAnalyticsController>();
+
+    if (controller.requiresUpgrade) {
+      return const _AiReviewUpsellButton(
+          label: 'WEEKLY AI REVIEW', tier: 'ADVANCED');
+    }
+
+    final state = controller.state;
+
+    if (controller.notEnoughData) {
+      return _AiRecapNotice(
+        title: 'AI Weekly Review',
+        icon: Icons.insights_outlined,
+        message: state.error != null && state.error!.isNotEmpty
+            ? state.error!
+            : "Log a bit more this week and your weekly review will unlock once there's enough to analyze.",
+        isRefreshing: controller.isRefreshing,
+        onRefresh: controller.refresh,
+      );
+    }
+
+    if (state.error != null && state.error!.isNotEmpty) {
+      return _AiRecapNotice(
+        title: 'AI Weekly Review',
+        message: state.error!,
+        isRefreshing: controller.isRefreshing,
+        onRefresh: controller.refresh,
+      );
+    }
+
+    if (!state.hasData) {
+      return _AiRecapLoading(
+        title: 'AI Weekly Review',
+        isRefreshing: controller.isRefreshing,
+        onRefresh: controller.refresh,
+      );
+    }
+
+    return _AiRecapCard(
+      title: 'AI Weekly Review',
+      analytics: state.data!,
+      isRefreshing: controller.isRefreshing,
+      onRefresh: controller.refresh,
     );
   }
 }

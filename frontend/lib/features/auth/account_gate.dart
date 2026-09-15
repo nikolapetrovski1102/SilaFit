@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../root_shell.dart';
 import '../onboarding/widgets/intro_slide.dart' show OnboardingIconMark;
 import 'auth_controller.dart';
 import 'register_screen.dart';
@@ -20,18 +22,51 @@ class AccountGate {
   AccountGate._();
 
   static Future<bool> ensure(BuildContext context) async {
+    // ignore: avoid_print
+    print('[GATE] ensure() called, stack=${StackTrace.current}');
     final auth = context.read<AuthController>();
     if (auth.isRegistered) return true;
 
     final createdAccount = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const _AccountRequiredSheet()),
     );
+    // ignore: avoid_print
+    print('[GATE] ensure() resolved with $createdAccount');
     return createdAccount ?? false;
   }
 }
 
-class _AccountRequiredSheet extends StatelessWidget {
+class _AccountRequiredSheet extends StatefulWidget {
   const _AccountRequiredSheet();
+
+  @override
+  State<_AccountRequiredSheet> createState() => _AccountRequiredSheetState();
+}
+
+class _AccountRequiredSheetState extends State<_AccountRequiredSheet>
+    with SingleTickerProviderStateMixin {
+  late final _lockController = AnimationController(vsync: this);
+
+  @override
+  void initState() {
+    super.initState();
+    // Let the screen settle before the lock animates, so it reads as a
+    // deliberate beat rather than firing mid-transition.
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _lockController.value = 1;
+      } else {
+        _lockController.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _lockController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,9 +84,29 @@ class _AccountRequiredSheet extends StatelessWidget {
             children: [
               Center(
                 child: OnboardingIconMark(
-                  size: 96,
-                  child: Icon(Icons.lock_outline_rounded,
-                      color: AppColors.accent, size: 36),
+                  size: 168,
+                  showDot: false,
+                  child: SizedBox(
+                    width: 118,
+                    height: 118,
+                    child: ColorFiltered(
+                      colorFilter: ColorFilter.mode(
+                        AppColors.accent,
+                        BlendMode.srcIn,
+                      ),
+                      child: Lottie.asset(
+                        'assets/lottie_animations/locked_lock.json',
+                        fit: BoxFit.contain,
+                        repeat: false,
+                        controller: _lockController,
+                        onLoaded: (composition) {
+                          // 2x the natural speed.
+                          _lockController.duration =
+                              composition.duration ~/ 2;
+                        },
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -80,7 +135,10 @@ class _AccountRequiredSheet extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
               SecondaryPillButton(
                   label: 'Not Now',
-                  onPressed: () => Navigator.of(context).pop(false)),
+                  onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const RootShell()),
+                        (route) => false,
+                      )),
               const SizedBox(height: AppSpacing.lg),
             ],
           ),

@@ -91,7 +91,8 @@ class _TodayScreenState extends State<TodayScreen> {
     if (split.splitId == _splitDetailForId) return;
     _splitDetailForId = split.splitId;
     try {
-      final detail = await context.read<SplitsRepository>().getDetail(split.splitId);
+      final detail =
+          await context.read<SplitsRepository>().getDetail(split.splitId);
       if (!mounted || _splitDetailForId != split.splitId) return;
       setState(() => _splitDetail = detail);
     } catch (_) {
@@ -105,7 +106,11 @@ class _TodayScreenState extends State<TodayScreen> {
     final sessionId = dashboard.session.workoutSessionId;
     if (sessionId == null) {
       _draftCheckedForId = null;
-      if (_hasDraft) setState(() { _hasDraft = false; _draftProgress = 0; });
+      if (_hasDraft)
+        setState(() {
+          _hasDraft = false;
+          _draftProgress = 0;
+        });
       return;
     }
     if (sessionId == _draftCheckedForId) return;
@@ -208,6 +213,7 @@ class _TodayScreenState extends State<TodayScreen> {
               child: ResourceBuilder<TodayDashboard>(
                 state: _controller.state,
                 onRetry: _controller.load,
+                minHeight: viewportHeight,
                 builder: (context, dashboard) {
                   unawaited(_ensureSplitDetail(dashboard));
                   unawaited(_ensureDraftCheck(dashboard));
@@ -302,7 +308,8 @@ class _TodayContent extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(greeting,
-                      style: AppTypography.headlineLg.copyWith(fontSize: 28 * scale)),
+                      style: AppTypography.headlineLg
+                          .copyWith(fontSize: 28 * scale)),
                   SizedBox(height: 2 * scale),
                   Text(dateLabel,
                       style: AppTypography.bodyMd
@@ -336,20 +343,12 @@ class _TodayContent extends StatelessWidget {
           scale: scale,
           isResumingWorkout: isResumingWorkout,
           workoutProgress: workoutProgress,
-          onStart: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                  builder: (_) => ActiveWorkoutTrackerScreen(
-                      session: dashboard.session,
-                      exercises: dashboard.targetExercises,
-                      controller: controller)),
-            );
-            // The tracker screen may have saved, cleared, or left untouched
-            // an `ActiveWorkoutDraft` for this same session - re-check
-            // rather than trust whatever "Continue Workout" showed before
-            // it was pushed.
-            onWorkoutScreenClosed();
-          },
+          workoutBuilder: (_) => ActiveWorkoutTrackerScreen(
+            session: dashboard.session,
+            exercises: dashboard.targetExercises,
+            controller: controller,
+          ),
+          onWorkoutClosed: onWorkoutScreenClosed,
         ),
         SizedBox(height: AppSpacing.xl * scale),
         ActiveSplitCard(activeSplit: dashboard.activeSplit, scale: scale),

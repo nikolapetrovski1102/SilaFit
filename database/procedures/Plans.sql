@@ -64,3 +64,68 @@ BEGIN
     WHERE us.UserId = @UserId;
 END
 GO
+
+-- Every paying subscriber currently entitled to a given plan, with the
+-- contact details the monthly review batch needs to reach them. "Active"
+-- means the subscription row says so AND it has not lapsed - a row whose
+-- ExpiresAtUtc has passed is treated as expired even before an expiry sweep
+-- rewrites Status. Inactive (deleted/disabled) users are excluded.
+CREATE OR ALTER PROCEDURE dbo.usp_Plans_GetActiveSubscribers
+    @PlanCode NVARCHAR(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        u.UserId,
+        u.DisplayName,
+        u.Email,
+        sp.Code AS PlanCode,
+        us.ExpiresAtUtc
+    FROM dbo.UserSubscriptions us
+    INNER JOIN dbo.SubscriptionPlans sp ON sp.PlanId = us.PlanId
+    INNER JOIN dbo.Users u ON u.UserId = us.UserId
+    WHERE sp.Code = @PlanCode
+      AND us.Status = 'Active'
+      AND u.IsActive = 1
+      AND (us.ExpiresAtUtc IS NULL OR us.ExpiresAtUtc > SYSUTCDATETIME())
+    ORDER BY u.CreatedAtUtc;
+END
+GO
+
+-- The complement of usp_Plans_GetActiveSubscribers: active users with an email
+-- on file who are NOT currently entitled to a paid plan. This is the audience
+-- for the monthly review teaser (stats + upgrade CTA), not the full AI report.
+--
+-- "Paid" is the PRO/ADVANCED plan-code set the rest of the app gates on
+-- (SubscriptionGate.ProPlanCodes); the FREE code is a catalogue row only, so
+-- free users simply have no qualifying subscription row. Excluding by explicit
+-- code list means a newly added paid tier must be added here too.
+CREATE OR ALTER PROCEDURE dbo.usp_Plans_GetNonSubscribers
+    @MaxUsers INT = 20000
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT TOP (@MaxUsers)
+        u.UserId,
+        u.DisplayName,
+        u.Email,
+        N'FREE' AS PlanCode,
+        CAST(NULL AS DATETIME2(3)) AS ExpiresAtUtc
+    FROM dbo.Users u
+    WHERE u.IsActive = 1
+      AND u.Email IS NOT NULL
+      AND LTRIM(RTRIM(u.Email)) <> N''
+      AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.UserSubscriptions us
+          INNER JOIN dbo.SubscriptionPlans sp ON sp.PlanId = us.PlanId
+          WHERE us.UserId = u.UserId
+            AND us.Status = 'Active'
+            AND (us.ExpiresAtUtc IS NULL OR us.ExpiresAtUtc > SYSUTCDATETIME())
+            AND sp.Code IN (N'PRO', N'ADVANCED')
+      )
+    ORDER BY u.CreatedAtUtc;
+END
+GO

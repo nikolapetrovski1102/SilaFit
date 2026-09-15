@@ -27,6 +27,19 @@ public sealed class AdminAccountModel
     public Guid? RoleId { get; set; }
 
     public string? RoleName { get; set; }
+
+    /// <summary>Optional recovery address. Null for most operators - the "send email code
+    /// instead" option only appears once one is on file (see Silen.Tools.AdminProvision --set-email).</summary>
+    public string? Email { get; set; }
+
+    /// <summary>PBKDF2 hash/salt of the most recently emailed second-factor code, or null
+    /// when none is outstanding. Cleared on every successful sign-in (usp_Admin_RecordSuccessfulLogin).</summary>
+    public byte[]? EmailOtpCodeHash { get; set; }
+    public byte[]? EmailOtpCodeSalt { get; set; }
+    public DateTime? EmailOtpExpiresAtUtc { get; set; }
+
+    /// <summary>Drives the resend cooldown in AdminAuthService.SendEmailCodeAsync.</summary>
+    public DateTime? EmailOtpLastSentAtUtc { get; set; }
 }
 
 /// <summary>Result of recording a failed sign-in - what the caller needs to say "try again in N minutes".</summary>

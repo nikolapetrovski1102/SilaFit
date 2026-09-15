@@ -168,6 +168,32 @@ class WeekDayStatus {
   }
 }
 
+/// One completed set, sent to `/today/workout/complete` alongside the
+/// session aggregate - mirrors `Silen.Common.Dtos.SetLogRequest`. This is
+/// what real per-exercise Personal Records (Progress screen) are built
+/// from, so only *completed* sets should ever be included, never an
+/// in-progress or skipped one.
+class SetLogEntry {
+  final String exerciseId;
+  final int setNumber;
+  final double weightKg;
+  final int reps;
+
+  const SetLogEntry({
+    required this.exerciseId,
+    required this.setNumber,
+    required this.weightKg,
+    required this.reps,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'exerciseId': exerciseId,
+        'setNumber': setNumber,
+        'weightKg': weightKg,
+        'reps': reps,
+      };
+}
+
 class BodyweightLogResult {
   final double latestWeightKg;
   final double? deltaKg;

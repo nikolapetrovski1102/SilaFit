@@ -28,7 +28,11 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
-    DECLARE @WeekStart DATE = DATEADD(WEEK, DATEDIFF(WEEK, 0, @Today), 0);
+    -- See usp_Streak_GetStatus: DATEDIFF(WEEK, ...) is DATEFIRST-dependent
+    -- and rolls a Sunday @Today into next week on the US-English default
+    -- (@@DATEFIRST = 7). DATEDIFF(DAY, ...) mod 7 off the fixed Monday
+    -- epoch (1900-01-01) is not.
+    DECLARE @WeekStart DATE = DATEADD(DAY, -(DATEDIFF(DAY, 0, @Today) % 7), @Today);
 
     ;WITH Calendar AS (
         SELECT @Today AS CalendarDate
@@ -62,9 +66,9 @@ BEGIN
         ISNULL(ws.AvgRpe, 0) AS AvgRpe,
 
         (SELECT COUNT(*) FROM Ranked WHERE Rn < ISNULL((SELECT BreakRn FROM FirstBreak), 999)) AS CurrentStreakDays,
-        (SELECT CAST(ROUND(100.0 * SUM(IsCompleted) / 7.0, 0) AS INT)
+        ISNULL((SELECT CAST(ROUND(100.0 * SUM(IsCompleted) / 7.0, 0) AS INT)
          FROM DayStatus
-         WHERE CalendarDate BETWEEN @WeekStart AND DATEADD(DAY, 6, @WeekStart)) AS WeeklyCompliancePercent,
+         WHERE CalendarDate BETWEEN @WeekStart AND DATEADD(DAY, 6, @WeekStart)), 0) AS WeeklyCompliancePercent,
 
         ISNULL(ml.LoggedMealDays, 0) AS LoggedMealDays,
         DATEDIFF(DAY, @FromDateUtc, @ToDateUtc) + 1 AS TotalDaysInRange,
@@ -140,5 +144,92 @@ BEGIN
     SELECT ReportId, UserId, ReportYear, ReportMonth, SnapshotJson, ResultJson, GeneratedAtUtc
     FROM dbo.MonthlyAnalyticsReports
     WHERE UserId = @UserId AND ReportYear = @ReportYear AND ReportMonth = @ReportMonth;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_Analytics_GetCachedWeeklyReport
+    @UserId UNIQUEIDENTIFIER,
+    @ReportYear SMALLINT,
+    @ReportWeek TINYINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT ReportId, UserId, ReportYear, ReportWeek, SnapshotJson, ResultJson, GeneratedAtUtc
+    FROM dbo.WeeklyAnalyticsReports
+    WHERE UserId = @UserId AND ReportYear = @ReportYear AND ReportWeek = @ReportWeek;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_Analytics_UpsertWeeklyReport
+    @UserId UNIQUEIDENTIFIER,
+    @ReportYear SMALLINT,
+    @ReportWeek TINYINT,
+    @SnapshotJson NVARCHAR(MAX),
+    @ResultJson NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    MERGE dbo.WeeklyAnalyticsReports AS target
+    USING (SELECT @UserId AS UserId, @ReportYear AS ReportYear, @ReportWeek AS ReportWeek) AS source
+    ON target.UserId = source.UserId AND target.ReportYear = source.ReportYear AND target.ReportWeek = source.ReportWeek
+    WHEN MATCHED THEN
+        UPDATE SET SnapshotJson = @SnapshotJson, ResultJson = @ResultJson, GeneratedAtUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT (UserId, ReportYear, ReportWeek, SnapshotJson, ResultJson)
+        VALUES (@UserId, @ReportYear, @ReportWeek, @SnapshotJson, @ResultJson);
+
+    SELECT ReportId, UserId, ReportYear, ReportWeek, SnapshotJson, ResultJson, GeneratedAtUtc
+    FROM dbo.WeeklyAnalyticsReports
+    WHERE UserId = @UserId AND ReportYear = @ReportYear AND ReportWeek = @ReportWeek;
+END
+GO
+
+-- Recap evidence: only past missed training days and real completed sets.
+-- PR includes history through report end, never future records.
+CREATE OR ALTER PROCEDURE dbo.usp_Analytics_GetMonthlyExerciseHistory
+    @UserId UNIQUEIDENTIFIER,
+    @FromDateUtc DATE,
+    @ToDateUtc DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT COUNT(DISTINCT ws.ScheduledDateUtc) AS MissedWorkoutDays
+    FROM dbo.WorkoutSessions ws
+    LEFT JOIN dbo.SplitDays sd ON sd.SplitDayId = ws.SplitDayId
+    WHERE ws.UserId = @UserId
+      AND ws.ScheduledDateUtc BETWEEN @FromDateUtc AND @ToDateUtc
+      AND ws.ScheduledDateUtc < CAST(SYSUTCDATETIME() AS DATE)
+      AND ws.Status IN ('Scheduled', 'Missed')
+      AND ISNULL(sd.IsRestDay, 0) = 0;
+
+    ;WITH RankedSets AS (
+        SELECT sl.ExerciseId, sl.WorkoutSessionId, sl.WeightKg, sl.Reps,
+               sl.CompletedAtUtc, ws.RpeScore,
+               ROW_NUMBER() OVER (
+                   PARTITION BY sl.WorkoutSessionId, sl.ExerciseId
+                   ORDER BY sl.WeightKg DESC, sl.Reps DESC, sl.SetNumber, sl.WorkoutSetLogId
+               ) AS SetRank
+        FROM dbo.WorkoutSetLogs sl
+        INNER JOIN dbo.WorkoutSessions ws ON ws.WorkoutSessionId = sl.WorkoutSessionId AND ws.UserId = sl.UserId
+        WHERE sl.UserId = @UserId AND ws.Status = 'Completed'
+          AND sl.CompletedAtUtc >= @FromDateUtc
+          AND sl.CompletedAtUtc < DATEADD(DAY, 1, @ToDateUtc)
+    )
+    SELECT r.ExerciseId, e.Name AS ExerciseName, r.WeightKg, r.Reps,
+           r.CompletedAtUtc, r.RpeScore, pr.RecordWeightKg
+    FROM RankedSets r
+    INNER JOIN dbo.Exercises e ON e.ExerciseId = r.ExerciseId
+    CROSS APPLY (
+        SELECT MAX(h.WeightKg) AS RecordWeightKg
+        FROM dbo.WorkoutSetLogs h
+        INNER JOIN dbo.WorkoutSessions hs ON hs.WorkoutSessionId = h.WorkoutSessionId AND hs.UserId = h.UserId
+        WHERE h.UserId = @UserId AND h.ExerciseId = r.ExerciseId
+          AND hs.Status = 'Completed'
+          AND h.CompletedAtUtc < DATEADD(DAY, 1, @ToDateUtc)
+    ) pr
+    WHERE r.SetRank = 1
+    ORDER BY e.Name, r.ExerciseId, r.CompletedAtUtc, r.WorkoutSessionId;
 END
 GO

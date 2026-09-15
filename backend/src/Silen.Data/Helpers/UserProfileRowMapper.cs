@@ -16,6 +16,12 @@ public static class UserProfileRowMapper
         var weightKg = reader.GetNullableBytes("WeightKg");
         var goal = reader.GetNullableBytes("Goal");
 
+        var trainingDaysPerWeek = reader.GetNullableBytes("TrainingDaysPerWeek");
+        var sessionDurationMinutes = reader.GetNullableBytes("SessionDurationMinutes");
+        var trainingExperience = reader.GetNullableBytes("TrainingExperience");
+        var equipmentAccess = reader.GetNullableBytes("EquipmentAccess");
+        var dailyActivityLevel = reader.GetNullableBytes("DailyActivityLevel");
+
         return new UserProfileModel
         {
             UserId = reader.GetGuidValue("UserId"),
@@ -24,6 +30,11 @@ public static class UserProfileRowMapper
             HeightCm = heightCm is null ? null : FieldCipher.DecryptDecimal(heightCm, key),
             WeightKg = weightKg is null ? null : FieldCipher.DecryptDecimal(weightKg, key),
             Goal = goal is null ? null : FieldCipher.DecryptString(goal, key),
+            TrainingDaysPerWeek = trainingDaysPerWeek is null ? null : FieldCipher.DecryptInt(trainingDaysPerWeek, key),
+            SessionDurationMinutes = sessionDurationMinutes is null ? null : FieldCipher.DecryptInt(sessionDurationMinutes, key),
+            TrainingExperience = trainingExperience is null ? null : FieldCipher.DecryptString(trainingExperience, key),
+            EquipmentAccess = equipmentAccess is null ? null : FieldCipher.DecryptString(equipmentAccess, key),
+            DailyActivityLevel = dailyActivityLevel is null ? null : FieldCipher.DecryptString(dailyActivityLevel, key),
             CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
             UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
         };

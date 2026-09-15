@@ -22,6 +22,12 @@ public static class AdminPermissions
     public const string SplitsRead = "content.splits.read";
     public const string SplitsWrite = "content.splits.write";
 
+    /// <summary>Hand a split to specific app users (the trainer's client list).</summary>
+    public const string SplitsAssign = "content.splits.assign";
+
+    /// <summary>Manage every split regardless of owner, including shipped system splits. Without it, an operator only manages the splits they own.</summary>
+    public const string SplitsManageAll = "content.splits.manage_all";
+
     public const string ExercisesRead = "content.exercises.read";
     public const string ExercisesWrite = "content.exercises.write";
 
@@ -29,6 +35,14 @@ public static class AdminPermissions
     public const string SuggestionsWrite = "content.suggestions.write";
 
     public const string UsersRead = "users.read";
+
+    /// <summary>
+    /// Replace one app user's logs with a generated month of mock history so the
+    /// monthly overview can be exercised. Destructive (it wipes and regenerates the
+    /// user's workouts/meals/hydration/bodyweight), so it ships granted only to
+    /// super-admin.
+    /// </summary>
+    public const string UsersMockData = "users.mock_data";
 
     /// <summary>Invite, re-role, deactivate and reactivate other console operators.</summary>
     public const string OperatorsManage = "operators.manage";
@@ -49,11 +63,14 @@ public static class AdminPermissions
         new(PlansWrite, "Plans", "Edit subscription plans", "Create, change and retire plans and their features."),
         new(SplitsRead, "Splits", "View workout splits", "The split library, its days and exercise prescriptions."),
         new(SplitsWrite, "Splits", "Edit workout splits", "Create and change splits, days and prescriptions."),
+        new(SplitsAssign, "Splits", "Assign splits to users", "Hand a split to specific app users and set it as their active program."),
+        new(SplitsManageAll, "Splits", "Manage every split", "Change splits owned by other trainers, including the shipped system splits."),
         new(ExercisesRead, "Exercises", "View exercises", "The exercise library and where each exercise is used."),
         new(ExercisesWrite, "Exercises", "Edit exercises", "Add, change and remove exercises."),
         new(SuggestionsRead, "Meal suggestions", "View meal suggestions", "The month-tagged suggestion catalog."),
         new(SuggestionsWrite, "Meal suggestions", "Edit meal suggestions", "Add, change and remove suggestions."),
         new(UsersRead, "Users", "View app users", "Account tier, join date and current subscription - never anyone's logs or body data."),
+        new(UsersMockData, "Users", "Generate mock data", "Replace one user's logs with a generated month of workouts, meals, hydration and bodyweight for testing."),
         new(OperatorsManage, "Operators", "Manage operators", "Move operators between roles and deactivate them."),
         new(RolesManage, "Roles", "Manage custom roles", "Create custom roles and choose what each may do."),
         new(AuditRead, "Audit", "Read the audit log", "Every change an operator has made, with who, what and from where.")

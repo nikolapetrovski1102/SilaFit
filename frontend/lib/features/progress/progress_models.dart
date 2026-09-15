@@ -64,3 +64,40 @@ class HeatmapDay {
         rpeScore: (map['rpeScore'] as num?)?.toDouble());
   }
 }
+
+/// The heaviest set ever logged for one exercise. Mirrors
+/// `Silen.Common.Dtos.PersonalRecordDto`. [previousBestWeightKg] is null
+/// when this is the only set ever logged for the exercise - callers show no
+/// delta badge in that case rather than a misleading "+0".
+class PersonalRecord {
+  final String exerciseId;
+  final String exerciseName;
+  final double weightKg;
+  final int reps;
+  final DateTime achievedAtUtc;
+  final double? previousBestWeightKg;
+
+  const PersonalRecord({
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.weightKg,
+    required this.reps,
+    required this.achievedAtUtc,
+    this.previousBestWeightKg,
+  });
+
+  double? get deltaKg =>
+      previousBestWeightKg == null ? null : weightKg - previousBestWeightKg!;
+
+  factory PersonalRecord.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return PersonalRecord(
+      exerciseId: map['exerciseId'] as String,
+      exerciseName: map['exerciseName'] as String? ?? '',
+      weightKg: (map['weightKg'] as num?)?.toDouble() ?? 0,
+      reps: map['reps'] as int? ?? 0,
+      achievedAtUtc: DateTime.parse(map['achievedAtUtc'] as String),
+      previousBestWeightKg: (map['previousBestWeightKg'] as num?)?.toDouble(),
+    );
+  }
+}

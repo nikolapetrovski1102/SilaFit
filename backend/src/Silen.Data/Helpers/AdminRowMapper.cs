@@ -24,7 +24,12 @@ public static class AdminRowMapper
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
         IsActive = reader.GetBoolValue("IsActive"),
         RoleId = reader.GetNullableGuid("RoleId"),
-        RoleName = reader.GetNullableString("RoleName")
+        RoleName = reader.GetNullableString("RoleName"),
+        Email = reader.GetNullableString("Email"),
+        EmailOtpCodeHash = reader.GetNullableBytes("EmailOtpCodeHash"),
+        EmailOtpCodeSalt = reader.GetNullableBytes("EmailOtpCodeSalt"),
+        EmailOtpExpiresAtUtc = reader.GetNullableDateTime("EmailOtpExpiresAtUtc"),
+        EmailOtpLastSentAtUtc = reader.GetNullableDateTime("EmailOtpLastSentAtUtc")
     };
 
     public static AdminLockoutStateModel MapLockoutState(SqlDataReader reader) => new()

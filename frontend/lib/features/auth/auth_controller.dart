@@ -19,8 +19,7 @@ class AuthController extends ChangeNotifier {
   // `serverClientId` (the Web OAuth client) is what actually makes
   // `account.authentication.idToken` populate - without it Google only
   // returns an accessToken, never an idToken, on every platform. `clientId`
-  // is iOS-only and ignored elsewhere. Both are placeholders until real
-  // Google Cloud credentials are created - see frontend/env/README.md.
+  // is iOS-only and ignored elsewhere. See frontend/env/README.md.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email'],
     clientId: ApiConfig.googleIosClientId,
@@ -158,10 +157,16 @@ class AuthController extends ChangeNotifier {
         await _applySession(result);
       });
 
+  /// Flips back to the cold-start splash for the duration of the re-login -
+  /// `bootstrap()` flips it off again once the fresh device session lands,
+  /// which also has the effect of tearing down and rebuilding `RootShell`
+  /// from scratch, so whichever tab the user logged out from doesn't linger:
+  /// they land back on Today like any other fresh bootstrap.
   Future<void> logout() async {
+    _isBootstrapping = true;
+    notifyListeners();
     await _googleSignIn.signOut();
     await _sessionStore.clear();
-    notifyListeners();
     await bootstrap();
   }
 

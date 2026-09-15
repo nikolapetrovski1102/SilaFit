@@ -79,6 +79,16 @@ public static class WorkoutRowMapper
         RpeScore = HasColumn(reader, "RpeScore") ? reader.GetNullableDecimal("RpeScore") : null
     };
 
+    public static PersonalRecordModel MapPersonalRecord(SqlDataReader reader) => new()
+    {
+        ExerciseId = reader.GetGuidValue("ExerciseId"),
+        ExerciseName = reader.GetStringValue("ExerciseName"),
+        WeightKg = reader.GetDecimalValue("WeightKg"),
+        Reps = reader.GetInt16Value("Reps"),
+        AchievedAtUtc = reader.GetDateTimeValue("CompletedAtUtc"),
+        PreviousBestWeightKg = reader.GetNullableDecimal("PreviousBestWeightKg")
+    };
+
     public static WorkoutSplitModel MapSplit(SqlDataReader reader) => new()
     {
         SplitId = reader.GetGuidValue("SplitId"),
@@ -90,7 +100,17 @@ public static class WorkoutRowMapper
         HeroImageUrl = reader.GetNullableString("HeroImageUrl"),
         IsSystemDefault = reader.GetBoolValue("IsSystemDefault"),
         SortOrder = HasColumn(reader, "SortOrder") ? reader.GetInt32Value("SortOrder") : 0,
-        RecommendedGoal = HasColumn(reader, "RecommendedGoal") ? reader.GetNullableString("RecommendedGoal") : null
+        RecommendedGoal = HasColumn(reader, "RecommendedGoal") ? reader.GetNullableString("RecommendedGoal") : null,
+        Visibility = HasColumn(reader, "Visibility") ? reader.GetNullableString("Visibility") ?? "Public" : "Public",
+        AvgSessionMinutes = HasColumn(reader, "AvgSessionMinutes") ? reader.GetInt32Value("AvgSessionMinutes") : 0,
+        DaysPerWeek = HasColumn(reader, "DaysPerWeek") ? reader.GetNullableByte("DaysPerWeek") : null,
+        ProgramDurationWeeks = HasColumn(reader, "ProgramDurationWeeks") ? reader.GetNullableInt16("ProgramDurationWeeks") : null,
+        MinSessionMinutes = HasColumn(reader, "MinSessionMinutes") ? reader.GetNullableInt16("MinSessionMinutes") : null,
+        MaxSessionMinutes = HasColumn(reader, "MaxSessionMinutes") ? reader.GetNullableInt16("MaxSessionMinutes") : null,
+        EquipmentRequired = HasColumn(reader, "EquipmentRequired") ? reader.GetNullableString("EquipmentRequired") : null,
+        TargetGender = HasColumn(reader, "TargetGender") ? reader.GetNullableString("TargetGender") : null,
+        WorkoutTypeLabel = HasColumn(reader, "WorkoutTypeLabel") ? reader.GetNullableString("WorkoutTypeLabel") : null,
+        SourceCategoriesJson = HasColumn(reader, "SourceCategoriesJson") ? reader.GetNullableString("SourceCategoriesJson") : null
     };
 
     public static SplitDayModel MapSplitDay(SqlDataReader reader) => new()
@@ -120,7 +140,8 @@ public static class WorkoutRowMapper
         SplitId = reader.GetGuidValue("SplitId"),
         ActivatedAtUtc = reader.GetDateTimeValue("ActivatedAtUtc"),
         Name = HasColumn(reader, "Name") ? reader.GetNullableString("Name") : null,
-        DurationDays = HasColumn(reader, "DurationDays") ? reader.GetByteValue("DurationDays") : null
+        DurationDays = HasColumn(reader, "DurationDays") ? reader.GetByteValue("DurationDays") : null,
+        IsAutoAssigned = HasColumn(reader, "IsAutoAssigned") && reader.GetBoolValue("IsAutoAssigned")
     };
 
     public static ExerciseModel MapExercise(SqlDataReader reader) => new()
@@ -151,6 +172,15 @@ public static class WorkoutRowMapper
         FeatureText = reader.GetStringValue("FeatureText"),
         SortOrder = reader.GetByteValue("SortOrder"),
         IsHighlighted = reader.GetBoolValue("IsHighlighted")
+    };
+
+    public static PlanSubscriberModel MapPlanSubscriber(SqlDataReader reader) => new()
+    {
+        UserId = reader.GetGuidValue("UserId"),
+        DisplayName = reader.GetNullableString("DisplayName"),
+        Email = reader.GetNullableString("Email"),
+        PlanCode = reader.GetStringValue("PlanCode"),
+        ExpiresAtUtc = reader.GetNullableDateTime("ExpiresAtUtc")
     };
 
     public static UserSubscriptionModel MapSubscription(SqlDataReader reader) => new()

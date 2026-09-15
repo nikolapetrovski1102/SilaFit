@@ -13,6 +13,7 @@ import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
+import 'meal_recommendation.dart';
 import 'meal_suggestions_screen.dart';
 import 'widgets/macro_bar.dart';
 import 'widgets/meal_log_card.dart';
@@ -372,20 +373,18 @@ class _MealSuggestionsSectionState extends State<_MealSuggestionsSection> {
       return const SizedBox.shrink();
     }
 
-    // Rank by closeness to what's actually left in the day's budget - a
-    // user with 200 kcal remaining sees ~200 kcal meals first, not whatever
-    // order the backend happened to return. Once the day's over budget
-    // (remaining <= 0) there's no positive target to aim for, so it falls
-    // back to favoring the lightest meals rather than sorting toward a
-    // meaningless negative number.
-    final remaining = widget.controller.state.data?.remainingCalories;
+    // Ranked by the same engine the full "Suggested Meals" library uses:
+    // calorie fit against what's left in the day, protein gap, and
+    // time-of-day - so the strip and the library never disagree about what's
+    // "best". See meal_recommendation.dart.
+    final day = widget.controller.state.data;
+    final suggestions = [
+      for (final match in rankMealMatches(allSuggestions, day: day))
+        match.suggestion,
+    ];
+
+    final remaining = day?.remainingCalories;
     final target = remaining == null ? null : (remaining < 0 ? 0 : remaining);
-    final suggestions = target == null
-        ? allSuggestions
-        : (List<MealSuggestion>.from(allSuggestions)
-          ..sort((a, b) => (a.caloriesKcal - target)
-              .abs()
-              .compareTo((b.caloriesKcal - target).abs())));
 
     final visibleCount =
         _visibleCount < suggestions.length ? _visibleCount : suggestions.length;
@@ -405,7 +404,7 @@ class _MealSuggestionsSectionState extends State<_MealSuggestionsSection> {
                     color: AppColors.accent),
                 if (target != null && target > 0) ...[
                   const SizedBox(height: 2),
-                  Text('Picked near your $target kcal remaining',
+                  Text('Ranked for your $target kcal left',
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant)),
                 ],

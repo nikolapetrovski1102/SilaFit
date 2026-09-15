@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/platform/device_timezone.dart';
 import '../../core/session/session_store.dart';
 import '../../core/state/resource_state.dart';
 import 'settings_models.dart';
@@ -25,7 +26,13 @@ class SettingsController extends ChangeNotifier {
 
   SettingsController(this._repository, this._sessionStore);
 
-  Future<void> load() async {
+  // Guards the cold-start + Settings-screen double-trigger and retry spam.
+  bool _isLoading = false;
+
+  Future<void> load({bool force = false}) async {
+    if (_isLoading) return;
+    if (!force && state.hasData) return;
+    _isLoading = true;
     state = const ResourceState.loading();
     notifyListeners();
     try {
@@ -36,6 +43,8 @@ class SettingsController extends ChangeNotifier {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);
+    } finally {
+      _isLoading = false;
     }
     notifyListeners();
   }
@@ -82,8 +91,13 @@ class SettingsController extends ChangeNotifier {
   Future<void> setBarbellStandardKg(double value) =>
       _update((s) => s.copyWith(barbellStandardKg: value));
 
-  Future<void> setNotificationsEnabled(bool value) =>
-      _update((s) => s.copyWith(notificationsEnabled: value));
+  // Turning reminders on also refreshes the stored timezone from the device,
+  // so they keep landing on the user's clock even if they skipped onboarding or
+  // the device has since changed zones.
+  Future<void> setNotificationsEnabled(bool value) => _update((s) => s.copyWith(
+        notificationsEnabled: value,
+        timeZoneId: value ? deviceTimeZoneId() : s.timeZoneId,
+      ));
 
   Future<void> setNotificationLocalTime(String value) =>
       _update((s) => s.copyWith(notificationLocalTime: value));

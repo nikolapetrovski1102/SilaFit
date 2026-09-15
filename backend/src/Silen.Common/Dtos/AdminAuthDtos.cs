@@ -18,7 +18,8 @@ public sealed class AdminLoginChallengeDto
     public int ExpiresInSeconds { get; set; }
 }
 
-/// <summary>Step 2: the challenge from step 1 plus the current authenticator code.</summary>
+/// <summary>Step 2: the challenge from step 1 plus the current authenticator code
+/// (or, when the operator asked for "send email code instead", the emailed one).</summary>
 public sealed class AdminVerifyCodeRequest
 {
     public string ChallengeToken { get; set; } = string.Empty;
@@ -27,6 +28,21 @@ public sealed class AdminVerifyCodeRequest
     /// <summary>Recorded on the session row for audit purposes. Filled in by the controller
     /// from the request connection - not set by the client directly.</summary>
     public string? ClientIp { get; set; }
+}
+
+/// <summary>"Send email code instead": the same challenge from step 1, asking the server
+/// to email a one-time code to the operator's address on file rather than checking an
+/// authenticator app code.</summary>
+public sealed class AdminSendEmailCodeRequest
+{
+    public string ChallengeToken { get; set; } = string.Empty;
+}
+
+/// <summary>Confirms a code was sent, without ever echoing the address in full.</summary>
+public sealed class AdminEmailCodeSentDto
+{
+    public string MaskedEmail { get; set; } = string.Empty;
+    public int ExpiresInSeconds { get; set; }
 }
 
 /// <summary>
@@ -40,6 +56,8 @@ public sealed class AdminSessionIssuedDto
     public string Username { get; set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; set; }
     public DateTime AbsoluteExpiresAtUtc { get; set; }
+    public string? RoleName { get; set; }
+    public List<string> Permissions { get; set; } = [];
 }
 
 /// <summary>Who is signed in and until when - the payload of the session endpoint.</summary>

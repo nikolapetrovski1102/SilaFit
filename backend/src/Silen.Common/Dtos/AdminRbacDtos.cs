@@ -49,6 +49,33 @@ public sealed class AdminOperatorDto
     public DateTime CreatedAtUtc { get; set; }
 }
 
+/// <summary>Adds a brand-new operator from the dashboard. Only ever creates - never rotates an existing account.</summary>
+public sealed class AdminOperatorCreateRequest
+{
+    public string Username { get; set; } = string.Empty;
+
+    /// <summary>Set by whoever is creating the account and shared with the new operator out of band, like a handed-over temporary password.</summary>
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>Optional - an operator can be created with no role (deny-all) and assigned one later.</summary>
+    public string? RoleName { get; set; }
+}
+
+/// <summary>
+/// Shown exactly once, immediately after an operator is created - like the CLI
+/// provisioning tool's console output, but returned over HTTP instead of printed.
+/// <see cref="TotpSecret"/>/<see cref="OtpAuthUri"/> are never retrievable again:
+/// only their encrypted form is stored, so losing this response means re-enrolling.
+/// </summary>
+public sealed class AdminOperatorCreatedDto
+{
+    public Guid AdminUserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string? RoleName { get; set; }
+    public string TotpSecret { get; set; } = string.Empty;
+    public string OtpAuthUri { get; set; } = string.Empty;
+}
+
 public sealed class AdminOperatorRoleRequest
 {
     public string Username { get; set; } = string.Empty;

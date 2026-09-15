@@ -15,6 +15,7 @@ public static class MealPlanningRowMapper
         TargetProteinG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetProteinG"), key),
         TargetCarbsG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetCarbsG"), key),
         TargetFatsG = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetFatsG"), key),
+        IsManualOverride = reader.GetBoolValue("IsManualOverride"),
         UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
     };
 

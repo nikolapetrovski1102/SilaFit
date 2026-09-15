@@ -15,7 +15,8 @@ public sealed class AuthService(
     IGoogleTokenVerifier googleTokenVerifier,
     IAppleTokenVerifier appleTokenVerifier,
     IEmailSender emailSender,
-    IOptions<JwtOptions> jwtOptions) : IAuthService
+    IOptions<JwtOptions> jwtOptions,
+    IOptions<ReviewerBypassOptions> reviewerBypassOptions) : IAuthService
 {
     /// <summary>How long an emailed code stays valid.</summary>
     private static readonly TimeSpan CodeLifetime = TimeSpan.FromMinutes(10);
@@ -36,7 +37,7 @@ public sealed class AuthService(
             }
 
             var user = await authProvider.GetOrCreateDeviceUserAsync(deviceId, cancellationToken)
-                ?? throw new NotFoundException($"Device login did not return a user row for device '{deviceId}'.");
+                ?? throw new NotFoundException($"Device login did not return a user row for device tag {LogRedaction.Tag(deviceId)}.");
 
             var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
 
@@ -61,13 +62,23 @@ public sealed class AuthService(
             var existingByEmail = await authProvider.GetUserByEmailAsync(request.Email, cancellationToken);
             if (existingByEmail is not null)
             {
-                throw new ConflictException($"Email '{request.Email}' is already registered.", "That email is already in use.");
+                // Do not reveal that the address is already registered - a 409 here
+                // is an unauthenticated account-enumeration oracle. Return the exact
+                // shape a real send would, without persisting or emailing anything;
+                // the synthetic id simply never verifies, so the only way to tell the
+                // address exists is to try logging in with it.
+                return new EmailVerificationStartResultDto
+                {
+                    PendingId = Guid.NewGuid(),
+                    ExpiresInSeconds = (int)CodeLifetime.TotalSeconds
+                };
             }
 
             var (passwordHash, passwordSalt) = PasswordHasher.Hash(request.Password);
 
             var pendingId = Guid.NewGuid();
-            var code = VerificationCodeGenerator.GenerateCode();
+            var isReviewerBypass = IsReviewerBypassEmail(request.Email);
+            var code = isReviewerBypass ? reviewerBypassOptions.Value.Code : VerificationCodeGenerator.GenerateCode();
             var (codeHash, codeSalt) = PasswordHasher.Hash(code);
             var expiresAtUtc = DateTime.UtcNow.Add(CodeLifetime);
 
@@ -75,8 +86,13 @@ public sealed class AuthService(
                 pendingId, request.ExistingUserId, request.Email, passwordHash, passwordSalt, request.DisplayName,
                 codeHash, codeSalt, expiresAtUtc, cancellationToken);
 
-            var (subject, html) = VerificationEmailTemplate.Build(code);
-            await emailSender.SendAsync(request.Email, subject, html, cancellationToken);
+            // Reviewer account gets a fixed code and no real email - App Store / Play
+            // Store reviewers don't have inbox access for the demo address.
+            if (!isReviewerBypass)
+            {
+                var (subject, html) = VerificationEmailTemplate.Build(code);
+                await emailSender.SendAsync(request.Email, subject, html, cancellationToken);
+            }
 
             return new EmailVerificationStartResultDto
             {
@@ -144,14 +160,18 @@ public sealed class AuthService(
                 throw new ConflictException("Email verification resend requested too soon.", "Please wait a moment before requesting another code.");
             }
 
-            var code = VerificationCodeGenerator.GenerateCode();
+            var isReviewerBypass = IsReviewerBypassEmail(pending.Email);
+            var code = isReviewerBypass ? reviewerBypassOptions.Value.Code : VerificationCodeGenerator.GenerateCode();
             var (codeHash, codeSalt) = PasswordHasher.Hash(code);
             var expiresAtUtc = DateTime.UtcNow.Add(CodeLifetime);
 
             await authProvider.RefreshPendingEmailVerificationAsync(pending.PendingId, codeHash, codeSalt, expiresAtUtc, cancellationToken);
 
-            var (subject, html) = VerificationEmailTemplate.Build(code);
-            await emailSender.SendAsync(pending.Email, subject, html, cancellationToken);
+            if (!isReviewerBypass)
+            {
+                var (subject, html) = VerificationEmailTemplate.Build(code);
+                await emailSender.SendAsync(pending.Email, subject, html, cancellationToken);
+            }
 
             return new EmailVerificationStartResultDto
             {
@@ -159,6 +179,16 @@ public sealed class AuthService(
                 ExpiresInSeconds = (int)CodeLifetime.TotalSeconds
             };
         });
+
+    /// <summary>True when both halves of the reviewer bypass are configured and match -
+    /// an empty configured email/code never matches, so the bypass is off by default.</summary>
+    private bool IsReviewerBypassEmail(string email)
+    {
+        var configuredEmail = reviewerBypassOptions.Value.Email;
+        var configuredCode = reviewerBypassOptions.Value.Code;
+        return !string.IsNullOrWhiteSpace(configuredEmail) && !string.IsNullOrWhiteSpace(configuredCode) &&
+            string.Equals(configuredEmail, email, StringComparison.OrdinalIgnoreCase);
+    }
 
     public Task<ServiceResult<AuthResultDto>> LoginEmailAsync(EmailLoginRequest request, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -169,7 +199,7 @@ public sealed class AuthService(
                 !PasswordHasher.Verify(request.Password, user.PasswordHash, user.PasswordSalt))
             {
                 throw new UnauthorizedAppException(
-                    $"Email login failed for '{request.Email}'.", "Invalid email or password.");
+                    $"Email login failed for email tag {LogRedaction.Tag(request.Email)}.", "Invalid email or password.");
             }
 
             await authProvider.UpdateLastLoginAsync(user.UserId, cancellationToken);

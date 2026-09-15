@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Silen.Common.Contracts;
 using Silen.Common.Dtos;
@@ -13,7 +14,7 @@ namespace Silen.Api.Controllers;
 ///
 /// Deliberately not [Authorize]: no action here trusts a bearer token, because the
 /// console's credential is an HttpOnly cookie that nginx validates before it will
-/// serve the console at all (see deploy/nginx-silafit.tappit.click.conf). These
+/// serve the console at all (see deploy/nginx-sila.fitness.conf). These
 /// endpoints are their own authentication - they issue, check and revoke that
 /// cookie - so an [Authorize] attribute would be guarding the wrong scheme.
 ///
@@ -28,6 +29,7 @@ public sealed class AdminAuthController(
     ILogger<AdminAuthController> logger) : ControllerBase
 {
     [HttpPost("login")]
+    [EnableRateLimiting(RateLimitPolicies.AdminAuth)]
     public async Task<IActionResult> Login([FromBody] AdminLoginRequest request, CancellationToken cancellationToken)
     {
         var result = await adminAuthService.StartLoginAsync(request, cancellationToken);
@@ -36,6 +38,7 @@ public sealed class AdminAuthController(
 
     /// <summary>Second factor. Success sets the session cookie the console runs on.</summary>
     [HttpPost("verify")]
+    [EnableRateLimiting(RateLimitPolicies.AdminAuth)]
     public async Task<IActionResult> Verify([FromBody] AdminVerifyCodeRequest request, CancellationToken cancellationToken)
     {
         request.ClientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -55,11 +58,23 @@ public sealed class AdminAuthController(
         {
             Username = result.Data.Username,
             ExpiresAtUtc = result.Data.ExpiresAtUtc,
-            AbsoluteExpiresAtUtc = result.Data.AbsoluteExpiresAtUtc
+            AbsoluteExpiresAtUtc = result.Data.AbsoluteExpiresAtUtc,
+            RoleName = result.Data.RoleName,
+            Permissions = result.Data.Permissions
         }))
         {
             StatusCode = result.StatusCode
         };
+    }
+
+    /// <summary>"Send email code instead": emails a one-time code to the operator's address
+    /// on file, checked by the same <see cref="Verify"/> step as an authenticator code.</summary>
+    [HttpPost("email-code")]
+    [EnableRateLimiting(RateLimitPolicies.AdminAuth)]
+    public async Task<IActionResult> SendEmailCode([FromBody] AdminSendEmailCodeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await adminAuthService.SendEmailCodeAsync(request, cancellationToken);
+        return result.ToActionResult(logger);
     }
 
     /// <summary>

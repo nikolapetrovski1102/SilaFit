@@ -16,7 +16,12 @@ GO
 -- Enum columns (Category, Level, RecommendedGoal) keep their CHECK constraints as
 -- the source of truth.
 
+-- @IncludeAll = 1 is an operator with content.splits.manage_all: they see the
+-- whole library. Otherwise a trainer sees only what they own, plus the shipped
+-- system splits (read-only reference material they can copy from).
 CREATE OR ALTER PROCEDURE dbo.usp_Admin_Splits_GetAll
+    @ViewerAdminUserId UNIQUEIDENTIFIER = NULL,
+    @IncludeAll BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -30,6 +35,9 @@ BEGIN
            s.HeroImageUrl,
            s.RecommendedGoal,
            s.IsSystemDefault,
+           s.Visibility,
+           s.OwnerAdminUserId,
+           owner_admin.Username AS OwnerUsername,
            s.SortOrder,
            s.CreatedAtUtc,
            (SELECT COUNT(*) FROM dbo.SplitDays d WHERE d.SplitId = s.SplitId) AS DayCount,
@@ -37,8 +45,13 @@ BEGIN
             FROM dbo.SplitDayExercises sde
             INNER JOIN dbo.SplitDays d ON d.SplitDayId = sde.SplitDayId
             WHERE d.SplitId = s.SplitId) AS ExerciseCount,
-           (SELECT COUNT(*) FROM dbo.UserActiveSplits a WHERE a.SplitId = s.SplitId) AS ActiveUserCount
+           (SELECT COUNT(*) FROM dbo.UserActiveSplits a WHERE a.SplitId = s.SplitId) AS ActiveUserCount,
+           (SELECT COUNT(*) FROM dbo.SplitAssignments asg WHERE asg.SplitId = s.SplitId) AS AssignedUserCount
     FROM dbo.WorkoutSplits s
+    LEFT JOIN dbo.AdminUsers owner_admin ON owner_admin.AdminUserId = s.OwnerAdminUserId
+    WHERE @IncludeAll = 1
+       OR s.OwnerAdminUserId = @ViewerAdminUserId
+       OR s.IsSystemDefault = 1
     ORDER BY s.SortOrder, s.Name;
 END
 GO
@@ -53,6 +66,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_Admin_Split_Upsert
     @HeroImageUrl NVARCHAR(500) = NULL,
     @RecommendedGoal NVARCHAR(20) = NULL,
     @SortOrder INT = 0,
+    @Visibility NVARCHAR(20) = N'Public',
+    @ActorCanManageAll BIT = 1,
     @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
     @ActorUsername NVARCHAR(100),
     @ActorIp NVARCHAR(64) = NULL
@@ -67,6 +82,7 @@ BEGIN
     SET @Description = NULLIF(LTRIM(RTRIM(@Description)), N'');
     SET @HeroImageUrl = NULLIF(LTRIM(RTRIM(@HeroImageUrl)), N'');
     SET @RecommendedGoal = NULLIF(LTRIM(RTRIM(@RecommendedGoal)), N'');
+    SET @Visibility = LTRIM(RTRIM(@Visibility));
 
     BEGIN TRANSACTION;
 
@@ -84,6 +100,13 @@ BEGIN
         RETURN;
     END
 
+    IF @Visibility IS NULL OR @Visibility NOT IN (N'Private', N'Public', N'Shared')
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 3 AS Outcome, CAST(NULL AS UNIQUEIDENTIFIER) AS EntityId, N'Visibility must be Private, Public or Shared.' AS Detail;
+        RETURN;
+    END
+
     DECLARE @Action NVARCHAR(30);
 
     IF @SplitId IS NULL
@@ -92,13 +115,41 @@ BEGIN
         SET @Action = N'Create';
 
         INSERT INTO dbo.WorkoutSplits
-            (SplitId, Name, Category, Level, DurationDays, Description, HeroImageUrl, RecommendedGoal, IsSystemDefault, SortOrder)
+            (SplitId, Name, Category, Level, DurationDays, Description, HeroImageUrl, RecommendedGoal,
+             IsSystemDefault, SortOrder, Visibility, OwnerAdminUserId)
         VALUES
-            (@SplitId, @Name, @Category, @Level, @DurationDays, @Description, @HeroImageUrl, @RecommendedGoal, 0, @SortOrder);
+            (@SplitId, @Name, @Category, @Level, @DurationDays, @Description, @HeroImageUrl, @RecommendedGoal,
+             0, @SortOrder, @Visibility, @ActorAdminUserId);
     END
     ELSE
     BEGIN
         SET @Action = N'Update';
+
+        DECLARE @ExistingOwnerAdminUserId UNIQUEIDENTIFIER;
+
+        SELECT @ExistingOwnerAdminUserId = OwnerAdminUserId
+        FROM dbo.WorkoutSplits
+        WHERE SplitId = @SplitId;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            COMMIT TRANSACTION;
+            SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
+            RETURN;
+        END
+
+        -- Ownership is enforced here rather than in the API so it holds inside
+        -- the same transaction as the write. A trainer may only change a split
+        -- whose owner is them; manage_all operators (and tooling, which passes
+        -- the default 1) may change any. System/legacy splits have a NULL owner,
+        -- so they are manage_all-only too.
+        IF @ActorCanManageAll = 0
+           AND (@ExistingOwnerAdminUserId IS NULL OR @ExistingOwnerAdminUserId <> @ActorAdminUserId)
+        BEGIN
+            COMMIT TRANSACTION;
+            SELECT 2 AS Outcome, @SplitId AS EntityId, N'This split belongs to another trainer.' AS Detail;
+            RETURN;
+        END
 
         UPDATE dbo.WorkoutSplits
         SET Name = @Name,
@@ -108,21 +159,15 @@ BEGIN
             Description = @Description,
             HeroImageUrl = @HeroImageUrl,
             RecommendedGoal = @RecommendedGoal,
-            SortOrder = @SortOrder
+            SortOrder = @SortOrder,
+            Visibility = @Visibility
         WHERE SplitId = @SplitId;
-
-        IF @@ROWCOUNT = 0
-        BEGIN
-            COMMIT TRANSACTION;
-            SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
-            RETURN;
-        END
     END
 
     INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
     VALUES (@ActorAdminUserId, @ActorUsername, @Action, N'WorkoutSplit', CONVERT(NVARCHAR(64), @SplitId),
             @Action + N' split ''' + @Name + N''' (' + @Category + N'/' + @Level + N', '
-            + CONVERT(NVARCHAR(10), @DurationDays) + N' days)', @ActorIp);
+            + CONVERT(NVARCHAR(10), @DurationDays) + N' days, ' + @Visibility + N')', @ActorIp);
 
     COMMIT TRANSACTION;
 
@@ -135,6 +180,7 @@ GO
 -- because their next workout would otherwise fail.
 CREATE OR ALTER PROCEDURE dbo.usp_Admin_Split_Delete
     @SplitId UNIQUEIDENTIFIER,
+    @ActorCanManageAll BIT = 1,
     @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
     @ActorUsername NVARCHAR(100),
     @ActorIp NVARCHAR(64) = NULL
@@ -144,18 +190,31 @@ BEGIN
     SET XACT_ABORT ON;
 
     DECLARE @Name NVARCHAR(150);
+    DECLARE @OwnerAdminUserId UNIQUEIDENTIFIER;
     DECLARE @ActiveUserCount INT;
     DECLARE @DayCount INT;
     DECLARE @ExerciseCount INT;
 
     BEGIN TRANSACTION;
 
-    SELECT @Name = Name FROM dbo.WorkoutSplits WHERE SplitId = @SplitId;
+    SELECT @Name = Name,
+           @OwnerAdminUserId = OwnerAdminUserId
+    FROM dbo.WorkoutSplits
+    WHERE SplitId = @SplitId;
 
     IF @Name IS NULL
     BEGIN
         COMMIT TRANSACTION;
         SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    -- Same ownership rule as the upsert: a trainer may only delete their own.
+    IF @ActorCanManageAll = 0
+       AND (@OwnerAdminUserId IS NULL OR @OwnerAdminUserId <> @ActorAdminUserId)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, @SplitId AS EntityId, N'This split belongs to another trainer.' AS Detail;
         RETURN;
     END
 
@@ -535,5 +594,220 @@ BEGIN
     COMMIT TRANSACTION;
 
     SELECT 0 AS Outcome, @SplitDayExerciseId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
+END
+GO
+
+-- =============================================================================
+-- Assignment: handing a split to specific paying clients.
+--
+-- One SplitAssignments row means "this user may see this split", which is what
+-- the app-side library filter reads. Assignment therefore works for any
+-- visibility: a Private split flips to Shared the moment it is assigned (a
+-- grant to a person is, by definition, sharing it with that person), while a
+-- Public split stays public and simply gains another client.
+--
+-- @ActorCanManageAll mirrors the upsert/delete ownership rule: a trainer assigns
+-- only their own splits; manage_all operators assign anything.
+-- =============================================================================
+
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_SplitAssignments_GetForSplit
+    @SplitId UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT a.SplitId,
+           a.UserId,
+           u.DisplayName,
+           u.Email,
+           u.AccountTier,
+           a.AssignedAtUtc,
+           assigned_by.Username AS AssignedByUsername,
+           CASE WHEN active.UserId IS NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS IsActive,
+           subPlan.Code AS ActivePlanCode,
+           sub.BillingCycle,
+           sub.Status AS SubscriptionStatus
+    FROM dbo.SplitAssignments a
+    INNER JOIN dbo.Users u ON u.UserId = a.UserId
+    LEFT JOIN dbo.AdminUsers assigned_by ON assigned_by.AdminUserId = a.AssignedByAdminUserId
+    LEFT JOIN dbo.UserActiveSplits active ON active.UserId = a.UserId AND active.SplitId = a.SplitId
+    -- UserSubscriptions has UserId as its primary key, so this is at most one row.
+    LEFT JOIN dbo.UserSubscriptions sub ON sub.UserId = a.UserId
+    LEFT JOIN dbo.SubscriptionPlans subPlan ON subPlan.PlanId = sub.PlanId
+    WHERE a.SplitId = @SplitId
+    ORDER BY u.DisplayName, u.Email;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_SplitAssignment_Assign
+    @SplitId UNIQUEIDENTIFIER,
+    @UserId UNIQUEIDENTIFIER,
+    @SetActive BIT = 0,
+    @ActorCanManageAll BIT = 1,
+    @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
+    @ActorUsername NVARCHAR(100),
+    @ActorIp NVARCHAR(64) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    BEGIN TRANSACTION;
+
+    DECLARE @SplitName NVARCHAR(150);
+    DECLARE @OwnerAdminUserId UNIQUEIDENTIFIER;
+    DECLARE @Visibility NVARCHAR(20);
+
+    SELECT @SplitName = Name,
+           @OwnerAdminUserId = OwnerAdminUserId,
+           @Visibility = Visibility
+    FROM dbo.WorkoutSplits
+    WHERE SplitId = @SplitId;
+
+    IF @SplitName IS NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    IF @ActorCanManageAll = 0
+       AND (@OwnerAdminUserId IS NULL OR @OwnerAdminUserId <> @ActorAdminUserId)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, @SplitId AS EntityId, N'Only the trainer who owns this split can assign it.' AS Detail;
+        RETURN;
+    END
+
+    DECLARE @ClientLabel NVARCHAR(200);
+
+    SELECT @ClientLabel = COALESCE(NULLIF(DisplayName, N''), NULLIF(Email, N''), CONVERT(NVARCHAR(64), UserId))
+    FROM dbo.Users
+    WHERE UserId = @UserId;
+
+    IF @ClientLabel IS NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, @UserId AS EntityId, N'That user no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    -- Idempotent: re-assigning an already-assigned client is not an error; it
+    -- only refreshes who did it and, when asked, sets it active again.
+    IF EXISTS (SELECT 1 FROM dbo.SplitAssignments WHERE SplitId = @SplitId AND UserId = @UserId)
+    BEGIN
+        UPDATE dbo.SplitAssignments
+        SET AssignedByAdminUserId = @ActorAdminUserId,
+            AssignedAtUtc = SYSUTCDATETIME()
+        WHERE SplitId = @SplitId AND UserId = @UserId;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO dbo.SplitAssignments (SplitId, UserId, AssignedByAdminUserId)
+        VALUES (@SplitId, @UserId, @ActorAdminUserId);
+    END
+
+    -- A grant to a named person makes a private split shared (with that person).
+    IF @Visibility = N'Private'
+    BEGIN
+        UPDATE dbo.WorkoutSplits SET Visibility = N'Shared' WHERE SplitId = @SplitId;
+        SET @Visibility = N'Shared';
+    END
+
+    IF @SetActive = 1
+    BEGIN
+        MERGE dbo.UserActiveSplits AS target
+        USING (SELECT @UserId AS UserId, @SplitId AS SplitId) AS source
+        ON target.UserId = source.UserId
+        WHEN MATCHED THEN
+            UPDATE SET SplitId = source.SplitId, ActivatedAtUtc = SYSUTCDATETIME()
+        WHEN NOT MATCHED THEN
+            INSERT (UserId, SplitId, ActivatedAtUtc) VALUES (source.UserId, source.SplitId, SYSUTCDATETIME());
+    END
+
+    INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
+    VALUES (@ActorAdminUserId, @ActorUsername, N'Assign', N'SplitAssignment', CONVERT(NVARCHAR(64), @UserId),
+            N'Assigned split ''' + @SplitName + N''' (' + @Visibility + N') to ' + @ClientLabel
+            + CASE WHEN @SetActive = 1 THEN N' as their active split' ELSE N'' END,
+            @ActorIp);
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @SplitId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_SplitAssignment_Remove
+    @SplitId UNIQUEIDENTIFIER,
+    @UserId UNIQUEIDENTIFIER,
+    @ActorCanManageAll BIT = 1,
+    @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
+    @ActorUsername NVARCHAR(100),
+    @ActorIp NVARCHAR(64) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    BEGIN TRANSACTION;
+
+    DECLARE @SplitName NVARCHAR(150);
+    DECLARE @OwnerAdminUserId UNIQUEIDENTIFIER;
+
+    SELECT @SplitName = Name,
+           @OwnerAdminUserId = OwnerAdminUserId
+    FROM dbo.WorkoutSplits
+    WHERE SplitId = @SplitId;
+
+    IF @SplitName IS NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    IF @ActorCanManageAll = 0
+       AND (@OwnerAdminUserId IS NULL OR @OwnerAdminUserId <> @ActorAdminUserId)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, @SplitId AS EntityId, N'Only the trainer who owns this split can unassign it.' AS Detail;
+        RETURN;
+    END
+
+    DECLARE @WasActive BIT = 0;
+
+    IF EXISTS (SELECT 1 FROM dbo.UserActiveSplits WHERE UserId = @UserId AND SplitId = @SplitId)
+        SET @WasActive = 1;
+
+    DELETE FROM dbo.SplitAssignments WHERE SplitId = @SplitId AND UserId = @UserId;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, @UserId AS EntityId, N'That client was not assigned this split.' AS Detail;
+        RETURN;
+    END
+
+    -- If it was their active program, clear it: the user can no longer see the
+    -- split, so leaving it active would strand their Today screen on a workout
+    -- they are no longer allowed to read.
+    IF @WasActive = 1
+    BEGIN
+        DELETE FROM dbo.UserActiveSplits WHERE UserId = @UserId AND SplitId = @SplitId;
+    END
+
+    DECLARE @ClientLabel NVARCHAR(200) =
+        (SELECT COALESCE(NULLIF(DisplayName, N''), NULLIF(Email, N''), CONVERT(NVARCHAR(64), UserId))
+         FROM dbo.Users WHERE UserId = @UserId);
+
+    INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
+    VALUES (@ActorAdminUserId, @ActorUsername, N'Unassign', N'SplitAssignment', CONVERT(NVARCHAR(64), @UserId),
+            N'Unassigned split ''' + @SplitName + N''' from ' + ISNULL(@ClientLabel, CONVERT(NVARCHAR(64), @UserId))
+            + CASE WHEN @WasActive = 1 THEN N' (and cleared it as their active split)' ELSE N'' END,
+            @ActorIp);
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @SplitId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
 END
 GO

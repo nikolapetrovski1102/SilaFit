@@ -21,12 +21,27 @@ public sealed class TodayService(
     public Task<ServiceResult<TodayDashboardDto>> GetDashboardAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
-            var (session, exercises) = await workoutSessionProvider.GetTodayScheduledAsync(userId, cancellationToken);
-            var hydrationTotal = await hydrationProvider.GetTodayTotalAsync(userId, cancellationToken);
-            var settings = await userSettingsProvider.GetAsync(userId, cancellationToken);
-            var weights = await bodyweightProvider.GetLatestAsync(userId, cancellationToken);
-            var (streakStatus, week) = await streakProvider.GetStatusAsync(userId, cancellationToken);
-            var activeSplit = await splitsProvider.GetActiveAsync(userId, cancellationToken);
+            // These six reads are independent, so run them concurrently instead of
+            // serially. The dashboard used to pay the sum of six round-trips on the
+            // hottest endpoint; the pool gives each call its own connection, so this
+            // drops the latency to roughly the slowest one. Task.WhenAll also
+            // observes every task, so a failure still surfaces to ServiceExecutor.
+            var sessionTask = workoutSessionProvider.GetTodayScheduledAsync(userId, cancellationToken);
+            var hydrationTask = hydrationProvider.GetTodayTotalAsync(userId, cancellationToken);
+            var settingsTask = userSettingsProvider.GetAsync(userId, cancellationToken);
+            var weightsTask = bodyweightProvider.GetLatestAsync(userId, cancellationToken);
+            var streakTask = streakProvider.GetStatusAsync(userId, cancellationToken);
+            var activeSplitTask = splitsProvider.GetActiveAsync(userId, cancellationToken);
+
+            await Task.WhenAll(sessionTask, hydrationTask, settingsTask, weightsTask, streakTask, activeSplitTask)
+                .ConfigureAwait(false);
+
+            var (session, exercises) = await sessionTask.ConfigureAwait(false);
+            var hydrationTotal = await hydrationTask.ConfigureAwait(false);
+            var settings = await settingsTask.ConfigureAwait(false);
+            var weights = await weightsTask.ConfigureAwait(false);
+            var (streakStatus, week) = await streakTask.ConfigureAwait(false);
+            var activeSplit = await activeSplitTask.ConfigureAwait(false);
 
             return new TodayDashboardDto
             {
@@ -107,9 +122,17 @@ public sealed class TodayService(
                 throw new ValidationException("Workout duration must be positive.", "Enter how long the workout took.");
             }
 
+            var setLogs = request.SetLogs?.Select(s => new SetLogEntryModel
+            {
+                ExerciseId = s.ExerciseId,
+                SetNumber = s.SetNumber,
+                WeightKg = s.WeightKg,
+                Reps = s.Reps
+            }).ToList();
+
             return await workoutSessionProvider.CompleteAsync(
                 userId, request.WorkoutSessionId, request.DurationMinutes,
-                request.CaloriesEstimate, request.RpeScore, request.TonnageKg, cancellationToken)
+                request.CaloriesEstimate, request.RpeScore, request.TonnageKg, setLogs, cancellationToken)
                 ?? throw new NotFoundException($"Workout session '{request.WorkoutSessionId}' not found for user '{userId}'.", "That workout session couldn't be found.");
         });
 }

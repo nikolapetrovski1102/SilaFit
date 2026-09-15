@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/dumbbell_icon.dart';
-import '../../../core/widgets/hero_container_transform.dart';
+import '../../../core/widgets/container_transform.dart';
 import '../../../core/widgets/slim_action_row.dart';
 import '../../splits/splits_screen.dart';
 import '../today_controller.dart';
@@ -33,16 +33,6 @@ class ActiveSplitCard extends StatelessWidget {
 
   const ActiveSplitCard({super.key, required this.activeSplit, this.scale = 1});
 
-  Future<void> _openSplits(BuildContext context) async {
-    final todayController = context.read<TodayController>();
-    await Navigator.of(context)
-        .push(heroExpandRoute(builder: (_) => const SplitsScreen()));
-    // The splits flow may have activated/switched a split - reload so it
-    // shows up here immediately instead of waiting for a manual pull-to-
-    // refresh on Home.
-    if (context.mounted) unawaited(todayController.load());
-  }
-
   @override
   Widget build(BuildContext context) {
     final split = activeSplit;
@@ -53,16 +43,11 @@ class ActiveSplitCard extends StatelessWidget {
             : split.name ?? 'Split active';
 
     final rowScale = scale * _emphasis;
-    // The whole row - not just an image, since there isn't one here - is the
-    // Hero, matching `_SplitCard`'s split-library-card transition: it grows
-    // into `SplitsScreen`'s header (tag 'active-split-hero' there), with
-    // crossfadeHeroShuttle dissolving this row's icon/text into that header
-    // as it grows rather than hard-swapping partway through the flight.
-    return Hero(
-      tag: 'active-split-hero',
-      createRectTween: straightHeroRectTween,
-      flightShuttleBuilder: crossfadeHeroShuttle,
-      child: SlimActionRow(
+    final todayController = context.read<TodayController>();
+    return ContainerTransform(
+      openBuilder: (_) => const SplitsScreen(),
+      onClosed: () => unawaited(todayController.load(force: true)),
+      closedBuilder: (context, openContainer) => SlimActionRow(
         icon: Icons.fitness_center_rounded,
         iconWidget:
             SoftDumbbellIcon(size: 22 * rowScale, color: AppColors.accent),
@@ -81,7 +66,7 @@ class ActiveSplitCard extends StatelessWidget {
         scale: rowScale,
         trailing: Icon(Icons.chevron_right_rounded,
             color: AppColors.onSurfaceVariant, size: 24 * rowScale),
-        onTap: () => _openSplits(context),
+        onTap: openContainer,
       ),
     );
   }

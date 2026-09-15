@@ -21,7 +21,7 @@ public sealed class SplitsController(ISplitService splitService, ILogger<SplitsC
     [HttpGet("{splitId:guid}")]
     public async Task<IActionResult> GetDetail(Guid splitId, CancellationToken cancellationToken)
     {
-        var result = await splitService.GetDetailAsync(splitId, cancellationToken);
+        var result = await splitService.GetDetailAsync(splitId, User.GetUserIdOrNull(), cancellationToken);
         return result.ToActionResult(logger);
     }
 

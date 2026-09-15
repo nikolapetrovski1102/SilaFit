@@ -3,13 +3,18 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/theme/app_colors.dart';
+import '../notifications/notifications_repository.dart';
 import '../onboarding/onboarding_controller.dart';
 import '../onboarding/onboarding_repository.dart';
+import '../onboarding/widgets/age_wheel_picker.dart';
+import '../onboarding/onboarding_models.dart';
 import '../onboarding/widgets/numeric_wheel_picker.dart';
+import '../onboarding/widgets/onboarding_step_transition.dart';
 import '../onboarding/widgets/option_row_selector.dart';
 import '../onboarding/widgets/question_scaffold.dart';
+import '../onboarding/widgets/training_preference_question.dart';
 
-/// Walks a just-registered user through the same 5 onboarding questions
+/// Walks a just-registered user through the same onboarding questions
 /// (gender/age/height/weight/goal) when `GET api/profile` comes back
 /// incomplete for their account - the only realistic way to hit this is an
 /// account created through a path that bypassed first-launch onboarding
@@ -22,13 +27,18 @@ import '../onboarding/widgets/question_scaffold.dart';
 /// pops `true` once the answers are saved (or `false` if the user backs out
 /// - registration itself already succeeded either way).
 class CompleteProfileFlow extends StatelessWidget {
-  const CompleteProfileFlow({super.key});
+  final UserProfile? initialProfile;
+  const CompleteProfileFlow({super.key, this.initialProfile});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) =>
-          OnboardingController(OnboardingRepository(ctx.read<ApiClient>())),
+      create: (ctx) => OnboardingController(
+        OnboardingRepository(ctx.read<ApiClient>()),
+        NotificationsRepository(ctx.read<ApiClient>()),
+        autoAdvanceEnabled: false,
+        initialProfile: initialProfile,
+      ),
       child: const _CompleteProfileView(),
     );
   }
@@ -42,15 +52,22 @@ class _CompleteProfileView extends StatefulWidget {
 }
 
 class _CompleteProfileViewState extends State<_CompleteProfileView> {
-  // Local 0-4 index over just the 5 question steps - separate from
+  // Local index over the nine question steps - separate from
   // OnboardingController's own step enum, which also carries intro/
   // notification steps this flow doesn't use.
   int _index = 0;
-  static const _stepCount = 5;
+  int _direction = 1;
+  static const _stepCount = 9;
 
   Future<void> _finish(OnboardingController controller) async {
-    await controller.submit();
+    final saved = await controller.submit();
     if (!mounted) return;
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(controller.lastError ?? 'Please complete your profile.')));
+      return;
+    }
     Navigator.of(context).pop(true);
   }
 
@@ -60,21 +77,47 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 320),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0.06, 0), end: Offset.zero)
-                .animate(animation),
-            child: child,
+      body: ClipRect(
+        child: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 360),
+          reverseDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 280),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeIn,
+          layoutBuilder: (currentChild, previousChildren) => Stack(
+            fit: StackFit.expand,
+            children: [
+              for (final child in previousChildren)
+                ExcludeSemantics(child: IgnorePointer(child: child)),
+              if (currentChild != null) currentChild,
+            ],
           ),
-        ),
-        child: KeyedSubtree(
-          key: ValueKey(_index),
-          child: _buildStep(controller),
+          transitionBuilder: (child, animation) => AnimatedBuilder(
+            animation: animation,
+            child: child,
+            builder: (context, child) {
+              final incoming = animation.status != AnimationStatus.reverse;
+              final progress = animation.value.clamp(0.0, 1.0);
+              final horizontalOffset = incoming
+                  ? _direction * (1 - progress)
+                  : -_direction * (1 - progress);
+              return Transform.translate(
+                offset: Offset(
+                    MediaQuery.sizeOf(context).width * horizontalOffset, 0),
+                child: OnboardingStepTransitionScope(
+                  animation: animation,
+                  child: child!,
+                ),
+              );
+            },
+          ),
+          child: KeyedSubtree(
+            key: ValueKey(_index),
+            child: _buildStep(controller),
+          ),
         ),
       ),
     );
@@ -84,17 +127,39 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
     if (_index == 0) {
       Navigator.of(context).maybePop(false);
     } else {
-      setState(() => _index--);
+      setState(() {
+        _direction = -1;
+        _index--;
+      });
     }
   }
 
   void _next() {
     if (_index < _stepCount - 1) {
-      setState(() => _index++);
+      setState(() {
+        _direction = 1;
+        _index++;
+      });
     }
   }
 
   Widget _buildStep(OnboardingController controller) {
+    if (_index >= 5) {
+      return TrainingPreferenceQuestion(
+        controller: controller,
+        step: const [
+          OnboardingStep.trainingDays,
+          OnboardingStep.trainingExperience,
+          OnboardingStep.equipmentAccess,
+          OnboardingStep.dailyActivity
+        ][_index - 5],
+        progressStep: _index + 1,
+        progressStepCount: _stepCount,
+        onBack: _back,
+        onNext: _index == 8 ? () => _finish(controller) : _next,
+        isLast: _index == 8,
+      );
+    }
     switch (_index) {
       case 0:
         return QuestionScaffold(
@@ -115,14 +180,13 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           onBack: _back,
           progressStep: 2,
           progressStepCount: _stepCount,
-          headline: 'How old are you?',
+          headline: 'What is your age?',
           body: Center(
-            child: NumericWheelPicker(
+            child: AgeWheelPicker(
               value: controller.ageYears,
               min: 13,
               max: 100,
               onChanged: controller.setAge,
-              suffixLabel: 'years',
             ),
           ),
           ctaLabel: 'Continue',
@@ -179,17 +243,19 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           headline: "What's your main goal?",
           body: OptionRowSelector(
             options: const ['BuildMuscle', 'LoseFat', 'MaintainActive'],
-            labelFor: (value) => const {
-              'BuildMuscle': 'Build muscle',
-              'LoseFat': 'Lose fat',
-              'MaintainActive': 'Maintain and stay active',
-            }[value] ?? value,
+            labelFor: (value) =>
+                const {
+                  'BuildMuscle': 'Build muscle',
+                  'LoseFat': 'Lose fat',
+                  'MaintainActive': 'Maintain and stay active',
+                }[value] ??
+                value,
             selected: controller.goal,
             onSelected: controller.selectGoal,
           ),
-          ctaLabel: 'Finish',
+          ctaLabel: 'Continue',
           ctaLoading: controller.isSubmitting,
-          onCta: controller.goal != null ? () => _finish(controller) : null,
+          onCta: controller.goal != null ? _next : null,
         );
     }
   }

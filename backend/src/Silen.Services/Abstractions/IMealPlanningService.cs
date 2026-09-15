@@ -16,7 +16,13 @@ public interface IMealPlanningService
 
     Task<ServiceResult<UserNutritionTargetsModel>> UpdateTargetsAsync(Guid userId, UpsertNutritionTargetsRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>Re-derives profile-based nutrition targets after a profile change
+    /// (weight/height/age/gender/goal/activity). No-op when the user has set their
+    /// own targets manually (<see cref="UserNutritionTargetsModel.IsManualOverride"/>).</summary>
+    Task<ServiceResult<UserNutritionTargetsModel>> RecomputeTargetsAsync(Guid userId, UserProfileModel profile, CancellationToken cancellationToken = default);
+
     /// <summary>Curated meal ideas for <paramref name="month"/> (1-12), or the
-    /// caller's current UTC month when null.</summary>
-    Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(int? month, CancellationToken cancellationToken = default);
+    /// caller's current UTC month when null, scored against the caller's own
+    /// nutrition targets and returned best-first.</summary>
+    Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(Guid userId, int? month, CancellationToken cancellationToken = default);
 }

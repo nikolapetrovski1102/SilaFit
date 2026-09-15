@@ -13,12 +13,21 @@ namespace Silen.Services.Implementations;
 /// <inheritdoc cref="IAdminAuthService"/>
 public sealed class AdminAuthService(
     IAdminProvider adminProvider,
+    IAdminRbacProvider adminRbacProvider,
+    IEmailSender emailSender,
     IOptions<AdminAuthOptions> adminAuthOptions,
     IOptions<JwtOptions> jwtOptions,
     IOptions<EncryptionOptions> encryptionOptions) : IAdminAuthService
 {
     /// <summary>Deliberately identical for a wrong password, an unknown username and an inactive account.</summary>
     private const string InvalidCredentialsMessage = "Invalid username or password.";
+
+    /// <summary>How long an emailed second-factor code stays valid - same window as the
+    /// registration verification email (<see cref="VerificationEmailTemplate"/>).</summary>
+    private static readonly TimeSpan EmailOtpLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>Minimum gap between "send email code instead" requests for the same challenge.</summary>
+    private static readonly TimeSpan EmailOtpResendCooldown = TimeSpan.FromSeconds(30);
 
     /// <summary>Burns a PBKDF2 cycle for unknown usernames too, so response time doesn't reveal who exists.</summary>
     private static readonly Lazy<(byte[] Hash, byte[] Salt)> DecoyCredentials =
@@ -38,7 +47,7 @@ public sealed class AdminAuthService(
             if (account is null || !account.IsActive)
             {
                 PasswordHasher.Verify(request.Password, DecoyCredentials.Value.Hash, DecoyCredentials.Value.Salt);
-                throw new UnauthorizedAppException($"Admin login attempted for unknown or inactive username '{request.Username}'.", InvalidCredentialsMessage);
+                throw new UnauthorizedAppException($"Admin login attempted for unknown or inactive username tag {LogRedaction.Tag(request.Username)}.", InvalidCredentialsMessage);
             }
 
             AdminSignInThrottle.ThrowIfLocked(account, options);
@@ -46,7 +55,7 @@ public sealed class AdminAuthService(
             if (!PasswordHasher.Verify(request.Password, account.PasswordHash, account.PasswordSalt))
             {
                 await AdminSignInThrottle.RecordFailureAsync(adminProvider, account, options, cancellationToken);
-                throw new UnauthorizedAppException($"Wrong password for admin '{account.Username}'.", InvalidCredentialsMessage);
+                throw new UnauthorizedAppException($"Wrong password for admin tag {LogRedaction.Tag(account.Username)}.", InvalidCredentialsMessage);
             }
 
             var lifetime = TimeSpan.FromMinutes(options.ChallengeMinutes);
@@ -69,7 +78,7 @@ public sealed class AdminAuthService(
 
             if (account is null || !account.IsActive)
             {
-                throw new UnauthorizedAppException($"Admin code step for '{challenge.Username}' found no active account.", InvalidCredentialsMessage);
+                throw new UnauthorizedAppException($"Admin code step for admin tag {LogRedaction.Tag(challenge.Username)} found no active account.", InvalidCredentialsMessage);
             }
 
             AdminSignInThrottle.ThrowIfLocked(account, options);
@@ -78,10 +87,13 @@ public sealed class AdminAuthService(
                 account.TotpSecretCipher,
                 AdminTotpSecretCipher.ParseMasterKey(encryptionOptions.Value.MasterKeyBase64));
 
-            if (!TotpHelper.VerifyCode(secret, request.Code, DateTime.UtcNow, options.TotpDigits, options.TotpStepSeconds, options.TotpWindowSteps))
+            var isValidTotpCode = TotpHelper.VerifyCode(secret, request.Code, DateTime.UtcNow, options.TotpDigits, options.TotpStepSeconds, options.TotpWindowSteps);
+            var isValidEmailCode = !isValidTotpCode && AdminEmailOtpValidator.IsValid(account, request.Code);
+
+            if (!isValidTotpCode && !isValidEmailCode)
             {
                 await AdminSignInThrottle.RecordFailureAsync(adminProvider, account, options, cancellationToken);
-                throw new UnauthorizedAppException($"Wrong authenticator code for admin '{account.Username}'.", "That code isn't right. Check your authenticator app and try again.");
+                throw new UnauthorizedAppException($"Wrong authenticator/email code for admin tag {LogRedaction.Tag(account.Username)}.", "That code isn't right. Check your authenticator app (or email) and try again.");
             }
 
             await adminProvider.RecordSuccessfulLoginAsync(account.AdminUserId, cancellationToken);
@@ -99,12 +111,62 @@ public sealed class AdminAuthService(
                 request.ClientIp,
                 cancellationToken);
 
+            // Resolved fresh from the role, not cached anywhere - the console's
+            // navigation is only ever as stale as this one lookup.
+            var permissions = await adminRbacProvider.GetPermissionsAsync(account.AdminUserId, cancellationToken);
+
             return new AdminSessionIssuedDto
             {
                 Token = token,
                 Username = account.Username,
                 ExpiresAtUtc = expiresAtUtc,
-                AbsoluteExpiresAtUtc = absoluteExpiresAtUtc
+                AbsoluteExpiresAtUtc = absoluteExpiresAtUtc,
+                RoleName = account.RoleName,
+                Permissions = permissions
+            };
+        });
+
+    public Task<ServiceResult<AdminEmailCodeSentDto>> SendEmailCodeAsync(AdminSendEmailCodeRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var challenge = AdminChallengeTokenFactory.ReadChallenge(jwtOptions.Value, request.ChallengeToken)
+                ?? throw new UnauthorizedAppException("Admin email-code request presented an invalid or expired challenge token.", "That sign-in attempt expired. Please start again.");
+
+            var options = adminAuthOptions.Value;
+            var account = await adminProvider.GetAccountByIdAsync(challenge.AdminUserId, cancellationToken);
+
+            if (account is null || !account.IsActive)
+            {
+                throw new UnauthorizedAppException($"Admin email-code request for admin tag {LogRedaction.Tag(challenge.Username)} found no active account.", InvalidCredentialsMessage);
+            }
+
+            AdminSignInThrottle.ThrowIfLocked(account, options);
+
+            if (string.IsNullOrWhiteSpace(account.Email))
+            {
+                throw new ValidationException(
+                    $"Admin tag {LogRedaction.Tag(account.Username)} requested an email code but has no email on file.",
+                    "No email address is on file for this account. Use your authenticator app, or ask another admin to add one.");
+            }
+
+            if (account.EmailOtpLastSentAtUtc is { } lastSentAtUtc && DateTime.UtcNow - lastSentAtUtc < EmailOtpResendCooldown)
+            {
+                throw new ConflictException("Admin email-code requested too soon after the previous send.", "Please wait a moment before requesting another code.");
+            }
+
+            var code = VerificationCodeGenerator.GenerateCode();
+            var (codeHash, codeSalt) = PasswordHasher.Hash(code);
+            var expiresAtUtc = DateTime.UtcNow.Add(EmailOtpLifetime);
+
+            await adminProvider.SetEmailOtpAsync(account.AdminUserId, account.Email, codeHash, codeSalt, expiresAtUtc, cancellationToken);
+
+            var (subject, html) = AdminEmailOtpTemplate.Build(code);
+            await emailSender.SendAsync(account.Email, subject, html, cancellationToken);
+
+            return new AdminEmailCodeSentDto
+            {
+                MaskedEmail = EmailMasking.Mask(account.Email),
+                ExpiresInSeconds = (int)EmailOtpLifetime.TotalSeconds
             };
         });
 
@@ -120,11 +182,19 @@ public sealed class AdminAuthService(
             var expiresAtUtc = DateTime.UtcNow.AddMinutes(options.SessionIdleMinutes);
             await adminProvider.TouchSessionAsync(session.AdminSessionId, expiresAtUtc, cancellationToken);
 
+            // Re-read on every probe (including nginx's auth_request subrequest), so a
+            // role change or revoked permission takes effect on the very next request
+            // rather than whenever the session happens to be re-issued.
+            var account = await adminProvider.GetAccountByIdAsync(session.AdminUserId, cancellationToken);
+            var permissions = await adminRbacProvider.GetPermissionsAsync(session.AdminUserId, cancellationToken);
+
             return new AdminSessionDto
             {
                 Username = session.Username,
                 ExpiresAtUtc = expiresAtUtc > session.AbsoluteExpiresAtUtc ? session.AbsoluteExpiresAtUtc : expiresAtUtc,
-                AbsoluteExpiresAtUtc = session.AbsoluteExpiresAtUtc
+                AbsoluteExpiresAtUtc = session.AbsoluteExpiresAtUtc,
+                RoleName = account?.RoleName,
+                Permissions = permissions
             };
         });
 

@@ -14,15 +14,31 @@ class AnalyticsController extends ChangeNotifier {
   /// error so the UI can show an upsell card instead of a generic error.
   bool requiresUpgrade = false;
 
+  /// Set once a 422 comes back - distinguishes "not enough logged history yet"
+  /// from any other error so the UI can show an encouraging card instead of a
+  /// generic one (see InsufficientAnalyticsDataException on the backend).
+  bool notEnoughData = false;
+
   bool isRefreshing = false;
+
+  // App-wide provider: the analytics tab used to refetch on every remount.
+  bool _isLoading = false;
 
   AnalyticsController(this._repository);
 
-  Future<void> load() async {
+  Future<void> load({bool force = false}) async {
+    if (_isLoading) return;
+    if (!force && state.hasData) return;
+    _isLoading = true;
     requiresUpgrade = false;
+    notEnoughData = false;
     state = const ResourceState.loading();
     notifyListeners();
-    await _fetch(refresh: false);
+    try {
+      await _fetch(refresh: false);
+    } finally {
+      _isLoading = false;
+    }
   }
 
   Future<void> refresh() async {
@@ -38,11 +54,15 @@ class AnalyticsController extends ChangeNotifier {
     try {
       final analytics = await _repository.getMonthly(refresh: refresh);
       requiresUpgrade = false;
+      notEnoughData = false;
       state = ResourceState.data(analytics);
     } on ApiException catch (e) {
       if (e.isForbidden) {
         requiresUpgrade = true;
         state = const ResourceState.error('');
+      } else if (e.isInsufficientData) {
+        notEnoughData = true;
+        state = ResourceState.error(e.userMessage);
       } else {
         state = ResourceState.error(e.userMessage);
       }

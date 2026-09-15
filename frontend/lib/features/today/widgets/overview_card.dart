@@ -1,3 +1,4 @@
+import '../../../core/widgets/container_transform.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:intl/intl.dart';
@@ -27,7 +28,8 @@ class TodayOverviewCard extends StatelessWidget {
   final DateTime? selectedDate;
   final WeekDayStatus? selectedKnownStatus;
   final ValueChanged<DayPreview> onDaySelected;
-  final VoidCallback onStart;
+  final WidgetBuilder workoutBuilder;
+  final VoidCallback onWorkoutClosed;
   final double scale;
 
   /// Whether a still-fresh `ActiveWorkoutDraft` exists for today's session -
@@ -49,7 +51,8 @@ class TodayOverviewCard extends StatelessWidget {
     required this.selectedDate,
     required this.selectedKnownStatus,
     required this.onDaySelected,
-    required this.onStart,
+    required this.workoutBuilder,
+    required this.onWorkoutClosed,
     this.scale = 1,
     this.isResumingWorkout = false,
     this.workoutProgress = 0,
@@ -98,13 +101,12 @@ class TodayOverviewCard extends StatelessWidget {
             activeSplit: dashboard.activeSplit,
             splitDetail: splitDetail,
             scale: scale,
-            onSelect: (date, status) =>
-                onDaySelected(DayPreview.resolve(
-                  date: date,
-                  dashboard: dashboard,
-                  knownStatus: status,
-                  splitDetail: splitDetail,
-                )),
+            onSelect: (date, status) => onDaySelected(DayPreview.resolve(
+              date: date,
+              dashboard: dashboard,
+              knownStatus: status,
+              splitDetail: splitDetail,
+            )),
           ),
         ),
         SizedBox(height: AppSpacing.xxl * scale),
@@ -114,7 +116,8 @@ class TodayOverviewCard extends StatelessWidget {
             key: ValueKey(dayKey(preview.date)),
             child: _SessionSection(
               preview: preview,
-              onStart: onStart,
+              workoutBuilder: workoutBuilder,
+              onWorkoutClosed: onWorkoutClosed,
               scale: scale,
               isResumingWorkout: isResumingWorkout,
               workoutProgress: workoutProgress,
@@ -133,14 +136,16 @@ class TodayOverviewCard extends StatelessWidget {
 /// a card of its own.
 class _SessionSection extends StatelessWidget {
   final DayPreview preview;
-  final VoidCallback onStart;
+  final WidgetBuilder workoutBuilder;
+  final VoidCallback onWorkoutClosed;
   final double scale;
   final bool isResumingWorkout;
   final double workoutProgress;
 
   const _SessionSection({
     required this.preview,
-    required this.onStart,
+    required this.workoutBuilder,
+    required this.onWorkoutClosed,
     required this.scale,
     this.isResumingWorkout = false,
     this.workoutProgress = 0,
@@ -171,11 +176,12 @@ class _SessionSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(preview.focusLabel?.toUpperCase() ?? 'SCHEDULED TODAY',
-                      style: AppTypography.labelCaps
-                          .copyWith(color: AppColors.accent, fontSize: 12 * scale)),
+                      style: AppTypography.labelCaps.copyWith(
+                          color: AppColors.accent, fontSize: 12 * scale)),
                   SizedBox(height: AppSpacing.xxs * scale),
                   Text(preview.title ?? 'Training Session',
-                      style: AppTypography.headlineLg.copyWith(fontSize: 32 * scale)),
+                      style: AppTypography.headlineLg
+                          .copyWith(fontSize: 32 * scale)),
                 ],
               ),
             ),
@@ -187,8 +193,8 @@ class _SessionSection extends StatelessWidget {
               progress: workoutProgress,
               size: 68 * scale,
               strokeWidth: 5.5 * scale,
-              child:
-                  Icon(Icons.bolt_rounded, color: AppColors.accent, size: 28 * scale),
+              child: Icon(Icons.bolt_rounded,
+                  color: AppColors.accent, size: 28 * scale),
             ),
           ],
         ),
@@ -204,19 +210,25 @@ class _SessionSection extends StatelessWidget {
           ],
         ),
         SizedBox(height: AppSpacing.lg * scale),
-        PrimaryPillButton(
-            // A fresh `ActiveWorkoutDraft` means there's a session already
-            // under way (sets logged, or just the clock already running) -
-            // "Start Workout" would read as discarding that instead of
-            // picking it back up.
-            label: isResumingWorkout ? 'Continue Workout' : 'Start Workout',
-            icon: isResumingWorkout
-                ? Icons.play_circle_fill_rounded
-                : Icons.play_arrow_rounded,
-            // Never below the spec's 48 tap-target floor, even if the rest
-            // of the card ever scaled down.
-            height: (48 * scale).clamp(48, 72),
-            onPressed: onStart),
+        ContainerTransform(
+          openBuilder: workoutBuilder,
+          onClosed: onWorkoutClosed,
+          closedColor: AppColors.accent,
+          radius: AppRadius.full,
+          closedBuilder: (context, openContainer) => PrimaryPillButton(
+              // A fresh `ActiveWorkoutDraft` means there's a session already
+              // under way (sets logged, or just the clock already running) -
+              // "Start Workout" would read as discarding that instead of
+              // picking it back up.
+              label: isResumingWorkout ? 'Continue Workout' : 'Start Workout',
+              icon: isResumingWorkout
+                  ? Icons.play_circle_fill_rounded
+                  : Icons.play_arrow_rounded,
+              // Never below the spec's 48 tap-target floor, even if the rest
+              // of the card ever scaled down.
+              height: (48 * scale).clamp(48, 72),
+              onPressed: openContainer),
+        ),
       ],
     );
   }
@@ -224,8 +236,9 @@ class _SessionSection extends StatelessWidget {
   /// A day - future or already gone - that the active split has scheduled
   /// but isn't today, so there's nothing to start: just what's coming up.
   Widget _buildUpcomingPreview() {
-    final minutesLabel =
-        preview.estimatedMinutes != null ? '${preview.estimatedMinutes} min' : null;
+    final minutesLabel = preview.estimatedMinutes != null
+        ? '${preview.estimatedMinutes} min'
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -238,10 +251,12 @@ class _SessionSection extends StatelessWidget {
                 children: [
                   Text('UPCOMING · ${_dateLabel.toUpperCase()}',
                       style: AppTypography.labelCaps.copyWith(
-                          color: AppColors.onSurfaceVariant, fontSize: 12 * scale)),
+                          color: AppColors.onSurfaceVariant,
+                          fontSize: 12 * scale)),
                   SizedBox(height: AppSpacing.xxs * scale),
                   Text(preview.title ?? 'Nothing scheduled',
-                      style: AppTypography.headlineLg.copyWith(fontSize: 32 * scale)),
+                      style: AppTypography.headlineLg
+                          .copyWith(fontSize: 32 * scale)),
                 ],
               ),
             ),
@@ -299,7 +314,8 @@ class _SessionSection extends StatelessWidget {
             children: [
               if (!preview.isToday) _dateEyebrow(),
               Text('REST DAY',
-                  style: AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
+                  style:
+                      AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
               SizedBox(height: AppSpacing.xxs * scale),
               Text(
                 subtitle,
@@ -317,8 +333,9 @@ class _SessionSection extends StatelessWidget {
   }
 
   Widget _buildCompleted() {
-    final subtitle =
-        preview.isToday ? 'Completed. Nice work today.' : 'Completed on $_dateLabel.';
+    final subtitle = preview.isToday
+        ? 'Completed. Nice work today.'
+        : 'Completed on $_dateLabel.';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -328,7 +345,8 @@ class _SessionSection extends StatelessWidget {
             children: [
               if (!preview.isToday) _dateEyebrow(),
               Text(preview.title ?? 'Session',
-                  style: AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
+                  style:
+                      AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
               SizedBox(height: AppSpacing.xxs * scale),
               Text(subtitle,
                   style: AppTypography.bodyLg
@@ -341,7 +359,8 @@ class _SessionSection extends StatelessWidget {
           progress: 1,
           size: 68 * scale,
           strokeWidth: 5.5 * scale,
-          child: Icon(Icons.check_rounded, color: AppColors.accent, size: 30 * scale),
+          child: Icon(Icons.check_rounded,
+              color: AppColors.accent, size: 30 * scale),
         ),
       ],
     );
@@ -357,7 +376,8 @@ class _SessionSection extends StatelessWidget {
             children: [
               _dateEyebrow(),
               Text(preview.title ?? 'Session missed',
-                  style: AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
+                  style:
+                      AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
               SizedBox(height: AppSpacing.xxs * scale),
               Text('No session logged for this day.',
                   style: AppTypography.bodyLg
@@ -366,7 +386,8 @@ class _SessionSection extends StatelessWidget {
           ),
         ),
         SizedBox(width: AppSpacing.md * scale),
-        Icon(Icons.close_rounded, color: AppColors.onSurfaceVariant, size: 36 * scale),
+        Icon(Icons.close_rounded,
+            color: AppColors.onSurfaceVariant, size: 36 * scale),
       ],
     );
   }
@@ -375,8 +396,8 @@ class _SessionSection extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.xxs * scale),
       child: Text(_dateLabel.toUpperCase(),
-          style: AppTypography.labelCaps
-              .copyWith(color: AppColors.onSurfaceVariant, fontSize: 12 * scale)),
+          style: AppTypography.labelCaps.copyWith(
+              color: AppColors.onSurfaceVariant, fontSize: 12 * scale)),
     );
   }
 }

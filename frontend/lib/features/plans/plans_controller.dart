@@ -11,11 +11,18 @@ class PlansController extends ChangeNotifier {
   ResourceState<List<PlanCatalogEntry>> state = const ResourceState.loading();
   bool isYearly = true;
   bool isPurchasing = false;
+  int purchaseRevision = 0;
   String? actionError;
 
   PlansController(this._repository);
 
-  Future<void> load() async {
+  // App-wide provider: skip a repeat catalogue load and never overlap loads.
+  bool _isLoading = false;
+
+  Future<void> load({bool force = false}) async {
+    if (_isLoading) return;
+    if (!force && state.hasData) return;
+    _isLoading = true;
     state = const ResourceState.loading();
     notifyListeners();
     try {
@@ -25,6 +32,8 @@ class PlansController extends ChangeNotifier {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);
+    } finally {
+      _isLoading = false;
     }
     notifyListeners();
   }
@@ -35,12 +44,14 @@ class PlansController extends ChangeNotifier {
   }
 
   Future<bool> purchase(String planId) async {
+    if (isPurchasing) return false;
     isPurchasing = true;
     actionError = null;
     notifyListeners();
     try {
       await _repository.purchase(
           planId: planId, billingCycle: isYearly ? 'Yearly' : 'Monthly');
+      purchaseRevision++;
       isPurchasing = false;
       notifyListeners();
       return true;

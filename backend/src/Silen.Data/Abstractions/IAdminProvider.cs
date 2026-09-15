@@ -12,12 +12,30 @@ public interface IAdminProvider
 
     Task<AdminAccountModel?> GetAccountByIdAsync(Guid adminUserId, CancellationToken cancellationToken = default);
 
-    /// <summary>Creates the account, or rotates the credentials of an existing username. Also clears the lockout and drops live sessions.</summary>
+    /// <summary>Creates the account, or rotates the credentials of an existing username. Also clears the lockout and drops live sessions.
+    /// A null <paramref name="email"/> leaves any existing address alone; pass an empty string to clear it.</summary>
     Task<Guid> UpsertAccountAsync(
         string username,
         byte[] passwordHash,
         byte[] passwordSalt,
         byte[] totpSecretCipher,
+        string? email = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sets or clears the recovery email without touching credentials or sessions.</summary>
+    Task SetEmailAsync(Guid adminUserId, string? email, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records the "send email code instead" code just emailed to <paramref name="email"/>.
+    /// A no-op (zero rows affected) if that address no longer matches the account's Email -
+    /// the caller re-reads the account and reports "no email on file" instead.
+    /// </summary>
+    Task SetEmailOtpAsync(
+        Guid adminUserId,
+        string email,
+        byte[] codeHash,
+        byte[] codeSalt,
+        DateTime expiresAtUtc,
         CancellationToken cancellationToken = default);
 
     Task<AdminLockoutStateModel?> RecordFailedLoginAsync(

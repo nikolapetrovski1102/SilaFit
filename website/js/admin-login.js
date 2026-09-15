@@ -27,10 +27,12 @@
   var codeSubmit = document.getElementById('codeSubmit');
   var passwordSubmit = document.getElementById('passwordSubmit');
   var timerEl = document.getElementById('challengeTimer');
+  var emailCodeBtn = document.getElementById('emailCodeBtn');
 
   var challengeToken = null;
   var challengeDeadline = 0;
   var timerHandle = null;
+  var emailCodeCooldownHandle = null;
 
   /* Reasons we can be sent back here mid-flow, so the page explains itself
      instead of silently reappearing. */
@@ -126,6 +128,7 @@
       challengeToken = result.data.challengeToken;
       passwordEl.value = '';
       showAlert('Password accepted. Enter the code from your authenticator app.', 'info');
+      resetEmailCodeButton();
       goToStep(2);
       startChallengeTimer(result.data.expiresInSeconds);
     });
@@ -165,12 +168,62 @@
     });
   });
 
+  /* Cooldown mirrors the API's own 30s resend window (AdminAuthService), so the
+     button never fires a request that's just going to come back as a 409. */
+  function startEmailCodeCooldown(seconds) {
+    window.clearInterval(emailCodeCooldownHandle);
+    var secondsLeft = seconds;
+    emailCodeBtn.disabled = true;
+    emailCodeBtn.textContent = 'Code sent — resend in ' + secondsLeft + 's';
+
+    emailCodeCooldownHandle = window.setInterval(function () {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        window.clearInterval(emailCodeCooldownHandle);
+        emailCodeBtn.disabled = false;
+        emailCodeBtn.textContent = 'Send email code instead';
+        return;
+      }
+      emailCodeBtn.textContent = 'Code sent — resend in ' + secondsLeft + 's';
+    }, 1000);
+  }
+
+  function resetEmailCodeButton() {
+    window.clearInterval(emailCodeCooldownHandle);
+    emailCodeBtn.disabled = false;
+    emailCodeBtn.textContent = 'Send email code instead';
+  }
+
+  emailCodeBtn.addEventListener('click', function () {
+    clearAlert();
+    emailCodeBtn.disabled = true;
+
+    auth.sendEmailCode(challengeToken).then(function (result) {
+      if (!result.ok || !result.data) {
+        resetEmailCodeButton();
+        showAlert(messageFor(result, 'Could not send an email code. Please try again.'));
+
+        if (result.status === 429 || result.status === 401) {
+          window.clearInterval(timerHandle);
+          timerEl.textContent = '';
+        }
+        return;
+      }
+
+      showAlert('Code sent to ' + result.data.maskedEmail + '. It expires in 10 minutes.', 'info');
+      codeEl.value = '';
+      codeEl.focus();
+      startEmailCodeCooldown(30);
+    });
+  });
+
   document.getElementById('restartBtn').addEventListener('click', function () {
     challengeToken = null;
     window.clearInterval(timerHandle);
     timerEl.textContent = '';
     codeEl.value = '';
     clearAlert();
+    resetEmailCodeButton();
     goToStep(1);
   });
 

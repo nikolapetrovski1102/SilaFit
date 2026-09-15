@@ -6,6 +6,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <!-- Renders the authenticator enrollment URI as a terminal QR in the read-only
+         reveal mode. Local-only, in-process: the URI carries the raw TOTP secret,
+         so it must never be handed to a remote QR service (same reason the console
+         uses a vendored qrcode.js instead of a CDN). -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <PropertyGroup>

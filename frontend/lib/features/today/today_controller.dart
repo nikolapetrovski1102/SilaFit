@@ -14,9 +14,21 @@ class TodayController extends ChangeNotifier {
   ResourceState<TodayDashboard> state = const ResourceState.loading();
   String? actionError;
 
+  /// Load-once + in-flight guard. The app-wide provider survives screen
+  /// remounts (e.g. the theme-change rebuild), so an unconditional `load()`
+  /// from a fresh `initState` used to re-fetch a dashboard we already had.
+  bool _isLoading = false;
+
   TodayController(this._repository);
 
-  Future<void> load() async {
+  /// [force] is for the explicit paths - pull-to-refresh, retry, or a write
+  /// that just changed the dashboard - which must re-fetch even when data is
+  /// already present.
+  Future<void> load({bool force = false}) async {
+    if (_isLoading) return;
+    if (!force && state.hasData) return;
+    _isLoading = true;
+
     // Only drop to the loading spinner on the very first load, when there's
     // no dashboard to show yet. On a pull-to-refresh, `state` already has
     // data - keep showing it while refetching instead of wiping it to
@@ -39,6 +51,8 @@ class TodayController extends ChangeNotifier {
     } catch (_) {
       state = ResourceState.error(ApiException.genericMessage,
           staleData: state.data);
+    } finally {
+      _isLoading = false;
     }
     notifyListeners();
   }
@@ -90,6 +104,7 @@ class TodayController extends ChangeNotifier {
     int? caloriesEstimate,
     double? rpeScore,
     double? tonnageKg,
+    List<SetLogEntry>? setLogs,
   }) async {
     try {
       await _repository.completeWorkout(
@@ -98,8 +113,9 @@ class TodayController extends ChangeNotifier {
         caloriesEstimate: caloriesEstimate,
         rpeScore: rpeScore,
         tonnageKg: tonnageKg,
+        setLogs: setLogs,
       );
-      await load();
+      await load(force: true);
       return true;
     } on ApiException catch (e) {
       actionError = e.userMessage;

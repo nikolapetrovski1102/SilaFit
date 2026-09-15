@@ -11,7 +11,14 @@ using Silen.Common.Helpers;
 // added by 024 - leaving the original plaintext columns untouched.
 //
 // Safe to re-run: only rows whose *Enc column is still NULL are processed,
-// so an interrupted run just picks up where it left off.
+// so an interrupted run just picks up where it left off. It is also safe to
+// run unconditionally on every deploy (deploy.sh does, right before applying
+// 025) even long after the cutover: each table is skipped once its "_Legacy"
+// column exists, since that is 025's own signal that it already promoted
+// that table's *Enc columns into place - at that point the columns this tool
+// would read as plaintext hold real ciphertext instead (a bare "*Enc IS
+// NULL" check can't tell the difference, and reading ciphertext bytes back
+// as a string throws System.InvalidCastException).
 //
 // Usage:
 //   SILEN_CONNECTION_STRING="..." ENCRYPTION_MASTER_KEY="<base64>" \
@@ -38,8 +45,24 @@ await EncryptUserNutritionTargetsAsync(connection, key);
 Console.WriteLine("Backfill complete.");
 return;
 
+static async Task<bool> ColumnExistsAsync(SqlConnection connection, string table, string column)
+{
+    await using var cmd = new SqlCommand(
+        "SELECT COL_LENGTH(@Table, @Column)", connection);
+    cmd.Parameters.AddWithValue("@Table", table);
+    cmd.Parameters.AddWithValue("@Column", column);
+    var result = await cmd.ExecuteScalarAsync();
+    return result is not DBNull and not null;
+}
+
 static async Task EncryptUserProfilesAsync(SqlConnection connection, byte[] key)
 {
+    if (await ColumnExistsAsync(connection, "dbo.UserProfiles", "Gender_Legacy"))
+    {
+        Console.WriteLine("UserProfiles: already cut over, skipping.");
+        return;
+    }
+
     const string selectSql = """
         SELECT UserId, Gender, AgeYears, HeightCm, WeightKg, Goal
         FROM dbo.UserProfiles
@@ -87,6 +110,12 @@ static async Task EncryptUserProfilesAsync(SqlConnection connection, byte[] key)
 
 static async Task EncryptBodyweightLogsAsync(SqlConnection connection, byte[] key)
 {
+    if (await ColumnExistsAsync(connection, "dbo.BodyweightLogs", "WeightKg_Legacy"))
+    {
+        Console.WriteLine("BodyweightLogs: already cut over, skipping.");
+        return;
+    }
+
     const string selectSql = "SELECT BodyweightLogId, WeightKg FROM dbo.BodyweightLogs WHERE WeightKgEnc IS NULL";
 
     var rows = new List<(Guid Id, decimal WeightKg)>();
@@ -113,6 +142,12 @@ static async Task EncryptBodyweightLogsAsync(SqlConnection connection, byte[] ke
 
 static async Task EncryptMealLogsAsync(SqlConnection connection, byte[] key)
 {
+    if (await ColumnExistsAsync(connection, "dbo.MealLogs", "Title_Legacy"))
+    {
+        Console.WriteLine("MealLogs: already cut over, skipping.");
+        return;
+    }
+
     const string selectSql = """
         SELECT MealLogId, Title, CaloriesKcal, ProteinG, CarbsG, FatsG
         FROM dbo.MealLogs
@@ -155,6 +190,12 @@ static async Task EncryptMealLogsAsync(SqlConnection connection, byte[] key)
 
 static async Task EncryptUserNutritionTargetsAsync(SqlConnection connection, byte[] key)
 {
+    if (await ColumnExistsAsync(connection, "dbo.UserNutritionTargets", "TargetCalories_Legacy"))
+    {
+        Console.WriteLine("UserNutritionTargets: already cut over, skipping.");
+        return;
+    }
+
     const string selectSql = """
         SELECT UserId, TargetCalories, TargetProteinG, TargetCarbsG, TargetFatsG
         FROM dbo.UserNutritionTargets

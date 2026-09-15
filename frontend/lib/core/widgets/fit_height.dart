@@ -124,7 +124,15 @@ class _FitHeightState extends State<FitHeight>
         // still lays this out (so it can be measured) but paints nothing
         // and reports zero size to the Stack.
         Offstage(
-          child: KeyedSubtree(key: _measureKey, child: widget.builder(1)),
+          // The builder is intentionally invoked twice: once here for
+          // measurement and once below for the visible content. Disable
+          // heroes in this private copy so HeroController never sees two
+          // widgets with the same tag in a PageRoute subtree. This applies
+          // to every FitHeight caller, including heroes added in the future.
+          child: HeroMode(
+            enabled: false,
+            child: KeyedSubtree(key: _measureKey, child: widget.builder(1)),
+          ),
         ),
         AnimatedBuilder(
           animation: _scale,

@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+# Local scraper environments and resumable page cache
+tools/muscleandstrength_scraper/.venv/
+data/scraped/muscleandstrength/.cache/
+
 # Visual Studio / VS for Mac
 .vs/
 
@@ -19,6 +23,7 @@ database/**/*.ldf
 
 # Local dev config with real connection strings & keys — never commit
 backend/src/Silen.Api/appsettings.Development.json
+backend/src/Silen.Tools.*/appsettings.Development.json
 
 # Old/local deploy scripts with hardcoded dev passwords — superseded by deploy/deploy.sh
 database/scripts/
@@ -27,6 +32,23 @@ database/scripts/
 # encrypted database; never commit it, move it to separate secure storage.
 deploy/tde-cert-backup/
 
+# Firebase service account for push reminders (see deploy/README.md). The JSON
+# is mounted read-only into the API / notification tool; it must never be committed.
+deploy/secrets/
+**/service-account*.json
+**/fcm-service-account*.json
+**/*firebase-adminsdk*.json
+
+# Local Google/Firebase OAuth client secrets (stray local copies) - never commit
+/data/*.json
+/data/*.plist
+
+# Chrome profile dump left behind by the scraper's browser automation
+data/scraped/muscleandstrength/.browser-profile/
+
 # Android signing keystore backup - never commit
 *.jks
 *.keystore
+
+# /graphify skill scratch output - not project content
+graphify-out/

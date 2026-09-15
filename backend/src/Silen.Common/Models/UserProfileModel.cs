@@ -10,4 +10,9 @@ public sealed class UserProfileModel
     public string? Goal { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+    public int? TrainingDaysPerWeek { get; set; }
+    public int? SessionDurationMinutes { get; set; }
+    public string? TrainingExperience { get; set; }
+    public string? EquipmentAccess { get; set; }
+    public string? DailyActivityLevel { get; set; }
 }

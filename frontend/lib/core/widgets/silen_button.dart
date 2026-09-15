@@ -143,7 +143,8 @@ class SecondaryPillButton extends StatelessWidget {
             ],
             Text(
               label,
-              style: AppTypography.labelCaps.copyWith(
+              style: AppTypography.headlineSm.copyWith(
+                  fontSize: 16,
                   color: foregroundColor ?? AppColors.onSurfaceVariant),
             ),
           ],

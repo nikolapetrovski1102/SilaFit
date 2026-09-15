@@ -55,11 +55,12 @@ public sealed class MealPlanningController(IMealPlanningService mealPlanningServ
         return result.ToActionResult(logger);
     }
 
-    /// <summary>Curated meal ideas for the given month (1-12); defaults to the current UTC month.</summary>
+    /// <summary>Curated meal ideas for the given month (1-12); defaults to the current UTC
+    /// month. Scored against the caller's nutrition targets and returned best-first.</summary>
     [HttpGet("suggestions")]
     public async Task<IActionResult> GetSuggestions([FromQuery] int? month, CancellationToken cancellationToken)
     {
-        var result = await mealPlanningService.GetSuggestionsAsync(month, cancellationToken);
+        var result = await mealPlanningService.GetSuggestionsAsync(User.GetUserId(), month, cancellationToken);
         return result.ToActionResult(logger);
     }
 }

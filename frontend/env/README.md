@@ -34,34 +34,34 @@ the committed default stays what the team actually runs against.
 
 ## `prod.json`
 
-Points at the real deployment - `https://silafit.tappit.click/api` (see
-`deploy/README.md` and `deploy/nginx-silafit.tappit.click.conf`).
+Points at the real deployment - `https://api.sila.fitness/api` (see
+`deploy/migration/README.md` and `deploy/migration/nginx-silen.conf`).
 
 ## `GOOGLE_WEB_CLIENT_ID` / `GOOGLE_IOS_CLIENT_ID`
 
-Both files currently ship placeholder values (`REPLACE_WITH_GOOGLE_...`) - Google
-Sign-In is wired end-to-end (Flutter `GoogleSignIn`, backend `GoogleAuth:ClientIds`
-validation) but needs real OAuth client IDs from a Google Cloud project before it'll
-actually work. To create them:
+Google Sign-In is wired end-to-end (Flutter `GoogleSignIn`, backend
+`GoogleAuth:ClientIds` validation) with real OAuth client IDs from the `silafit`
+Google Cloud project, all three registered against `applicationId`/bundle id
+`com.nikolapetrovski.silafit`:
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), create (or pick) a
-   project, then go to **APIs & Services → Credentials → Create Credentials → OAuth
-   client ID**.
-2. Configure the **OAuth consent screen** first if prompted (External, app name
-   "SilaFit", your email as support/developer contact - no special scopes needed
-   beyond the default `email`/`profile`).
-3. Create an **iOS** client:
-   - Bundle ID: `com.nikolapetrovski.silafit`
-   - Copy the generated client ID into `GOOGLE_IOS_CLIENT_ID` in both env files.
-4. Create a **Web application** client (this is the one the backend validates
-   Google ID tokens against - Google calls it the "server client ID" /
-   `serverClientId` on the Flutter side, and it's also what an Android build's
-   idToken is issued for):
-   - No redirect URIs are needed for the native-app flow used here.
-   - Copy the generated client ID into `GOOGLE_WEB_CLIENT_ID` in both env files,
-     **and** into the repo-root `.env` file as `GOOGLE_WEB_CLIENT_ID=...` (picked up
-     by `docker-compose.yml`'s `GoogleAuth__ClientIds__0` for the backend - see
-     `.env` and `docker-compose.yml`).
-5. If/when an Android OAuth client is added, it must be registered against the
-   app's real `applicationId` + release/debug signing SHA-1 - `applicationId` is
-   now `com.nikolapetrovski.silafit`, matching iOS.
+- **iOS** client → `GOOGLE_IOS_CLIENT_ID` in both env files, and the matching
+  `REVERSED_CLIENT_ID` URL scheme in `ios/SilaFit/Info.plist`
+  (`CFBundleURLTypes`) so the sign-in redirect lands back in the app.
+- **Android** client → registered against the app's package name + debug/release
+  signing SHA-1 in Google Cloud Console. Nothing to configure app-side: the
+  `google_sign_in` plugin picks it up automatically from the app's signature,
+  not from a client ID passed in code.
+- **Web application** client → the one the backend actually validates ID tokens
+  against (Google calls it the "server client ID" / `serverClientId` on the
+  Flutter side, and it's also what an Android build's idToken is issued for).
+  Lives in `GOOGLE_WEB_CLIENT_ID` in both env files, and in the repo-root `.env`
+  file (picked up by `docker-compose.yml`'s `GoogleAuth__ClientIds__0` for the
+  backend). It needs no redirect URIs or JS origins - it only serves as a token
+  audience, never an actual web flow.
+
+Rotating or adding a client (e.g. a new signing key's SHA-1, or a new bundle id)
+means creating/updating it in [Google Cloud Console](https://console.cloud.google.com/)
+under **APIs & Services → Credentials**, project `silafit`.
+
+Production (`deploy/.env` on the server, separate from this repo) needs its own
+`GOOGLE_WEB_CLIENT_ID` set the same way - see `deploy/.env.example`.

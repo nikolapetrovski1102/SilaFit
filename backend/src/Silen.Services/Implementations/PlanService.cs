@@ -25,6 +25,18 @@ public sealed class PlanService(IPlansProvider plansProvider) : IPlanService
                 .ToList();
         });
 
+    public Task<ServiceResult<UserSubscriptionModel>> GetCurrentAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var subscription = await plansProvider.GetActiveAsync(userId, cancellationToken);
+            if (subscription is not null
+                && string.Equals(subscription.Status, "Active", StringComparison.OrdinalIgnoreCase)
+                && (subscription.ExpiresAtUtc is null || subscription.ExpiresAtUtc > DateTime.UtcNow))
+                return subscription;
+
+            return new UserSubscriptionModel { UserId = userId, PlanCode = "FREE", PlanName = "Free", Status = "Inactive" };
+        });
+
     public Task<ServiceResult<UserSubscriptionModel>> PurchaseAsync(Guid userId, PurchaseRequest request, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {

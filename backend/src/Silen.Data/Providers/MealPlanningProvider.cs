@@ -34,7 +34,8 @@ public sealed class MealPlanningProvider : IMealPlanningProvider
                 SqlParameterBuilder.Create("@TargetCalories", FieldCipher.EncryptInt(request.TargetCalories, _key)),
                 SqlParameterBuilder.Create("@TargetProteinG", FieldCipher.EncryptInt(request.TargetProteinG, _key)),
                 SqlParameterBuilder.Create("@TargetCarbsG", FieldCipher.EncryptInt(request.TargetCarbsG, _key)),
-                SqlParameterBuilder.Create("@TargetFatsG", FieldCipher.EncryptInt(request.TargetFatsG, _key))
+                SqlParameterBuilder.Create("@TargetFatsG", FieldCipher.EncryptInt(request.TargetFatsG, _key)),
+                SqlParameterBuilder.Create("@IsManualOverride", request.IsManualOverride)
             ],
             async reader => await reader.ReadAsync(cancellationToken) ? MealPlanningRowMapper.MapNutritionTargets(reader, _key) : null,
             cancellationToken) ?? throw new InvalidOperationException("usp_UserNutritionTargets_Upsert did not return a row.");

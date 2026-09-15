@@ -5,7 +5,7 @@ namespace Silen.Common.Options;
 /// intentionally separate from the app's JWT flow: the app authenticates with a
 /// bearer token it holds in memory, while the admin dashboard is gated by an
 /// HttpOnly cookie that nginx validates before it will serve admin.html at all
-/// (see deploy/nginx-silafit.tappit.click.conf).
+/// (see deploy/nginx-sila.fitness.conf).
 /// </summary>
 public sealed class AdminAuthOptions
 {

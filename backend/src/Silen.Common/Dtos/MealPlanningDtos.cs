@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Silen.Common.Models;
 
 namespace Silen.Common.Dtos;
@@ -22,6 +23,13 @@ public sealed class UpsertNutritionTargetsRequest
     public short TargetProteinG { get; set; }
     public short TargetCarbsG { get; set; }
     public short TargetFatsG { get; set; }
+
+    /// <summary>Set by the service layer, never by a client payload. True when the
+    /// user edited their own targets (PUT /api/meals/targets) so a later profile
+    /// change doesn't silently recompute over their choice; false for targets the
+    /// app derived from the profile.</summary>
+    [JsonIgnore]
+    public bool IsManualOverride { get; set; }
 }
 
 /// <summary>Composed view the app renders for one day: targets, the day's meals, and derived totals.</summary>

@@ -272,6 +272,77 @@ BEGIN
 END
 GO
 
+-- Creates a brand-new operator from the dashboard (operators.manage). Deliberately
+-- separate from usp_Admin_UpsertAccount: that procedure is the provisioning CLI's
+-- rotate-or-create tool and will happily overwrite an existing username's
+-- credentials, which is exactly the wrong behavior for an HTTP endpoint an
+-- authenticated operator can call - a typo'd "existing" username must never
+-- silently reset someone else's password and kill their sessions. This procedure
+-- only ever inserts, and refuses (Conflict) if the username is already taken.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_Operator_Create
+    @Username NVARCHAR(100),
+    @PasswordHash VARBINARY(256),
+    @PasswordSalt VARBINARY(128),
+    @TotpSecretCipher VARBINARY(256),
+    @RoleName NVARCHAR(64) = NULL,
+    @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
+    @ActorUsername NVARCHAR(100),
+    @ActorIp NVARCHAR(64) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @Username = LTRIM(RTRIM(@Username));
+    SET @RoleName = NULLIF(LTRIM(RTRIM(@RoleName)), N'');
+
+    DECLARE @RoleId UNIQUEIDENTIFIER;
+
+    BEGIN TRANSACTION;
+
+    IF @Username IS NULL OR @Username = N''
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 3 AS Outcome, CAST(NULL AS UNIQUEIDENTIFIER) AS EntityId, N'A username is required.' AS Detail;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM dbo.AdminUsers WHERE Username = @Username)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, CAST(NULL AS UNIQUEIDENTIFIER) AS EntityId,
+               N'An operator named ''' + @Username + N''' already exists.' AS Detail;
+        RETURN;
+    END
+
+    IF @RoleName IS NOT NULL
+    BEGIN
+        SELECT @RoleId = RoleId FROM dbo.AdminRoles WHERE Name = @RoleName;
+
+        IF @RoleId IS NULL
+        BEGIN
+            COMMIT TRANSACTION;
+            SELECT 1 AS Outcome, CAST(NULL AS UNIQUEIDENTIFIER) AS EntityId,
+                   N'No role named ''' + @RoleName + N'''.' AS Detail;
+            RETURN;
+        END
+    END
+
+    DECLARE @AdminUserId UNIQUEIDENTIFIER = NEWID();
+
+    INSERT INTO dbo.AdminUsers (AdminUserId, Username, PasswordHash, PasswordSalt, TotpSecretCipher, RoleId)
+    VALUES (@AdminUserId, @Username, @PasswordHash, @PasswordSalt, @TotpSecretCipher, @RoleId);
+
+    INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
+    VALUES (@ActorAdminUserId, @ActorUsername, N'Create', N'AdminOperator', CONVERT(NVARCHAR(64), @AdminUserId),
+            N'Created operator ''' + @Username + N''' with role ''' + ISNULL(@RoleName, N'none') + N'''', @ActorIp);
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @AdminUserId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
+END
+GO
+
 -- Moving an operator between roles also drops their live sessions: privilege is
 -- re-read per request so the change is immediate anyway, but a demotion should not
 -- leave a console tab sitting mid-edit holding a page it can no longer save.

@@ -4,10 +4,9 @@ import 'package:flutter/widgets.dart';
 /// the previous "Kinetic Pulse" palette wholesale (different literal hex
 /// values throughout, not a re-skin of the old ones).
 ///
-/// Dark mode's ground truth is the 4 built `code.html` mockups' Tailwind
-/// config (dark canvas #0f1512 / lime accent #d0f043) - the accent had
-/// briefly been swapped to Cosmic Orange (#f77e2d) per product direction,
-/// but that's been reverted back to the mockups' lime. Light mode's ground
+/// Dark mode uses the teal-green fitness palette sampled from the current
+/// product reference (deep teal canvas #172d30 / soft lime accent #defb92).
+/// Light mode's ground
 /// truth is `homescreen_inspiration-light`
 /// (cream canvas / mustard-gold secondary), with its accent likewise swapped
 /// to a truer burgundy (#800020) - see [AppPalette.light]'s doc comment.
@@ -53,18 +52,18 @@ class AppColors {
   static Color get outline => _current.outline;
   static Color get outlineVariant => _current.outlineVariant;
 
-  // Lime accent (Precision Kinetic "primary" family)
+  // Soft chartreuse accent (primary family)
   static Color get accent => _current.accent;
   static Color get onAccent => _current.onAccent;
   static Color get primaryContainer => _current.primaryContainer;
   static Color get onPrimaryContainer => _current.onPrimaryContainer;
 
-  // Gold accent (Pro tier)
+  // Warm orange accent (Pro tier)
   static Color get secondary => _current.secondary;
   static Color get secondaryContainer => _current.secondaryContainer;
   static Color get onSecondaryContainer => _current.onSecondaryContainer;
 
-  // Tertiary (pale blue - e.g. carbs macro bar)
+  // Tertiary (sky blue - e.g. carbs macro bar)
   static Color get tertiaryContainer => _current.tertiaryContainer;
 
   // Status
@@ -156,32 +155,31 @@ class AppPalette {
   final Color onError;
   final Color onErrorContainer;
 
-  /// Dark palette - ground truth from the 4 built Precision Kinetic
-  /// `code.html` mockups' Tailwind config, including the accent family
-  /// (lime #d0f043) - reverted back to this after a brief swap to Cosmic
-  /// Orange (#f77e2d). This is the app's default mode.
+  /// Dark palette sampled from the current fitness onboarding reference:
+  /// deep teal foundations, softly stepped green surfaces, and a pastel
+  /// chartreuse accent. This is the app's default mode.
   static const dark = AppPalette(
-    background: Color(0xFF0F1512),
-    surface: Color(0xFF0F1512),
-    surfaceContainerLowest: Color(0xFF0A0F0D),
-    surfaceContainerLow: Color(0xFF171D1A),
-    surfaceContainer: Color(0xFF1B211E),
-    surfaceContainerHigh: Color(0xFF252B28),
-    surfaceContainerHighest: Color(0xFF303633),
-    surfaceBright: Color(0xFF343B37),
-    onSurface: Color(0xFFDEE4DF),
-    onSurfaceVariant: Color(0xFFC6C9AF),
+    background: Color(0xFF172D30),
+    surface: Color(0xFF172D30),
+    surfaceContainerLowest: Color(0xFF102629),
+    surfaceContainerLow: Color(0xFF233A39),
+    surfaceContainer: Color(0xFF2B423F),
+    surfaceContainerHigh: Color(0xFF314948),
+    surfaceContainerHighest: Color(0xFF385145),
+    surfaceBright: Color(0xFF435E50),
+    onSurface: Color(0xFFF3F7F4),
+    onSurfaceVariant: Color(0xFFB9C5C0),
     highEmphasis: Color(0xFFFFFFFF),
-    outline: Color(0xFF8F937B),
-    outlineVariant: Color(0xFF454935),
-    accent: Color(0xFFD0F043),
-    onAccent: Color(0xFF1D2900),
-    primaryContainer: Color(0xFFD0F043),
-    onPrimaryContainer: Color(0xFF3A4A00),
-    secondary: Color(0xFFE6C367),
-    secondaryContainer: Color(0xFF735800),
-    onSecondaryContainer: Color(0xFFF6D173),
-    tertiaryContainer: Color(0xFFC7E7FA),
+    outline: Color(0xFF879A93),
+    outlineVariant: Color(0xFF3D5551),
+    accent: Color(0xFFDEFB92),
+    onAccent: Color(0xFF1B2A14),
+    primaryContainer: Color(0xFFDEFB92),
+    onPrimaryContainer: Color(0xFF263716),
+    secondary: Color(0xFFEEAF51),
+    secondaryContainer: Color(0xFF67461C),
+    onSecondaryContainer: Color(0xFFFFE0AA),
+    tertiaryContainer: Color(0xFF71C2E6),
     error: Color(0xFFFFB4AB),
     errorContainer: Color(0xFF93000A),
     onError: Color(0xFF690005),

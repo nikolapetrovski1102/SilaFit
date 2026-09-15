@@ -287,7 +287,7 @@ body { overflow-x: hidden; }
 .phone-mockup__screen-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, transparent 60%, rgba(10,15,13,0.4));
+  background: linear-gradient(to bottom, transparent 60%, rgba(16,38,41,0.4));
   z-index: 2;
 }
 

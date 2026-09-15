@@ -5,12 +5,15 @@ import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/best_match_card.dart';
+import '../../core/widgets/browse_all_toggle.dart';
 import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import 'split_detail_screen.dart';
+import 'split_recommendation.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
 import 'splits_repository.dart';
@@ -47,37 +50,33 @@ class _SplitsScreenState extends State<SplitsScreen> {
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
-          return RefreshIndicator(
-            onRefresh: _controller.load,
-            color: AppColors.accent,
-            backgroundColor: AppColors.surfaceContainer,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-                  AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.sm),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Present the instant this screen is pushed, regardless of
-                  // whether `_controller.load()` has resolved yet - this is
-                  // the Hero that Home's "Active split" row expands into
-                  // (ActiveSplitCard), and a Hero flight needs its
-                  // destination widget to already exist when the push
-                  // happens rather than gated behind the data fetch below.
-                  const Hero(
-                    tag: 'active-split-hero',
-                    child: _SplitsHeader(),
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Present the instant this screen is pushed, regardless of
+                // whether `_controller.load()` has resolved yet - this is
+                // the Hero that Home's "Active split" row expands into
+                // (ActiveSplitCard), and a Hero flight needs its
+                // destination widget to already exist when the push
+                // happens rather than gated behind the data fetch below.
+                const Hero(
+                  tag: 'active-split-hero',
+                  child: _SplitsHeader(),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                HeroExpandReveal(
+                  child: ResourceBuilder<List<WorkoutSplit>>(
+                    state: _controller.state,
+                    onRetry: _controller.load,
+                    builder: (context, splits) =>
+                        _SplitsContent(splits: splits),
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  HeroExpandReveal(
-                    child: ResourceBuilder<List<WorkoutSplit>>(
-                      state: _controller.state,
-                      onRetry: _controller.load,
-                      builder: (context, splits) => _SplitsList(splits: splits),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
@@ -103,16 +102,163 @@ class _SplitsHeader extends StatelessWidget {
   }
 }
 
-class _SplitsList extends StatefulWidget {
+/// The ranked landing view: the single best protocol for this user as an
+/// opinionated hero, then the full library collapsed behind a deliberate
+/// "browse" action. Adding more splits grows the library behind that action
+/// rather than lengthening the default view.
+class _SplitsContent extends StatefulWidget {
   final List<WorkoutSplit> splits;
 
-  const _SplitsList({required this.splits});
+  const _SplitsContent({required this.splits});
 
   @override
-  State<_SplitsList> createState() => _SplitsListState();
+  State<_SplitsContent> createState() => _SplitsContentState();
 }
 
-class _SplitsListState extends State<_SplitsList> {
+class _SplitsContentState extends State<_SplitsContent> {
+  bool _browsingAll = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.splits.isEmpty) {
+      return const MascotEmptyState(
+        pose: MascotPose.ready,
+        title: 'No splits yet',
+        message:
+            'Your training protocols will show up here once they\'re ready.',
+      );
+    }
+
+    final ranked = rankSplitMatches(widget.splits);
+    final best = ranked.first;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _BestMatchHero(match: best),
+        if (ranked.length > 1) ...[
+          const SizedBox(height: AppSpacing.lg),
+          const SectionEyebrow('More for you'),
+          const SizedBox(height: AppSpacing.sm),
+          for (final match in ranked.skip(1).take(3)) ...[
+            _SplitPickRow(match: match),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ],
+        const SizedBox(height: AppSpacing.lg),
+        BrowseAllToggle(
+          open: _browsingAll,
+          title: 'Browse all ${widget.splits.length} protocols',
+          subtitle: _browsingAll
+              ? 'Showing the full library'
+              : 'Filter every split in the library',
+          onTap: () => setState(() => _browsingAll = !_browsingAll),
+        ),
+        if (_browsingAll) ...[
+          const SizedBox(height: AppSpacing.md),
+          _SplitLibrary(splits: widget.splits),
+        ],
+      ],
+    );
+  }
+}
+
+class _BestMatchHero extends StatelessWidget {
+  final SplitMatch match;
+
+  const _BestMatchHero({required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = context.read<SplitsRepository>();
+    final split = match.split;
+    return BestMatchCard(
+      eyebrow: split.matchesGoal ? 'Best for you' : 'Start here',
+      title: split.name,
+      reason: match.reason,
+      icon: Icons.auto_awesome_rounded,
+      meta: [
+        BestMatchMeta(
+            Icons.calendar_view_week_rounded, '${split.durationDays} days'),
+        BestMatchMeta(Icons.trending_up_rounded, split.level),
+        BestMatchMeta(
+            Icons.category_rounded, splitCategoryLabel(split.category)),
+      ],
+      actionLabel: 'View this protocol',
+      onTap: () => Navigator.of(context).push(heroExpandRoute(
+        builder: (_) => SplitDetailScreen(
+          controller: SplitDetailController(repository, split.splitId),
+          splitName: split.name,
+        ),
+      )),
+    );
+  }
+}
+
+/// A compact row for one of the 3 runners-up below the hero - deliberately
+/// lighter than [_SplitCard] (no image) so the default screen stays short no
+/// matter how large the library grows.
+class _SplitPickRow extends StatelessWidget {
+  final SplitMatch match;
+
+  const _SplitPickRow({required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = context.read<SplitsRepository>();
+    final split = match.split;
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(heroExpandRoute(
+        builder: (_) => SplitDetailScreen(
+          controller: SplitDetailController(repository, split.splitId),
+          splitName: split.name,
+        ),
+      )),
+      child: SectionCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionEyebrow(splitCategoryLabel(split.category)),
+                  const SizedBox(height: 4),
+                  Text(split.name,
+                      style: AppTypography.headlineSm,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(match.reason,
+                      style: AppTypography.labelSm
+                          .copyWith(color: AppColors.onSurfaceVariant),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Icon(Icons.chevron_right_rounded,
+                color: AppColors.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The full catalog, filters included - shown only once the user opts into
+/// browsing, so the default screen stays short no matter how big the library
+/// gets.
+class _SplitLibrary extends StatefulWidget {
+  final List<WorkoutSplit> splits;
+
+  const _SplitLibrary({required this.splits});
+
+  @override
+  State<_SplitLibrary> createState() => _SplitLibraryState();
+}
+
+class _SplitLibraryState extends State<_SplitLibrary> {
   // null = "All Splits". Categories are derived from whatever the backend
   // actually returns rather than a hardcoded taxonomy, so a new split
   // category shows up as a working filter with no frontend change needed.
@@ -164,12 +310,13 @@ class _SplitsListState extends State<_SplitsList> {
                 return PillChip(
                   label: 'Recommended for you',
                   selected: _recommendedOnly,
-                  onTap: () => setState(() => _recommendedOnly = !_recommendedOnly),
+                  onTap: () =>
+                      setState(() => _recommendedOnly = !_recommendedOnly),
                 );
               }
               final category = categories[i - 1 - (hasRecommendations ? 1 : 0)];
               return PillChip(
-                label: category,
+                label: splitCategoryLabel(category),
                 selected: _filter == category,
                 onTap: () => setState(() {
                   _filter = category;
@@ -190,13 +337,7 @@ class _SplitsListState extends State<_SplitsList> {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        if (visible.isEmpty && widget.splits.isEmpty)
-          const MascotEmptyState(
-            pose: MascotPose.ready,
-            title: 'No splits yet',
-            message: 'Your training protocols will show up here once they\'re ready.',
-          )
-        else if (visible.isEmpty)
+        if (visible.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 48),
             child: Center(
@@ -252,7 +393,8 @@ class _SplitCard extends StatelessWidget {
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
                       child: split.heroImageUrl != null
-                          ? Image.network(split.heroImageUrl!, fit: BoxFit.cover)
+                          ? Image.network(split.heroImageUrl!,
+                              fit: BoxFit.cover)
                           // No per-split hero image on record yet - the same
                           // stock training photo every split card falls back
                           // to in `workout_splits_library/code.html`.
@@ -319,27 +461,35 @@ class _SplitCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionEyebrow(split.category),
+                    SectionEyebrow(splitCategoryLabel(split.category)),
                     const SizedBox(height: 6),
                     Text(split.name, style: AppTypography.headlineSm),
                     if (split.description != null) ...[
                       const SizedBox(height: 4),
                       Text(split.description!,
-                          style: AppTypography.bodyMd.copyWith(
-                              color: AppColors.onSurfaceVariant),
+                          style: AppTypography.bodyMd
+                              .copyWith(color: AppColors.onSurfaceVariant),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis),
                     ],
                     const SizedBox(height: AppSpacing.sm),
-                    Row(
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
                       children: [
                         _MetaPill(
                             icon: Icons.calendar_view_week_rounded,
                             label: '${split.durationDays} days'),
-                        const SizedBox(width: AppSpacing.xs),
                         _MetaPill(
                             icon: Icons.trending_up_rounded,
                             label: split.level),
+                        // Anything not shipped by SilaFit is a trainer's own
+                        // protocol, shown to this user because it was made public
+                        // or assigned to them.
+                        if (!split.isSystemDefault)
+                          const _MetaPill(
+                              icon: Icons.fitness_center_rounded,
+                              label: 'From your coach'),
                       ],
                     ),
                   ],

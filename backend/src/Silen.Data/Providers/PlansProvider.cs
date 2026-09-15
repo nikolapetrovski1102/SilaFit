@@ -38,4 +38,19 @@ public sealed class PlansProvider(ISqlExecutor sqlExecutor) : IPlansProvider
             [SqlParameterBuilder.Create("@UserId", userId)],
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapSubscription, cancellationToken),
             cancellationToken);
+
+    public Task<List<PlanSubscriberModel>> GetActiveSubscribersByPlanCodeAsync(
+        string planCode, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Plans_GetActiveSubscribers",
+            [SqlParameterBuilder.Create("@PlanCode", planCode)],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapPlanSubscriber, cancellationToken),
+            cancellationToken);
+
+    public Task<List<PlanSubscriberModel>> GetNonSubscribersAsync(CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Plans_GetNonSubscribers",
+            [],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapPlanSubscriber, cancellationToken),
+            cancellationToken);
 }

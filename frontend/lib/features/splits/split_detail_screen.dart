@@ -8,6 +8,7 @@ import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import 'split_recommendation.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
 
@@ -116,7 +117,8 @@ class _DetailBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SectionEyebrow(detail.split.category, color: AppColors.accent),
+              SectionEyebrow(splitCategoryLabel(detail.split.category),
+                  color: AppColors.accent),
               const SizedBox(height: AppSpacing.sm),
               Row(
                 children: [

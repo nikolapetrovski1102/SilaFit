@@ -8,12 +8,23 @@ class WorkoutSplit {
   final String? description;
   final String? heroImageUrl;
   final bool isSystemDefault;
+  // 'Public' (every user), 'Shared' (assigned users only) or 'Private' (owner
+  // only). The backend has already filtered the list/detail to what this caller
+  // may see, so this is presentation metadata (e.g. a "from your coach" badge).
+  final String visibility;
   // The onboarding goal ('BuildMuscle'/'LoseFat'/'MaintainActive') this split
   // is tagged for, or null if it isn't goal-tagged; matchesGoal is computed
   // server-side against the caller's own profile goal (false for guests/
   // unauthenticated callers or users without a matching profile).
   final String? recommendedGoal;
   final bool matchesGoal;
+
+  // Person-fit signals computed server-side from the caller's profile (goal +
+  // age/BMI-derived level fit + category affinity). Null on payloads that
+  // predate this field (or in tests), in which case the local fallback
+  // heuristic in split_recommendation.dart takes over.
+  final int? matchScore;
+  final String? matchReason;
 
   const WorkoutSplit({
     required this.splitId,
@@ -24,8 +35,11 @@ class WorkoutSplit {
     this.description,
     this.heroImageUrl,
     required this.isSystemDefault,
+    this.visibility = 'Public',
     this.recommendedGoal,
     this.matchesGoal = false,
+    this.matchScore,
+    this.matchReason,
   });
 
   factory WorkoutSplit.fromJson(dynamic json) {
@@ -39,8 +53,11 @@ class WorkoutSplit {
       description: map['description'] as String?,
       heroImageUrl: map['heroImageUrl'] as String?,
       isSystemDefault: map['isSystemDefault'] as bool? ?? false,
+      visibility: map['visibility'] as String? ?? 'Public',
       recommendedGoal: map['recommendedGoal'] as String?,
       matchesGoal: map['matchesGoal'] as bool? ?? false,
+      matchScore: map['matchScore'] as int?,
+      matchReason: map['matchReason'] as String?,
     );
   }
 }
