@@ -46,9 +46,18 @@ public interface IAdminRbacProvider
         byte[] passwordHash,
         byte[] passwordSalt,
         byte[] totpSecretCipher,
+        string email,
         string? roleName,
         AdminActorModel actor,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks an operator's email confirmed. <paramref name="email"/> is re-checked
+    /// against the row rather than trusted, so a link from before the address
+    /// changed can never confirm the new one. Idempotent: confirming an
+    /// already-confirmed address is a no-op success, not a conflict.
+    /// </summary>
+    Task<AdminMutationResultModel> ConfirmOperatorEmailAsync(Guid adminUserId, string email, string? clientIp, CancellationToken cancellationToken = default);
 
     Task<AdminMutationResultModel> SetOperatorRoleAsync(string username, string roleName, AdminActorModel actor, CancellationToken cancellationToken = default);
 

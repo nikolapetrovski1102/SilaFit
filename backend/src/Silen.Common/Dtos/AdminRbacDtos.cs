@@ -47,6 +47,10 @@ public sealed class AdminOperatorDto
     public int ActiveSessionCount { get; set; }
     public DateTime? LastLoginAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+    public string? Email { get; set; }
+
+    /// <summary>True once the operator has clicked the link in their confirmation email.</summary>
+    public bool EmailConfirmed { get; set; }
 }
 
 /// <summary>Adds a brand-new operator from the dashboard. Only ever creates - never rotates an existing account.</summary>
@@ -57,8 +61,22 @@ public sealed class AdminOperatorCreateRequest
     /// <summary>Set by whoever is creating the account and shared with the new operator out of band, like a handed-over temporary password.</summary>
     public string Password { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Required so every operator has a proven way to receive the "send email code
+    /// instead" second factor and account-recovery notices. A confirmation email is
+    /// sent here immediately after creation; the address does nothing until its link
+    /// is clicked (see AdminRbacService.ConfirmOperatorEmailAsync).
+    /// </summary>
+    public string Email { get; set; } = string.Empty;
+
     /// <summary>Optional - an operator can be created with no role (deny-all) and assigned one later.</summary>
     public string? RoleName { get; set; }
+}
+
+/// <summary>The token from an operator's confirmation-email link.</summary>
+public sealed class AdminConfirmOperatorEmailRequest
+{
+    public string Token { get; set; } = string.Empty;
 }
 
 /// <summary>

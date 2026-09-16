@@ -60,6 +60,8 @@ public sealed class AdminOperatorModel
     public DateTime? LastLoginAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public int ActiveSessionCount { get; set; }
+    public string? Email { get; set; }
+    public DateTime? EmailConfirmedAtUtc { get; set; }
 }
 
 /// <summary>One line of the audit trail.</summary>

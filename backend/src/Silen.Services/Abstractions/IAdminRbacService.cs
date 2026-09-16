@@ -39,13 +39,22 @@ public interface IAdminRbacService
     Task<ServiceResult<List<AdminOperatorDto>>> GetOperatorsAsync(string? sessionToken, bool includeInactive, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Creates a new operator account with its own password and TOTP secret,
-    /// optionally assigned a role immediately. The secret/otpauth URI in the
-    /// response are shown exactly once - the server keeps only their encrypted
-    /// form, so this response is the operator's one chance to enroll their
-    /// authenticator app. Requires operators.manage.
+    /// Creates a new operator account with its own password, TOTP secret and
+    /// email, optionally assigned a role immediately. The secret/otpauth URI in
+    /// the response are shown exactly once - the server keeps only their
+    /// encrypted form, so this response is the operator's one chance to enroll
+    /// their authenticator app. Also sends a confirmation email to the address on
+    /// file; it does nothing (see <see cref="ConfirmOperatorEmailAsync"/>) until
+    /// its link is clicked. Requires operators.manage.
     /// </summary>
     Task<ServiceResult<AdminOperatorCreatedDto>> CreateOperatorAsync(string? sessionToken, AdminOperatorCreateRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Confirms the email a new operator was created with, from the link in their
+    /// confirmation email. Unauthenticated by design - the signed, time-limited
+    /// token is the proof, not a session cookie.
+    /// </summary>
+    Task<ServiceResult<AdminWriteResultDto>> ConfirmOperatorEmailAsync(string token, string? clientIp, CancellationToken cancellationToken = default);
 
     /// <summary>Moves an operator to a different role. Drops that operator's live sessions. Requires operators.manage.</summary>
     Task<ServiceResult<AdminWriteResultDto>> SetOperatorRoleAsync(string? sessionToken, AdminOperatorRoleRequest request, string? clientIp, CancellationToken cancellationToken = default);

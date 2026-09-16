@@ -45,4 +45,10 @@ public sealed class AdminAuthOptions
 
     /// <summary>Steps of clock drift tolerated on either side (1 = the previous + next code also work).</summary>
     public int TotpWindowSteps { get; set; } = 1;
+
+    /// <summary>Origin the operator-creation confirmation email's link is built against. No trailing slash.</summary>
+    public string ConsoleBaseUrl { get; set; } = "https://sila.fitness";
+
+    /// <summary>How long an operator's email-confirmation link stays clickable.</summary>
+    public int EmailConfirmHours { get; set; } = 48;
 }

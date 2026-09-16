@@ -26,6 +26,7 @@ public static class AdminRowMapper
         RoleId = reader.GetNullableGuid("RoleId"),
         RoleName = reader.GetNullableString("RoleName"),
         Email = reader.GetNullableString("Email"),
+        EmailConfirmedAtUtc = reader.GetNullableDateTime("EmailConfirmedAtUtc"),
         EmailOtpCodeHash = reader.GetNullableBytes("EmailOtpCodeHash"),
         EmailOtpCodeSalt = reader.GetNullableBytes("EmailOtpCodeSalt"),
         EmailOtpExpiresAtUtc = reader.GetNullableDateTime("EmailOtpExpiresAtUtc"),

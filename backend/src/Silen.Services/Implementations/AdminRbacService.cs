@@ -16,7 +16,9 @@ namespace Silen.Services.Implementations;
 public sealed class AdminRbacService(
     IAdminProvider adminProvider,
     IAdminRbacProvider adminRbacProvider,
+    IEmailSender emailSender,
     IOptions<AdminAuthOptions> adminAuthOptions,
+    IOptions<JwtOptions> jwtOptions,
     IOptions<EncryptionOptions> encryptionOptions) : IAdminRbacService
 {
     /// <summary>Same floor the CLI provisioning tool enforces - one account creation path, one rule.</summary>
@@ -127,6 +129,12 @@ public sealed class AdminRbacService(
                 throw new ValidationException("Create-operator called with a blank username.", "A username is required.");
             }
 
+            var email = request.Email.Trim();
+            if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            {
+                throw new ValidationException("Create-operator called with a missing or malformed email.", "A valid email address is required.");
+            }
+
             if (request.Password.Length < MinimumPasswordLength)
             {
                 throw new ValidationException(
@@ -146,7 +154,7 @@ public sealed class AdminRbacService(
             var roleName = string.IsNullOrWhiteSpace(request.RoleName) ? null : request.RoleName.Trim();
 
             var mutation = await adminRbacProvider.CreateOperatorAsync(
-                username, passwordHash, passwordSalt, totpSecretCipher, roleName, actor, cancellationToken);
+                username, passwordHash, passwordSalt, totpSecretCipher, email, roleName, actor, cancellationToken);
 
             // Reuse the outcome mapper purely for its exception translation (NotFound /
             // Conflict / Rejected -> the matching HTTP status) - its success DTO has no
@@ -154,6 +162,8 @@ public sealed class AdminRbacService(
             _ = AdminMutationOutcomeMapper.Resolve(mutation, "Operator created.");
 
             var options = adminAuthOptions.Value;
+
+            await SendOperatorEmailConfirmationAsync(mutation.EntityId!.Value, username, email, cancellationToken);
 
             return new AdminOperatorCreatedDto
             {
@@ -164,6 +174,33 @@ public sealed class AdminRbacService(
                 OtpAuthUri = TotpHelper.BuildOtpAuthUri(options.TotpIssuer, username, totpSecret, options.TotpDigits, options.TotpStepSeconds)
             };
         });
+
+    /// <summary>
+    /// Confirms the email a new operator was created with. Deliberately takes no
+    /// session token and calls no permission check - the recipient has just
+    /// clicked a link from their inbox and may not have signed in yet, so the
+    /// signed, time-limited token itself is the authorization (see
+    /// <see cref="AdminEmailConfirmTokenFactory"/>).
+    /// </summary>
+    public Task<ServiceResult<AdminWriteResultDto>> ConfirmOperatorEmailAsync(string token, string? clientIp, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var confirm = AdminEmailConfirmTokenFactory.ReadToken(jwtOptions.Value, token)
+                ?? throw new UnauthorizedAppException("Operator email confirmation presented an invalid or expired token.", "This confirmation link is invalid or has expired. Ask an admin to resend it.");
+
+            var mutation = await adminRbacProvider.ConfirmOperatorEmailAsync(confirm.AdminUserId, confirm.Email, clientIp, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Email confirmed.");
+        });
+
+    private async Task SendOperatorEmailConfirmationAsync(Guid adminUserId, string username, string email, CancellationToken cancellationToken)
+    {
+        var options = adminAuthOptions.Value;
+        var token = AdminEmailConfirmTokenFactory.CreateToken(jwtOptions.Value, adminUserId, email, TimeSpan.FromHours(options.EmailConfirmHours));
+        var confirmUrl = $"{options.ConsoleBaseUrl}/confirm-operator-email.html?token={Uri.EscapeDataString(token)}";
+
+        var (subject, html) = OperatorEmailConfirmTemplate.Build(username, confirmUrl);
+        await emailSender.SendAsync(email, subject, html, cancellationToken);
+    }
 
     public Task<ServiceResult<AdminWriteResultDto>> SetOperatorRoleAsync(string? sessionToken, AdminOperatorRoleRequest request, string? clientIp, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -236,6 +273,8 @@ public sealed class AdminRbacService(
         IsActive = model.IsActive,
         ActiveSessionCount = model.ActiveSessionCount,
         LastLoginAtUtc = model.LastLoginAtUtc,
-        CreatedAtUtc = model.CreatedAtUtc
+        CreatedAtUtc = model.CreatedAtUtc,
+        Email = model.Email,
+        EmailConfirmed = model.EmailConfirmedAtUtc is not null
     };
 }

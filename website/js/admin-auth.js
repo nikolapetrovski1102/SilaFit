@@ -149,10 +149,15 @@
     },
 
     /** Response carries a TOTP secret + otpauth URI — shown exactly once. */
-    createOperator: function (username, password, roleName) {
+    createOperator: function (username, email, password, roleName) {
       return request('/api/admin/rbac/operators', 'POST', {
-        username: username, password: password, roleName: roleName || null
+        username: username, email: email, password: password, roleName: roleName || null
       });
+    },
+
+    /** Confirms the email a new operator was created with, from the link in their confirmation email. */
+    confirmOperatorEmail: function (token) {
+      return request('/api/admin/rbac/operators/confirm-email', 'POST', { token: token });
     },
 
     setOperatorRole: function (username, roleName) {

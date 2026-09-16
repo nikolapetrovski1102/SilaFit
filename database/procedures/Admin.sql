@@ -23,11 +23,12 @@ BEGIN
     -- RoleId/RoleName ride along because the login path needs to know which
     -- permission set this operator will be resolved against (see AdminRbac.sql).
     -- The EmailOtp* columns are the "send email code instead" second factor -
-    -- see usp_Admin_SetEmailOtp.
+    -- see usp_Admin_SetEmailOtp. EmailConfirmedAtUtc gates that option on top of
+    -- Email being non-null - see usp_Admin_Operator_ConfirmEmail.
     SELECT u.AdminUserId, u.Username, u.PasswordHash, u.PasswordSalt, u.TotpSecretCipher,
            u.FailedAttemptCount, u.LockedUntilUtc, u.LastLoginAtUtc, u.PasswordChangedAtUtc,
            u.CreatedAtUtc, u.IsActive, u.RoleId, r.Name AS RoleName,
-           u.Email, u.EmailOtpCodeHash, u.EmailOtpCodeSalt, u.EmailOtpExpiresAtUtc, u.EmailOtpLastSentAtUtc
+           u.Email, u.EmailConfirmedAtUtc, u.EmailOtpCodeHash, u.EmailOtpCodeSalt, u.EmailOtpExpiresAtUtc, u.EmailOtpLastSentAtUtc
     FROM dbo.AdminUsers u
     LEFT JOIN dbo.AdminRoles r ON r.RoleId = u.RoleId
     WHERE u.Username = @Username;
@@ -43,7 +44,7 @@ BEGIN
     SELECT u.AdminUserId, u.Username, u.PasswordHash, u.PasswordSalt, u.TotpSecretCipher,
            u.FailedAttemptCount, u.LockedUntilUtc, u.LastLoginAtUtc, u.PasswordChangedAtUtc,
            u.CreatedAtUtc, u.IsActive, u.RoleId, r.Name AS RoleName,
-           u.Email, u.EmailOtpCodeHash, u.EmailOtpCodeSalt, u.EmailOtpExpiresAtUtc, u.EmailOtpLastSentAtUtc
+           u.Email, u.EmailConfirmedAtUtc, u.EmailOtpCodeHash, u.EmailOtpCodeSalt, u.EmailOtpExpiresAtUtc, u.EmailOtpLastSentAtUtc
     FROM dbo.AdminUsers u
     LEFT JOIN dbo.AdminRoles r ON r.RoleId = u.RoleId
     WHERE u.AdminUserId = @AdminUserId;

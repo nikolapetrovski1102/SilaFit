@@ -264,6 +264,8 @@ BEGIN
            u.IsActive,
            u.LastLoginAtUtc,
            u.CreatedAtUtc,
+           u.Email,
+           u.EmailConfirmedAtUtc,
            (SELECT COUNT(*) FROM dbo.AdminSessions s WHERE s.AdminUserId = u.AdminUserId) AS ActiveSessionCount
     FROM dbo.AdminUsers u
     LEFT JOIN dbo.AdminRoles r ON r.RoleId = u.RoleId
@@ -284,6 +286,9 @@ CREATE OR ALTER PROCEDURE dbo.usp_Admin_Operator_Create
     @PasswordHash VARBINARY(256),
     @PasswordSalt VARBINARY(128),
     @TotpSecretCipher VARBINARY(256),
+    -- Stored unconfirmed (EmailConfirmedAtUtc stays NULL) until the operator
+    -- clicks the link in their confirmation email - see usp_Admin_Operator_ConfirmEmail.
+    @Email NVARCHAR(256) = NULL,
     @RoleName NVARCHAR(64) = NULL,
     @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
     @ActorUsername NVARCHAR(100),
@@ -295,6 +300,7 @@ BEGIN
 
     SET @Username = LTRIM(RTRIM(@Username));
     SET @RoleName = NULLIF(LTRIM(RTRIM(@RoleName)), N'');
+    SET @Email = NULLIF(LTRIM(RTRIM(@Email)), N'');
 
     DECLARE @RoleId UNIQUEIDENTIFIER;
 
@@ -330,8 +336,8 @@ BEGIN
 
     DECLARE @AdminUserId UNIQUEIDENTIFIER = NEWID();
 
-    INSERT INTO dbo.AdminUsers (AdminUserId, Username, PasswordHash, PasswordSalt, TotpSecretCipher, RoleId)
-    VALUES (@AdminUserId, @Username, @PasswordHash, @PasswordSalt, @TotpSecretCipher, @RoleId);
+    INSERT INTO dbo.AdminUsers (AdminUserId, Username, PasswordHash, PasswordSalt, TotpSecretCipher, Email, RoleId)
+    VALUES (@AdminUserId, @Username, @PasswordHash, @PasswordSalt, @TotpSecretCipher, @Email, @RoleId);
 
     INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
     VALUES (@ActorAdminUserId, @ActorUsername, N'Create', N'AdminOperator', CONVERT(NVARCHAR(64), @AdminUserId),
@@ -447,6 +453,60 @@ BEGIN
                  THEN N'Activated operator ''' + @Username + N''''
                  ELSE N'Deactivated operator ''' + @Username + N''' (sessions revoked)' END,
             @ActorIp);
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @AdminUserId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
+END
+GO
+
+-- Confirms the email an operator was created with, reached by clicking the link
+-- in the confirmation email (see AdminRbacService.ConfirmOperatorEmailAsync).
+-- Deliberately not gated by a permission or actor lookup the way the rest of
+-- this file is: the caller has no session yet, and the possession of a valid,
+-- unexpired token (verified by the service before this ever runs) *is* the
+-- authorization. @Email is re-checked against the row rather than trusted, so a
+-- stale link from before the address was changed can never confirm the new one.
+-- Confirming an already-confirmed address is treated as success, not an error -
+-- clicking the link twice should never look like a failure.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_Operator_ConfirmEmail
+    @AdminUserId UNIQUEIDENTIFIER,
+    @Email NVARCHAR(256),
+    @ActorIp NVARCHAR(64) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @Username NVARCHAR(100);
+    DECLARE @AlreadyConfirmed BIT;
+
+    BEGIN TRANSACTION;
+
+    SELECT @Username = Username, @AlreadyConfirmed = CASE WHEN EmailConfirmedAtUtc IS NOT NULL THEN 1 ELSE 0 END
+    FROM dbo.AdminUsers
+    WHERE AdminUserId = @AdminUserId AND Email = @Email;
+
+    IF @Username IS NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, CAST(NULL AS UNIQUEIDENTIFIER) AS EntityId,
+               N'This confirmation link no longer matches an operator on file.' AS Detail;
+        RETURN;
+    END
+
+    IF @AlreadyConfirmed = 1
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 0 AS Outcome, @AdminUserId AS EntityId, N'Email already confirmed.' AS Detail;
+        RETURN;
+    END
+
+    UPDATE dbo.AdminUsers SET EmailConfirmedAtUtc = SYSUTCDATETIME() WHERE AdminUserId = @AdminUserId;
+
+    INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
+    VALUES (@AdminUserId, @Username, N'ConfirmEmail', N'AdminOperator', CONVERT(NVARCHAR(64), @AdminUserId),
+            N'Confirmed email for ''' + @Username + N'''', @ActorIp);
 
     COMMIT TRANSACTION;
 

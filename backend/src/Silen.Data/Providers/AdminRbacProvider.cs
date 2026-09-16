@@ -114,6 +114,7 @@ public sealed class AdminRbacProvider(ISqlExecutor sqlExecutor) : IAdminRbacProv
         byte[] passwordHash,
         byte[] passwordSalt,
         byte[] totpSecretCipher,
+        string email,
         string? roleName,
         AdminActorModel actor,
         CancellationToken cancellationToken = default) =>
@@ -124,10 +125,22 @@ public sealed class AdminRbacProvider(ISqlExecutor sqlExecutor) : IAdminRbacProv
                 SqlParameterBuilder.Create("@PasswordHash", passwordHash),
                 SqlParameterBuilder.Create("@PasswordSalt", passwordSalt),
                 SqlParameterBuilder.Create("@TotpSecretCipher", totpSecretCipher),
+                SqlParameterBuilder.Create("@Email", email),
                 SqlParameterBuilder.Create("@RoleName", roleName),
                 SqlParameterBuilder.Create("@ActorAdminUserId", actor.AdminUserId),
                 SqlParameterBuilder.Create("@ActorUsername", actor.Username),
                 SqlParameterBuilder.Create("@ActorIp", actor.Ip)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> ConfirmOperatorEmailAsync(Guid adminUserId, string email, string? clientIp, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_Operator_ConfirmEmail",
+            [
+                SqlParameterBuilder.Create("@AdminUserId", adminUserId),
+                SqlParameterBuilder.Create("@Email", email),
+                SqlParameterBuilder.Create("@ActorIp", clientIp)
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);

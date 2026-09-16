@@ -40,7 +40,9 @@ public static class AdminContentRowMapper
         IsActive = reader.GetBoolValue("IsActive"),
         LastLoginAtUtc = reader.GetNullableDateTime("LastLoginAtUtc"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
-        ActiveSessionCount = reader.GetInt32Value("ActiveSessionCount")
+        ActiveSessionCount = reader.GetInt32Value("ActiveSessionCount"),
+        Email = reader.GetNullableString("Email"),
+        EmailConfirmedAtUtc = reader.GetNullableDateTime("EmailConfirmedAtUtc")
     };
 
     public static AdminAuditEntryModel MapAuditEntry(SqlDataReader reader) => new()

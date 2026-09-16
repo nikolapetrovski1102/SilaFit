@@ -299,11 +299,17 @@
     var table = $('#operatorsTable');
     if (!table) return;
 
-    var head = '<thead><tr><th>Operator</th><th>Role</th><th class="num">Sessions</th><th>Last login</th><th>Joined</th><th>Active</th></tr></thead>';
+    var head = '<thead><tr><th>Operator</th><th>Email</th><th>Role</th><th class="num">Sessions</th><th>Last login</th><th>Joined</th><th>Active</th></tr></thead>';
     var body = operators.map(function (op) {
+      var emailCell = op.email
+        ? esc(op.email) + (op.emailConfirmed
+            ? ' <span class="chip chip--accent" title="Confirmed">Confirmed</span>'
+            : ' <span class="chip chip--error" title="Not yet confirmed">Unconfirmed</span>')
+        : '<span class="muted">None on file</span>';
       return (
         '<tr' + (op.isActive ? '' : ' style="opacity:0.55;"') + '>' +
           '<td><div class="row-title">' + esc(op.username) + '</div></td>' +
+          '<td class="row-sub">' + emailCell + '</td>' +
           '<td><select class="select" style="height:32px;font-size:12.5px;" data-op-role="' + esc(op.username) + '">' + roleOptionsHtml(op.roleName) + '</select></td>' +
           '<td class="num">' + op.activeSessionCount + '</td>' +
           '<td class="row-sub">' + fmtDate(op.lastLoginAtUtc) + '</td>' +
@@ -314,7 +320,7 @@
     }).join('');
 
     table.innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="6"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No operators</div></div></td></tr>') +
+      (body || '<tr><td colspan="7"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No operators</div></div></td></tr>') +
     '</tbody>';
 
     $$('[data-op-role]', table).forEach(function (select) {
@@ -364,7 +370,7 @@
     var qrSvg = totpQrSvg(dto.otpAuthUri);
     var backdrop = openModal(
       modalHead('Operator created') +
-      '<p class="body-sm">Share the password with <strong>' + esc(dto.username) + '</strong> out of band, then have them enroll this secret in their authenticator app.</p>' +
+      '<p class="body-sm">Share the password with <strong>' + esc(dto.username) + '</strong> out of band, then have them enroll this secret in their authenticator app. A confirmation email was also sent to their address — they\'ll need to confirm it before "send email code instead" works for their sign-in.</p>' +
       '<div class="totp-reveal">' +
         '<div class="totp-reveal__warning">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 2.5 17a1.5 1.5 0 0 0 1.3 2.2h16.4a1.5 1.5 0 0 0 1.3-2.2L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z"/></svg>' +
@@ -398,6 +404,7 @@
       modalHead('Add operator') +
       '<div class="form-grid">' +
         '<div class="field field--full"><label>Username</label><input class="input" id="opUsername" placeholder="e.g. jane" /></div>' +
+        '<div class="field field--full"><label>Email</label><input class="input" type="email" id="opEmail" placeholder="jane@example.com" /></div>' +
         '<div class="field field--full"><label>Temporary password</label><input class="input" type="password" id="opPassword" placeholder="At least 12 characters" /></div>' +
         '<div class="field field--full"><label>Role</label><select class="select" id="opRole">' +
           '<option value="">No role (no access until assigned)</option>' +
@@ -412,11 +419,13 @@
     wireClose(backdrop);
     $('#opSave').addEventListener('click', function () {
       var username = $('#opUsername').value.trim();
+      var email = $('#opEmail').value.trim();
       var password = $('#opPassword').value;
       var roleName = $('#opRole').value;
       if (!username) { toast('A username is required.', true); return; }
+      if (!email || email.indexOf('@') === -1) { toast('A valid email is required.', true); return; }
       if (password.length < 12) { toast('Choose a password of at least 12 characters.', true); return; }
-      auth.createOperator(username, password, roleName || null).then(function (result) {
+      auth.createOperator(username, email, password, roleName || null).then(function (result) {
         if (result.ok) { closeModal(); openOperatorCreatedModal(result.data); }
         else toast(result.message || 'Could not create operator.', true);
       });

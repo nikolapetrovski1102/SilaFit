@@ -32,6 +32,11 @@ public sealed class AdminAccountModel
     /// instead" option only appears once one is on file (see Silen.Tools.AdminProvision --set-email).</summary>
     public string? Email { get; set; }
 
+    /// <summary>Set once the operator clicks the link in their confirmation email
+    /// (usp_Admin_Operator_ConfirmEmail). Null means Email, if any, is unproven -
+    /// AdminAuthService.SendEmailCodeAsync refuses to email a second-factor code there.</summary>
+    public DateTime? EmailConfirmedAtUtc { get; set; }
+
     /// <summary>PBKDF2 hash/salt of the most recently emailed second-factor code, or null
     /// when none is outstanding. Cleared on every successful sign-in (usp_Admin_RecordSuccessfulLogin).</summary>
     public byte[]? EmailOtpCodeHash { get; set; }
@@ -68,4 +73,15 @@ public sealed class AdminChallengeModel
 {
     public Guid AdminUserId { get; set; }
     public string Username { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Verified contents of an operator's email-confirmation link token: who it was
+/// issued to, and the address it was issued for (re-checked against the row at
+/// confirm time so a stale link can't confirm an address that was since changed).
+/// </summary>
+public sealed class AdminEmailConfirmModel
+{
+    public Guid AdminUserId { get; set; }
+    public string Email { get; set; } = string.Empty;
 }

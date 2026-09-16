@@ -61,7 +61,8 @@ public class AdminAuthServiceTests
         DateTime? lockedUntilUtc = null,
         string? totpSecret = null,
         string? email = null,
-        DateTime? emailOtpLastSentAtUtc = null)
+        DateTime? emailOtpLastSentAtUtc = null,
+        DateTime? emailConfirmedAtUtc = null)
     {
         var (hash, salt) = PasswordHasher.Hash(password);
         var secret = totpSecret ?? TotpHelper.GenerateSecret();
@@ -76,7 +77,8 @@ public class AdminAuthServiceTests
             LockedUntilUtc = lockedUntilUtc,
             RoleName = "Operator",
             Email = email,
-            EmailOtpLastSentAtUtc = emailOtpLastSentAtUtc
+            EmailOtpLastSentAtUtc = emailOtpLastSentAtUtc,
+            EmailConfirmedAtUtc = emailConfirmedAtUtc
         };
     }
 
@@ -397,9 +399,22 @@ public class AdminAuthServiceTests
     }
 
     [Fact]
+    public async Task SendEmailCodeAsync_EmailNotConfirmed_ReturnsValidationFailure()
+    {
+        var account = Account(email: "ops@example.com");
+        var token = Challenge(account.AdminUserId, account.Username);
+        adminProvider.Setup(p => p.GetAccountByIdAsync(account.AdminUserId, It.IsAny<CancellationToken>())).ReturnsAsync(account);
+
+        var result = await sut.SendEmailCodeAsync(new AdminSendEmailCodeRequest { ChallengeToken = token });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
     public async Task SendEmailCodeAsync_RequestedTooSoonAfterPreviousSend_ReturnsConflict()
     {
-        var account = Account(email: "ops@example.com", emailOtpLastSentAtUtc: DateTime.UtcNow.AddSeconds(-5));
+        var account = Account(email: "ops@example.com", emailOtpLastSentAtUtc: DateTime.UtcNow.AddSeconds(-5), emailConfirmedAtUtc: DateTime.UtcNow.AddDays(-1));
         var token = Challenge(account.AdminUserId, account.Username);
         adminProvider.Setup(p => p.GetAccountByIdAsync(account.AdminUserId, It.IsAny<CancellationToken>())).ReturnsAsync(account);
 
@@ -412,7 +427,7 @@ public class AdminAuthServiceTests
     [Fact]
     public async Task SendEmailCodeAsync_HasEmailOnFile_StoresHashedCodeAndSendsIt()
     {
-        var account = Account(email: "ops@example.com");
+        var account = Account(email: "ops@example.com", emailConfirmedAtUtc: DateTime.UtcNow.AddDays(-1));
         var token = Challenge(account.AdminUserId, account.Username);
         adminProvider.Setup(p => p.GetAccountByIdAsync(account.AdminUserId, It.IsAny<CancellationToken>())).ReturnsAsync(account);
         adminProvider.Setup(p => p.SetEmailOtpAsync(

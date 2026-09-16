@@ -7,6 +7,7 @@ using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Common.Options;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -16,6 +17,7 @@ public class AdminRbacServiceTests
 {
     private readonly Mock<IAdminProvider> adminProvider = new(MockBehavior.Strict);
     private readonly Mock<IAdminRbacProvider> adminRbacProvider = new(MockBehavior.Strict);
+    private readonly Mock<IEmailSender> emailSender = new(MockBehavior.Strict);
     private readonly byte[] masterKey = RandomNumberGenerator.GetBytes(FieldCipher.KeySizeBytes);
     private readonly AdminRbacService sut;
 
@@ -24,7 +26,9 @@ public class AdminRbacServiceTests
         sut = new AdminRbacService(
             adminProvider.Object,
             adminRbacProvider.Object,
+            emailSender.Object,
             Options.Create(new AdminAuthOptions { TotpIssuer = "Test Admin", TotpDigits = 6, TotpStepSeconds = 30 }),
+            Options.Create(new JwtOptions { Issuer = "silafit-test", Audience = "silafit-test-aud", SigningKey = "unit-test-signing-key-unit-test-signing-key" }),
             Options.Create(new EncryptionOptions { MasterKeyBase64 = Convert.ToBase64String(masterKey) }));
     }
 
@@ -216,10 +220,22 @@ public class AdminRbacServiceTests
     }
 
     [Fact]
+    public async Task CreateOperatorAsync_BlankEmail_ReturnsValidationFailure()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
+        var request = new AdminOperatorCreateRequest { Username = "new-op", Email = "not-an-email", Password = "a-long-enough-password" };
+
+        var result = await sut.CreateOperatorAsync(token, request, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateOperatorAsync_PasswordShorterThanMinimum_ReturnsValidationFailure()
     {
         var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
-        var request = new AdminOperatorCreateRequest { Username = "new-op", Password = "short" };
+        var request = new AdminOperatorCreateRequest { Username = "new-op", Email = "new-op@example.com", Password = "short" };
 
         var result = await sut.CreateOperatorAsync(token, request, null);
 
@@ -231,7 +247,7 @@ public class AdminRbacServiceTests
     public async Task CreateOperatorAsync_UnknownRoleName_ReturnsValidationFailure()
     {
         var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
-        var request = new AdminOperatorCreateRequest { Username = "new-op", Password = "a-long-enough-password", RoleName = "Ghost" };
+        var request = new AdminOperatorCreateRequest { Username = "new-op", Email = "new-op@example.com", Password = "a-long-enough-password", RoleName = "Ghost" };
         adminRbacProvider.Setup(p => p.GetRolePermissionsAsync("Ghost", It.IsAny<CancellationToken>())).ReturnsAsync((AdminRolePermissionSetModel?)null);
 
         var result = await sut.CreateOperatorAsync(token, request, null);
@@ -244,21 +260,23 @@ public class AdminRbacServiceTests
     public async Task CreateOperatorAsync_HappyPath_ReturnsEnrollmentSecretAndOtpAuthUri()
     {
         var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
-        var request = new AdminOperatorCreateRequest { Username = "new-op", Password = "a-long-enough-password", RoleName = null };
+        var request = new AdminOperatorCreateRequest { Username = "new-op", Email = "new-op@example.com", Password = "a-long-enough-password", RoleName = null };
         var entityId = Guid.NewGuid();
 
         byte[]? capturedHash = null;
         byte[]? capturedSalt = null;
         byte[]? capturedCipher = null;
         adminRbacProvider.Setup(p => p.CreateOperatorAsync(
-                "new-op", It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), null, It.IsAny<AdminActorModel>(), It.IsAny<CancellationToken>()))
-            .Callback<string, byte[], byte[], byte[], string?, AdminActorModel, CancellationToken>((_, hash, salt, cipher, _, _, _) =>
+                "new-op", It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "new-op@example.com", null, It.IsAny<AdminActorModel>(), It.IsAny<CancellationToken>()))
+            .Callback<string, byte[], byte[], byte[], string, string?, AdminActorModel, CancellationToken>((_, hash, salt, cipher, _, _, _, _) =>
             {
                 capturedHash = hash;
                 capturedSalt = salt;
                 capturedCipher = cipher;
             })
             .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.Success, EntityId = entityId, Detail = null });
+        emailSender.Setup(e => e.SendAsync("new-op@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var result = await sut.CreateOperatorAsync(token, request, null);
 
@@ -274,6 +292,51 @@ public class AdminRbacServiceTests
 
         var decrypted = AdminTotpSecretCipher.Decrypt(capturedCipher!, masterKey);
         Assert.Equal(result.Data.TotpSecret, decrypted);
+    }
+
+    /* ------------------------------- ConfirmOperatorEmailAsync ------------------------------ */
+
+    private static readonly JwtOptions ConfirmTokenOptions = new()
+    {
+        Issuer = "silafit-test",
+        Audience = "silafit-test-aud",
+        SigningKey = "unit-test-signing-key-unit-test-signing-key"
+    };
+
+    [Fact]
+    public async Task ConfirmOperatorEmailAsync_InvalidToken_ReturnsUnauthorizedFailure()
+    {
+        var result = await sut.ConfirmOperatorEmailAsync("not-a-real-token", null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(401, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConfirmOperatorEmailAsync_ValidToken_ConfirmsAndReturnsSuccess()
+    {
+        var adminUserId = Guid.NewGuid();
+        var token = AdminEmailConfirmTokenFactory.CreateToken(ConfirmTokenOptions, adminUserId, "new-op@example.com", TimeSpan.FromHours(48));
+        adminRbacProvider.Setup(p => p.ConfirmOperatorEmailAsync(adminUserId, "new-op@example.com", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.Success, EntityId = adminUserId, Detail = null });
+
+        var result = await sut.ConfirmOperatorEmailAsync(token, null);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task ConfirmOperatorEmailAsync_ProviderReportsNotFound_ReturnsNotFoundFailure()
+    {
+        var adminUserId = Guid.NewGuid();
+        var token = AdminEmailConfirmTokenFactory.CreateToken(ConfirmTokenOptions, adminUserId, "new-op@example.com", TimeSpan.FromHours(48));
+        adminRbacProvider.Setup(p => p.ConfirmOperatorEmailAsync(adminUserId, "new-op@example.com", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.NotFound, EntityId = null, Detail = "This confirmation link no longer matches an operator on file." });
+
+        var result = await sut.ConfirmOperatorEmailAsync(token, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(404, result.StatusCode);
     }
 
     /* ------------------------------- GetRecentAuditAsync ------------------------------ */

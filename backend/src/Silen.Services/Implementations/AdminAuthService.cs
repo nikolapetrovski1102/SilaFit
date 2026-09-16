@@ -149,6 +149,13 @@ public sealed class AdminAuthService(
                     "No email address is on file for this account. Use your authenticator app, or ask another admin to add one.");
             }
 
+            if (account.EmailConfirmedAtUtc is null)
+            {
+                throw new ValidationException(
+                    $"Admin tag {LogRedaction.Tag(account.Username)} requested an email code but has not confirmed their email.",
+                    "The email on file for this account hasn't been confirmed yet. Use your authenticator app, or check your inbox for the confirmation link.");
+            }
+
             if (account.EmailOtpLastSentAtUtc is { } lastSentAtUtc && DateTime.UtcNow - lastSentAtUtc < EmailOtpResendCooldown)
             {
                 throw new ConflictException("Admin email-code requested too soon after the previous send.", "Please wait a moment before requesting another code.");

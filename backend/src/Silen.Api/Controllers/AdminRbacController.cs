@@ -64,6 +64,15 @@ public sealed class AdminRbacController(
     public async Task<IActionResult> CreateOperator([FromBody] AdminOperatorCreateRequest request, CancellationToken cancellationToken) =>
         (await rbacService.CreateOperatorAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
 
+    /// <summary>
+    /// Confirms the email a new operator was created with, from the link in their
+    /// confirmation email. Deliberately reads no session cookie: the recipient may
+    /// not have signed in yet, so the token in the body is the only credential.
+    /// </summary>
+    [HttpPost("operators/confirm-email")]
+    public async Task<IActionResult> ConfirmOperatorEmail([FromBody] AdminConfirmOperatorEmailRequest request, CancellationToken cancellationToken) =>
+        (await rbacService.ConfirmOperatorEmailAsync(request.Token, ClientIp, cancellationToken)).ToActionResult(logger);
+
     [HttpPut("operators/role")]
     public async Task<IActionResult> SetOperatorRole([FromBody] AdminOperatorRoleRequest request, CancellationToken cancellationToken) =>
         (await rbacService.SetOperatorRoleAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
