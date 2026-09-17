@@ -9,7 +9,6 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/best_match_card.dart';
 import '../../core/widgets/browse_all_toggle.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
@@ -112,7 +111,6 @@ class _SuggestionsContentState extends State<_SuggestionsContent> {
         const SizedBox(height: AppSpacing.md),
         if (widget.suggestions.isEmpty)
           const MascotEmptyState(
-            pose: MascotPose.ready,
             title: 'No suggestions yet',
             message:
                 'Curated meal ideas will show up here once they\'re ready.',

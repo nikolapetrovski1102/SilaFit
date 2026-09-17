@@ -79,6 +79,16 @@ public static class WorkoutRowMapper
         RpeScore = HasColumn(reader, "RpeScore") ? reader.GetNullableDecimal("RpeScore") : null
     };
 
+    public static SetLogModel MapSetLog(SqlDataReader reader) => new()
+    {
+        ExerciseId = reader.GetGuidValue("ExerciseId"),
+        ExerciseName = reader.GetStringValue("ExerciseName"),
+        SetNumber = reader.GetByteValue("SetNumber"),
+        WeightKg = reader.GetDecimalValue("WeightKg"),
+        Reps = reader.GetInt16Value("Reps"),
+        CompletedAtUtc = reader.GetDateTimeValue("CompletedAtUtc")
+    };
+
     public static PersonalRecordModel MapPersonalRecord(SqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),

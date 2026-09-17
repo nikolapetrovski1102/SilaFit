@@ -6,7 +6,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import 'diet_plan_builder_screen.dart';
 import 'diet_plan_controller.dart';
@@ -75,7 +74,6 @@ class _MyDietPlansScreenState extends State<MyDietPlansScreen> {
                 builder: (context, plans) {
                   if (plans.isEmpty) {
                     return const MascotEmptyState(
-                      pose: MascotPose.ready,
                       title: 'No diet plans yet',
                       message:
                           'Build your own meal plan - tap "New plan" to start.',

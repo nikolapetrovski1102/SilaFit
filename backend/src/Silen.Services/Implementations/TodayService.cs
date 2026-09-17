@@ -135,4 +135,20 @@ public sealed class TodayService(
                 request.CaloriesEstimate, request.RpeScore, request.TonnageKg, setLogs, cancellationToken)
                 ?? throw new NotFoundException($"Workout session '{request.WorkoutSessionId}' not found for user '{userId}'.", "That workout session couldn't be found.");
         });
+
+    public Task<ServiceResult<List<SetLogDto>>> GetWorkoutHistoryAsync(Guid userId, DateTime date, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var setLogs = await workoutSessionProvider.GetSetLogsByDateAsync(userId, date, cancellationToken);
+
+            return setLogs.Select(s => new SetLogDto
+            {
+                ExerciseId = s.ExerciseId,
+                ExerciseName = s.ExerciseName,
+                SetNumber = s.SetNumber,
+                WeightKg = s.WeightKg,
+                Reps = s.Reps,
+                CompletedAtUtc = s.CompletedAtUtc
+            }).ToList();
+        });
 }

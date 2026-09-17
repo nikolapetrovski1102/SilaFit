@@ -42,4 +42,11 @@ public sealed class TodayController(ITodayService todayService, ILogger<TodayCon
         var result = await todayService.CompleteWorkoutAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult(logger);
     }
+
+    [HttpGet("workout/history")]
+    public async Task<IActionResult> GetWorkoutHistory([FromQuery] DateTime date, CancellationToken cancellationToken)
+    {
+        var result = await todayService.GetWorkoutHistoryAsync(User.GetUserId(), date, cancellationToken);
+        return result.ToActionResult(logger);
+    }
 }

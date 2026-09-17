@@ -6,7 +6,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
@@ -82,7 +81,6 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
   Widget _buildContent(List<DietPlan> plans) {
     if (plans.isEmpty) {
       return const MascotEmptyState(
-        pose: MascotPose.ready,
         title: 'No diet plans yet',
         message: 'Weekly and monthly meal plans will show up here once ready.',
       );

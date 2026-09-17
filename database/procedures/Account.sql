@@ -93,6 +93,46 @@ BEGIN
 END
 GO
 
+-- Atomically checks and, if allowed, stamps dbo.Users.LastExportRequestedAtUtc
+-- so at most one export can be requested per @CooldownDays - a "download my
+-- data" export decrypts and emails a user's entire history, so it needs the
+-- same per-user cooldown discipline as PendingEmailVerifications.LastSentAtUtc
+-- (see 023_EmailVerification.sql), just with a much longer window. UPDLOCK +
+-- HOLDLOCK on the read serializes concurrent requests from the same user so
+-- two simultaneous calls can't both read "allowed" before either writes the
+-- new timestamp.
+CREATE OR ALTER PROCEDURE dbo.usp_Account_TryBeginExport
+    @UserId UNIQUEIDENTIFIER,
+    @CooldownDays INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+    DECLARE @LastRequestedAtUtc DATETIME2(3);
+
+    BEGIN TRANSACTION;
+
+    SELECT @LastRequestedAtUtc = LastExportRequestedAtUtc
+    FROM dbo.Users WITH (UPDLOCK, HOLDLOCK)
+    WHERE UserId = @UserId;
+
+    IF @LastRequestedAtUtc IS NOT NULL AND DATEADD(DAY, @CooldownDays, @LastRequestedAtUtc) > @Now
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT CAST(0 AS BIT) AS Allowed, DATEADD(DAY, @CooldownDays, @LastRequestedAtUtc) AS NextAllowedAtUtc;
+        RETURN;
+    END
+
+    UPDATE dbo.Users SET LastExportRequestedAtUtc = @Now WHERE UserId = @UserId;
+
+    COMMIT TRANSACTION;
+
+    SELECT CAST(1 AS BIT) AS Allowed, CAST(NULL AS DATETIME2(3)) AS NextAllowedAtUtc;
+END
+GO
+
 -- Full "download my data" export: one result set per section, read in this
 -- exact order by AccountProvider.ExportAsync via SqlResultSetReader. Column
 -- lists mirror each feature's own Get procedure so the existing row mappers

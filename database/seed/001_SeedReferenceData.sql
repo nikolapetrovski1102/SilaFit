@@ -745,7 +745,7 @@ SELECT v.Code, v.Name, v.Tagline, v.MonthlyPrice, v.YearlyPrice, v.IsFeatured, v
 FROM (VALUES
     (N'FREE', N'Free Tier', N'Essential hardware tracking and routine logging for self-guided lifters.', 0.00, 0.00, 0, 1),
     (N'PRO', N'Pro Tier', N'Advanced volume telemetry, predictive PR curves, and automated deload signals.', 2.49, 20.99, 1, 2),
-    (N'ADVANCED', N'Advanced Tier', N'Full biofeedback, real-time form corrections, and dynamic metabolic nutrition.', 4.99, 41.99, 0, 3)
+    (N'ADVANCED', N'Advanced Tier', N'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.', 4.99, 41.99, 0, 3)
 ) AS v(Code, Name, Tagline, MonthlyPrice, YearlyPrice, IsFeatured, SortOrder)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.SubscriptionPlans p WHERE p.Code = v.Code);
 GO
@@ -762,6 +762,15 @@ INNER JOIN (VALUES
 ) AS v(Code, MonthlyPrice, YearlyPrice) ON v.Code = p.Code;
 GO
 
+-- Re-runnable tagline correction, same reasoning as the price correction above.
+UPDATE p
+SET p.Tagline = v.Tagline
+FROM dbo.SubscriptionPlans p
+INNER JOIN (VALUES
+    (N'ADVANCED', N'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.')
+) AS v(Code, Tagline) ON v.Code = p.Code AND p.Tagline <> v.Tagline;
+GO
+
 INSERT INTO dbo.PlanFeatures (PlanId, FeatureText, SortOrder, IsHighlighted)
 SELECT p.PlanId, v.FeatureText, v.SortOrder, v.IsHighlighted
 FROM (VALUES
@@ -776,14 +785,30 @@ FROM (VALUES
     (N'PRO', N'Custom split builder with infinite routines', 5, 0),
     (N'ADVANCED', N'Everything included in Pro tier', 1, 0),
     (N'ADVANCED', N'Adaptive meal planner calibrated to load', 2, 1),
-    (N'ADVANCED', N'Live grocery list & instant recipe matching', 3, 0),
-    (N'ADVANCED', N'Real-time AI form feedback & auto-adjustments', 4, 0),
-    (N'ADVANCED', N'1-on-1 AI coach chat assistant', 5, 0)
+    (N'ADVANCED', N'Weekly AI check-ins with prioritized recommendations', 3, 0),
+    (N'ADVANCED', N'AI-generated workout splits & diet plans on request', 4, 0),
+    (N'ADVANCED', N'Unlimited saved splits & diet plans', 5, 0)
 ) AS v(Code, FeatureText, SortOrder, IsHighlighted)
 INNER JOIN dbo.SubscriptionPlans p ON p.Code = v.Code
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.PlanFeatures pf WHERE pf.PlanId = p.PlanId AND pf.FeatureText = v.FeatureText
 );
+GO
+
+-- Re-runnable correction: earlier seeds advertised Advanced features that were
+-- never implemented (live grocery lists, real-time AI form feedback, a 1-on-1
+-- coach chat). Rewrite those existing rows to what Advanced actually ships -
+-- the weekly AI check-in, on-demand AI generation, and unlimited saved
+-- splits/diet plans built in this deploy - instead of inserting duplicates.
+UPDATE pf
+SET pf.FeatureText = v.NewText
+FROM dbo.PlanFeatures pf
+INNER JOIN dbo.SubscriptionPlans p ON p.PlanId = pf.PlanId
+INNER JOIN (VALUES
+    (N'ADVANCED', N'Live grocery list & instant recipe matching', N'Weekly AI check-ins with prioritized recommendations'),
+    (N'ADVANCED', N'Real-time AI form feedback & auto-adjustments', N'AI-generated workout splits & diet plans on request'),
+    (N'ADVANCED', N'1-on-1 AI coach chat assistant', N'Unlimited saved splits & diet plans')
+) AS v(Code, OldText, NewText) ON v.Code = p.Code AND pf.FeatureText = v.OldText;
 GO
 
 ----------------------------------------------------------------------------

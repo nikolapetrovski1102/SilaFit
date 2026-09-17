@@ -6,6 +6,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../auth/widgets/auth_blob_background.dart';
 import '../exercises/exercise_picker_sheet.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
@@ -278,6 +279,10 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      // See the matching comment in SplitBuilderScreen - lets the blob
+      // backdrop bleed all the way behind the (transparent) AppBar instead
+      // of stopping at the body's normal top edge.
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -291,78 +296,98 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
             ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: widget.builderController,
-        builder: (context, _) => SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.gutterMobile),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _title,
-                  decoration: const InputDecoration(labelText: 'Title'),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // See the matching comment in SplitBuilderScreen - layout 3 keeps
+          // every blob inside the visible viewport for a full-page
+          // scrolling form like this one.
+          const Positioned.fill(child: AuthBlobBackground(layout: 3)),
+          AnimatedBuilder(
+            animation: widget.builderController,
+            builder: (context, _) => SafeArea(
+              child: SingleChildScrollView(
+                // Extra top inset makes up for `extendBodyBehindAppBar`,
+                // same reasoning as SplitBuilderScreen's padding.
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.gutterMobile,
+                  AppSpacing.gutterMobile + kToolbarHeight,
+                  AppSpacing.gutterMobile,
+                  AppSpacing.gutterMobile,
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                TextField(
-                  controller: _focus,
-                  decoration: const InputDecoration(labelText: 'Focus (optional)'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Rest day'),
-                  value: _isRestDay,
-                  onChanged: (value) => setState(() => _isRestDay = value),
-                ),
-                if (!_isRestDay) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _hours,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Hours'),
-                        ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _title,
+                      decoration: const InputDecoration(labelText: 'Title'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: _focus,
+                      decoration:
+                          const InputDecoration(labelText: 'Focus (optional)'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Rest day'),
+                      value: _isRestDay,
+                      onChanged: (value) => setState(() => _isRestDay = value),
+                    ),
+                    if (!_isRestDay) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _hours,
+                              keyboardType: TextInputType.number,
+                              decoration:
+                                  const InputDecoration(labelText: 'Hours'),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: TextField(
+                              controller: _minutes,
+                              keyboardType: TextInputType.number,
+                              decoration:
+                                  const InputDecoration(labelText: 'Minutes'),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Expanded(
-                        child: TextField(
-                          controller: _minutes,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Minutes'),
-                        ),
-                      ),
+                      const SizedBox(height: AppSpacing.sm),
                     ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                PrimaryPillButton(
-                  label: _splitDayId == null ? 'Create day' : 'Save changes',
-                  icon: Icons.check_rounded,
-                  isLoading: widget.builderController.isSaving,
-                  onPressed: _saveHeader,
-                ),
-                if (_splitDayId != null && !_isRestDay) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const SectionEyebrow('Exercises'),
-                      TextButton.icon(
-                        onPressed: _addExercise,
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Add exercise'),
+                    PrimaryPillButton(
+                      label:
+                          _splitDayId == null ? 'Create day' : 'Save changes',
+                      icon: Icons.check_rounded,
+                      isLoading: widget.builderController.isSaving,
+                      onPressed: _saveHeader,
+                    ),
+                    if (_splitDayId != null && !_isRestDay) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const SectionEyebrow('Exercises'),
+                          TextButton.icon(
+                            onPressed: _addExercise,
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Add exercise'),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      _buildExerciseList(),
                     ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _buildExerciseList(),
-                ],
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

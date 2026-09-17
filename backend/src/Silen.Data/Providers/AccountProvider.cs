@@ -23,6 +23,20 @@ public sealed class AccountProvider : IAccountProvider
             [SqlParameterBuilder.Create("@UserId", userId)],
             cancellationToken);
 
+    public Task<ExportEligibilityModel> TryBeginExportAsync(Guid userId, int cooldownDays, CancellationToken cancellationToken = default) =>
+        _sqlExecutor.QueryAsync(
+            "dbo.usp_Account_TryBeginExport",
+            [SqlParameterBuilder.Create("@UserId", userId), SqlParameterBuilder.Create("@CooldownDays", cooldownDays)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(
+                reader,
+                r => new ExportEligibilityModel
+                {
+                    Allowed = r.GetBoolean(r.GetOrdinal("Allowed")),
+                    NextAllowedAtUtc = r.IsDBNull(r.GetOrdinal("NextAllowedAtUtc")) ? null : r.GetDateTime(r.GetOrdinal("NextAllowedAtUtc"))
+                },
+                cancellationToken),
+            cancellationToken);
+
     public Task<AccountExportModel> ExportAsync(Guid userId, CancellationToken cancellationToken = default) =>
         _sqlExecutor.QueryAsync(
             "dbo.usp_Account_Export",

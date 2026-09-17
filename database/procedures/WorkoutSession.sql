@@ -203,6 +203,35 @@ BEGIN
 END
 GO
 
+-- Feeds Home's "View set history" button on a completed past day: every set
+-- logged for that date's session, grouped by exercise (ordered by that
+-- exercise's first logged set, so the list reads in the order the exercises
+-- were actually worked, not alphabetically or by GUID) and by set number
+-- within it.
+CREATE OR ALTER PROCEDURE dbo.usp_WorkoutSession_GetSetLogsByDate
+    @UserId UNIQUEIDENTIFIER,
+    @ScheduledDateUtc DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        wsl.ExerciseId,
+        e.Name AS ExerciseName,
+        wsl.SetNumber,
+        wsl.WeightKg,
+        wsl.Reps,
+        wsl.CompletedAtUtc
+    FROM dbo.WorkoutSessions ws
+    INNER JOIN dbo.WorkoutSetLogs wsl ON wsl.WorkoutSessionId = ws.WorkoutSessionId
+    INNER JOIN dbo.Exercises e ON e.ExerciseId = wsl.ExerciseId
+    WHERE ws.UserId = @UserId
+      AND wsl.UserId = @UserId
+      AND ws.ScheduledDateUtc = @ScheduledDateUtc
+    ORDER BY MIN(wsl.CompletedAtUtc) OVER (PARTITION BY wsl.ExerciseId), wsl.SetNumber;
+END
+GO
+
 -- "Still working out" heartbeat, called by the Active Workout Tracker while a
 -- session is open. Records the session's start the first time it is seen and
 -- refreshes LastActivityAtUtc on every ping. The notification publisher reads

@@ -69,3 +69,11 @@ public sealed class AccountExportRequestResultModel
 {
     public string Email { get; set; } = string.Empty;
 }
+
+/// <summary>Result of usp_Account_TryBeginExport - whether this export request
+/// is within the per-user cooldown, and if not, when the next one is allowed.</summary>
+public sealed class ExportEligibilityModel
+{
+    public bool Allowed { get; set; }
+    public DateTime? NextAllowedAtUtc { get; set; }
+}

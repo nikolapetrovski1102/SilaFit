@@ -7,7 +7,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../auth/widgets/auth_blob_background.dart';
 import 'split_builder_screen.dart';
@@ -84,6 +83,7 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
         label: const Text('New split'),
       ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
           // See the matching comment in SplitBuilderScreen - layout 3 keeps
           // every blob inside the visible viewport instead of relying on
@@ -110,7 +110,6 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                     builder: (context, splits) {
                       if (splits.isEmpty) {
                         return const MascotEmptyState(
-                          pose: MascotPose.ready,
                           title: 'No splits yet',
                           message:
                               'Build your own training split - tap "New split" to start.',

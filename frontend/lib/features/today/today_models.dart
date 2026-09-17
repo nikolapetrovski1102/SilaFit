@@ -208,6 +208,37 @@ class SetLogEntry {
       };
 }
 
+/// One logged set from a past day's session - mirrors `Silen.Common.Dtos.SetLogDto`.
+class SetLogHistoryEntry {
+  final String exerciseId;
+  final String exerciseName;
+  final int setNumber;
+  final double weightKg;
+  final int reps;
+  final DateTime completedAtUtc;
+
+  const SetLogHistoryEntry({
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.setNumber,
+    required this.weightKg,
+    required this.reps,
+    required this.completedAtUtc,
+  });
+
+  factory SetLogHistoryEntry.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return SetLogHistoryEntry(
+      exerciseId: map['exerciseId'] as String,
+      exerciseName: map['exerciseName'] as String? ?? '',
+      setNumber: map['setNumber'] as int? ?? 0,
+      weightKg: (map['weightKg'] as num?)?.toDouble() ?? 0,
+      reps: map['reps'] as int? ?? 0,
+      completedAtUtc: DateTime.parse(map['completedAtUtc'] as String),
+    );
+  }
+}
+
 class BodyweightLogResult {
   final double latestWeightKg;
   final double? deltaKg;

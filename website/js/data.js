@@ -88,14 +88,14 @@
     },
     {
       code: 'ADVANCED', name: 'Advanced Tier',
-      tagline: 'Full biofeedback, real-time form corrections, and dynamic metabolic nutrition.',
+      tagline: 'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.',
       monthlyPrice: 4.99, yearlyPrice: 41.99, isFeatured: false,
       features: [
         { text: 'Everything included in Pro tier', highlighted: false },
         { text: 'Adaptive meal planner calibrated to load', highlighted: true },
-        { text: 'Live grocery list & instant recipe matching', highlighted: false },
-        { text: 'Real-time AI form feedback & auto-adjustments', highlighted: false },
-        { text: '1-on-1 AI coach chat assistant', highlighted: false }
+        { text: 'Weekly AI check-ins with prioritized recommendations', highlighted: false },
+        { text: 'AI-generated workout splits & diet plans on request', highlighted: false },
+        { text: 'Unlimited saved splits & diet plans', highlighted: false }
       ]
     }
   ];

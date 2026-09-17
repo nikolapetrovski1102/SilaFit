@@ -88,3 +88,14 @@ public sealed class LogBodyweightResultDto
     public decimal LatestWeightKg { get; set; }
     public decimal? DeltaKg { get; set; }
 }
+
+/// <summary>One logged set from a past day's session - see `WorkoutSessionModels.SetLogModel`.</summary>
+public sealed class SetLogDto
+{
+    public Guid ExerciseId { get; set; }
+    public string ExerciseName { get; set; } = string.Empty;
+    public byte SetNumber { get; set; }
+    public decimal WeightKg { get; set; }
+    public short Reps { get; set; }
+    public DateTime CompletedAtUtc { get; set; }
+}

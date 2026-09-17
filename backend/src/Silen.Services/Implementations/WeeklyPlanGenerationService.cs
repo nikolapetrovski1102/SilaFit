@@ -25,6 +25,7 @@ public sealed class WeeklyPlanGenerationService(
     ISplitService splitService,
     IDietPlanService dietPlanService,
     IDietPlansProvider dietPlansProvider,
+    ISubscriptionGate subscriptionGate,
     IOpenRouterClient openRouterClient,
     INotificationProvider notificationProvider,
     IPushNotificationSender pushSender,
@@ -149,6 +150,14 @@ public sealed class WeeklyPlanGenerationService(
         Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            var entitlements = await subscriptionGate.GetEntitlementsAsync(userId, cancellationToken).ConfigureAwait(false);
+            if (!entitlements.AllowAiGeneration)
+            {
+                throw new ProUpgradeRequiredException(
+                    $"User '{userId}' requested on-demand diet plan generation without AllowAiGeneration.",
+                    "AI-generated diet plans aren't included in your plan. Upgrade to unlock them.");
+            }
+
             var opts = options.Value;
             var weekStart = ResolveWeekStart(null);
 

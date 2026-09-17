@@ -14,4 +14,7 @@ public interface ITodayService
     Task<ServiceResult<LogBodyweightResultDto>> LogBodyweightAsync(Guid userId, LogBodyweightRequest request, CancellationToken cancellationToken = default);
 
     Task<ServiceResult<WorkoutSessionCompletionModel>> CompleteWorkoutAsync(Guid userId, CompleteWorkoutRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Every set logged for the session scheduled on <paramref name="date"/> - powers Home's "View set history" button.</summary>
+    Task<ServiceResult<List<SetLogDto>>> GetWorkoutHistoryAsync(Guid userId, DateTime date, CancellationToken cancellationToken = default);
 }

@@ -6,7 +6,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import 'diet_guide_controller.dart';
@@ -80,7 +79,6 @@ class _DietGuidesScreenState extends State<DietGuidesScreen> {
   Widget _buildContent(List<DietGuide> guides) {
     if (guides.isEmpty) {
       return const MascotEmptyState(
-        pose: MascotPose.ready,
         title: 'No diet guides yet',
         message: 'Diet guides will show up here once they are available.',
       );

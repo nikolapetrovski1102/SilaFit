@@ -9,7 +9,6 @@ import '../../core/widgets/best_match_card.dart';
 import '../../core/widgets/browse_all_toggle.dart';
 import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import 'my_splits_screen.dart';
@@ -135,7 +134,6 @@ class _SplitsContentState extends State<_SplitsContent> {
   Widget build(BuildContext context) {
     if (widget.splits.isEmpty) {
       return const MascotEmptyState(
-        pose: MascotPose.ready,
         title: 'No splits yet',
         message:
             'Your training protocols will show up here once they\'re ready.',

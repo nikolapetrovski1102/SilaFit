@@ -23,4 +23,8 @@ public interface IWorkoutSessionProvider
     /// <summary>The heaviest set ever logged per exercise, most recently achieved first - see `usp_WorkoutSession_GetPersonalRecords`.</summary>
     Task<List<PersonalRecordModel>> GetPersonalRecordsAsync(
         Guid userId, int top, CancellationToken cancellationToken = default);
+
+    /// <summary>Every set logged for the session scheduled on <paramref name="scheduledDateUtc"/> - see `usp_WorkoutSession_GetSetLogsByDate`.</summary>
+    Task<List<SetLogModel>> GetSetLogsByDateAsync(
+        Guid userId, DateTime scheduledDateUtc, CancellationToken cancellationToken = default);
 }

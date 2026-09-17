@@ -198,6 +198,7 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
         ],
       ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
           // Layout 3 keeps every blob inside the visible viewport (unlike
           // login/register's step layouts, which push their third blob past

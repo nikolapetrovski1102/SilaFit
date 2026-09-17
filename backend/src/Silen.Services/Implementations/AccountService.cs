@@ -14,6 +14,12 @@ public sealed class AccountService(IAccountProvider accountProvider, IEmailSende
 {
     private static readonly JsonSerializerOptions ExportJsonOptions = new() { WriteIndented = true };
 
+    // "1 in 2 months" - the export emails a user's entire decrypted history as
+    // a JSON attachment, so it's rate-limited far more tightly than an
+    // ordinary resend/OTP cooldown to prevent it being used to exfiltrate
+    // data or spam the mailbox.
+    private const int ExportCooldownDays = 60;
+
     public Task<ServiceResult<bool>> DeleteAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
@@ -27,6 +33,14 @@ public sealed class AccountService(IAccountProvider accountProvider, IEmailSende
     public Task<ServiceResult<AccountExportRequestResultModel>> ExportAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            var eligibility = await accountProvider.TryBeginExportAsync(userId, ExportCooldownDays, cancellationToken);
+            if (!eligibility.Allowed)
+            {
+                throw new ConflictException(
+                    $"Account '{userId}' requested a data export before the cooldown elapsed.",
+                    $"You can request a data export once every {ExportCooldownDays} days. Next available on {eligibility.NextAllowedAtUtc:yyyy-MM-dd}.");
+            }
+
             var export = await accountProvider.ExportAsync(userId, cancellationToken);
             var email = export.Account.Email;
             if (string.IsNullOrWhiteSpace(email))

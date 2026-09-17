@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 import '../../core/api/api_client.dart';
 import 'today_models.dart';
 
@@ -43,5 +45,16 @@ class TodayRepository {
           if (setLogs != null && setLogs.isNotEmpty)
             'setLogs': setLogs.map((s) => s.toJson()).toList(),
         },
+      );
+
+  /// Every set logged for the session scheduled on [date] - powers Home's
+  /// "View set history" button on a completed past day.
+  Future<List<SetLogHistoryEntry>> getWorkoutHistory(DateTime date) =>
+      _client.get(
+        '/today/workout/history',
+        (json) => (json as List<dynamic>)
+            .map((e) => SetLogHistoryEntry.fromJson(e))
+            .toList(),
+        query: {'date': DateFormat('yyyy-MM-dd').format(date)},
       );
 }

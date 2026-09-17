@@ -14,6 +14,7 @@ import '../../splits/splits_models.dart';
 import '../today_models.dart';
 import 'day_preview.dart';
 import 'day_scroll_strip.dart';
+import 'set_history_screen.dart';
 
 /// Home's hero: the scrollable day picker and whichever day it's centered
 /// on, floating directly on the page background rather than boxed in a
@@ -155,7 +156,7 @@ class _SessionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (preview.isRestDay) return _buildRestDay();
-    if (preview.status == 'Completed') return _buildCompleted();
+    if (preview.status == 'Completed') return _buildCompleted(context);
     if (preview.status == 'Missed') return _buildMissed();
     return preview.isToday ? _buildScheduledToday() : _buildUpcomingPreview();
   }
@@ -333,36 +334,65 @@ class _SessionSection extends StatelessWidget {
     );
   }
 
-  Widget _buildCompleted() {
+  Widget _buildCompleted(BuildContext context) {
     final subtitle = preview.isToday
         ? 'Completed. Nice work today.'
         : 'Completed on $_dateLabel.';
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!preview.isToday) _dateEyebrow(),
-              Text(preview.title ?? 'Session',
-                  style:
-                      AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
-              SizedBox(height: AppSpacing.xxs * scale),
-              Text(subtitle,
-                  style: AppTypography.bodyLg
-                      .copyWith(color: AppColors.onSurfaceVariant)),
-            ],
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!preview.isToday) _dateEyebrow(),
+                  Text(preview.title ?? 'Session',
+                      style: AppTypography.headlineLg
+                          .copyWith(fontSize: 30 * scale)),
+                  SizedBox(height: AppSpacing.xxs * scale),
+                  Text(subtitle,
+                      style: AppTypography.bodyLg
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            SizedBox(width: AppSpacing.md * scale),
+            RadialProgressRing(
+              progress: 1,
+              size: 68 * scale,
+              strokeWidth: 5.5 * scale,
+              child: Icon(Icons.check_rounded,
+                  color: AppColors.accent, size: 30 * scale),
+            ),
+          ],
+        ),
+        // Only offered for a past day - today's own completion already shows
+        // in the active tracker it was just logged from.
+        if (!preview.isToday) ...[
+          SizedBox(height: AppSpacing.lg * scale),
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SetHistoryScreen(
+                date: preview.date,
+                sessionTitle: preview.title,
+              ),
+            )),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('View set history',
+                    style: AppTypography.labelSm.copyWith(
+                        color: AppColors.accent, fontWeight: FontWeight.w600)),
+                SizedBox(width: 4 * scale),
+                Icon(Icons.arrow_forward_rounded,
+                    size: 14 * scale, color: AppColors.accent),
+              ],
+            ),
           ),
-        ),
-        SizedBox(width: AppSpacing.md * scale),
-        RadialProgressRing(
-          progress: 1,
-          size: 68 * scale,
-          strokeWidth: 5.5 * scale,
-          child: Icon(Icons.check_rounded,
-              color: AppColors.accent, size: 30 * scale),
-        ),
+        ],
       ],
     );
   }

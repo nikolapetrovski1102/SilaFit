@@ -80,4 +80,15 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
             ],
             reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapPersonalRecord, cancellationToken),
             cancellationToken);
+
+    public Task<List<SetLogModel>> GetSetLogsByDateAsync(
+        Guid userId, DateTime scheduledDateUtc, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_WorkoutSession_GetSetLogsByDate",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@ScheduledDateUtc", scheduledDateUtc.Date)
+            ],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapSetLog, cancellationToken),
+            cancellationToken);
 }

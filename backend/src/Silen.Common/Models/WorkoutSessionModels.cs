@@ -61,6 +61,17 @@ public sealed class SetLogEntryModel
     public short Reps { get; set; }
 }
 
+/// <summary>One logged set from a past day's session - see `usp_WorkoutSession_GetSetLogsByDate`.</summary>
+public sealed class SetLogModel
+{
+    public Guid ExerciseId { get; set; }
+    public string ExerciseName { get; set; } = string.Empty;
+    public byte SetNumber { get; set; }
+    public decimal WeightKg { get; set; }
+    public short Reps { get; set; }
+    public DateTime CompletedAtUtc { get; set; }
+}
+
 /// <summary>
 /// The heaviest set ever logged for one exercise, plus the heaviest set
 /// before it (null if this is the only set ever logged for that exercise) -
