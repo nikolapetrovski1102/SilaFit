@@ -27,4 +27,8 @@ public sealed class UpdateUserSettingsRequest
 
     [StringLength(20)]
     public string AppearanceMode { get; set; } = "Device";
+
+    public bool ReceiveWeeklyAiPlans { get; set; }
+
+    public bool AutoActivateAiPlans { get; set; }
 }

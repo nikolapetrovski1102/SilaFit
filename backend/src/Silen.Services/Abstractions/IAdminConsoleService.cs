@@ -31,6 +31,12 @@ public interface IAdminConsoleService
     /// <summary>Refused while any split day still references the exercise. Requires content.exercises.write.</summary>
     Task<ServiceResult<AdminWriteResultDto>> DeleteExerciseAsync(string? sessionToken, Guid exerciseId, string? clientIp, CancellationToken cancellationToken = default);
 
+    /* --------------------------------- images -------------------------------- */
+
+    /// <summary>Stores an uploaded image (e.g. a split hero image) and returns its public URL.
+    /// Requires content.splits.write - the only editor that uses this today.</summary>
+    Task<ServiceResult<AdminImageUploadResultDto>> UploadImageAsync(string? sessionToken, ImageUploadRequest upload, string? clientIp, CancellationToken cancellationToken = default);
+
     /* --------------------------- meal suggestions ---------------------------- */
 
     /// <summary>Requires content.suggestions.read.</summary>
@@ -66,6 +72,13 @@ public interface IAdminConsoleService
 
     /// <summary>Requires content.plans.write.</summary>
     Task<ServiceResult<AdminWriteResultDto>> DeletePlanFeatureAsync(string? sessionToken, Guid planFeatureId, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Null when the plan has no entitlements row yet. Requires content.plans.read.</summary>
+    Task<ServiceResult<AdminPlanEntitlementsModel?>> GetPlanEntitlementsAsync(string? sessionToken, Guid planId, CancellationToken cancellationToken = default);
+
+    /// <summary>Creates or updates the plan's split/diet-plan limits and AI-generation
+    /// entitlement (one row per plan). Requires content.plans.write.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> SavePlanEntitlementsAsync(string? sessionToken, AdminPlanEntitlementsUpsertRequest request, string? clientIp, CancellationToken cancellationToken = default);
 
     /* -------------------------------- splits -------------------------------- */
 
@@ -106,6 +119,46 @@ public interface IAdminConsoleService
 
     /// <summary>Requires content.splits.write.</summary>
     Task<ServiceResult<AdminWriteResultDto>> DeleteSplitDayExerciseAsync(string? sessionToken, Guid splitDayExerciseId, string? clientIp, CancellationToken cancellationToken = default);
+
+    /* ------------------------------- diet plans ------------------------------ */
+
+    /// <summary>Requires content.diet_plans.read. Without content.diet_plans.manage_all the
+    /// caller only sees the plans they own, plus the shipped system plans.</summary>
+    Task<ServiceResult<List<AdminDietPlanModel>>> GetDietPlansAsync(string? sessionToken, CancellationToken cancellationToken = default);
+
+    /// <summary>The plan, its days and every meal slot. Requires content.diet_plans.read.</summary>
+    Task<ServiceResult<AdminDietPlanDetailModel>> GetDietPlanDetailAsync(string? sessionToken, Guid dietPlanId, CancellationToken cancellationToken = default);
+
+    /// <summary>Requires content.diet_plans.write. A trainer may only change a plan they own;
+    /// content.diet_plans.manage_all lifts that (and is required for system plans).</summary>
+    Task<ServiceResult<AdminWriteResultDto>> SaveDietPlanAsync(string? sessionToken, AdminDietPlanUpsertRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Refused while any user has the plan active, and refused for a plan
+    /// owned by another trainer. Requires content.diet_plans.write.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> DeleteDietPlanAsync(string? sessionToken, Guid dietPlanId, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>The clients one plan is assigned to, with plan context. Requires content.diet_plans.read.</summary>
+    Task<ServiceResult<List<AdminDietPlanAssignmentModel>>> GetDietPlanAssignmentsAsync(string? sessionToken, Guid dietPlanId, CancellationToken cancellationToken = default);
+
+    /// <summary>Assigns a plan to one user, optionally as their active plan.
+    /// Requires content.diet_plans.assign; ownership is enforced on top.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> AssignDietPlanAsync(string? sessionToken, AdminDietPlanAssignRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes a user's access to a plan. Requires content.diet_plans.assign;
+    /// ownership is enforced on top.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> RemoveDietPlanAssignmentAsync(string? sessionToken, Guid dietPlanId, Guid userId, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Requires content.diet_plans.write.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> SaveDietPlanDayAsync(string? sessionToken, AdminDietPlanDayUpsertRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Requires content.diet_plans.write.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> DeleteDietPlanDayAsync(string? sessionToken, Guid dietPlanDayId, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Requires content.diet_plans.write.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> SaveDietPlanMealAsync(string? sessionToken, AdminDietPlanMealUpsertRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
+    /// <summary>Requires content.diet_plans.write.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> DeleteDietPlanMealAsync(string? sessionToken, Guid dietPlanMealId, string? clientIp, CancellationToken cancellationToken = default);
 
     /* --------------------------------- users -------------------------------- */
 

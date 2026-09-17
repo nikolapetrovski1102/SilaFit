@@ -81,6 +81,31 @@ public static class NotificationMessageComposer
             ("data in. verdict pending.", "you logged the month. unlock the review that tells you what to do with it."),
             ("what actually improved?", "your numbers know. unlock the full AI review and hear it."));
 
+    /// <summary>
+    /// Sunday "your AI plan is ready" push - sent directly by
+    /// WeeklyPlanGenerationService for one user at a time, outside the
+    /// candidate-scanning pipeline the other categories go through, so this
+    /// takes a bare userId/displayName rather than a full
+    /// <see cref="NotificationCandidateModel"/>. Points at "splits" (My
+    /// Splits), where the freshly generated split - and a link into the new
+    /// diet plan - both land.
+    /// </summary>
+    public static NotificationContent WeeklyAiPlanReady(Guid userId, string? displayName)
+    {
+        var index = StableIndex(userId, DateOnly.FromDateTime(DateTime.UtcNow), NotificationCategories.WeeklyAiPlanReady, WeeklyAiPlanReadyTemplates.Length);
+        var (title, body) = WeeklyAiPlanReadyTemplates[index];
+        return new NotificationContent(title, body.Replace("{name}", Name(displayName)), "splits");
+    }
+
+    private static readonly (string Title, string Body)[] WeeklyAiPlanReadyTemplates =
+    [
+        ("your week, planned 🗓️", "{name}, your AI split and diet plan for this week are ready. take a look."),
+        ("fresh plan just dropped", "{name}, a new split and meal plan built from last week's log. check it out."),
+        ("this week, sorted ✅", "your AI coach built next week's training and food plan. it's in My Splits."),
+        ("no more guessing this week", "{name}, your personalized split + diet plan are ready to go."),
+        ("built from your data 📊", "last week's training became this week's plan. go see it."),
+    ];
+
     private static NotificationContent Pick(
         NotificationCandidateModel candidate,
         string category,
@@ -117,9 +142,11 @@ public static class NotificationMessageComposer
         }
     }
 
-    private static string Name(NotificationCandidateModel candidate)
+    private static string Name(NotificationCandidateModel candidate) => Name(candidate.DisplayName);
+
+    private static string Name(string? rawDisplayName)
     {
-        var displayName = candidate.DisplayName?.Trim();
+        var displayName = rawDisplayName?.Trim();
         if (string.IsNullOrEmpty(displayName))
         {
             return "bestie";

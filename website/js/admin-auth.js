@@ -68,6 +68,36 @@
     });
   }
 
+  // Multipart upload — separate from request() because that helper always
+  // JSON.stringifies its body, which would corrupt a File. No Content-Type
+  // header is set here on purpose: the browser fills in the multipart
+  // boundary itself, and overriding it drops the boundary and breaks parsing.
+  function uploadFile(path, file) {
+    var formData = new FormData();
+    formData.append('file', file);
+
+    return fetch(API_BASE + path, { method: 'POST', credentials: 'include', body: formData })
+      .then(function (response) {
+        return response.json().then(function (payload) {
+          return {
+            ok: response.ok,
+            status: response.status,
+            data: payload && payload.success ? payload.data : null,
+            message: payload && payload.message ? payload.message : null
+          };
+        }, function () {
+          return { ok: response.ok, status: response.status, data: null, message: null };
+        });
+      }, function () {
+        return {
+          ok: false,
+          status: 0,
+          data: null,
+          message: 'Could not reach the SilaFit API. Check your connection and try again.'
+        };
+      });
+  }
+
   global.SilaAdminAuth = {
     /* Step 1 — password. Resolves to a challenge, not to a session. */
     login: function (username, password) {
@@ -160,6 +190,11 @@
       return request('/api/admin/rbac/operators/confirm-email', 'POST', { token: token });
     },
 
+    /** Re-sends the confirmation link to an operator's address on file (never a caller-supplied one). */
+    resendOperatorConfirmation: function (username) {
+      return request('/api/admin/rbac/operators/resend-confirmation', 'POST', { username: username });
+    },
+
     setOperatorRole: function (username, roleName) {
       return request('/api/admin/rbac/operators/role', 'PUT', { username: username, roleName: roleName });
     },
@@ -230,6 +265,14 @@
       return request('/api/admin/content/plans/features/' + encodeURIComponent(planFeatureId), 'DELETE');
     },
 
+    getPlanEntitlements: function (planId) {
+      return request('/api/admin/content/plans/' + encodeURIComponent(planId) + '/entitlements', 'GET');
+    },
+
+    savePlanEntitlements: function (entitlements) {
+      return request('/api/admin/content/plans/entitlements', 'PUT', entitlements);
+    },
+
     getSplits: function () {
       return request('/api/admin/content/splits', 'GET');
     },
@@ -244,6 +287,12 @@
 
     deleteSplit: function (splitId) {
       return request('/api/admin/content/splits/' + encodeURIComponent(splitId), 'DELETE');
+    },
+
+    // Returns { ok, data: { url }, message } — url is the public
+    // images.sila.fitness (or local /uploads fallback) address to store on the split.
+    uploadImage: function (file) {
+      return uploadFile('/api/admin/content/images', file);
     },
 
     /* Clients a split is assigned to, and the assign/unassign mutations. */
@@ -276,6 +325,54 @@
 
     deleteSplitDayExercise: function (splitDayExerciseId) {
       return request('/api/admin/content/splits/days/exercises/' + encodeURIComponent(splitDayExerciseId), 'DELETE');
+    },
+
+    getDietPlans: function () {
+      return request('/api/admin/content/diet-plans', 'GET');
+    },
+
+    getDietPlanDetail: function (dietPlanId) {
+      return request('/api/admin/content/diet-plans/' + encodeURIComponent(dietPlanId), 'GET');
+    },
+
+    saveDietPlan: function (plan) {
+      return request('/api/admin/content/diet-plans', 'POST', plan);
+    },
+
+    deleteDietPlan: function (dietPlanId) {
+      return request('/api/admin/content/diet-plans/' + encodeURIComponent(dietPlanId), 'DELETE');
+    },
+
+    /* Clients a diet plan is assigned to, and the assign/unassign mutations. */
+    getDietPlanAssignments: function (dietPlanId) {
+      return request('/api/admin/content/diet-plans/' + encodeURIComponent(dietPlanId) + '/assignments', 'GET');
+    },
+
+    assignDietPlan: function (dietPlanId, userId, setActive) {
+      return request('/api/admin/content/diet-plans/assignments', 'POST', {
+        dietPlanId: dietPlanId, userId: userId, setActive: !!setActive
+      });
+    },
+
+    removeDietPlanAssignment: function (dietPlanId, userId) {
+      return request('/api/admin/content/diet-plans/' + encodeURIComponent(dietPlanId) +
+        '/assignments/' + encodeURIComponent(userId), 'DELETE');
+    },
+
+    saveDietPlanDay: function (day) {
+      return request('/api/admin/content/diet-plans/days', 'POST', day);
+    },
+
+    deleteDietPlanDay: function (dietPlanDayId) {
+      return request('/api/admin/content/diet-plans/days/' + encodeURIComponent(dietPlanDayId), 'DELETE');
+    },
+
+    saveDietPlanMeal: function (meal) {
+      return request('/api/admin/content/diet-plans/meals', 'POST', meal);
+    },
+
+    deleteDietPlanMeal: function (dietPlanMealId) {
+      return request('/api/admin/content/diet-plans/meals/' + encodeURIComponent(dietPlanMealId), 'DELETE');
     },
 
     getUsers: function (search, limit) {

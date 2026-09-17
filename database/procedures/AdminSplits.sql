@@ -49,9 +49,13 @@ BEGIN
            (SELECT COUNT(*) FROM dbo.SplitAssignments asg WHERE asg.SplitId = s.SplitId) AS AssignedUserCount
     FROM dbo.WorkoutSplits s
     LEFT JOIN dbo.AdminUsers owner_admin ON owner_admin.AdminUserId = s.OwnerAdminUserId
-    WHERE @IncludeAll = 1
-       OR s.OwnerAdminUserId = @ViewerAdminUserId
-       OR s.IsSystemDefault = 1
+    -- A user-built split (OwnerUserId set - see 044_WorkoutSplitsUserOwnership.sql)
+    -- never surfaces in the console: it is that user's own content, managed only
+    -- through the app's UserSplits endpoints, never through the admin side.
+    WHERE s.OwnerUserId IS NULL
+      AND (@IncludeAll = 1
+           OR s.OwnerAdminUserId = @ViewerAdminUserId
+           OR s.IsSystemDefault = 1)
     ORDER BY s.SortOrder, s.Name;
 END
 GO
@@ -126,8 +130,10 @@ BEGIN
         SET @Action = N'Update';
 
         DECLARE @ExistingOwnerAdminUserId UNIQUEIDENTIFIER;
+        DECLARE @ExistingOwnerUserId UNIQUEIDENTIFIER;
 
-        SELECT @ExistingOwnerAdminUserId = OwnerAdminUserId
+        SELECT @ExistingOwnerAdminUserId = OwnerAdminUserId,
+               @ExistingOwnerUserId = OwnerUserId
         FROM dbo.WorkoutSplits
         WHERE SplitId = @SplitId;
 
@@ -135,6 +141,17 @@ BEGIN
         BEGIN
             COMMIT TRANSACTION;
             SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
+            RETURN;
+        END
+
+        -- A split an app user built themselves (see 044_WorkoutSplitsUserOwnership.sql)
+        -- is never editable from the console, regardless of manage_all - it isn't
+        -- trainer/admin content at all. usp_Admin_Splits_GetAll already excludes
+        -- these from the list; this is defense in depth for a direct call.
+        IF @ExistingOwnerUserId IS NOT NULL
+        BEGIN
+            COMMIT TRANSACTION;
+            SELECT 2 AS Outcome, @SplitId AS EntityId, N'This split was built by an app user and cannot be edited here.' AS Detail;
             RETURN;
         END
 
@@ -191,6 +208,7 @@ BEGIN
 
     DECLARE @Name NVARCHAR(150);
     DECLARE @OwnerAdminUserId UNIQUEIDENTIFIER;
+    DECLARE @OwnerUserId UNIQUEIDENTIFIER;
     DECLARE @ActiveUserCount INT;
     DECLARE @DayCount INT;
     DECLARE @ExerciseCount INT;
@@ -198,7 +216,8 @@ BEGIN
     BEGIN TRANSACTION;
 
     SELECT @Name = Name,
-           @OwnerAdminUserId = OwnerAdminUserId
+           @OwnerAdminUserId = OwnerAdminUserId,
+           @OwnerUserId = OwnerUserId
     FROM dbo.WorkoutSplits
     WHERE SplitId = @SplitId;
 
@@ -206,6 +225,14 @@ BEGIN
     BEGIN
         COMMIT TRANSACTION;
         SELECT 1 AS Outcome, @SplitId AS EntityId, N'That split no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    -- Same "not console content at all" guard as the upsert - see there.
+    IF @OwnerUserId IS NOT NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, @SplitId AS EntityId, N'This split was built by an app user and cannot be deleted here.' AS Detail;
         RETURN;
     END
 

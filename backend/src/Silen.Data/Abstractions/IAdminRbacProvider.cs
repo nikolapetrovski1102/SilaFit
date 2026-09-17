@@ -36,6 +36,13 @@ public interface IAdminRbacProvider
     Task<List<AdminOperatorModel>> GetOperatorsAsync(bool includeInactive, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// One operator by username regardless of active state, or null. Used by
+    /// operations that need the account's address/confirmation state without
+    /// listing every operator (e.g. re-sending a confirmation email).
+    /// </summary>
+    Task<AdminOperatorModel?> GetOperatorByUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a brand-new operator account. Only ever inserts - an existing
     /// username comes back as <see cref="AdminWriteOutcome.Conflict"/>, never a
     /// silent credential rotation. <paramref name="roleName"/> is optional; leaving

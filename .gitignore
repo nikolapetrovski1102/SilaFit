@@ -43,6 +43,11 @@ deploy/secrets/
 /data/*.json
 /data/*.plist
 
+# User-uploaded split/plan images (see Silen.Common.Options.ImageUploadOptions).
+# Written at runtime by the API into a bind-mounted directory; never source-controlled.
+/uploads/
+deploy/uploads/
+
 # Chrome profile dump left behind by the scraper's browser automation
 data/scraped/muscleandstrength/.browser-profile/
 

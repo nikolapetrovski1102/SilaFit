@@ -28,11 +28,27 @@ BEGIN
 
     IF @SplitId IS NOT NULL
     BEGIN
-        DECLARE @CycleIndex INT = DATEDIFF(DAY, @ActivatedDate, @Today) % CAST(@DurationDays AS INT);
+        -- 0-based position within the split's rotation. Normalised to be
+        -- non-negative so a future ActivatedAtUtc (clock skew) can't index
+        -- backwards - same convention as the Dart resolver and the mock seeder.
+        DECLARE @CycleIndex INT =
+            ((DATEDIFF(DAY, @ActivatedDate, @Today) % CAST(@DurationDays AS INT))
+             + CAST(@DurationDays AS INT)) % CAST(@DurationDays AS INT);
 
-        SELECT @SplitDayId = SplitDayId
-        FROM dbo.SplitDays
-        WHERE SplitId = @SplitId AND DayIndex = @CycleIndex;
+        -- Match on the day's ordinal position, not its stored DayIndex. System
+        -- and imported splits are seeded 0-based, while user-built and
+        -- AI-generated splits are written 1-based (usp_UserSplitDay_Upsert
+        -- enforces 1..14) - an ordinal lookup resolves both, and it also fixes
+        -- the off-by-one that left a 1-based split's first day with no session
+        -- on activation day and its last day unreachable.
+        SELECT @SplitDayId = d.SplitDayId
+        FROM (
+            SELECT SplitDayId,
+                   ROW_NUMBER() OVER (ORDER BY DayIndex) - 1 AS CyclePos
+            FROM dbo.SplitDays
+            WHERE SplitId = @SplitId
+        ) d
+        WHERE d.CyclePos = @CycleIndex;
     END
 
     DECLARE @WorkoutSessionId UNIQUEIDENTIFIER;

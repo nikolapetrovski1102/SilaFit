@@ -12,6 +12,7 @@ import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import 'my_splits_screen.dart';
 import 'split_detail_screen.dart';
 import 'split_recommendation.dart';
 import 'splits_controller.dart';
@@ -46,7 +47,19 @@ class _SplitsScreenState extends State<SplitsScreen> {
     // status bar/notch.
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MySplitsScreen())),
+            icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
+            label: Text('My splits',
+                style: AppTypography.labelSm.copyWith(color: AppColors.onSurface)),
+          ),
+        ],
+      ),
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
@@ -483,10 +496,13 @@ class _SplitCard extends StatelessWidget {
                         _MetaPill(
                             icon: Icons.trending_up_rounded,
                             label: split.level),
-                        // Anything not shipped by SilaFit is a trainer's own
-                        // protocol, shown to this user because it was made public
-                        // or assigned to them.
-                        if (!split.isSystemDefault)
+                        if (split.isEditableByMe)
+                          const _MetaPill(
+                              icon: Icons.edit_rounded, label: 'Your split')
+                        // Anything not shipped by SilaFit and not owned by
+                        // this user is a trainer's own protocol, shown
+                        // because it was made public or assigned to them.
+                        else if (!split.isSystemDefault)
                           const _MetaPill(
                               icon: Icons.fitness_center_rounded,
                               label: 'From your coach'),

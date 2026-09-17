@@ -304,7 +304,8 @@
       var emailCell = op.email
         ? esc(op.email) + (op.emailConfirmed
             ? ' <span class="chip chip--accent" title="Confirmed">Confirmed</span>'
-            : ' <span class="chip chip--error" title="Not yet confirmed">Unconfirmed</span>')
+            : ' <span class="chip chip--error" title="Not yet confirmed">Unconfirmed</span>' +
+              ' <button class="btn btn--ghost btn--sm" data-op-resend="' + esc(op.username) + '" title="Re-send the confirmation email">Resend</button>')
         : '<span class="muted">None on file</span>';
       return (
         '<tr' + (op.isActive ? '' : ' style="opacity:0.55;"') + '>' +
@@ -345,6 +346,18 @@
           toggle.disabled = false;
           if (result.ok) { toast((result.data && result.data.message) || 'Updated.'); loadOperators(); }
           else { toggle.checked = !isActive; toast(result.message || 'Could not update operator.', true); }
+        });
+      });
+    });
+
+    $$('[data-op-resend]', table).forEach(function (button) {
+      button.addEventListener('click', function () {
+        var username = button.getAttribute('data-op-resend');
+        button.disabled = true;
+        auth.resendOperatorConfirmation(username).then(function (result) {
+          button.disabled = false;
+          if (result.ok) toast((result.data && result.data.message) || 'Confirmation email sent.');
+          else toast(result.message || 'Could not send the confirmation email.', true);
         });
       });
     });

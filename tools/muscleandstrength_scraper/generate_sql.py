@@ -100,6 +100,23 @@ def exercise_value(row: dict[str, Any], wanted: str) -> str | None:
     return None
 
 
+# Muscle & Strength numbers the exercise column inside a day's table ("1. Squat",
+# "4b. Cable Curl"), and marks superset pairings with a letter+digit label
+# ("A1."/"A2." are performed back to back, then "B1."/"B2.", and so on). The
+# ordering is already captured by SortOrder and the superset grouping survives in
+# the workout's FullDescription, so the prefix is noise that would otherwise create
+# a second Exercises row for an exercise that already exists under its plain name
+# ("Goblet Squat" vs "A1. Goblet Squat"), fragmenting exercise matching.
+LEADING_ORDINAL = re.compile(r"^\s*[A-Za-z]?\d+[a-z]?\.\s*")
+
+
+def normalize_exercise_name(name: str | None) -> str | None:
+    if not name:
+        return name
+    stripped = LEADING_ORDINAL.sub("", name).strip()
+    return stripped or None
+
+
 def workout_rows(item: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for day in item.get("days") or []:
@@ -107,6 +124,16 @@ def workout_rows(item: dict[str, Any]) -> list[dict[str, Any]]:
             if isinstance(table, list):
                 rows.extend(row for row in table if isinstance(row, dict) and exercise_value(row, "Exercise"))
     return rows
+
+
+def workout_exercise_names(items: list[dict[str, Any]]) -> list[str]:
+    names: set[str] = set()
+    for item in items:
+        for row in workout_rows(item):
+            name = normalize_exercise_name(exercise_value(row, "Exercise"))
+            if name:
+                names.add(name)
+    return sorted(names, key=str.casefold)
 
 
 def muscle_group(name: str) -> str:
@@ -176,7 +203,7 @@ def header() -> list[str]:
 
 def render_workouts(items: list[dict[str, Any]]) -> list[str]:
     out = ["----------------------------------------------------------------------------", "-- Complete workout catalog", "----------------------------------------------------------------------------"]
-    exercise_names = sorted({exercise_value(row, "Exercise") for item in items for row in workout_rows(item) if exercise_value(row, "Exercise")}, key=str.casefold)
+    exercise_names = workout_exercise_names(items)
     for name in exercise_names:
         out.extend([
             "IF NOT EXISTS (SELECT 1 FROM dbo.Exercises WHERE Name = " + sql_text(name, 150) + ")",
@@ -233,9 +260,17 @@ def render_workouts(items: list[dict[str, Any]]) -> list[str]:
                 f"    Title={sql_text(day.get('title') or f'Day {day_index + 1}', 150)}, FocusLabel={sql_text(item.get('workout_type'), 100)}, EstimatedMinutes={0 if day.get('is_rest_day') else typical_minutes}, IsRestDay={1 if day.get('is_rest_day') else 0}, SourceNotes={sql_text(day.get('notes'))}",
                 "    WHERE SplitDayId=@ImportedDayId;",
             ])
-            rows = [row for table in day.get("exercise_tables", []) if isinstance(table, list) for row in table if isinstance(row, dict) and exercise_value(row, "Exercise")]
-            for sort_order, row in enumerate(rows, start=1):
-                exercise = exercise_value(row, "Exercise")
+            rows: list[tuple[str, dict[str, Any]]] = []
+            for table in day.get("exercise_tables", []) or []:
+                if not isinstance(table, list):
+                    continue
+                for row in table:
+                    if not isinstance(row, dict):
+                        continue
+                    name = normalize_exercise_name(exercise_value(row, "Exercise"))
+                    if name:
+                        rows.append((name, row))
+            for sort_order, (exercise, row) in enumerate(rows, start=1):
                 source_reps = exercise_value(row, "Reps")
                 source_sets = exercise_value(row, "Sets")
                 low, high = rep_range(source_reps)

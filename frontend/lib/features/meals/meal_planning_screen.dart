@@ -8,21 +8,20 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/progress_ring.dart';
-import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../diet_plans/diet_plan_controller.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
-import 'meal_recommendation.dart';
-import 'meal_suggestions_screen.dart';
+import 'widgets/active_diet_plan_section.dart';
 import 'widgets/macro_bar.dart';
-import 'widgets/meal_log_card.dart';
-import 'widgets/meal_suggestion_card.dart';
+import 'widgets/suggested_diet_plans_section.dart';
 
 /// The Nutrition/Meal Planning screen - boxless: a calorie ring on the left
 /// with its macro bars beside it on the right, a 7-day pill strip below that
-/// connects up to the ring via a thin accent line, the day's logged meals
-/// list, and a quick-add FAB.
+/// connects up to the ring via a thin accent line, the active diet plan's
+/// meals for the selected day, a "Suggested This Month" strip of diet plans
+/// (with on-demand generation), and a quick-add FAB.
 class MealPlanningScreen extends StatefulWidget {
   const MealPlanningScreen({super.key});
 
@@ -37,7 +36,15 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
   void initState() {
     super.initState();
     _controller = context.read<MealController>();
-    Future.microtask(_controller.load);
+    // App-wide controllers: the "Suggested This Month" strip and the active
+    // plan section both need their own first load, independent of the meal day.
+    final dietPlansController = context.read<DietPlansController>();
+    final activePlanController = context.read<ActiveDietPlanController>();
+    Future.microtask(() {
+      _controller.load();
+      dietPlansController.load();
+      activePlanController.load();
+    });
   }
 
   @override
@@ -79,7 +86,9 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
                       _MealDayContent(controller: _controller, day: day),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                _MealSuggestionsSection(controller: _controller),
+                ActiveDietPlanSection(mealController: _controller),
+                const SizedBox(height: AppSpacing.xl),
+                const SuggestedDietPlansSection(),
                 const SizedBox(height: 96), // clears the FAB
               ],
             ),
@@ -312,190 +321,7 @@ class _MealDayContent extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         _DayStrip(controller: controller),
-        const SizedBox(height: AppSpacing.xl),
-        const SectionEyebrow('Logged Meals'),
-        const SizedBox(height: AppSpacing.sm),
-        if (day.meals.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: Text('No meals yet - tap + to add one.',
-                  style: AppTypography.bodyMd
-                      .copyWith(color: AppColors.onSurfaceVariant)),
-            ),
-          )
-        else
-          for (final meal in day.meals) ...[
-            MealLogCard(
-              meal: meal,
-              onLog: () => controller.logMeal(meal),
-              onDelete: () => controller.deleteMeal(meal.mealLogId),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
       ],
-    );
-  }
-}
-
-/// The month-tagged strip of curated meal ideas from `dbo.MealSuggestions` -
-/// tapping a card opens the quick-add sheet pre-filled so the user can still
-/// tweak portions before logging it, rather than adding it silently.
-///
-/// The catalog can run into the hundreds (seeded recipes, not just the
-/// original hand-picked flagships), so the strip starts capped at
-/// [_pageSize] and grows by [_pageSize] each time the trailing "Load more"
-/// tile is tapped, instead of dumping the whole list into one long
-/// horizontal scroll.
-class _MealSuggestionsSection extends StatefulWidget {
-  final MealController controller;
-
-  const _MealSuggestionsSection({required this.controller});
-
-  @override
-  State<_MealSuggestionsSection> createState() =>
-      _MealSuggestionsSectionState();
-}
-
-class _MealSuggestionsSectionState extends State<_MealSuggestionsSection> {
-  static const _pageSize = 10;
-
-  int _visibleCount = _pageSize;
-
-  @override
-  Widget build(BuildContext context) {
-    // Deliberately not routed through ResourceBuilder: that renders a
-    // full-height spinner/error card, which is too heavy for a secondary
-    // discovery strip. A stalled load just leaves this section blank rather
-    // than blocking or drawing attention away from the rest of the screen.
-    final allSuggestions = widget.controller.suggestionsState.data;
-    if (allSuggestions == null || allSuggestions.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Ranked by the same engine the full "Suggested Meals" library uses:
-    // calorie fit against what's left in the day, protein gap, and
-    // time-of-day - so the strip and the library never disagree about what's
-    // "best". See meal_recommendation.dart.
-    final day = widget.controller.state.data;
-    final suggestions = [
-      for (final match in rankMealMatches(allSuggestions, day: day))
-        match.suggestion,
-    ];
-
-    final remaining = day?.remainingCalories;
-    final target = remaining == null ? null : (remaining < 0 ? 0 : remaining);
-
-    final visibleCount =
-        _visibleCount < suggestions.length ? _visibleCount : suggestions.length;
-    final hasMore = visibleCount < suggestions.length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SectionEyebrow('Suggested This Month',
-                    color: AppColors.accent),
-                if (target != null && target > 0) ...[
-                  const SizedBox(height: 2),
-                  Text('Ranked for your $target kcal left',
-                      style: AppTypography.labelSm
-                          .copyWith(color: AppColors.onSurfaceVariant)),
-                ],
-              ],
-            ),
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const MealSuggestionsScreen())),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('See all',
-                      style: AppTypography.labelSm
-                          .copyWith(color: AppColors.accent)),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 16, color: AppColors.accent),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        SizedBox(
-          height: 156,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: visibleCount + (hasMore ? 1 : 0),
-            separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
-            itemBuilder: (context, i) {
-              if (i >= visibleCount) {
-                return _LoadMoreTile(
-                  remaining: suggestions.length - visibleCount,
-                  onTap: () => setState(() {
-                    _visibleCount += _pageSize;
-                  }),
-                );
-              }
-              final suggestion = suggestions[i];
-              return MealSuggestionCard(
-                suggestion: suggestion,
-                onTap: () => showQuickAddSheet(context, widget.controller,
-                    initial: suggestion),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Trailing tile in the suggestions strip that reveals the next batch of
-/// [MealSuggestion]s in place, rather than navigating to a separate list.
-class _LoadMoreTile extends StatelessWidget {
-  final int remaining;
-  final VoidCallback onTap;
-
-  const _LoadMoreTile({required this.remaining, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 108,
-        child: SectionCard(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add_circle_outline,
-                    color: AppColors.accent, size: 28),
-                const SizedBox(height: 6),
-                Text(
-                  'Load more',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.labelSm
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$remaining more',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.labelSm
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -80,6 +80,16 @@ public sealed class AdminConfirmOperatorEmailRequest
 }
 
 /// <summary>
+/// Asks the API to re-send an operator's confirmation link. Only the username is
+/// supplied - the address is always re-read from the row server-side, so a caller
+/// can never redirect the mail to an address of their choosing.
+/// </summary>
+public sealed class AdminOperatorResendConfirmationRequest
+{
+    public string Username { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Shown exactly once, immediately after an operator is created - like the CLI
 /// provisioning tool's console output, but returned over HTTP instead of printed.
 /// <see cref="TotpSecret"/>/<see cref="OtpAuthUri"/> are never retrievable again:

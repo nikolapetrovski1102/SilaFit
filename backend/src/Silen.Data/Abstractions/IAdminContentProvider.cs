@@ -45,6 +45,11 @@ public interface IAdminContentProvider
 
     Task<AdminMutationResultModel> DeletePlanFeatureAsync(Guid planFeatureId, AdminActorModel actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Null when the plan has no entitlements row yet.</summary>
+    Task<AdminPlanEntitlementsModel?> GetPlanEntitlementsAsync(Guid planId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertPlanEntitlementsAsync(AdminPlanEntitlementsUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
     Task<List<AdminSplitModel>> GetSplitsAsync(Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default);
 
     /// <summary>The split, its days and every prescription row - assembled from three procedures.</summary>
@@ -76,4 +81,36 @@ public interface IAdminContentProvider
     Task<AdminMutationResultModel> DeleteSplitDayExerciseAsync(Guid splitDayExerciseId, AdminActorModel actor, CancellationToken cancellationToken = default);
 
     Task<List<AdminUserSummaryModel>> GetUsersAsync(string? search, int limit, CancellationToken cancellationToken = default);
+
+    /* ------------------------------- diet plans ------------------------------ */
+
+    Task<List<AdminDietPlanModel>> GetDietPlansAsync(Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default);
+
+    /// <summary>The plan, its days and every meal slot - assembled from three procedures.</summary>
+    Task<AdminDietPlanDetailModel?> GetDietPlanDetailAsync(Guid dietPlanId, Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertDietPlanAsync(AdminDietPlanUpsertRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteDietPlanAsync(Guid dietPlanId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
+
+    /// <summary>The clients a plan is currently assigned to, with their plan context.</summary>
+    Task<List<AdminDietPlanAssignmentModel>> GetDietPlanAssignmentsAsync(Guid dietPlanId, CancellationToken cancellationToken = default);
+
+    /// <summary>Grants one user visibility, optionally making the plan their active diet plan.</summary>
+    Task<AdminMutationResultModel> AssignDietPlanAsync(AdminDietPlanAssignRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes a user's access; clears it as their active plan if it was.</summary>
+    Task<AdminMutationResultModel> RemoveDietPlanAssignmentAsync(Guid dietPlanId, Guid userId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default);
+
+    Task<List<AdminDietPlanDayModel>> GetDietPlanDaysAsync(Guid dietPlanId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertDietPlanDayAsync(AdminDietPlanDayUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteDietPlanDayAsync(Guid dietPlanDayId, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<List<AdminDietPlanMealModel>> GetDietPlanMealsAsync(Guid dietPlanId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertDietPlanMealAsync(AdminDietPlanMealUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteDietPlanMealAsync(Guid dietPlanMealId, AdminActorModel actor, CancellationToken cancellationToken = default);
 }

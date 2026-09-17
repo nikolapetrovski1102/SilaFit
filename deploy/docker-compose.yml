@@ -103,6 +103,11 @@ services:
       - "127.0.0.1:${API_PORT:-5010}:8080"   # localhost only — nginx proxies to it
     volumes:
       - ./secrets:/secrets:ro
+      # Uploaded split/plan images (Silen.Common.Options.ImageUploadOptions,
+      # default StoragePath "uploads" relative to /app). nginx's images.sila.fitness
+      # vhost (deploy/nginx-sila.fitness.conf) serves this same host directory
+      # straight off disk - the API is only ever hit to write a new file here.
+      - ./uploads:/app/uploads
     restart: unless-stopped
     # Backstop like the db service's mem_limit above: without a ceiling, a leak can
     # let the API eat all host RAM and push everything (including SQL Server) into
@@ -236,6 +241,53 @@ services:
       Push__Enabled: "${PUSH_ENABLED:-false}"
       Push__ProjectId: "${PUSH_PROJECT_ID:-}"
       Push__ServiceAccountJsonPath: "${PUSH_SERVICE_ACCOUNT_PATH:-/secrets/fcm-service-account.json}"
+    volumes:
+      - ./secrets:/secrets:ro
+
+  # Weekly AI plan generation batch: for every active ADVANCED subscriber opted
+  # into ReceiveWeeklyAiPlans, looks at what they actually trained/ate last week
+  # and generates a fresh custom split + diet plan for the upcoming week, then
+  # pushes/emails them that it's ready. Profile-gated like the other tools;
+  # deploy.sh installs a cron entry that runs it every Sunday.
+  #
+  # Run it by hand with:
+  #   docker compose --profile tools run --rm --build silen-weekly-plan-generation
+  # Testing one user, writing nothing:
+  #   docker compose --profile tools run --rm silen-weekly-plan-generation -- --user=<guid> --dry-run
+  silen-weekly-plan-generation:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.WeeklyPlanGeneration/Dockerfile
+    container_name: silen-weekly-plan-generation
+    profiles: ["tools"]
+    depends_on:
+      silen-sqlserver:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: "Production"
+      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      # AES-256-GCM key: reads decrypted bodyweight/meal columns the same way
+      # the API does, so it must match ENCRYPTION_MASTER_KEY.
+      Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
+      # OpenRouter - required: an unset key means every user fails to generate.
+      OpenRouter__ApiKey: "${OPENROUTER_API_KEY:-}"
+      OpenRouter__Model: "${OPENROUTER_MODEL:-openai/gpt-4.1-mini}"
+      # SMTP - when Smtp__Host is blank the batch still generates + stores each
+      # plan but sends no email (deliveries are recorded as 'Generated').
+      Smtp__Host: "${SMTP_HOST:-}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__Username: "${SMTP_USERNAME:-}"
+      Smtp__Password: "${SMTP_PASSWORD:-}"
+      Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
+      Smtp__FromName: "${SMTP_FROM_NAME:-SilaFit}"
+      Push__Enabled: "${PUSH_ENABLED:-false}"
+      Push__ProjectId: "${PUSH_PROJECT_ID:-}"
+      Push__ServiceAccountJsonPath: "${PUSH_SERVICE_ACCOUNT_PATH:-/secrets/fcm-service-account.json}"
+      WeeklyPlanGeneration__SendEmails: "${WEEKLY_PLAN_SEND_EMAILS:-true}"
+      WeeklyPlanGeneration__SendPushNotifications: "${WEEKLY_PLAN_SEND_PUSH:-true}"
+      WeeklyPlanGeneration__MinTrackedActivityUnits: "${WEEKLY_PLAN_MIN_TRACKED_UNITS:-2}"
+      WeeklyPlanGeneration__ExerciseCandidatePoolSize: "${WEEKLY_PLAN_EXERCISE_POOL_SIZE:-60}"
+      WeeklyPlanGeneration__MealCandidatePoolSizePerType: "${WEEKLY_PLAN_MEAL_POOL_SIZE:-15}"
     volumes:
       - ./secrets:/secrets:ro
 

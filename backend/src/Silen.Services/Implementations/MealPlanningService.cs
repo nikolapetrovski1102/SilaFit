@@ -27,7 +27,14 @@ public sealed class MealPlanningService(
     // Mifflin-St Jeor activity multipliers, keyed by the onboarding
     // DailyActivityLevel answer. The default (1.55, "moderately active") is used
     // for profiles that predate the activity question and have no answer.
+    // These capture non-exercise/occupational movement only; the planned
+    // training itself is added separately by WeeklyTrainingCaloriesPerDay.
     private const double DefaultActivityMultiplier = 1.55;
+
+    // Rough energy cost of a resistance-training session, in METs. Kept at the
+    // moderate "vigorous weight training" band so the training contribution is a
+    // sensible addition rather than dominating the resting/occupational TDEE.
+    private const double TrainingMet = 6.0;
 
     private static double ActivityMultiplierFor(string? dailyActivityLevel) => dailyActivityLevel switch
     {
@@ -37,6 +44,26 @@ public sealed class MealPlanningService(
         "VeryActive" => 1.725,
         _ => DefaultActivityMultiplier
     };
+
+    /// <summary>
+    /// The average daily energy cost of the user's planned training, from the
+    /// onboarding training-days-per-week and session-length answers, spread over
+    /// the week. This is what makes two otherwise-identical profiles differ by
+    /// how many active days they train. Missing answers (legacy profiles) add
+    /// nothing, so those targets are unchanged.
+    /// </summary>
+    private static double WeeklyTrainingCaloriesPerDay(
+        int? trainingDaysPerWeek, int? sessionDurationMinutes, double weightKg)
+    {
+        if (trainingDaysPerWeek is not { } days || sessionDurationMinutes is not { } minutes)
+        {
+            return 0;
+        }
+
+        // kcal/min = MET * 3.5 * kg / 200 (standard MET-to-kcal conversion).
+        var kcalPerMinute = TrainingMet * 3.5 * weightKg / 200.0;
+        return days * minutes * kcalPerMinute / 7.0;
+    }
 
     public Task<ServiceResult<MealDayDto>> GetDayAsync(Guid userId, DateOnly logDateUtc, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -184,7 +211,9 @@ public sealed class MealPlanningService(
             _ => -78
         };
 
-        var tdee = bmr * ActivityMultiplierFor(profile.DailyActivityLevel);
+        var tdee = (bmr * ActivityMultiplierFor(profile.DailyActivityLevel))
+            + WeeklyTrainingCaloriesPerDay(
+                profile.TrainingDaysPerWeek, profile.SessionDurationMinutes, weightKg);
 
         var calorieTarget = profile.Goal switch
         {

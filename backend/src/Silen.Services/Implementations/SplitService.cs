@@ -10,7 +10,7 @@ using Silen.Services.Helpers;
 namespace Silen.Services.Implementations;
 
 /// <inheritdoc cref="ISplitService"/>
-public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfileProvider userProfileProvider) : ISplitService
+public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfileProvider userProfileProvider, ISubscriptionGate subscriptionGate) : ISplitService
 {
     public Task<ServiceResult<List<WorkoutSplitModel>>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -32,6 +32,14 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
                 }
             }
 
+            if (userId is { } callerId)
+            {
+                foreach (var split in splits)
+                {
+                    split.IsEditableByMe = split.OwnerUserId == callerId;
+                }
+            }
+
             // Person-fit (goal + age/BMI level fit + category affinity) is
             // computed server-side so both the screens and the account-creation
             // auto-assign agree on the same best pick; the list comes back
@@ -47,6 +55,11 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
             if (split is null)
             {
                 throw new NotFoundException($"Split '{splitId}' was not found.", "That split couldn't be found.");
+            }
+
+            if (userId is { } callerId)
+            {
+                split.IsEditableByMe = split.OwnerUserId == callerId;
             }
 
             return new SplitDetailDto
@@ -119,5 +132,126 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
             }
 
             return await splitsProvider.SetActiveAsync(userId, recommended.SplitId, isAutoAssigned: true, cancellationToken: cancellationToken);
+        });
+
+    /* ----------------------------- user-owned splits ----------------------------- */
+
+    public Task<ServiceResult<List<WorkoutSplitModel>>> GetMySplitsAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var splits = await splitsProvider.GetOwnedSplitsAsync(userId, cancellationToken);
+            foreach (var split in splits)
+            {
+                split.IsEditableByMe = true;
+            }
+            return splits;
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> CreateOrUpdateMySplitAsync(Guid userId, UserSplitUpsertRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var name = request.Name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ValidationException("Split upsert called with a blank name.", "Give the split a name.");
+            }
+            AdminContentFieldRules.ThrowIfUnknown(request.Category, AdminContentFieldRules.SplitCategories, "category");
+            AdminContentFieldRules.ThrowIfUnknown(request.Level, AdminContentFieldRules.SplitLevels, "level");
+            AdminContentFieldRules.ThrowIfUnknownWhenSet(request.RecommendedGoal, AdminContentFieldRules.RecommendedGoals, "recommended goal");
+            if (request.DurationDays is < 1 or > 14)
+            {
+                throw new ValidationException($"Split upsert called with out-of-range duration {request.DurationDays}.", "Duration must be between 1 and 14 days.");
+            }
+            request.Name = name;
+
+            if (request.SplitId is null)
+            {
+                var entitlements = await subscriptionGate.GetEntitlementsAsync(userId, cancellationToken);
+
+                if (request.IsAiGenerated && !entitlements.AllowAiGeneration)
+                {
+                    throw new PlanLimitExceededException(
+                        $"User '{userId}' requested an AI-generated split without AllowAiGeneration.",
+                        "AI-generated splits aren't included in your plan. Upgrade to unlock them.");
+                }
+
+                if (entitlements.MaxActiveSplits is { } maxSplits)
+                {
+                    var owned = await splitsProvider.GetOwnedSplitsAsync(userId, cancellationToken);
+                    if (owned.Count >= maxSplits)
+                    {
+                        throw new PlanLimitExceededException(
+                            $"User '{userId}' has {owned.Count} splits, at or above their plan's limit of {maxSplits}.",
+                            "You've reached your plan's limit on saved splits. Upgrade to add more.");
+                    }
+                }
+            }
+
+            var mutation = await splitsProvider.UpsertUserSplitAsync(request, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, $"Split '{name}' saved.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> KeepMySplitAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var mutation = await splitsProvider.KeepUserSplitAsync(splitId, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "This split is now permanent.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> DeleteMySplitAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var mutation = await splitsProvider.DeleteUserSplitAsync(splitId, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Split deleted.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> SaveMySplitDayAsync(Guid userId, UserSplitDayUpsertRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var title = request.Title.Trim();
+            if (string.IsNullOrWhiteSpace(title) && !request.IsRestDay)
+            {
+                throw new ValidationException("Split day upsert called with a blank title on a training day.", "Give the day a title.");
+            }
+            if (request.DayIndex < 1)
+            {
+                throw new ValidationException($"Split day upsert called with out-of-range day index {request.DayIndex}.", "Day index must be 1 or greater.");
+            }
+            request.Title = title;
+
+            var mutation = await splitsProvider.UpsertUserSplitDayAsync(request, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, $"Day {request.DayIndex} saved.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> DeleteMySplitDayAsync(Guid userId, Guid splitDayId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var mutation = await splitsProvider.DeleteUserSplitDayAsync(splitDayId, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Day removed.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> SaveMySplitDayExerciseAsync(Guid userId, UserSplitDayExerciseUpsertRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            if (request.TargetSets < 1)
+            {
+                throw new ValidationException($"Split day exercise upsert called with {request.TargetSets} target sets.", "Target sets must be at least 1.");
+            }
+            if (request.TargetRepsLow < 1 || request.TargetRepsHigh < request.TargetRepsLow)
+            {
+                throw new ValidationException(
+                    $"Split day exercise upsert called with rep range {request.TargetRepsLow}-{request.TargetRepsHigh}.",
+                    "The rep range must start at 1 or higher and the high end must not be below the low end.");
+            }
+
+            var mutation = await splitsProvider.UpsertUserSplitDayExerciseAsync(request, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Exercise saved to the day.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> DeleteMySplitDayExerciseAsync(Guid userId, Guid splitDayExerciseId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var mutation = await splitsProvider.DeleteUserSplitDayExerciseAsync(splitDayExerciseId, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Exercise removed from the day.");
         });
 }

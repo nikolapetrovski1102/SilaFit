@@ -25,13 +25,32 @@ class AuthBlobBackground extends StatelessWidget {
     [Alignment(1.35, -1.05), Alignment(-1.25, 0.25), Alignment(0.55, 1.4)],
     [Alignment(-1.1, -0.55), Alignment(1.15, 0.55), Alignment(-0.35, 1.4)],
     [Alignment(0.95, -1.25), Alignment(-1.45, 0.55), Alignment(1.2, 1.25)],
+    // Register/login's step layouts above all rest their third blob well
+    // past the bottom edge (y >= 1.25) - fine there, since QuestionScaffold's
+    // CTA/footer content always occupies that space anyway. Full-page forms
+    // like SplitBuilderScreen/MySplitsScreen scroll to whatever height their
+    // content needs, so that third blob is often the only color that would
+    // ever reach the lower half of the screen - pulled up to a more central
+    // y and blown up in `_sizeOverrides`/`_alphaOverrides` below so its glow
+    // actually bridges the gap between short content and the true bottom,
+    // instead of just warming the very edge of it.
+    [Alignment(-1.2, -1.05), Alignment(1.3, -0.15), Alignment(-0.25, 0.55)],
   ];
 
-  static const _sizes = [260.0, 220.0, 240.0];
+  static const _defaultSizes = [260.0, 220.0, 240.0];
+  static const _defaultAlphas = [0.32, 0.32, 0.32];
+
+  // Layout 3's third blob is enlarged/brightened relative to the shared
+  // defaults - see the comment on that layout's alignment above.
+  static const _sizeOverrides = {3: [260.0, 220.0, 460.0]};
+  static const _alphaOverrides = {3: [0.32, 0.32, 0.4]};
 
   @override
   Widget build(BuildContext context) {
-    final targets = _layouts[layout % _layouts.length];
+    final index = layout % _layouts.length;
+    final targets = _layouts[index];
+    final sizes = _sizeOverrides[index] ?? _defaultSizes;
+    final alphas = _alphaOverrides[index] ?? _defaultAlphas;
     final colors = [
       AppColors.accent,
       AppColors.secondary,
@@ -50,11 +69,11 @@ class AuthBlobBackground extends StatelessWidget {
                   curve: Curves.easeInOut,
                   alignment: targets[i],
                   child: Container(
-                    width: _sizes[i],
-                    height: _sizes[i],
+                    width: sizes[i],
+                    height: sizes[i],
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: colors[i].withValues(alpha: 0.32),
+                      color: colors[i].withValues(alpha: alphas[i]),
                     ),
                   ),
                 ),

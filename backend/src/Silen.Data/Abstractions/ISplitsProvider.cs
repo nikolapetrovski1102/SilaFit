@@ -1,3 +1,4 @@
+using Silen.Common.Dtos;
 using Silen.Common.Models;
 
 namespace Silen.Data.Abstractions;
@@ -18,4 +19,25 @@ public interface ISplitsProvider
     Task<ActiveSplitModel?> SetActiveAsync(Guid userId, Guid splitId, bool isAutoAssigned = false, CancellationToken cancellationToken = default);
 
     Task<ActiveSplitModel?> GetActiveAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /* ----------------------------- user-owned splits ----------------------------- */
+
+    /// <summary>Every split this user has built themselves (usp_UserSplits_GetOwned).</summary>
+    Task<List<WorkoutSplitModel>> GetOwnedSplitsAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertUserSplitAsync(UserSplitUpsertRequest request, Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks an AI-generated split permanent (usp_UserSplit_Keep) - a no-op, not an
+    /// error, when the split isn't AI-generated or is already kept.</summary>
+    Task<AdminMutationResultModel> KeepUserSplitAsync(Guid splitId, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteUserSplitAsync(Guid splitId, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertUserSplitDayAsync(UserSplitDayUpsertRequest request, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteUserSplitDayAsync(Guid splitDayId, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> UpsertUserSplitDayExerciseAsync(UserSplitDayExerciseUpsertRequest request, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AdminMutationResultModel> DeleteUserSplitDayExerciseAsync(Guid splitDayExerciseId, Guid userId, CancellationToken cancellationToken = default);
 }

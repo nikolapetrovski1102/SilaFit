@@ -192,6 +192,45 @@ public sealed class AdminRbacService(
             return AdminMutationOutcomeMapper.Resolve(mutation, "Email confirmed.");
         });
 
+    /// <summary>
+    /// Re-sends an operator's confirmation email. The address is re-read from the
+    /// row rather than taken from the request, so this can only ever mail the
+    /// address already on file. Refused (as a clean failure, not a silent success)
+    /// when the operator has already confirmed or has no address to confirm.
+    /// </summary>
+    public Task<ServiceResult<AdminWriteResultDto>> ResendOperatorEmailConfirmationAsync(string? sessionToken, AdminOperatorResendConfirmationRequest request, string? clientIp, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            await RequireAsync(sessionToken, AdminPermissions.OperatorsManage, clientIp, cancellationToken);
+
+            var username = request.Username.Trim();
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                throw new ValidationException("Resend-confirmation called with a blank username.", "A username is required.");
+            }
+
+            var operatorModel = await adminRbacProvider.GetOperatorByUsernameAsync(username, cancellationToken)
+                ?? throw new NotFoundException($"No operator named '{username}'.", $"No operator named '{username}'.");
+
+            if (string.IsNullOrWhiteSpace(operatorModel.Email))
+            {
+                throw new ValidationException($"Operator '{username}' has no email on file.", $"'{username}' has no email address on file to confirm.");
+            }
+
+            if (operatorModel.EmailConfirmedAtUtc is not null)
+            {
+                throw new ConflictException($"Operator '{username}' has already confirmed their email.", $"'{username}' has already confirmed their email.");
+            }
+
+            await SendOperatorEmailConfirmationAsync(operatorModel.AdminUserId, operatorModel.Username, operatorModel.Email, cancellationToken);
+
+            return new AdminWriteResultDto
+            {
+                Id = operatorModel.AdminUserId,
+                Message = $"Confirmation email sent to {operatorModel.Email}."
+            };
+        });
+
     private async Task SendOperatorEmailConfirmationAsync(Guid adminUserId, string username, string email, CancellationToken cancellationToken)
     {
         var options = adminAuthOptions.Value;

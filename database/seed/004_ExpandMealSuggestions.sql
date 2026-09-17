@@ -1,6 +1,11 @@
 USE SilenDb;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Expands the "Suggested this month" catalog seeded in 003_SeedMealSuggestions.sql
 -- from one flagship dinner-or-similar per month to full coverage: every
 -- calendar month now has a Breakfast, Lunch, Dinner, and Snack option, plus

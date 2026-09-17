@@ -46,6 +46,9 @@ BEGIN
            s.TargetGender,
            s.WorkoutTypeLabel,
            s.SourceCategoriesJson,
+           s.OwnerUserId,
+           s.IsAiGenerated,
+           s.AiKeptAtUtc,
            -- Average training-day length, surfaced so the recommender can fit a
            -- user's session-duration answer. Rest days are excluded so a split
            -- with recovery days booked still reports a realistic session.
@@ -56,6 +59,7 @@ BEGIN
     FROM dbo.WorkoutSplits s
     WHERE s.IsSystemDefault = 1
        OR s.Visibility = N'Public'
+       OR (@UserId IS NOT NULL AND s.OwnerUserId = @UserId)
        OR (@UserId IS NOT NULL
            AND EXISTS (SELECT 1
                        FROM dbo.SplitAssignments a
@@ -87,6 +91,7 @@ BEGIN
     WHERE s.SplitId = @SplitId
       AND (s.IsSystemDefault = 1
            OR s.Visibility = N'Public'
+           OR (@UserId IS NOT NULL AND s.OwnerUserId = @UserId)
            OR (@UserId IS NOT NULL
                AND EXISTS (SELECT 1
                            FROM dbo.SplitAssignments a
@@ -95,7 +100,7 @@ BEGIN
 
     SELECT SplitId, Name, Category, Level, DurationDays, Description, HeroImageUrl, IsSystemDefault, SortOrder, RecommendedGoal, Visibility,
            DaysPerWeek, ProgramDurationWeeks, MinSessionMinutes, MaxSessionMinutes,
-           EquipmentRequired, TargetGender, WorkoutTypeLabel, SourceCategoriesJson,
+           EquipmentRequired, TargetGender, WorkoutTypeLabel, SourceCategoriesJson, OwnerUserId, IsAiGenerated, AiKeptAtUtc,
            ISNULL((SELECT CONVERT(INT, AVG(d.EstimatedMinutes))
                    FROM dbo.SplitDays d
                    WHERE d.SplitId = @SplitId
@@ -110,7 +115,7 @@ BEGIN
       AND @Visible = 1
     ORDER BY DayIndex;
 
-    SELECT sd.SplitDayId, e.ExerciseId, e.Name, sde.SortOrder, sde.TargetSets, sde.TargetRepsLow, sde.TargetRepsHigh
+    SELECT sd.SplitDayId, sde.SplitDayExerciseId, e.ExerciseId, e.Name, e.MuscleGroup, sde.SortOrder, sde.TargetSets, sde.TargetRepsLow, sde.TargetRepsHigh
     FROM dbo.SplitDays sd
     INNER JOIN dbo.SplitDayExercises sde ON sde.SplitDayId = sd.SplitDayId
     INNER JOIN dbo.Exercises e ON e.ExerciseId = sde.ExerciseId

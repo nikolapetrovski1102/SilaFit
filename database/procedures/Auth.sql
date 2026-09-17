@@ -145,6 +145,15 @@ BEGIN
 
     BEGIN TRANSACTION;
 
+    -- A fresh sign-in (no @UserId from the client) can still belong to an
+    -- account that already exists under this email - e.g. registered with a
+    -- password, or linked to the other provider. Link to it instead of
+    -- inserting a second Users row and hitting UX_Users_Email.
+    IF @UserId IS NULL AND @Email IS NOT NULL
+    BEGIN
+        SELECT @UserId = UserId FROM dbo.Users WHERE Email = @Email;
+    END
+
     IF @UserId IS NULL
     BEGIN
         SET @UserId = NEWID();

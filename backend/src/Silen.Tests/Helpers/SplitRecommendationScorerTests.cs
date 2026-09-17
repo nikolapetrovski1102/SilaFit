@@ -262,6 +262,38 @@ public class SplitRecommendationScorerTests
         Assert.Contains("Designed for your profile", ranked[0].MatchReason);
     }
 
+    [Fact]
+    public void Rank_GluteFocusSplitsDifferByGender_EvenWithoutAudienceTags()
+    {
+        // Same library, same answers except gender: the soft category nudge must
+        // make the male and female picks differ even though neither split is
+        // explicitly gender-tagged.
+        var female = PersonFit.From(165, 60, 28, 3, 45, "Intermediate", "FullGym", "Active", "Female");
+        var male = PersonFit.From(180, 80, 28, 3, 45, "Intermediate", "FullGym", "Active", "Male");
+
+        var glute = Split("Glute & Core", "GluteFocus", "Intermediate", 3, "BuildMuscle", isSystemDefault: true);
+        var fullBody = Split("Full Body", "FullBody", "Intermediate", 3, "BuildMuscle", isSystemDefault: true);
+
+        var femaleRanked = SplitRecommendationScorer.Rank([fullBody, glute], female, "BuildMuscle");
+        var maleRanked = SplitRecommendationScorer.Rank([glute, fullBody], male, "BuildMuscle");
+
+        Assert.Equal(glute.SplitId, femaleRanked[0].SplitId);
+        Assert.Equal(fullBody.SplitId, maleRanked[0].SplitId);
+    }
+
+    [Fact]
+    public void PersonFit_EighteenYearOld_IsTeenAndCappedAtBeginner()
+    {
+        // The requirement is 13-18 = beginner. Age 18 used to fall into the
+        // unrestricted "Young" band and escape the safety ceiling.
+        var fit = PersonFit.From(175m, 70m, 18,
+            trainingDaysPerWeek: null, sessionDurationMinutes: null,
+            trainingExperience: "Advanced", equipmentAccess: null, dailyActivityLevel: null);
+
+        Assert.Equal("Teen", fit.AgeBand);
+        Assert.Equal("Beginner", fit.PreferredLevel);
+    }
+
     [Theory]
     [InlineData("Teen", "Advanced", "Beginner")]
     [InlineData("Masters", "Advanced", "Beginner")]

@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../auth/login_screen.dart';
 import '../notifications/notifications_repository.dart';
 import '../notifications/push_messaging_service.dart';
+import '../settings/settings_repository.dart';
 import '../../root_shell.dart';
 import 'onboarding_controller.dart';
 import 'onboarding_repository.dart';
@@ -18,9 +19,11 @@ import 'widgets/onboarding_step_transition.dart';
 import 'widgets/option_row_selector.dart';
 import 'widgets/question_scaffold.dart';
 import 'widgets/training_preference_question.dart';
+import 'widgets/weekly_ai_plans_question.dart';
 
-/// The first-launch flow: 2 intro slides, 10 answer questions, then a
-/// notification-permission screen. Owns its own [OnboardingController] -
+/// The first-launch flow: 2 intro slides, 9 profile questions, the AI weekly
+/// plans opt-in, then a notification-permission screen. Owns its own
+/// [OnboardingController] -
 /// nothing outside this flow needs the in-progress answers - and hands off
 /// into [RootShell] once it's done, however the user got there (finished,
 /// skipped, or logged into an existing account mid-flow).
@@ -33,6 +36,7 @@ class OnboardingFlowScreen extends StatelessWidget {
       create: (ctx) => OnboardingController(
         OnboardingRepository(ctx.read<ApiClient>()),
         ctx.read<NotificationsRepository>(),
+        settingsRepository: ctx.read<SettingsRepository>(),
         pushMessaging: ctx.read<PushMessagingService>(),
       ),
       child: const _OnboardingFlowView(),
@@ -63,6 +67,8 @@ class _OnboardingFlowView extends StatelessWidget {
       ));
       return;
     }
+    await controller.submitAiPlanPreferences();
+    if (!context.mounted) return;
     await controller.submitNotificationOptIn(notificationsAllowed);
     if (!context.mounted) return;
     await _enterApp(context);
@@ -285,6 +291,18 @@ class _OnboardingFlowView extends StatelessWidget {
           progressStepCount: controller.questionStepCount,
           onBack: controller.goBack,
           onNext: controller.goNext,
+        );
+
+      case OnboardingStep.aiPlans:
+        return WeeklyAiPlansQuestion(
+          onBack: controller.goBack,
+          progressStep: controller.questionProgressStep!,
+          progressStepCount: controller.questionStepCount,
+          receiveWeeklyAiPlans: controller.receiveWeeklyAiPlans,
+          autoActivateAiPlans: controller.autoActivateAiPlans,
+          onReceiveChanged: controller.setReceiveWeeklyAiPlans,
+          onAutoActivateChanged: controller.setAutoActivateAiPlans,
+          onCta: controller.goNext,
         );
 
       case OnboardingStep.notifications:

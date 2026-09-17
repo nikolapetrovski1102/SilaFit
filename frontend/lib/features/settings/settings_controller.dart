@@ -101,4 +101,14 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> setNotificationLocalTime(String value) =>
       _update((s) => s.copyWith(notificationLocalTime: value));
+
+  Future<void> setReceiveWeeklyAiPlans(bool value) => _update((s) => s.copyWith(
+        receiveWeeklyAiPlans: value,
+        // Turning the whole feature off also turns off auto-activate, so the
+        // two toggles can't be left in a contradictory state server-side.
+        autoActivateAiPlans: value ? s.autoActivateAiPlans : false,
+      ));
+
+  Future<void> setAutoActivateAiPlans(bool value) =>
+      _update((s) => s.copyWith(autoActivateAiPlans: value));
 }

@@ -56,6 +56,14 @@ public interface IAdminRbacService
     /// </summary>
     Task<ServiceResult<AdminWriteResultDto>> ConfirmOperatorEmailAsync(string token, string? clientIp, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Re-sends an operator's confirmation email. The address is always re-read
+    /// from the row (never supplied by the caller) and the operation is refused
+    /// for an operator who already confirmed or has no address on file. Requires
+    /// operators.manage.
+    /// </summary>
+    Task<ServiceResult<AdminWriteResultDto>> ResendOperatorEmailConfirmationAsync(string? sessionToken, AdminOperatorResendConfirmationRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
     /// <summary>Moves an operator to a different role. Drops that operator's live sessions. Requires operators.manage.</summary>
     Task<ServiceResult<AdminWriteResultDto>> SetOperatorRoleAsync(string? sessionToken, AdminOperatorRoleRequest request, string? clientIp, CancellationToken cancellationToken = default);
 

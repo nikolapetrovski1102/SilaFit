@@ -73,6 +73,15 @@ public sealed class AdminRbacController(
     public async Task<IActionResult> ConfirmOperatorEmail([FromBody] AdminConfirmOperatorEmailRequest request, CancellationToken cancellationToken) =>
         (await rbacService.ConfirmOperatorEmailAsync(request.Token, ClientIp, cancellationToken)).ToActionResult(logger);
 
+    /// <summary>
+    /// Re-sends the confirmation email for an operator who hasn't confirmed yet.
+    /// The address is read from the row, not the request, so this can only mail the
+    /// address already on file. Requires operators.manage.
+    /// </summary>
+    [HttpPost("operators/resend-confirmation")]
+    public async Task<IActionResult> ResendOperatorEmailConfirmation([FromBody] AdminOperatorResendConfirmationRequest request, CancellationToken cancellationToken) =>
+        (await rbacService.ResendOperatorEmailConfirmationAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+
     [HttpPut("operators/role")]
     public async Task<IActionResult> SetOperatorRole([FromBody] AdminOperatorRoleRequest request, CancellationToken cancellationToken) =>
         (await rbacService.SetOperatorRoleAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);

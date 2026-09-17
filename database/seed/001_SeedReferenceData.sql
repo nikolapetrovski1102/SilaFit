@@ -1,6 +1,11 @@
 USE SilenDb;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Idempotent reference-data seed: exercises, a default PPL split with its
 -- days/exercises, and the subscription plan catalog shown on the Plans
 -- screen. Safe to re-run.

@@ -1,6 +1,11 @@
 USE SilenDb;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Backfills Exercises.DemoVideoUrl with form-reference photos from
 -- free-exercise-db (https://github.com/yuhonas/free-exercise-db),
 -- explicitly public-domain per that repo's README - safe to ship without

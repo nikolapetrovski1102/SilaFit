@@ -17,9 +17,12 @@ public static class NotificationCategories
     /// <summary>Monthly "your full review is locked, upgrade" nudge for non-paying users.</summary>
     public const string MonthlyReviewUpsell = "MonthlyReviewUpsell";
 
+    /// <summary>Sent by Silen.Tools.WeeklyPlanGeneration once a user's Sunday AI split/diet plan is ready.</summary>
+    public const string WeeklyAiPlanReady = "WeeklyAiPlanReady";
+
     public static bool IsValid(string category) => category switch
     {
-        GymReminder or TrackSets or TrackCalories or MealIdea or Motivation or Comeback or MonthlyReviewUpsell => true,
+        GymReminder or TrackSets or TrackCalories or MealIdea or Motivation or Comeback or MonthlyReviewUpsell or WeeklyAiPlanReady => true,
         _ => false
     };
 }

@@ -620,6 +620,78 @@ BEGIN
 END
 GO
 
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_PlanEntitlements_GetForPlan
+    @PlanId UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT PlanId, MaxActiveSplits, MaxActiveDietPlans, AllowAiGeneration
+    FROM dbo.PlanEntitlements
+    WHERE PlanId = @PlanId;
+END
+GO
+
+-- One row per plan (PlanId is the key, not a surrogate id): update first,
+-- insert if nothing was there yet.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_PlanEntitlements_Upsert
+    @PlanId UNIQUEIDENTIFIER,
+    @MaxActiveSplits INT = NULL,
+    @MaxActiveDietPlans INT = NULL,
+    @AllowAiGeneration BIT = 0,
+    @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
+    @ActorUsername NVARCHAR(100),
+    @ActorIp NVARCHAR(64) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    BEGIN TRANSACTION;
+
+    IF @MaxActiveSplits < 0 OR @MaxActiveDietPlans < 0
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 3 AS Outcome, @PlanId AS EntityId, N'Limits cannot be negative. Leave a field blank for unlimited.' AS Detail;
+        RETURN;
+    END
+
+    DECLARE @PlanName NVARCHAR(100);
+
+    SELECT @PlanName = Name FROM dbo.SubscriptionPlans WHERE PlanId = @PlanId;
+
+    IF @PlanName IS NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, @PlanId AS EntityId, N'That plan no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    UPDATE dbo.PlanEntitlements
+    SET MaxActiveSplits = @MaxActiveSplits,
+        MaxActiveDietPlans = @MaxActiveDietPlans,
+        AllowAiGeneration = @AllowAiGeneration
+    WHERE PlanId = @PlanId;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        INSERT INTO dbo.PlanEntitlements (PlanId, MaxActiveSplits, MaxActiveDietPlans, AllowAiGeneration)
+        VALUES (@PlanId, @MaxActiveSplits, @MaxActiveDietPlans, @AllowAiGeneration);
+    END
+
+    INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
+    VALUES (@ActorAdminUserId, @ActorUsername, N'Update', N'PlanEntitlements', CONVERT(NVARCHAR(64), @PlanId),
+            N'Set entitlements on plan ''' + @PlanName + N''': splits='
+            + ISNULL(CONVERT(NVARCHAR(10), @MaxActiveSplits), N'unlimited') + N', diet plans='
+            + ISNULL(CONVERT(NVARCHAR(10), @MaxActiveDietPlans), N'unlimited') + N', AI generation='
+            + CASE WHEN @AllowAiGeneration = 1 THEN N'on' ELSE N'off' END, @ActorIp);
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @PlanId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
+END
+GO
+
 -- =============================================================================
 -- Users (read-only: no operator needs to edit an app user from here)
 -- =============================================================================

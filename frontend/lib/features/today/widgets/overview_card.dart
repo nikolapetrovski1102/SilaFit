@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/duration_format.dart';
 import '../../../core/widgets/mascot/mascot_pose.dart';
 import '../../../core/widgets/progress_ring.dart';
 import '../../../core/widgets/silen_button.dart';
@@ -163,7 +164,7 @@ class _SessionSection extends StatelessWidget {
 
   Widget _buildScheduledToday() {
     final minutesLabel = preview.estimatedMinutes != null
-        ? '${preview.estimatedMinutes} min'
+        ? formatMinutesLabel(preview.estimatedMinutes!)
         : 'Duration not set';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +238,7 @@ class _SessionSection extends StatelessWidget {
   /// but isn't today, so there's nothing to start: just what's coming up.
   Widget _buildUpcomingPreview() {
     final minutesLabel = preview.estimatedMinutes != null
-        ? '${preview.estimatedMinutes} min'
+        ? formatMinutesLabel(preview.estimatedMinutes!)
         : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

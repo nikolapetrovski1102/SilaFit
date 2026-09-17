@@ -2,6 +2,7 @@ using Moq;
 using Silen.Common.Dtos;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -11,11 +12,12 @@ public class SplitServiceTests
 {
     private readonly Mock<ISplitsProvider> splitsProvider = new(MockBehavior.Strict);
     private readonly Mock<IUserProfileProvider> userProfileProvider = new(MockBehavior.Strict);
+    private readonly Mock<ISubscriptionGate> subscriptionGate = new(MockBehavior.Strict);
     private readonly SplitService sut;
 
     public SplitServiceTests()
     {
-        sut = new SplitService(splitsProvider.Object, userProfileProvider.Object);
+        sut = new SplitService(splitsProvider.Object, userProfileProvider.Object, subscriptionGate.Object);
     }
 
     private static UserProfileModel Profile(string? goal, int? trainingDaysPerWeek = null) => new()

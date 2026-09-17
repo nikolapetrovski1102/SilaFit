@@ -32,4 +32,70 @@ public sealed class SplitsController(ISplitService splitService, ILogger<SplitsC
         var result = await splitService.ActivateAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult(logger);
     }
+
+    /* ----------------------------- user-owned splits ----------------------------- */
+
+    [HttpGet("mine")]
+    [Authorize]
+    public async Task<IActionResult> GetMine(CancellationToken cancellationToken)
+    {
+        var result = await splitService.GetMySplitsAsync(User.GetUserId(), cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost]
+    [Authorize]
+    public async Task<IActionResult> Save([FromBody] UserSplitUpsertRequest request, CancellationToken cancellationToken)
+    {
+        var result = await splitService.CreateOrUpdateMySplitAsync(User.GetUserId(), request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpDelete("{splitId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> Delete(Guid splitId, CancellationToken cancellationToken)
+    {
+        var result = await splitService.DeleteMySplitAsync(User.GetUserId(), splitId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("mine/{splitId:guid}/keep")]
+    [Authorize]
+    public async Task<IActionResult> Keep(Guid splitId, CancellationToken cancellationToken)
+    {
+        var result = await splitService.KeepMySplitAsync(User.GetUserId(), splitId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("days")]
+    [Authorize]
+    public async Task<IActionResult> SaveDay([FromBody] UserSplitDayUpsertRequest request, CancellationToken cancellationToken)
+    {
+        var result = await splitService.SaveMySplitDayAsync(User.GetUserId(), request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpDelete("days/{splitDayId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteDay(Guid splitDayId, CancellationToken cancellationToken)
+    {
+        var result = await splitService.DeleteMySplitDayAsync(User.GetUserId(), splitDayId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("day-exercises")]
+    [Authorize]
+    public async Task<IActionResult> SaveDayExercise([FromBody] UserSplitDayExerciseUpsertRequest request, CancellationToken cancellationToken)
+    {
+        var result = await splitService.SaveMySplitDayExerciseAsync(User.GetUserId(), request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpDelete("day-exercises/{splitDayExerciseId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteDayExercise(Guid splitDayExerciseId, CancellationToken cancellationToken)
+    {
+        var result = await splitService.DeleteMySplitDayExerciseAsync(User.GetUserId(), splitDayExerciseId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
 }

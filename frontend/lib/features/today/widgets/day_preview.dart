@@ -13,6 +13,11 @@ String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 /// cycle the backend uses to resolve *today's* scheduled session
 /// (`usp_WorkoutSession_GetTodayScheduled`), just evaluated for an arbitrary
 /// date so the strip can preview days that haven't happened yet.
+///
+/// The day is picked by its *ordinal position* in the split, not by its
+/// stored `dayIndex`, mirroring `usp_WorkoutSession_GetTodayScheduled`: system
+/// splits are seeded 0-based while custom/AI splits are written 1-based, and
+/// position-based matching keeps both on the same rotation.
 SplitDay? resolveSplitDay(DateTime date, ActiveSplit split, SplitDetail detail) {
   final duration = split.durationDays;
   if (duration == null || duration <= 0) return null;
@@ -21,10 +26,10 @@ SplitDay? resolveSplitDay(DateTime date, ActiveSplit split, SplitDetail detail) 
   final cycleLength = duration;
   final diff = target.difference(activated).inDays;
   final cycleIndex = ((diff % cycleLength) + cycleLength) % cycleLength;
-  for (final entry in detail.days) {
-    if (entry.day.dayIndex == cycleIndex) return entry.day;
-  }
-  return null;
+  final ordered = [...detail.days]
+    ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
+  if (cycleIndex >= ordered.length) return null;
+  return ordered[cycleIndex].day;
 }
 
 /// Everything Home's hero session card needs to render whichever day is

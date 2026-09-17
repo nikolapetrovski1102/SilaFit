@@ -41,6 +41,6 @@ ALTER TABLE dbo.WorkoutSplits
     ADD CONSTRAINT CK_WorkoutSplits_Category CHECK (Category IN (
         'PushPullLegs', 'UpperLower', 'FullBody', 'ArnoldSplit',
         'PHUL', 'PHAT', 'BroSplit', 'Circuit', 'Powerlifting',
-        'Calisthenics', 'GluteFocus'
+        'Calisthenics', 'GluteFocus', 'Custom'
     ));
 GO

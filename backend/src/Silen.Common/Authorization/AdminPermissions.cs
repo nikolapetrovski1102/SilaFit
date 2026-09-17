@@ -28,6 +28,15 @@ public static class AdminPermissions
     /// <summary>Manage every split regardless of owner, including shipped system splits. Without it, an operator only manages the splits they own.</summary>
     public const string SplitsManageAll = "content.splits.manage_all";
 
+    public const string DietPlansRead = "content.diet_plans.read";
+    public const string DietPlansWrite = "content.diet_plans.write";
+
+    /// <summary>Hand a diet plan to specific app users (the trainer's client list).</summary>
+    public const string DietPlansAssign = "content.diet_plans.assign";
+
+    /// <summary>Manage every diet plan regardless of owner, including shipped system plans. Without it, an operator only manages the plans they own.</summary>
+    public const string DietPlansManageAll = "content.diet_plans.manage_all";
+
     public const string ExercisesRead = "content.exercises.read";
     public const string ExercisesWrite = "content.exercises.write";
 
@@ -65,6 +74,10 @@ public static class AdminPermissions
         new(SplitsWrite, "Splits", "Edit workout splits", "Create and change splits, days and prescriptions."),
         new(SplitsAssign, "Splits", "Assign splits to users", "Hand a split to specific app users and set it as their active program."),
         new(SplitsManageAll, "Splits", "Manage every split", "Change splits owned by other trainers, including the shipped system splits."),
+        new(DietPlansRead, "Diet plans", "View diet plans", "The diet plan library, its days and meal slots."),
+        new(DietPlansWrite, "Diet plans", "Edit diet plans", "Create and change plans, days and meal slots."),
+        new(DietPlansAssign, "Diet plans", "Assign diet plans to users", "Hand a plan to specific app users and set it as their active plan."),
+        new(DietPlansManageAll, "Diet plans", "Manage every diet plan", "Change plans owned by other trainers, including the shipped system plans."),
         new(ExercisesRead, "Exercises", "View exercises", "The exercise library and where each exercise is used."),
         new(ExercisesWrite, "Exercises", "Edit exercises", "Add, change and remove exercises."),
         new(SuggestionsRead, "Meal suggestions", "View meal suggestions", "The month-tagged suggestion catalog."),

@@ -28,6 +28,7 @@ builder.Services.Configure<AdminAuthOptions>(builder.Configuration.GetSection(Ad
 builder.Services.Configure<NotificationPublishOptions>(builder.Configuration.GetSection(NotificationPublishOptions.SectionName));
 builder.Services.Configure<PushNotificationOptions>(builder.Configuration.GetSection(PushNotificationOptions.SectionName));
 builder.Services.Configure<ReviewerBypassOptions>(builder.Configuration.GetSection(ReviewerBypassOptions.SectionName));
+builder.Services.Configure<ImageUploadOptions>(builder.Configuration.GetSection(ImageUploadOptions.SectionName));
 
 builder.Services.AddSilenData();
 builder.Services.AddSilenServices();
@@ -197,6 +198,19 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// Serves uploaded images back out under /uploads. In production nginx's
+// images.sila.fitness vhost reads the same directory straight off disk and this
+// route never gets hit for a real request - it exists so images.sila.fitness's
+// DNS/TLS being briefly unready (or plain local development, which has no nginx
+// at all) still has a working URL to fall back to.
+var imageUploadOptions = builder.Configuration.GetSection(ImageUploadOptions.SectionName).Get<ImageUploadOptions>() ?? new ImageUploadOptions();
+Directory.CreateDirectory(imageUploadOptions.StoragePath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.GetFullPath(imageUploadOptions.StoragePath)),
+    RequestPath = "/uploads"
+});
 
 // Baseline response hardening for the API. The static site / admin console get
 // their own headers from nginx; these keep direct API responses safe too.

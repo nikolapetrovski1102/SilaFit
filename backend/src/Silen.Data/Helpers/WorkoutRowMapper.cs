@@ -110,7 +110,10 @@ public static class WorkoutRowMapper
         EquipmentRequired = HasColumn(reader, "EquipmentRequired") ? reader.GetNullableString("EquipmentRequired") : null,
         TargetGender = HasColumn(reader, "TargetGender") ? reader.GetNullableString("TargetGender") : null,
         WorkoutTypeLabel = HasColumn(reader, "WorkoutTypeLabel") ? reader.GetNullableString("WorkoutTypeLabel") : null,
-        SourceCategoriesJson = HasColumn(reader, "SourceCategoriesJson") ? reader.GetNullableString("SourceCategoriesJson") : null
+        SourceCategoriesJson = HasColumn(reader, "SourceCategoriesJson") ? reader.GetNullableString("SourceCategoriesJson") : null,
+        OwnerUserId = HasColumn(reader, "OwnerUserId") ? reader.GetNullableGuid("OwnerUserId") : null,
+        IsAiGenerated = HasColumn(reader, "IsAiGenerated") && reader.GetBoolValue("IsAiGenerated"),
+        AiKeptAtUtc = HasColumn(reader, "AiKeptAtUtc") ? reader.GetNullableDateTime("AiKeptAtUtc") : null
     };
 
     public static SplitDayModel MapSplitDay(SqlDataReader reader) => new()
@@ -126,8 +129,10 @@ public static class WorkoutRowMapper
     public static SplitDayExerciseModel MapSplitDayExercise(SqlDataReader reader) => new()
     {
         SplitDayId = reader.GetGuidValue("SplitDayId"),
+        SplitDayExerciseId = reader.GetGuidValue("SplitDayExerciseId"),
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         Name = reader.GetStringValue("Name"),
+        MuscleGroup = reader.GetStringValue("MuscleGroup"),
         SortOrder = reader.GetByteValue("SortOrder"),
         TargetSets = reader.GetByteValue("TargetSets"),
         TargetRepsLow = reader.GetByteValue("TargetRepsLow"),
@@ -193,6 +198,13 @@ public static class WorkoutRowMapper
         ExpiresAtUtc = reader.GetNullableDateTime("ExpiresAtUtc"),
         PlanCode = HasColumn(reader, "Code") ? reader.GetNullableString("Code") : null,
         PlanName = HasColumn(reader, "Name") ? reader.GetNullableString("Name") : null
+    };
+
+    public static PlanEntitlementsModel MapPlanEntitlements(SqlDataReader reader) => new()
+    {
+        MaxActiveSplits = reader.GetNullableInt32("MaxActiveSplits"),
+        MaxActiveDietPlans = reader.GetNullableInt32("MaxActiveDietPlans"),
+        AllowAiGeneration = reader.GetBoolValue("AllowAiGeneration")
     };
 
     private static bool HasColumn(SqlDataReader reader, string column)

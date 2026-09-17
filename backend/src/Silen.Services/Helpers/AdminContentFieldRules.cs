@@ -29,7 +29,10 @@ public static class AdminContentFieldRules
     {
         "PushPullLegs", "UpperLower", "FullBody", "ArnoldSplit",
         "PHUL", "PHAT", "BroSplit", "Circuit", "Powerlifting",
-        "Calisthenics", "GluteFocus"
+        "Calisthenics", "GluteFocus",
+        // A self-built split shouldn't have to fit one of the curated archetypes
+        // above - see 044_WorkoutSplitsUserOwnership.sql's CK_WorkoutSplits_Category widen.
+        "Custom"
     };
 
     public static readonly IReadOnlySet<string> SplitLevels = new HashSet<string>(StringComparer.Ordinal)
@@ -50,6 +53,16 @@ public static class AdminContentFieldRules
     {
         "Private", "Public", "Shared"
     };
+
+    /// <summary>Mirrors CK_DietPlans_PeriodType (schema 045) - display/filter metadata only.</summary>
+    public static readonly IReadOnlySet<string> DietPlanPeriodTypes = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "Weekly", "Monthly"
+    };
+
+    /// <summary>Same closed set as SplitVisibilities - DietPlans.Visibility mirrors
+    /// WorkoutSplits.Visibility exactly (see CK_DietPlans_Visibility, schema 045).</summary>
+    public static readonly IReadOnlySet<string> DietPlanVisibilities = SplitVisibilities;
 
     /// <summary>Rejects anything outside <paramref name="allowed"/>, naming the field and the alternatives.</summary>
     public static void ThrowIfUnknown(string? value, IReadOnlySet<string> allowed, string fieldName)

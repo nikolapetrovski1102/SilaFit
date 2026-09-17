@@ -79,9 +79,13 @@ public sealed record PersonFit(
             _ => "Obese"
         };
 
+        // 13-18 is the teen band: onboarding's minimum age is 13 and everyone
+        // through 18 is still treated as a beginner (see PreferredLevelFor's
+        // safety ceiling), so 18 must not fall through to the unrestricted
+        // "Young" band.
         var ageBand = ageYears switch
         {
-            < 18 => "Teen",
+            <= 18 => "Teen",
             <= 29 => "Young",
             <= 44 => "Adult",
             _ => "Masters"

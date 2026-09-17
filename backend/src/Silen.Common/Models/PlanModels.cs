@@ -31,3 +31,13 @@ public sealed class UserSubscriptionModel
     public string? PlanCode { get; set; }
     public string? PlanName { get; set; }
 }
+
+/// <summary>What a plan actually entitles its subscriber to. Null on a limit means
+/// unlimited. A Free/unsubscribed caller has no row to read here - see
+/// ISubscriptionGate.GetEntitlementsAsync for the hardcoded fallback.</summary>
+public sealed class PlanEntitlementsModel
+{
+    public int? MaxActiveSplits { get; set; }
+    public int? MaxActiveDietPlans { get; set; }
+    public bool AllowAiGeneration { get; set; }
+}

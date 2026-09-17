@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'today_models.dart';
+
 /// One logged (or in-progress) set inside a persisted [ActiveWorkoutDraft] -
 /// the storage counterpart of `_SetDraft` in `active_workout_tracker_screen.dart`.
 class DraftSet {
@@ -36,6 +38,13 @@ class ActiveWorkoutDraft {
   final String workoutSessionId;
   final int exerciseIndex;
   final List<List<DraftSet>> setsByExercise;
+  // Full exercise data, one per `setsByExercise` slot - not just an id. The
+  // live-workout swap/add feature can change this list away from whatever
+  // `TodayDashboard.targetExercises` originally prescribed, so resuming from
+  // a killed app has to rebuild `_exercises` from here rather than from the
+  // (now stale) split-day plan; carrying the full record avoids needing a
+  // by-id refetch endpoint that doesn't exist.
+  final List<TargetExercise> exercises;
   final DateTime startedAtUtc;
   final DateTime savedAtUtc;
 
@@ -43,6 +52,7 @@ class ActiveWorkoutDraft {
     required this.workoutSessionId,
     required this.exerciseIndex,
     required this.setsByExercise,
+    required this.exercises,
     required this.startedAtUtc,
     required this.savedAtUtc,
   });
@@ -67,6 +77,7 @@ class ActiveWorkoutDraft {
         'setsByExercise': setsByExercise
             .map((sets) => sets.map((s) => s.toJson()).toList())
             .toList(),
+        'exercises': exercises.map((e) => e.toJson()).toList(),
         'startedAtUtc': startedAtUtc.toIso8601String(),
         'savedAtUtc': savedAtUtc.toIso8601String(),
       };
@@ -80,6 +91,15 @@ class ActiveWorkoutDraft {
                 .map((s) => DraftSet.fromJson(s as Map<String, dynamic>))
                 .toList())
             .toList(),
+        // Missing on a draft saved before the swap/add feature landed - an
+        // empty list here always fails the shape check against
+        // `setsByExercise` in `ActiveWorkoutTrackerScreen._init`, so a
+        // pre-upgrade draft is correctly treated as stale rather than
+        // resumed with no exercise data.
+        exercises: (json['exercises'] as List<dynamic>?)
+                ?.map((e) => TargetExercise.fromJson(e))
+                .toList() ??
+            const [],
         startedAtUtc: DateTime.parse(json['startedAtUtc'] as String),
         savedAtUtc: DateTime.parse(json['savedAtUtc'] as String),
       );

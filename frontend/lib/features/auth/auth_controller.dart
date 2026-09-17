@@ -26,12 +26,21 @@ class AuthController extends ChangeNotifier {
     serverClientId: ApiConfig.googleWebClientId,
   );
 
+  /// Rebuilds the whole app from a cold start. Injected from the root so a
+  /// sign-out or account deletion can discard every controller's state
+  /// instead of leaving the previous account's data behind in memory. Also
+  /// clears the persisted per-user caches before the rebuild; async because
+  /// [logout] must not reload until that cleanup has finished.
+  final Future<void> Function() _onReload;
+
   bool _isBootstrapping = true;
   bool _isBusy = false;
   String? _lastError;
   EmailVerificationStart? _pendingVerification;
 
-  AuthController(this._repository, this._sessionStore);
+  AuthController(this._repository, this._sessionStore,
+      {required Future<void> Function() onReload})
+      : _onReload = onReload;
 
   SilenSession? get session => _sessionStore.current;
   bool get isRegistered => _sessionStore.isRegistered;
@@ -157,17 +166,31 @@ class AuthController extends ChangeNotifier {
         await _applySession(result);
       });
 
-  /// Flips back to the cold-start splash for the duration of the re-login -
-  /// `bootstrap()` flips it off again once the fresh device session lands,
-  /// which also has the effect of tearing down and rebuilding `RootShell`
-  /// from scratch, so whichever tab the user logged out from doesn't linger:
-  /// they land back on Today like any other fresh bootstrap.
+  /// Signs out and reloads the app from a cold start. [SessionStore.signOut]
+  /// clears the local session *and* rotates the device identity - the crucial
+  /// half, because device login returns whichever account owns the stored
+  /// device id, so clearing the token alone just signs the same user back in.
+  /// The root key bump then tears down the entire provider graph - including
+  /// this controller - so the fresh [AuthController] bootstraps a brand-new
+  /// guest device and lands on Today with no trace of the account just left.
   Future<void> logout() async {
-    _isBootstrapping = true;
-    notifyListeners();
-    await _googleSignIn.signOut();
-    await _sessionStore.clear();
-    await bootstrap();
+    // Clear the local session first - that's what the app actually trusts.
+    // A storage failure must not trap the user in the old account: the
+    // reload below still discards every in-memory trace of it, and the
+    // bootstrap that follows would only ever fall back to a fresh device.
+    try {
+      await _sessionStore.signOut();
+    } catch (_) {
+      // Best-effort: proceed to the platform sign-out and reload regardless.
+    }
+    // Best-effort platform sign-out: a hiccup here must not leave the user
+    // signed in locally.
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    // Clears the persisted per-user caches and rebuilds the app from a cold
+    // start, so it comes back as a fresh guest even if sign-out failed.
+    await _onReload();
   }
 
   Future<void> _applySession(AuthResult result) =>

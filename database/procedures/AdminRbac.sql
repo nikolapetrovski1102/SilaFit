@@ -274,6 +274,33 @@ BEGIN
 END
 GO
 
+-- One operator by username, regardless of active state, so operations that only
+-- need a single account's address/confirmation state (e.g. re-sending an email
+-- confirmation) do not have to list every operator. Deliberately selects the same
+-- columns as usp_Admin_Operators_GetAll so AdminContentRowMapper.MapOperator reads
+-- it unchanged.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_Operator_GetByUsername
+    @Username NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT u.AdminUserId,
+           u.Username,
+           u.RoleId,
+           r.Name AS RoleName,
+           u.IsActive,
+           u.LastLoginAtUtc,
+           u.CreatedAtUtc,
+           u.Email,
+           u.EmailConfirmedAtUtc,
+           (SELECT COUNT(*) FROM dbo.AdminSessions s WHERE s.AdminUserId = u.AdminUserId) AS ActiveSessionCount
+    FROM dbo.AdminUsers u
+    LEFT JOIN dbo.AdminRoles r ON r.RoleId = u.RoleId
+    WHERE u.Username = LTRIM(RTRIM(@Username));
+END
+GO
+
 -- Creates a brand-new operator from the dashboard (operators.manage). Deliberately
 -- separate from usp_Admin_UpsertAccount: that procedure is the provisioning CLI's
 -- rotate-or-create tool and will happily overwrite an existing username's

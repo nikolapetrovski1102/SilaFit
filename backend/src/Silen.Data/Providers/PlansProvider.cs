@@ -53,4 +53,11 @@ public sealed class PlansProvider(ISqlExecutor sqlExecutor) : IPlansProvider
             [],
             reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapPlanSubscriber, cancellationToken),
             cancellationToken);
+
+    public Task<PlanEntitlementsModel?> GetEntitlementsForUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Plans_GetEntitlementsForUser",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapPlanEntitlements, cancellationToken),
+            cancellationToken);
 }

@@ -20,15 +20,19 @@
     "title": "Muscle & Strength’s 12 Week Women’s Workout Program",
     "url": "https://www.muscleandstrength.com/workouts/muscle-and-strength-womens-workout",
     "summary": "This 12 week women's specific training program is perfect for any healthy woman who is looking to transform her body through a good weight lifting program.",
-    "tag": null,
+    "tag": "Lose Fat",
     "metadata": [
-      "6.6M Reads",
-      "746 Comments"
+      "Beginner",
+      "Female",
+      "5 Days/Week"
     ],
     "source_categories": [
       "Women"
     ],
-    "catalog_rank": 2
+    "catalog_rank": 2,
+    "image_url": "https://cdn.muscleandstrength.com/sites/default/files/styles/800x500/public/womens_12_week_workout_-_1200x630.jpg?itok=q3lckLiY",
+    "popularity_rank": 2,
+    "popularity_window": "most downloaded in the past 24 hours"
   },
   {
     "title": "10-Week Lean & Strong Program for Women 40+",
@@ -440,15 +444,19 @@
     "title": "Muscle & Strength's 30 Day Workout Plan For Women",
     "url": "https://www.muscleandstrength.com/workouts/muscle-and-strength-30-day-womens-workout",
     "summary": "Looking for the best place to start working towards a leaner, solid, and stronger body? This thorough workout routine is specifically designed to get you there!",
-    "tag": null,
+    "tag": "Build Muscle",
     "metadata": [
-      "686.5K Reads",
-      "65 Comments"
+      "Beginner",
+      "Female",
+      "6 Days/Week"
     ],
     "source_categories": [
       "Women"
     ],
-    "catalog_rank": 29
+    "catalog_rank": 29,
+    "image_url": "https://cdn.muscleandstrength.com/sites/default/files/styles/large/public/field/feature-image/workout/30-day-womens-workout-thumb.jpg?itok=G9TyarXw",
+    "popularity_rank": 5,
+    "popularity_window": "most downloaded in the past 24 hours"
   },
   {
     "title": "12 Week Women's Bikini Prep Workout Program",
@@ -1130,16 +1138,20 @@
     "title": "10 Week Mass Building Program",
     "url": "https://www.muscleandstrength.com/workouts/10-week-mass-building-program.html",
     "summary": "This workout is designed to increase your muscle mass as much as possible in 10 weeks. Works each muscle group hard once per week using mostly heavy compound exercises.",
-    "tag": null,
+    "tag": "Build Muscle",
     "metadata": [
-      "24.4M Reads",
-      "4.8K Comments"
+      "Advanced",
+      "Male",
+      "4 Days/Week"
     ],
     "source_categories": [
       "Muscle Building",
       "Men"
     ],
-    "catalog_rank": 75
+    "catalog_rank": 75,
+    "image_url": "https://cdn.muscleandstrength.com/sites/default/files/styles/800x500/public/10_week_mass_building_program_-_1200x630.jpg?itok=orvPYk43",
+    "popularity_rank": 1,
+    "popularity_window": "most downloaded in the past 24 hours"
   },
   {
     "title": "Dumbbell Only Workout: 3 Day Full Body Dumbbell Workout",
@@ -1238,16 +1250,20 @@
     "title": "Power Hypertrophy Upper Lower (P.H.U.L.) Workout",
     "url": "https://www.muscleandstrength.com/workouts/phul-workout",
     "summary": "Build both size and strength in this 4 day split based around basic compound movements. Get the best of both worlds with bodybuilding and powerlifting.",
-    "tag": null,
+    "tag": "Build Muscle",
     "metadata": [
-      "11M Reads",
-      "2.5K Comments"
+      "Intermediate",
+      "Male & Female",
+      "4 Days/Week"
     ],
     "source_categories": [
       "Muscle Building",
       "Men"
     ],
-    "catalog_rank": 82
+    "catalog_rank": 82,
+    "image_url": "https://cdn.muscleandstrength.com/sites/default/files/styles/800x500/public/phul_-_1200x630.jpg?itok=d4QbNj9c",
+    "popularity_rank": 4,
+    "popularity_window": "most downloaded in the past 24 hours"
   },
   {
     "title": "Muscle & Strength Full Body Workout Routine",
@@ -1347,10 +1363,11 @@
     "title": "Dumbbell Only Home Or Gym Full Body Workout",
     "url": "https://www.muscleandstrength.com/workouts/dumbbell-only-home-or-gym-fullbody-workout.html",
     "summary": "Short on equipment? No worries! This dumbbell only workout can be used at home or in the gym for building muscle mass. You can also use this as a muscle shock workout to mix things up.",
-    "tag": null,
+    "tag": "Build Muscle",
     "metadata": [
-      "7.4M Reads",
-      "2.2K Comments"
+      "Beginner",
+      "Male",
+      "3 Days/Week"
     ],
     "source_categories": [
       "Muscle Building",
@@ -1358,7 +1375,10 @@
       "Full Body",
       "At Home"
     ],
-    "catalog_rank": 89
+    "catalog_rank": 89,
+    "image_url": "https://cdn.muscleandstrength.com/sites/default/files/styles/800x500/public/dumbbell_only_full_body_-_1200x630.jpg?itok=7kjeVpJm",
+    "popularity_rank": 6,
+    "popularity_window": "most downloaded in the past 24 hours"
   },
   {
     "title": "3 Day Full Body Planet Fitness Workout (Machines & Dumbbells Only)",
@@ -4249,16 +4269,20 @@
     "title": "12 Week Fat Destroyer: Complete Fat Loss Workout & Diet Program",
     "url": "https://www.muscleandstrength.com/workouts/12-week-fat-destroyer",
     "summary": "This is a complete 12 week program to help you get ripped. Feature includes detailed diet plan and cardio schedule, along with a 4 day upper/lower muscle building split.",
-    "tag": null,
+    "tag": "Lose Fat",
     "metadata": [
-      "9.8M Reads",
-      "1.9K Comments"
+      "Beginner",
+      "Male & Female",
+      "4 Days/Week"
     ],
     "source_categories": [
       "Fat Loss",
       "Men"
     ],
-    "catalog_rank": 287
+    "catalog_rank": 287,
+    "image_url": "https://cdn.muscleandstrength.com/sites/default/files/styles/800x500/public/12_week_fat_destroyer_-_1200x630.jpg?itok=gnV2NyoI",
+    "popularity_rank": 3,
+    "popularity_window": "most downloaded in the past 24 hours"
   },
   {
     "title": "Doug's 6 Day Cutting Routine",

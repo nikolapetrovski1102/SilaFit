@@ -1,12 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/session/session_store.dart';
 import '../../core/dev_flags.dart';
@@ -15,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
+import '../../core/widgets/in_app_web_view.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
@@ -29,7 +24,9 @@ import '../progress/weekly_overview_mock.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
 
-/// Support and Privacy Policy are real hosted pages, not in-app content.
+/// Support and Privacy Policy are real hosted pages, not in-app content, so
+/// they open in the in-app browser (see [InAppWebViewScreen]) rather than as
+/// bundled screens.
 const _supportUrl = 'https://sila.fitness/support.html';
 const _privacyUrl = 'https://sila.fitness/privacy.html';
 
@@ -162,10 +159,12 @@ class _SettingsContent extends StatelessWidget {
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Privacy policy',
-                  onTap: () => _openUrl(context, _privacyUrl)),
+                  onTap: () =>
+                      _openUrl(context, _privacyUrl, 'Privacy Policy')),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
-                  label: 'Support', onTap: () => _openUrl(context, _supportUrl)),
+                  label: 'Support',
+                  onTap: () => _openUrl(context, _supportUrl, 'Support')),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Delete account',
@@ -202,11 +201,33 @@ class _SettingsContent extends StatelessWidget {
         SecondaryPillButton(
           label: 'Log Out',
           foregroundColor: AppColors.error,
-          onPressed: () => _logOut(context),
+          onPressed: () => _confirmLogOut(context),
         ),
         const SizedBox(height: AppSpacing.md),
       ],
     );
+  }
+
+  Future<void> _confirmLogOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will need to sign in again to continue.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Log Out', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await _logOut(context);
   }
 
   /// Detaches this device from push delivery before the session goes away, so
@@ -215,41 +236,36 @@ class _SettingsContent extends StatelessWidget {
   Future<void> _logOut(BuildContext context) async {
     final pushMessaging = context.read<PushMessagingService>();
     final authController = context.read<AuthController>();
-    await pushMessaging.deactivate();
+    // Must run before the session is cleared (the call needs the auth token),
+    // but bounded so a stalled Firebase call can never stop the user signing
+    // out. `deactivate` already swallows its own errors.
+    await pushMessaging
+        .deactivate()
+        .timeout(const Duration(seconds: 3), onTimeout: () {});
     await authController.logout();
   }
 
-  Future<void> _openUrl(BuildContext context, String url) async {
-    final ok = await launchUrl(Uri.parse(url),
-        mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $url.')));
-    }
+  /// Opens one of the app's own hosted pages (Support / Privacy Policy) in the
+  /// in-app browser, so the user stays in the app. The WebView's toolbar still
+  /// offers "open in browser" for anyone who wants the real browser.
+  void _openUrl(BuildContext context, String url, String title) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => InAppWebViewScreen(title: title, url: url),
+    ));
   }
 
-  /// Fetches the full "download my data" payload and hands it to the native
-  /// share sheet as a JSON file - there's no in-app viewer for it, this is a
-  /// one-shot export, not a screen.
+  /// Asks the server to email the full "download my data" payload to the
+  /// account's address - there's no in-app viewer for it, this is a one-shot
+  /// request, not a screen.
   Future<void> _exportData(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
         const SnackBar(content: Text('Preparing your data export...')));
     try {
       final repository = context.read<AccountRepository>();
-      final data = await repository.exportData();
-      final json = const JsonEncoder.withIndent('  ').convert(data);
-      final dir = await getTemporaryDirectory();
-      final timestamp = DateTime.now()
-          .toUtc()
-          .toIso8601String()
-          .replaceAll(RegExp('[:.]'), '-');
-      final file = File('${dir.path}/silafit-data-export-$timestamp.json');
-      await file.writeAsString(json);
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/json')],
-        subject: 'My SilaFit data export',
-      );
+      final email = await repository.exportData();
+      messenger.showSnackBar(
+          SnackBar(content: Text('Your data export is on its way to $email.')));
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
           content: Text(
@@ -286,12 +302,15 @@ class _SettingsContent extends StatelessWidget {
     try {
       await context.read<AccountRepository>().deleteAccount();
       await pushMessaging.deactivate();
-      // Server-side data is already gone; clearing the local session and
-      // bootstrapping fresh reuses the exact same client-side cleanup
-      // AuthController.logout() already does for a guest device.
-      await authController.logout();
+      // Queue the confirmation *before* logging out, because logout reloads
+      // the whole app. The app-level messenger outlives that reload, so the
+      // snackbar still lands on the fresh home screen.
       messenger.showSnackBar(
           const SnackBar(content: Text('Your account has been deleted.')));
+      // Server-side data is already gone; `logout()` does the local cleanup
+      // and reloads the app from a cold start, so the user sees the full
+      // loading screen and then lands on Today as a brand-new guest device.
+      await authController.logout();
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
           content:
@@ -405,6 +424,43 @@ class _PreferencesSections extends StatelessWidget {
                 _ReminderTimeRow(
                   localTime: settings.notificationLocalTime,
                   onSelected: controller.setNotificationLocalTime,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        const SectionEyebrow('AI Weekly Plans'),
+        const SizedBox(height: AppSpacing.sm),
+        SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SwitchRow(
+                label: 'Let AI build your weekly plan',
+                value: settings.receiveWeeklyAiPlans,
+                onChanged: controller.setReceiveWeeklyAiPlans,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Every Sunday, generates a fresh custom split and diet plan '
+                'from what you actually trained and logged last week.',
+                style: AppTypography.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant),
+              ),
+              if (settings.receiveWeeklyAiPlans) ...[
+                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+                _SwitchRow(
+                  label: 'Auto-activate it each week',
+                  value: settings.autoActivateAiPlans,
+                  onChanged: controller.setAutoActivateAiPlans,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Off: the new plan just lands in "My Splits"/"My Diet '
+                  'Plans" for you to activate yourself.',
+                  style: AppTypography.bodySm
+                      .copyWith(color: AppColors.onSurfaceVariant),
                 ),
               ],
             ],

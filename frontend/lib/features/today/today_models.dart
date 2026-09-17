@@ -152,6 +152,20 @@ class TargetExercise {
       targetRepsHigh: map['targetRepsHigh'] as int? ?? 0,
     );
   }
+
+  /// Round-trips through [ActiveWorkoutDraft] so a session-local exercise
+  /// swap/add survives an app kill without needing a by-id refetch on
+  /// resume - the draft carries full exercise data, not just an id.
+  Map<String, dynamic> toJson() => {
+        'exerciseId': exerciseId,
+        'name': name,
+        'muscleGroup': muscleGroup,
+        'equipmentType': equipmentType,
+        'demoVideoUrl': demoVideoUrl,
+        'targetSets': targetSets,
+        'targetRepsLow': targetRepsLow,
+        'targetRepsHigh': targetRepsHigh,
+      };
 }
 
 class WeekDayStatus {

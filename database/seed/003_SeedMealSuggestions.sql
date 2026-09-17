@@ -1,6 +1,11 @@
 USE SilenDb;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Idempotent seed for the Nutrition screen's "Suggested this month" strip.
 -- One flagship meal per calendar month (SuggestedMonth 1-12), each built
 -- from real whole-food ingredients at realistic portions; every macro

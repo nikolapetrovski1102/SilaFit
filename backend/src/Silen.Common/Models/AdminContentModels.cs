@@ -132,6 +132,15 @@ public sealed class AdminPlanFeatureModel
     public bool IsHighlighted { get; set; }
 }
 
+/// <summary>One plan's entitlements as the console edits them. Null on a limit means unlimited.</summary>
+public sealed class AdminPlanEntitlementsModel
+{
+    public Guid PlanId { get; set; }
+    public int? MaxActiveSplits { get; set; }
+    public int? MaxActiveDietPlans { get; set; }
+    public bool AllowAiGeneration { get; set; }
+}
+
 /// <summary>A split with the counts that decide whether it is safe to edit or delete.</summary>
 public sealed class AdminSplitModel
 {
@@ -226,6 +235,96 @@ public sealed class AdminSplitDetailModel
     public AdminSplitModel Split { get; set; } = new();
     public List<AdminSplitDayModel> Days { get; set; } = [];
     public List<AdminSplitDayExerciseModel> DayExercises { get; set; } = [];
+}
+
+/// <summary>A diet plan with the counts that decide whether it is safe to edit or delete.
+/// Structural clone of AdminSplitModel for the meal-planning equivalent.</summary>
+public sealed class AdminDietPlanModel
+{
+    public Guid DietPlanId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? HeroImageUrl { get; set; }
+    public string PeriodType { get; set; } = "Weekly";
+    public int DurationDays { get; set; }
+    public bool IsSystemDefault { get; set; }
+    public int SortOrder { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public int DayCount { get; set; }
+    public int MealCount { get; set; }
+    public int ActiveUserCount { get; set; }
+
+    /// <summary>'Private' | 'Public' | 'Shared' - see DietPlans.Visibility.</summary>
+    public string Visibility { get; set; } = "Public";
+
+    /// <summary>The console operator who authored the plan; null for shipped/system content.</summary>
+    public Guid? OwnerAdminUserId { get; set; }
+
+    public string? OwnerUsername { get; set; }
+
+    /// <summary>How many app users this plan has been assigned to.</summary>
+    public int AssignedUserCount { get; set; }
+
+    /// <summary>
+    /// Computed by the service per request: true when the signed-in operator may
+    /// edit/delete/assign this plan (owns it, or holds content.diet_plans.manage_all).
+    /// </summary>
+    public bool CanManage { get; set; }
+}
+
+/// <summary>One client a diet plan has been assigned to - clone of AdminSplitAssignmentModel.</summary>
+public sealed class AdminDietPlanAssignmentModel
+{
+    public Guid DietPlanId { get; set; }
+    public Guid UserId { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+    public string AccountTier { get; set; } = string.Empty;
+    public DateTime AssignedAtUtc { get; set; }
+    public string? AssignedByUsername { get; set; }
+
+    /// <summary>True when this plan is currently the user's active plan.</summary>
+    public bool IsActive { get; set; }
+
+    public string? ActivePlanCode { get; set; }
+    public string? BillingCycle { get; set; }
+    public string? SubscriptionStatus { get; set; }
+}
+
+public sealed class AdminDietPlanDayModel
+{
+    public Guid DietPlanDayId { get; set; }
+    public Guid DietPlanId { get; set; }
+    public int DayIndex { get; set; }
+    public string? Title { get; set; }
+    public int MealCount { get; set; }
+}
+
+/// <summary>
+/// One meal slot, with the referenced MealSuggestions row's title/macros joined in
+/// so a day can be rendered without a lookup per slot.
+/// </summary>
+public sealed class AdminDietPlanMealModel
+{
+    public Guid DietPlanMealId { get; set; }
+    public Guid DietPlanDayId { get; set; }
+    public int DayIndex { get; set; }
+    public string MealType { get; set; } = string.Empty;
+    public Guid MealSuggestionId { get; set; }
+    public string MealSuggestionTitle { get; set; } = string.Empty;
+    public int CaloriesKcal { get; set; }
+    public int ProteinG { get; set; }
+    public int CarbsG { get; set; }
+    public int FatsG { get; set; }
+    public int SortOrder { get; set; }
+}
+
+/// <summary>Everything the diet plan editor needs for one plan, assembled from three procedures.</summary>
+public sealed class AdminDietPlanDetailModel
+{
+    public AdminDietPlanModel Plan { get; set; } = new();
+    public List<AdminDietPlanDayModel> Days { get; set; } = [];
+    public List<AdminDietPlanMealModel> Meals { get; set; } = [];
 }
 
 /// <summary>

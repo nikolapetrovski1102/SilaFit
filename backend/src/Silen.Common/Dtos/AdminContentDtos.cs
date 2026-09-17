@@ -56,6 +56,19 @@ public sealed class AdminPlanFeatureUpsertRequest
     public bool IsHighlighted { get; set; }
 }
 
+public sealed class AdminPlanEntitlementsUpsertRequest
+{
+    public Guid PlanId { get; set; }
+
+    /// <summary>Null means unlimited.</summary>
+    public int? MaxActiveSplits { get; set; }
+
+    /// <summary>Null means unlimited.</summary>
+    public int? MaxActiveDietPlans { get; set; }
+
+    public bool AllowAiGeneration { get; set; }
+}
+
 public sealed class AdminSplitUpsertRequest
 {
     public Guid? SplitId { get; set; }
@@ -107,6 +120,53 @@ public sealed class AdminSplitDayExerciseUpsertRequest
     public int TargetRepsHigh { get; set; }
 }
 
+public sealed class AdminDietPlanUpsertRequest
+{
+    public Guid? DietPlanId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? HeroImageUrl { get; set; }
+
+    /// <summary>'Weekly' | 'Monthly'. Display/filter metadata only - the actual cycle length
+    /// is <see cref="DurationDays"/>.</summary>
+    public string PeriodType { get; set; } = "Weekly";
+
+    /// <summary>1-31. The console does not force this to match the number of days it has.</summary>
+    public int DurationDays { get; set; } = 7;
+
+    public int SortOrder { get; set; }
+
+    /// <summary>'Private' | 'Public' | 'Shared'. Left blank, the service defaults a
+    /// new/changed plan to Private so a trainer's work is never published by accident.
+    /// Ignored on update of someone else's plan (the procedure refuses that first).</summary>
+    public string Visibility { get; set; } = string.Empty;
+}
+
+/// <summary>Trainer hands one diet plan to one app user. SetActive also makes it their plan.</summary>
+public sealed class AdminDietPlanAssignRequest
+{
+    public Guid DietPlanId { get; set; }
+    public Guid UserId { get; set; }
+    public bool SetActive { get; set; }
+}
+
+public sealed class AdminDietPlanDayUpsertRequest
+{
+    public Guid? DietPlanDayId { get; set; }
+    public Guid DietPlanId { get; set; }
+    public int DayIndex { get; set; }
+    public string? Title { get; set; }
+}
+
+public sealed class AdminDietPlanMealUpsertRequest
+{
+    public Guid? DietPlanMealId { get; set; }
+    public Guid DietPlanDayId { get; set; }
+    public string MealType { get; set; } = string.Empty;
+    public Guid MealSuggestionId { get; set; }
+    public int SortOrder { get; set; }
+}
+
 /// <summary>
 /// Super-admin only: regenerate one app user's logs with a generated month of
 /// history so the monthly overview has something to show. Replaces the user's
@@ -125,4 +185,11 @@ public sealed class AdminMockDataRequest
 
     /// <summary>Optional RNG seed, for a reproducible run. Null means "any".</summary>
     public int? Seed { get; set; }
+}
+
+/// <summary>Result of an image upload - the URL to store back onto whatever field it's for
+/// (e.g. a split's HeroImageUrl).</summary>
+public sealed class AdminImageUploadResultDto
+{
+    public required string Url { get; init; }
 }

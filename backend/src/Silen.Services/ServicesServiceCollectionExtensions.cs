@@ -17,11 +17,15 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IProgressService, ProgressService>();
         services.AddScoped<IPlanService, PlanService>();
         services.AddScoped<ISplitService, SplitService>();
+        services.AddScoped<IExercisesService, ExercisesService>();
+        services.AddScoped<IDietPlanService, DietPlanService>();
+        services.AddScoped<IDietGuideService, DietGuideService>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IMealPlanningService, MealPlanningService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IMonthlyReviewService, MonthlyReviewService>();
+        services.AddScoped<IWeeklyPlanGenerationService, WeeklyPlanGenerationService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<INotificationPublishService, NotificationPublishService>();
         services.AddScoped<ISubscriptionGate, SubscriptionGate>();
@@ -31,6 +35,7 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IAdminRbacService, AdminRbacService>();
         services.AddScoped<IAdminConsoleService, AdminConsoleService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IImageUploadService, ImageUploadService>();
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();

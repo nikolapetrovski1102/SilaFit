@@ -1,3 +1,5 @@
+using Silen.Common.Models;
+
 namespace Silen.Services.Abstractions;
 
 /// <summary>Reusable Pro/Advanced entitlement checks, with a dev-only override (FeatureFlags:DevTiersFree)
@@ -11,4 +13,9 @@ public interface ISubscriptionGate
     /// <summary>True only for an active ADVANCED subscriber - the weekly AI overview and the
     /// meal/split recommendations review are exclusive to the top tier.</summary>
     Task<bool> HasActiveAdvancedAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>The caller's admin-editable split/diet-plan limits and AI-generation
+    /// entitlement. A Free/unsubscribed caller (no PlanEntitlements row to read) gets
+    /// hardcoded conservative defaults - see the implementation.</summary>
+    Task<PlanEntitlementsModel> GetEntitlementsAsync(Guid userId, CancellationToken cancellationToken = default);
 }

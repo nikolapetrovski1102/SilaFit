@@ -12,6 +12,16 @@ class UserSettings {
   final double barbellStandardKg;
   final String appearanceMode;
 
+  /// Whether the Sunday batch job considers this user for an AI-generated
+  /// weekly split + diet plan at all (still gated server-side on an active
+  /// Advanced subscription + minimum logged activity).
+  final bool receiveWeeklyAiPlans;
+
+  /// Whether each newly generated split/diet plan becomes this user's active
+  /// one automatically, or just lands in "My Splits"/"My Diet Plans" for them
+  /// to activate themselves.
+  final bool autoActivateAiPlans;
+
   const UserSettings({
     required this.targetWaterMl,
     required this.notificationsEnabled,
@@ -22,6 +32,8 @@ class UserSettings {
     required this.restTimerSoundEnabled,
     required this.barbellStandardKg,
     required this.appearanceMode,
+    required this.receiveWeeklyAiPlans,
+    required this.autoActivateAiPlans,
   });
 
   factory UserSettings.fromJson(dynamic json) {
@@ -36,6 +48,8 @@ class UserSettings {
       restTimerSoundEnabled: map['restTimerSoundEnabled'] as bool,
       barbellStandardKg: (map['barbellStandardKg'] as num).toDouble(),
       appearanceMode: map['appearanceMode'] as String? ?? 'Device',
+      receiveWeeklyAiPlans: map['receiveWeeklyAiPlans'] as bool? ?? false,
+      autoActivateAiPlans: map['autoActivateAiPlans'] as bool? ?? false,
     );
   }
 
@@ -49,6 +63,8 @@ class UserSettings {
         'restTimerSoundEnabled': restTimerSoundEnabled,
         'barbellStandardKg': barbellStandardKg,
         'appearanceMode': appearanceMode,
+        'receiveWeeklyAiPlans': receiveWeeklyAiPlans,
+        'autoActivateAiPlans': autoActivateAiPlans,
       };
 
   UserSettings copyWith({
@@ -61,6 +77,8 @@ class UserSettings {
     bool? restTimerSoundEnabled,
     double? barbellStandardKg,
     String? appearanceMode,
+    bool? receiveWeeklyAiPlans,
+    bool? autoActivateAiPlans,
   }) {
     return UserSettings(
       targetWaterMl: targetWaterMl ?? this.targetWaterMl,
@@ -72,6 +90,8 @@ class UserSettings {
       restTimerSoundEnabled: restTimerSoundEnabled ?? this.restTimerSoundEnabled,
       barbellStandardKg: barbellStandardKg ?? this.barbellStandardKg,
       appearanceMode: appearanceMode ?? this.appearanceMode,
+      receiveWeeklyAiPlans: receiveWeeklyAiPlans ?? this.receiveWeeklyAiPlans,
+      autoActivateAiPlans: autoActivateAiPlans ?? this.autoActivateAiPlans,
     );
   }
 }

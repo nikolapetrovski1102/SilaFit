@@ -82,12 +82,20 @@ public static class SplitRecommendationScorer
     private const int AudienceMatchPoints = 160;
     private const int AudienceMismatchPenalty = 260;
 
+    // Soft gender signal on a category whose training emphasis is traditionally
+    // gendered (glute/lower-body work). It nudges an otherwise-close pick toward
+    // the profile that usually seeks it and away from the other, on top of the
+    // explicit source-audience tag. Deliberately softer than every hard gate so
+    // it only reorders comparable options.
+    private const int GenderCategoryAffinityPoints = 90;
+    private const int GenderCategoryPenalty = 60;
+
     // The most every soft signal can add, and the step a hard gate must clear so
     // it can never be outvoted by goal/level/category noise.
     private const int SoftSignalCeiling =
         GoalMatchPoints + BestLevelPoints + AdjacentLevelPoints + CategoryAffinityPoints +
         BmiNudgePoints + SystemDefaultPoints + SessionFitPoints + ActivityMovementPoints +
-        AudienceMatchPoints + EquipmentFitPoints;
+        AudienceMatchPoints + EquipmentFitPoints + GenderCategoryAffinityPoints;
     private const int HardGateStep = SoftSignalCeiling + ScheduleFitPoints + 1;
 
     // Schedule compatibility: a split the person's week can accommodate outranks
@@ -574,6 +582,24 @@ public static class SplitRecommendationScorer
             else if (category == "Powerlifting")
             {
                 points -= BmiNudgePoints;
+            }
+        }
+
+        // Glute/lower-body-biased programming is sought out more by women and
+        // less by men. This is a soft reorder on top of the explicit audience
+        // tag, so it makes male and female picks differ even when the library
+        // has no gender-tagged program for either. Every other category and
+        // every profile without a gender answer is unaffected.
+        if (category == "GluteFocus")
+        {
+            var gender = fit.Gender?.ToLowerInvariant();
+            if (gender is "female" or "woman")
+            {
+                points += GenderCategoryAffinityPoints;
+            }
+            else if (gender is "male" or "man")
+            {
+                points -= GenderCategoryPenalty;
             }
         }
 

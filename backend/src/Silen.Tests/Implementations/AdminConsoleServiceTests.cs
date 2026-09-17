@@ -4,6 +4,7 @@ using Silen.Common.Dtos;
 using Silen.Common.Models;
 using Silen.Common.Helpers;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -15,11 +16,12 @@ public class AdminConsoleServiceTests
     private readonly Mock<IAdminRbacProvider> adminRbacProvider = new(MockBehavior.Strict);
     private readonly Mock<IAdminContentProvider> contentProvider = new(MockBehavior.Strict);
     private readonly Mock<IMockDataSeeder> mockDataSeeder = new(MockBehavior.Strict);
+    private readonly Mock<IImageUploadService> imageUploadService = new(MockBehavior.Strict);
     private readonly AdminConsoleService sut;
 
     public AdminConsoleServiceTests()
     {
-        sut = new AdminConsoleService(adminProvider.Object, adminRbacProvider.Object, contentProvider.Object, mockDataSeeder.Object);
+        sut = new AdminConsoleService(adminProvider.Object, adminRbacProvider.Object, contentProvider.Object, mockDataSeeder.Object, imageUploadService.Object);
     }
 
     private (string SessionToken, Guid AdminUserId) ArrangeSession(params string[] permissions)

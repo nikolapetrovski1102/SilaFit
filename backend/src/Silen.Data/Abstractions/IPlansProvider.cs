@@ -19,4 +19,8 @@ public interface IPlansProvider
     /// <summary>The complement: active users with an email who are not currently entitled to a
     /// paid plan - the monthly review teaser audience.</summary>
     Task<List<PlanSubscriberModel>> GetNonSubscribersAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Null when the caller has no active subscription (Free tier) or their plan
+    /// has no entitlements row yet.</summary>
+    Task<PlanEntitlementsModel?> GetEntitlementsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }

@@ -150,6 +150,9 @@ class SessionStore {
     await prefs.setString(_appearanceModeKey, mode);
   }
 
+  /// Clears the saved auth session only. Used by [ApiClient] when a request
+  /// proves the token is dead; it deliberately leaves [deviceId] alone so a
+  /// transient 401 can never cost the device its identity.
   Future<void> clear() async {
     _session = null;
     await _secureStorage.delete(key: _tokenKey);
@@ -157,5 +160,28 @@ class SessionStore {
     await _secureStorage.delete(key: _tierKey);
     await _secureStorage.delete(key: _emailKey);
     await _secureStorage.delete(key: _displayNameKey);
+  }
+
+  /// Full sign-out: clears the session *and* rotates the device identity,
+  /// plus the cached appearance preference that came from the outgoing
+  /// account's settings.
+  ///
+  /// Deleting the token alone is not enough to sign anyone out. Device login
+  /// (`POST /auth/device`) looks the device id up server-side and returns
+  /// whichever account owns it, and linking email/Google/Apple upgrades that
+  /// same row in place - so without rotating the device id,
+  /// `AuthController.logout()` would silently sign the same user straight
+  /// back in on the very next bootstrap. Dropping the id here means the next
+  /// [restore]/bootstrap mints a brand-new guest instead.
+  ///
+  /// Distinct from [clear] on purpose: the API client's dead-token path must
+  /// not rotate the device.
+  Future<void> signOut() async {
+    await clear();
+    _deviceId = null;
+    await _secureStorage.delete(key: _deviceIdKey);
+    _cachedAppearanceMode = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_appearanceModeKey);
   }
 }

@@ -25,10 +25,53 @@ BEGIN
 
     BEGIN TRANSACTION;
 
+    -- Weekly AI plan delivery audit rows reference this user, the owned splits
+    -- and the owned diet plans they delivered - all non-cascading (see
+    -- 051_WeeklyAiPlans.sql) - so they must be cleared before any of those, or
+    -- deletion fails on the first FK violation. This was the cause of account
+    -- deletion returning the generic "Something went wrong" fallback: because
+    -- the weekly batch writes a row per considered user, *any* opted-in user
+    -- was blocked from deleting their account.
+    DELETE FROM dbo.WeeklyAiPlanDeliveries WHERE UserId = @UserId;
+
     DELETE FROM dbo.WorkoutSetLogs WHERE UserId = @UserId;
     DELETE FROM dbo.WorkoutSessions WHERE UserId = @UserId;
     DELETE FROM dbo.UserActiveSplits WHERE UserId = @UserId;
     DELETE FROM dbo.SplitAssignments WHERE UserId = @UserId;
+    DELETE FROM dbo.UserActiveDietPlans WHERE UserId = @UserId;
+    DELETE FROM dbo.DietPlanAssignments WHERE UserId = @UserId;
+
+    -- Owned-split tree (see 044_WorkoutSplitsUserOwnership.sql): exercises ->
+    -- days -> the split rows themselves, for every split this user built via
+    -- the in-app builder. None of these FKs cascade, so order matters here.
+    DELETE sde
+    FROM dbo.SplitDayExercises sde
+    INNER JOIN dbo.SplitDays sd ON sd.SplitDayId = sde.SplitDayId
+    INNER JOIN dbo.WorkoutSplits ws ON ws.SplitId = sd.SplitId
+    WHERE ws.OwnerUserId = @UserId;
+
+    DELETE sd
+    FROM dbo.SplitDays sd
+    INNER JOIN dbo.WorkoutSplits ws ON ws.SplitId = sd.SplitId
+    WHERE ws.OwnerUserId = @UserId;
+
+    DELETE FROM dbo.WorkoutSplits WHERE OwnerUserId = @UserId;
+
+    -- Owned-diet-plan tree (see 045-048_DietPlan*.sql): meals -> days -> the
+    -- plan rows themselves, for every plan this user built via the app.
+    DELETE dpm
+    FROM dbo.DietPlanMeals dpm
+    INNER JOIN dbo.DietPlanDays dpd ON dpd.DietPlanDayId = dpm.DietPlanDayId
+    INNER JOIN dbo.NutritionPlans dp ON dp.DietPlanId = dpd.DietPlanId
+    WHERE dp.OwnerUserId = @UserId;
+
+    DELETE dpd
+    FROM dbo.DietPlanDays dpd
+    INNER JOIN dbo.NutritionPlans dp ON dp.DietPlanId = dpd.DietPlanId
+    WHERE dp.OwnerUserId = @UserId;
+
+    DELETE FROM dbo.NutritionPlans WHERE OwnerUserId = @UserId;
+
     DELETE FROM dbo.HydrationLogs WHERE UserId = @UserId;
     DELETE FROM dbo.BodyweightLogs WHERE UserId = @UserId;
     DELETE FROM dbo.MealLogs WHERE UserId = @UserId;
@@ -84,7 +127,7 @@ BEGIN
     -- 4: Settings
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           UpdatedAtUtc
+           ReceiveWeeklyAiPlans, AutoActivateAiPlans, UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 

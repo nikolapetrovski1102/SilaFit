@@ -129,3 +129,23 @@ BEGIN
     ORDER BY u.CreatedAtUtc;
 END
 GO
+
+-- The caller's current plan entitlements, if any. No row means either the
+-- user has no active subscription (Free tier - the service layer supplies
+-- hardcoded defaults for that case) or their plan has no PlanEntitlements
+-- row yet.
+CREATE OR ALTER PROCEDURE dbo.usp_Plans_GetEntitlementsForUser
+    @UserId UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT pe.PlanId, pe.MaxActiveSplits, pe.MaxActiveDietPlans, pe.AllowAiGeneration
+    FROM dbo.UserSubscriptions us
+    INNER JOIN dbo.SubscriptionPlans sp ON sp.PlanId = us.PlanId
+    INNER JOIN dbo.PlanEntitlements pe ON pe.PlanId = sp.PlanId
+    WHERE us.UserId = @UserId
+      AND us.Status = 'Active'
+      AND (us.ExpiresAtUtc IS NULL OR us.ExpiresAtUtc > SYSUTCDATETIME());
+END
+GO

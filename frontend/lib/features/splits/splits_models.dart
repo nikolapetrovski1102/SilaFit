@@ -26,6 +26,19 @@ class WorkoutSplit {
   final int? matchScore;
   final String? matchReason;
 
+  // True only when this caller built the split themselves via the in-app
+  // builder. Trainer-assigned and system splits are never editable, no
+  // matter who is asking - the client never sees a raw owner id, just this
+  // computed flag.
+  final bool isEditableByMe;
+
+  // True when Silen.Tools.WeeklyPlanGeneration wrote this split rather than
+  // the user building it by hand. aiKeptAtUtc is null while it's still
+  // eligible to be overwritten by next Sunday's run; once the user taps
+  // "Keep this plan" it's permanent and a new one is generated separately.
+  final bool isAiGenerated;
+  final DateTime? aiKeptAtUtc;
+
   const WorkoutSplit({
     required this.splitId,
     required this.name,
@@ -40,6 +53,9 @@ class WorkoutSplit {
     this.matchesGoal = false,
     this.matchScore,
     this.matchReason,
+    this.isEditableByMe = false,
+    this.isAiGenerated = false,
+    this.aiKeptAtUtc,
   });
 
   factory WorkoutSplit.fromJson(dynamic json) {
@@ -58,6 +74,11 @@ class WorkoutSplit {
       matchesGoal: map['matchesGoal'] as bool? ?? false,
       matchScore: map['matchScore'] as int?,
       matchReason: map['matchReason'] as String?,
+      isEditableByMe: map['isEditableByMe'] as bool? ?? false,
+      isAiGenerated: map['isAiGenerated'] as bool? ?? false,
+      aiKeptAtUtc: map['aiKeptAtUtc'] != null
+          ? DateTime.parse(map['aiKeptAtUtc'] as String)
+          : null,
     );
   }
 }
@@ -93,16 +114,27 @@ class SplitDay {
 }
 
 class SplitDayExercise {
+  // Identity of this row within SplitDayExercises - needed to address a
+  // specific exercise slot for edit/delete (exerciseId alone is not unique
+  // per day: the same exercise can appear twice).
+  final String splitDayExerciseId;
   final String exerciseId;
   final String name;
+
+  /// Coarse catalogue muscle group. Used by the exercise picker to suggest more
+  /// of what a generically titled day already trains.
+  final String muscleGroup;
+
   final int sortOrder;
   final int targetSets;
   final int targetRepsLow;
   final int targetRepsHigh;
 
   const SplitDayExercise({
+    required this.splitDayExerciseId,
     required this.exerciseId,
     required this.name,
+    this.muscleGroup = '',
     required this.sortOrder,
     required this.targetSets,
     required this.targetRepsLow,
@@ -112,8 +144,10 @@ class SplitDayExercise {
   factory SplitDayExercise.fromJson(dynamic json) {
     final map = json as Map<String, dynamic>;
     return SplitDayExercise(
+      splitDayExerciseId: map['splitDayExerciseId'] as String? ?? '',
       exerciseId: map['exerciseId'] as String,
       name: map['name'] as String? ?? '',
+      muscleGroup: map['muscleGroup'] as String? ?? '',
       sortOrder: map['sortOrder'] as int? ?? 0,
       targetSets: map['targetSets'] as int? ?? 0,
       targetRepsLow: map['targetRepsLow'] as int? ?? 0,

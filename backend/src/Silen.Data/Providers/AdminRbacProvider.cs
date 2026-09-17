@@ -109,6 +109,13 @@ public sealed class AdminRbacProvider(ISqlExecutor sqlExecutor) : IAdminRbacProv
             reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapOperator, cancellationToken),
             cancellationToken);
 
+    public Task<AdminOperatorModel?> GetOperatorByUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_Operator_GetByUsername",
+            [SqlParameterBuilder.Create("@Username", username)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, AdminContentRowMapper.MapOperator, cancellationToken),
+            cancellationToken);
+
     public Task<AdminMutationResultModel> CreateOperatorAsync(
         string username,
         byte[] passwordHash,

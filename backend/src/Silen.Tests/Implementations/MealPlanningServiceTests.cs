@@ -19,7 +19,8 @@ public class MealPlanningServiceTests
     }
 
     private static UserProfileModel Profile(
-        string gender, byte age, decimal heightCm, decimal weightKg, string goal, string? activity = null) => new()
+        string gender, byte age, decimal heightCm, decimal weightKg, string goal, string? activity = null,
+        int? trainingDays = null, int? sessionMinutes = null) => new()
     {
         UserId = Guid.NewGuid(),
         Gender = gender,
@@ -27,7 +28,9 @@ public class MealPlanningServiceTests
         HeightCm = heightCm,
         WeightKg = weightKg,
         Goal = goal,
-        DailyActivityLevel = activity
+        DailyActivityLevel = activity,
+        TrainingDaysPerWeek = trainingDays,
+        SessionDurationMinutes = sessionMinutes
     };
 
     /// <summary>Captures whatever request MealPlanningService derives so the test can
@@ -148,6 +151,47 @@ public class MealPlanningServiceTests
 
         // Raw target computes to ~6512 kcal, above the 6000 kcal safety ceiling.
         Assert.Equal(6000, result.Data!.TargetCalories);
+    }
+
+    [Fact]
+    public async Task GetTargetsAsync_MoreTrainingDaysPerWeek_RaisesCalorieTarget()
+    {
+        // Same height/weight/age/goal/daily-activity: only the onboarding active-day
+        // answer differs, so the calorie target must differ too.
+        var lowUserId = Guid.NewGuid();
+        var low = Profile("Male", 25, 180, 80, "MaintainActive", "Active",
+            trainingDays: 2, sessionMinutes: 45);
+        userProfileProvider.Setup(p => p.GetAsync(lowUserId, It.IsAny<CancellationToken>())).ReturnsAsync(low);
+        CaptureUpsertedTargets(lowUserId);
+
+        var highUserId = Guid.NewGuid();
+        var high = Profile("Male", 25, 180, 80, "MaintainActive", "Active",
+            trainingDays: 6, sessionMinutes: 45);
+        userProfileProvider.Setup(p => p.GetAsync(highUserId, It.IsAny<CancellationToken>())).ReturnsAsync(high);
+        CaptureUpsertedTargets(highUserId);
+
+        var lowResult = await sut.GetTargetsAsync(lowUserId);
+        var highResult = await sut.GetTargetsAsync(highUserId);
+
+        // bmr = 1805; tdee (Active 1.55) = 2797.75; training = days*45*8.4/7 kcal/day.
+        // 2 days -> +108 -> 2906; 6 days -> +324 -> 3122.
+        Assert.Equal(2906, lowResult.Data!.TargetCalories);
+        Assert.Equal(3122, highResult.Data!.TargetCalories);
+    }
+
+    [Fact]
+    public async Task GetTargetsAsync_MissingTrainingAnswers_LeavesTdeeUnchanged()
+    {
+        // Legacy profile with no training-days/session answers must compute exactly
+        // as before the training contribution existed.
+        var userId = Guid.NewGuid();
+        var profile = Profile("Male", 25, 180, 80, "BuildMuscle", "Active");
+        userProfileProvider.Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(profile);
+        CaptureUpsertedTargets(userId);
+
+        var result = await sut.GetTargetsAsync(userId);
+
+        Assert.Equal(3048, result.Data!.TargetCalories);
     }
 
     [Fact]

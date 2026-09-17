@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../core/live_workout/live_workout_notifier.dart';
 import '../../core/live_workout/live_workout_snapshot.dart';
@@ -14,6 +13,9 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_dialog.dart';
 import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/silen_button.dart';
+import '../exercises/exercise_picker_sheet.dart';
+import '../exercises/exercise_video_sheet.dart';
+import '../exercises/exercises_models.dart';
 import '../notifications/notifications_repository.dart';
 import '../settings/settings_controller.dart';
 import 'active_workout_draft_store.dart';
@@ -120,6 +122,12 @@ class ActiveWorkoutTrackerScreen extends StatefulWidget {
 class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     with WidgetsBindingObserver {
   late List<List<_SetDraft>> _setsByExercise;
+  // Session-local only - swapping/adding an exercise here never mutates the
+  // underlying split day (see `_swapExercise`/`_addExercise`). Seeded from
+  // `widget.exercises` in `_init`, same as `_setsByExercise`, and restored
+  // from `ActiveWorkoutDraft.exercises` on resume rather than always
+  // re-deriving from `widget.exercises`, so a swap survives an app kill.
+  late List<TargetExercise> _exercises;
   int _exerciseIndex = 0;
 
   // Resolved once from Settings at mount - see the class doc on _SetDraft.
@@ -240,9 +248,14 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
 
     // Only trusted when it matches the shape of today's exercises - a
     // draft saved against a different/older plan for the same session id
-    // would otherwise restore the wrong number of exercises or sets.
+    // would otherwise restore the wrong number of exercises or sets. Also
+    // requires a matching `exercises` list (absent/short on a draft saved
+    // before the swap/add feature, or one saved before any swap happened),
+    // so a stale-format draft falls back to the fresh plan rather than
+    // resuming with mismatched exercise data.
     final draftMatchesShape = draft != null &&
         draft.setsByExercise.length == freshSets.length &&
+        draft.exercises.length == freshSets.length &&
         draft.exerciseIndex >= 0 &&
         draft.exerciseIndex < freshSets.length;
 
@@ -256,6 +269,9 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                   .toList())
               .toList()
           : freshSets;
+      _exercises = draftMatchesShape
+          ? List.of(draft.exercises)
+          : List.of(widget.exercises);
       _exerciseIndex = draftMatchesShape ? draft.exerciseIndex : 0;
       _startedAtUtc =
           draftMatchesShape ? draft.startedAtUtc : DateTime.now().toUtc();
@@ -327,6 +343,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                   ))
               .toList())
           .toList(),
+      exercises: _exercises,
       startedAtUtc: _startedAtUtc,
       savedAtUtc: DateTime.now().toUtc(),
     )));
@@ -347,8 +364,8 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   }
 
   List<_SetDraft> get _currentSets => _setsByExercise[_exerciseIndex];
-  TargetExercise get _currentExercise => widget.exercises[_exerciseIndex];
-  bool get _isLastExercise => _exerciseIndex == widget.exercises.length - 1;
+  TargetExercise get _currentExercise => _exercises[_exerciseIndex];
+  bool get _isLastExercise => _exerciseIndex == _exercises.length - 1;
 
   /// Current session state in the shape the native live surfaces expect (see
   /// [LiveWorkoutNotifier]). Built fresh on every read so it always mirrors
@@ -358,7 +375,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
         sessionId: widget.session.workoutSessionId ?? '',
         exerciseName: _currentExercise.name,
         exerciseNumber: _exerciseIndex + 1,
-        exerciseCount: widget.exercises.length,
+        exerciseCount: _exercises.length,
         completedSets: _completedSetsInCurrentExercise,
         totalSets: _currentSets.length,
         startedAtUtc: _startedAtUtc,
@@ -481,6 +498,86 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     _syncLiveWorkout();
   }
 
+  /// Same seed rule `_init` uses for a fresh set table - last-logged
+  /// weight/reps for this exercise if there's any memory of it, otherwise
+  /// the equipment floor and the rep-range midpoint - reused so a swapped
+  /// or newly-added exercise opens exactly like it would have if the day
+  /// had been planned with it from the start.
+  List<_SetDraft> _seedSets(
+    ExerciseSummary exercise,
+    int targetSets,
+    int repsLow,
+    int repsHigh,
+    Map<String, ExerciseMemory> memory,
+  ) {
+    final remembered = memory[exercise.exerciseId];
+    return List.generate(
+      targetSets <= 0 ? 1 : targetSets,
+      (_) => _SetDraft(
+        weightKg:
+            remembered?.weightKg ?? _weightFloorKgFor(exercise.equipmentType),
+        reps: remembered?.reps ??
+            ((repsLow + repsHigh) / 2).round().clamp(1, 999),
+      ),
+    );
+  }
+
+  TargetExercise _toTargetExercise(ExerciseSummary exercise, int targetSets,
+          int repsLow, int repsHigh) =>
+      TargetExercise(
+        exerciseId: exercise.exerciseId,
+        name: exercise.name,
+        muscleGroup: exercise.muscleGroup,
+        equipmentType: exercise.equipmentType,
+        demoVideoUrl: exercise.demoVideoUrl,
+        targetSets: targetSets,
+        targetRepsLow: repsLow,
+        targetRepsHigh: repsHigh,
+      );
+
+  /// Replaces the current exercise for the rest of *this* session only -
+  /// never mutates the split day it came from. Keeps the outgoing
+  /// exercise's own target sets/rep-range (a like-for-like substitution:
+  /// same volume, different movement) but reseeds the set table's
+  /// weight/reps from the new exercise's own memory rather than carrying
+  /// over the outgoing exercise's numbers, which would be meaningless for a
+  /// different lift.
+  Future<void> _swapExercise() async {
+    final picked =
+        await showExercisePickerSheet(context, title: 'Swap exercise');
+    if (picked == null || !mounted) return;
+    final memory = await ExerciseMemoryStore.instance.loadAll();
+    if (!mounted) return;
+    final outgoing = _currentExercise;
+    setState(() {
+      _exercises[_exerciseIndex] = _toTargetExercise(picked,
+          outgoing.targetSets, outgoing.targetRepsLow, outgoing.targetRepsHigh);
+      _setsByExercise[_exerciseIndex] = _seedSets(picked, outgoing.targetSets,
+          outgoing.targetRepsLow, outgoing.targetRepsHigh, memory);
+    });
+    _saveDraft();
+    _syncLiveWorkout();
+  }
+
+  /// Appends a brand-new exercise (and an empty-ish, one-set starting slot)
+  /// to the end of this session - session-local only, same as
+  /// [_swapExercise]. No prescribed rep range exists for an ad hoc addition,
+  /// so both bounds are left at 0 (see `_hasRealRepTarget`) rather than
+  /// inventing one.
+  Future<void> _addExercise() async {
+    final picked =
+        await showExercisePickerSheet(context, title: 'Add exercise');
+    if (picked == null || !mounted) return;
+    final memory = await ExerciseMemoryStore.instance.loadAll();
+    if (!mounted) return;
+    setState(() {
+      _exercises.add(_toTargetExercise(picked, 1, 0, 0));
+      _setsByExercise.add(_seedSets(picked, 1, 0, 0, memory));
+    });
+    _saveDraft();
+    _syncLiveWorkout();
+  }
+
   void _adjustWeight(int index, double directionSign) {
     setState(() {
       final floor = _weightFloorKg;
@@ -517,9 +614,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
       // is per hand, so the load actually moved is double what a
       // barbell/machine/cable set of the same number would be.
       final perRepMultiplier =
-          widget.exercises[i].equipmentType == _bilateralDumbbellEquipment
-              ? 2
-              : 1;
+          _exercises[i].equipmentType == _bilateralDumbbellEquipment ? 2 : 1;
       for (final set in _setsByExercise[i]) {
         if (set.completed) {
           total += set.weightKg * set.reps * perRepMultiplier;
@@ -539,7 +634,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   List<SetLogEntry> get _completedSetLogs {
     final logs = <SetLogEntry>[];
     for (var i = 0; i < _setsByExercise.length; i++) {
-      final exerciseId = widget.exercises[i].exerciseId;
+      final exerciseId = _exercises[i].exerciseId;
       var setNumber = 0;
       for (final set in _setsByExercise[i]) {
         setNumber++;
@@ -734,13 +829,13 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                             children: [
                               Expanded(
                                 child: Text(
-                                    'EXERCISE ${_exerciseIndex + 1} OF ${widget.exercises.length}',
+                                    'EXERCISE ${_exerciseIndex + 1} OF ${_exercises.length}',
                                     style: AppTypography.labelCaps
                                         .copyWith(color: AppColors.accent)),
                               ),
-                              if (_currentExercise.demoVideoUrl != null)
+                              if (_currentExercise.demoVideoUrl != null) ...[
                                 _WatchDemoChip(
-                                  isVideo: _isVideoUrl(
+                                  isVideo: isVideoUrl(
                                       _currentExercise.demoVideoUrl!),
                                   onTap: () => showExerciseVideoSheet(
                                     context,
@@ -748,6 +843,12 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                     exerciseName: _currentExercise.name,
                                   ),
                                 ),
+                                const SizedBox(width: AppSpacing.xxs),
+                              ],
+                              _ExerciseMenuChip(
+                                onSwap: _swapExercise,
+                                onAdd: _addExercise,
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -918,19 +1019,74 @@ class _TelemetryBar extends StatelessWidget {
   }
 }
 
-/// Whether [url] points at a real video file rather than a static image.
-/// `Exercise.DemoVideoUrl` is typed for video, but the free, legally-clear
-/// seed source ([free-exercise-db](https://github.com/yuhonas/free-exercise-db),
-/// public domain) only has step-position JPEGs - so this same column also
-/// carries plain image URLs today, and the sheet below renders accordingly
-/// instead of feeding a `.jpg` into `video_player` (which would just sit in
-/// its error state for every exercise).
-bool _isVideoUrl(String url) {
-  final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
-  return path.endsWith('.mp4') ||
-      path.endsWith('.mov') ||
-      path.endsWith('.webm') ||
-      path.endsWith('.m3u8');
+/// Compact icon-only chip opening a bottom sheet with "Swap exercise" /
+/// "Add exercise" - the entry point for the session-local exercise
+/// swap/add feature (see `_swapExercise`/`_addExercise`). A plain circular
+/// icon rather than another labeled pill like [_WatchDemoChip], since it's
+/// always present (unlike the demo chip, which only shows up when the
+/// exercise has a reference video) and doesn't need to compete for width in
+/// the header row.
+class _ExerciseMenuChip extends StatelessWidget {
+  final VoidCallback onSwap;
+  final VoidCallback onAdd;
+
+  const _ExerciseMenuChip({required this.onSwap, required this.onAdd});
+
+  Future<void> _openSheet(BuildContext context) async {
+    final action = await showModalBottomSheet<VoidCallback>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading:
+                  Icon(Icons.swap_horiz_rounded, color: AppColors.onSurface),
+              title: Text('Swap this exercise', style: AppTypography.bodyMd),
+              subtitle: Text('Replace it for this workout only',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+              onTap: () => Navigator.of(sheetContext).pop(onSwap),
+            ),
+            ListTile(
+              leading: Icon(Icons.add_circle_outline_rounded,
+                  color: AppColors.onSurface),
+              title: Text('Add an exercise', style: AppTypography.bodyMd),
+              subtitle: Text('Tack on something extra for today',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+              onTap: () => Navigator.of(sheetContext).pop(onAdd),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ),
+      ),
+    );
+    action?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _openSheet(context),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(Icons.more_horiz_rounded,
+            size: 16, color: AppColors.onSurface),
+      ),
+    );
+  }
 }
 
 class _WatchDemoChip extends StatelessWidget {
@@ -958,196 +1114,6 @@ class _WatchDemoChip extends StatelessWidget {
             Text(isVideo ? 'Watch form' : 'View form',
                 style: AppTypography.labelCaps
                     .copyWith(color: AppColors.onSurface, fontSize: 10)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Opens a bottom sheet showing an exercise's form reference - a looping
-/// muted video when [url] is one, or a static photo when it isn't (see
-/// [_isVideoUrl]).
-Future<void> showExerciseVideoSheet(
-  BuildContext context, {
-  required String url,
-  required String exerciseName,
-}) {
-  return showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surfaceContainer,
-    shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
-    builder: (_) => _ExerciseVideoSheet(url: url, exerciseName: exerciseName),
-  );
-}
-
-class _ExerciseVideoSheet extends StatefulWidget {
-  final String url;
-  final String exerciseName;
-
-  const _ExerciseVideoSheet({required this.url, required this.exerciseName});
-
-  @override
-  State<_ExerciseVideoSheet> createState() => _ExerciseVideoSheetState();
-}
-
-class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
-  late final bool _isVideo = _isVideoUrl(widget.url);
-  VideoPlayerController? _controller;
-  bool _muted = true;
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (!_isVideo) {
-      return; // Image case is handled entirely by Image.network in build().
-    }
-    final uri = Uri.tryParse(widget.url);
-    if (uri == null) {
-      _failed = true;
-      return;
-    }
-    final controller = VideoPlayerController.networkUrl(uri);
-    _controller = controller;
-    controller.initialize().then((_) {
-      if (!mounted) return;
-      controller
-        ..setLooping(true)
-        ..setVolume(0)
-        ..play();
-      setState(() {});
-    }).catchError((_) {
-      if (!mounted) return;
-      setState(() => _failed = true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  void _toggleMute() {
-    final controller = _controller;
-    if (controller == null) return;
-    setState(() => _muted = !_muted);
-    controller.setVolume(_muted ? 0 : 1);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    final ready = controller != null && controller.value.isInitialized;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-            AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(widget.exerciseName,
-                      style: AppTypography.headlineSm,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Icon(Icons.close_rounded,
-                      size: 22, color: AppColors.onSurfaceVariant),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.inset),
-              child: AspectRatio(
-                aspectRatio: ready ? controller.value.aspectRatio : 4 / 3,
-                child: Container(
-                  color: AppColors.surfaceContainerLowest,
-                  child: !_isVideo
-                      ? Image.network(
-                          widget.url,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) =>
-                              progress == null
-                                  ? child
-                                  : Center(
-                                      child: SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            color: AppColors.accent),
-                                      ),
-                                    ),
-                          errorBuilder: (context, error, stack) => Center(
-                            child: Text('Couldn\'t load the form photo.',
-                                style: AppTypography.bodySm),
-                          ),
-                        )
-                      : _failed
-                          ? Center(
-                              child: Text('Couldn\'t load the form video.',
-                                  style: AppTypography.bodySm),
-                            )
-                          : !ready
-                              ? Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: AppColors.accent),
-                                  ),
-                                )
-                              : GestureDetector(
-                                  onTap: () => setState(() =>
-                                      controller.value.isPlaying
-                                          ? controller.pause()
-                                          : controller.play()),
-                                  child: Stack(
-                                    alignment: Alignment.bottomRight,
-                                    children: [
-                                      VideoPlayer(controller),
-                                      Padding(
-                                        padding: const EdgeInsets.all(8),
-                                        child: GestureDetector(
-                                          onTap: _toggleMute,
-                                          child: Container(
-                                            width: 32,
-                                            height: 32,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Colors.black
-                                                  .withOpacity(0.45),
-                                            ),
-                                            child: Icon(
-                                              _muted
-                                                  ? Icons.volume_off_rounded
-                                                  : Icons.volume_up_rounded,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                ),
-              ),
-            ),
           ],
         ),
       ),

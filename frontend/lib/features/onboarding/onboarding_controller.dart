@@ -5,6 +5,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/platform/device_timezone.dart';
 import '../notifications/notifications_repository.dart';
 import '../notifications/push_messaging_service.dart';
+import '../settings/settings_repository.dart';
 import 'onboarding_repository.dart';
 import 'onboarding_models.dart';
 
@@ -14,7 +15,8 @@ import 'onboarding_models.dart';
 const _autoAdvanceDelay = Duration(milliseconds: 260);
 
 /// The screens of the flow in display order. `intro1`/`intro2` are the
-/// carousel slides; nine profile questions precede the notification prompt.
+/// carousel slides; nine profile questions precede the AI-plans opt-in and
+/// the closing notification prompt.
 enum OnboardingStep {
   intro1,
   intro2,
@@ -27,6 +29,7 @@ enum OnboardingStep {
   trainingExperience,
   equipmentAccess,
   dailyActivity,
+  aiPlans,
   notifications,
 }
 
@@ -40,6 +43,7 @@ const _questionSteps = [
   OnboardingStep.trainingExperience,
   OnboardingStep.equipmentAccess,
   OnboardingStep.dailyActivity,
+  OnboardingStep.aiPlans,
   OnboardingStep.notifications,
 ];
 
@@ -49,14 +53,17 @@ const _questionSteps = [
 class OnboardingController extends ChangeNotifier {
   final OnboardingRepository _repository;
   final NotificationsRepository _notificationsRepository;
+  final SettingsRepository? _settingsRepository;
   final PushMessagingService? _pushMessaging;
 
   final bool autoAdvanceEnabled;
   OnboardingController(this._repository, this._notificationsRepository,
       {this.autoAdvanceEnabled = true,
       UserProfile? initialProfile,
+      SettingsRepository? settingsRepository,
       PushMessagingService? pushMessaging})
-      : _pushMessaging = pushMessaging {
+      : _settingsRepository = settingsRepository,
+        _pushMessaging = pushMessaging {
     if (initialProfile != null) {
       gender = initialProfile.gender;
       ageYears = initialProfile.ageYears ?? ageYears;
@@ -109,6 +116,10 @@ class OnboardingController extends ChangeNotifier {
   String? trainingExperience;
   String? equipmentAccess;
   String? dailyActivityLevel;
+
+  // Defaults on - see WeeklyAiPlansQuestion's doc comment for why.
+  bool receiveWeeklyAiPlans = true;
+  bool autoActivateAiPlans = true;
 
   bool _isSubmitting = false;
   String? _lastError;
@@ -239,6 +250,19 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setReceiveWeeklyAiPlans(bool value) {
+    receiveWeeklyAiPlans = value;
+    // Same dependency the Settings screen enforces: auto-activate never
+    // stays on once the feature itself is off.
+    if (!value) autoActivateAiPlans = false;
+    notifyListeners();
+  }
+
+  void setAutoActivateAiPlans(bool value) {
+    autoActivateAiPlans = value;
+    notifyListeners();
+  }
+
   /// Persists the collected answers. Returns true on success; the caller
   /// proceeds into the app only after the profile has been saved.
   Future<bool> submit() async {
@@ -300,6 +324,28 @@ class OnboardingController extends ChangeNotifier {
         timeZoneId: deviceTimeZoneId(),
         notificationsEnabled: enabled,
       );
+    } catch (_) {
+      // Intentionally swallowed - see the doc comment above.
+    }
+  }
+
+  /// Persists the AI-plans opt-in chosen on [WeeklyAiPlansQuestion]. These
+  /// two flags live on `UserSettings`, not the profile, and that endpoint
+  /// replaces the whole settings row - so this reads the current row first
+  /// (freshly created with defaults for a brand-new user) and writes it back
+  /// with only these two fields changed, same as `SettingsController._update`
+  /// does for every other toggle.
+  ///
+  /// Best-effort: onboarding entry must never depend on this succeeding.
+  Future<void> submitAiPlanPreferences() async {
+    final settingsRepository = _settingsRepository;
+    if (settingsRepository == null) return;
+    try {
+      final current = await settingsRepository.getSettings();
+      await settingsRepository.updateSettings(current.copyWith(
+        receiveWeeklyAiPlans: receiveWeeklyAiPlans,
+        autoActivateAiPlans: autoActivateAiPlans,
+      ));
     } catch (_) {
       // Intentionally swallowed - see the doc comment above.
     }

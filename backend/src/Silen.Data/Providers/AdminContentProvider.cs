@@ -143,6 +143,26 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
 
+    public Task<AdminPlanEntitlementsModel?> GetPlanEntitlementsAsync(Guid planId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_PlanEntitlements_GetForPlan",
+            [SqlParameterBuilder.Create("@PlanId", planId)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, AdminContentRowMapper.MapPlanEntitlements, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> UpsertPlanEntitlementsAsync(AdminPlanEntitlementsUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_PlanEntitlements_Upsert",
+            [
+                SqlParameterBuilder.Create("@PlanId", request.PlanId),
+                SqlParameterBuilder.Create("@MaxActiveSplits", request.MaxActiveSplits),
+                SqlParameterBuilder.Create("@MaxActiveDietPlans", request.MaxActiveDietPlans),
+                SqlParameterBuilder.Create("@AllowAiGeneration", request.AllowAiGeneration),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
     /* -------------------------------- splits -------------------------------- */
 
     public Task<List<AdminSplitModel>> GetSplitsAsync(Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default) =>
@@ -308,5 +328,156 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
             "dbo.usp_Admin_Users_GetAll",
             [SqlParameterBuilder.Create("@Search", search), SqlParameterBuilder.Create("@Limit", limit)],
             reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapUserSummary, cancellationToken),
+            cancellationToken);
+
+    /* ------------------------------- diet plans ------------------------------ */
+
+    public Task<List<AdminDietPlanModel>> GetDietPlansAsync(Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlans_GetAll",
+            [
+                SqlParameterBuilder.Create("@ViewerAdminUserId", viewerAdminUserId),
+                SqlParameterBuilder.Create("@IncludeAll", includeAll)
+            ],
+            reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapDietPlan, cancellationToken),
+            cancellationToken);
+
+    /// <summary>
+    /// Three procedures rather than one multi-result-set call - same reasoning as
+    /// <see cref="GetSplitDetailAsync"/>: the list already carries the counts, and
+    /// the other two are also used on their own by the day and meal-slot editors.
+    /// </summary>
+    public async Task<AdminDietPlanDetailModel?> GetDietPlanDetailAsync(Guid dietPlanId, Guid? viewerAdminUserId, bool includeAll, CancellationToken cancellationToken = default)
+    {
+        var plans = await GetDietPlansAsync(viewerAdminUserId, includeAll, cancellationToken);
+        var plan = plans.FirstOrDefault(candidate => candidate.DietPlanId == dietPlanId);
+
+        if (plan is null)
+        {
+            return null;
+        }
+
+        return new AdminDietPlanDetailModel
+        {
+            Plan = plan,
+            Days = await GetDietPlanDaysAsync(dietPlanId, cancellationToken),
+            Meals = await GetDietPlanMealsAsync(dietPlanId, cancellationToken)
+        };
+    }
+
+    public Task<AdminMutationResultModel> UpsertDietPlanAsync(AdminDietPlanUpsertRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlan_Upsert",
+            [
+                SqlParameterBuilder.Create("@DietPlanId", request.DietPlanId),
+                SqlParameterBuilder.Create("@Name", request.Name),
+                SqlParameterBuilder.Create("@Description", request.Description),
+                SqlParameterBuilder.Create("@HeroImageUrl", request.HeroImageUrl),
+                SqlParameterBuilder.Create("@PeriodType", request.PeriodType),
+                SqlParameterBuilder.Create("@DurationDays", request.DurationDays),
+                SqlParameterBuilder.Create("@SortOrder", request.SortOrder),
+                SqlParameterBuilder.Create("@Visibility", request.Visibility),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> DeleteDietPlanAsync(Guid dietPlanId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlan_Delete",
+            [
+                SqlParameterBuilder.Create("@DietPlanId", dietPlanId),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<List<AdminDietPlanAssignmentModel>> GetDietPlanAssignmentsAsync(Guid dietPlanId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanAssignments_GetForPlan",
+            [SqlParameterBuilder.Create("@DietPlanId", dietPlanId)],
+            reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapDietPlanAssignment, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> AssignDietPlanAsync(AdminDietPlanAssignRequest request, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanAssignment_Assign",
+            [
+                SqlParameterBuilder.Create("@DietPlanId", request.DietPlanId),
+                SqlParameterBuilder.Create("@UserId", request.UserId),
+                SqlParameterBuilder.Create("@SetActive", request.SetActive),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> RemoveDietPlanAssignmentAsync(Guid dietPlanId, Guid userId, AdminActorModel actor, bool canManageAll, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanAssignment_Remove",
+            [
+                SqlParameterBuilder.Create("@DietPlanId", dietPlanId),
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@ActorCanManageAll", canManageAll),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<List<AdminDietPlanDayModel>> GetDietPlanDaysAsync(Guid dietPlanId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanDays_GetForPlan",
+            [SqlParameterBuilder.Create("@DietPlanId", dietPlanId)],
+            reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapDietPlanDay, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> UpsertDietPlanDayAsync(AdminDietPlanDayUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanDay_Upsert",
+            [
+                SqlParameterBuilder.Create("@DietPlanDayId", request.DietPlanDayId),
+                SqlParameterBuilder.Create("@DietPlanId", request.DietPlanId),
+                SqlParameterBuilder.Create("@DayIndex", request.DayIndex),
+                SqlParameterBuilder.Create("@Title", request.Title),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> DeleteDietPlanDayAsync(Guid dietPlanDayId, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanDay_Delete",
+            [SqlParameterBuilder.Create("@DietPlanDayId", dietPlanDayId), .. AdminActorParameters.Build(actor)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<List<AdminDietPlanMealModel>> GetDietPlanMealsAsync(Guid dietPlanId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanMeals_GetForPlan",
+            [SqlParameterBuilder.Create("@DietPlanId", dietPlanId)],
+            reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapDietPlanMeal, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> UpsertDietPlanMealAsync(AdminDietPlanMealUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanMeal_Upsert",
+            [
+                SqlParameterBuilder.Create("@DietPlanMealId", request.DietPlanMealId),
+                SqlParameterBuilder.Create("@DietPlanDayId", request.DietPlanDayId),
+                SqlParameterBuilder.Create("@MealType", request.MealType),
+                SqlParameterBuilder.Create("@MealSuggestionId", request.MealSuggestionId),
+                SqlParameterBuilder.Create("@SortOrder", request.SortOrder),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> DeleteDietPlanMealAsync(Guid dietPlanMealId, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_DietPlanMeal_Delete",
+            [SqlParameterBuilder.Create("@DietPlanMealId", dietPlanMealId), .. AdminActorParameters.Build(actor)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
 }

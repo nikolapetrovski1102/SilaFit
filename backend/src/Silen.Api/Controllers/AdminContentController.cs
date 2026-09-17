@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Silen.Common.Contracts;
 using Silen.Common.Dtos;
 using Silen.Common.Helpers;
 using Silen.Common.Options;
@@ -42,6 +43,25 @@ public sealed class AdminContentController(
     [HttpDelete("exercises/{exerciseId:guid}")]
     public async Task<IActionResult> DeleteExercise(Guid exerciseId, CancellationToken cancellationToken) =>
         (await consoleService.DeleteExerciseAsync(SessionToken, exerciseId, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    /* --------------------------------- images -------------------------------- */
+
+    // IFormFile is bound from the multipart body automatically even under
+    // [ApiController]'s normally-body-first inference rules - no [FromForm] needed.
+    // The Kestrel-wide 1MB body cap (Program.cs) is overridden per-request here.
+    [HttpPost("images")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> UploadImage(IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(ApiResponse.Fail("Choose an image to upload."));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var upload = new ImageUploadRequest(stream, file.FileName, file.ContentType, file.Length);
+        return (await consoleService.UploadImageAsync(SessionToken, upload, ClientIp, cancellationToken)).ToActionResult(logger);
+    }
 
     /* --------------------------- meal suggestions ---------------------------- */
 
@@ -86,6 +106,14 @@ public sealed class AdminContentController(
     [HttpDelete("plans/features/{planFeatureId:guid}")]
     public async Task<IActionResult> DeletePlanFeature(Guid planFeatureId, CancellationToken cancellationToken) =>
         (await consoleService.DeletePlanFeatureAsync(SessionToken, planFeatureId, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpGet("plans/{planId:guid}/entitlements")]
+    public async Task<IActionResult> GetPlanEntitlements(Guid planId, CancellationToken cancellationToken) =>
+        (await consoleService.GetPlanEntitlementsAsync(SessionToken, planId, cancellationToken)).ToActionResult(logger);
+
+    [HttpPut("plans/entitlements")]
+    public async Task<IActionResult> SavePlanEntitlements([FromBody] AdminPlanEntitlementsUpsertRequest request, CancellationToken cancellationToken) =>
+        (await consoleService.SavePlanEntitlementsAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
 
     /* -------------------------------- splits -------------------------------- */
 
@@ -134,6 +162,54 @@ public sealed class AdminContentController(
     [HttpDelete("splits/days/exercises/{splitDayExerciseId:guid}")]
     public async Task<IActionResult> DeleteSplitDayExercise(Guid splitDayExerciseId, CancellationToken cancellationToken) =>
         (await consoleService.DeleteSplitDayExerciseAsync(SessionToken, splitDayExerciseId, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    /* ------------------------------- diet plans ------------------------------ */
+
+    [HttpGet("diet-plans")]
+    public async Task<IActionResult> GetDietPlans(CancellationToken cancellationToken) =>
+        (await consoleService.GetDietPlansAsync(SessionToken, cancellationToken)).ToActionResult(logger);
+
+    [HttpGet("diet-plans/{dietPlanId:guid}")]
+    public async Task<IActionResult> GetDietPlanDetail(Guid dietPlanId, CancellationToken cancellationToken) =>
+        (await consoleService.GetDietPlanDetailAsync(SessionToken, dietPlanId, cancellationToken)).ToActionResult(logger);
+
+    [HttpPost("diet-plans")]
+    public async Task<IActionResult> SaveDietPlan([FromBody] AdminDietPlanUpsertRequest request, CancellationToken cancellationToken) =>
+        (await consoleService.SaveDietPlanAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpDelete("diet-plans/{dietPlanId:guid}")]
+    public async Task<IActionResult> DeleteDietPlan(Guid dietPlanId, CancellationToken cancellationToken) =>
+        (await consoleService.DeleteDietPlanAsync(SessionToken, dietPlanId, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    /* ------------------------ diet plan assignments -------------------------- */
+
+    [HttpGet("diet-plans/{dietPlanId:guid}/assignments")]
+    public async Task<IActionResult> GetDietPlanAssignments(Guid dietPlanId, CancellationToken cancellationToken) =>
+        (await consoleService.GetDietPlanAssignmentsAsync(SessionToken, dietPlanId, cancellationToken)).ToActionResult(logger);
+
+    [HttpPost("diet-plans/assignments")]
+    public async Task<IActionResult> AssignDietPlan([FromBody] AdminDietPlanAssignRequest request, CancellationToken cancellationToken) =>
+        (await consoleService.AssignDietPlanAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpDelete("diet-plans/{dietPlanId:guid}/assignments/{userId:guid}")]
+    public async Task<IActionResult> RemoveDietPlanAssignment(Guid dietPlanId, Guid userId, CancellationToken cancellationToken) =>
+        (await consoleService.RemoveDietPlanAssignmentAsync(SessionToken, dietPlanId, userId, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpPost("diet-plans/days")]
+    public async Task<IActionResult> SaveDietPlanDay([FromBody] AdminDietPlanDayUpsertRequest request, CancellationToken cancellationToken) =>
+        (await consoleService.SaveDietPlanDayAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpDelete("diet-plans/days/{dietPlanDayId:guid}")]
+    public async Task<IActionResult> DeleteDietPlanDay(Guid dietPlanDayId, CancellationToken cancellationToken) =>
+        (await consoleService.DeleteDietPlanDayAsync(SessionToken, dietPlanDayId, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpPost("diet-plans/meals")]
+    public async Task<IActionResult> SaveDietPlanMeal([FromBody] AdminDietPlanMealUpsertRequest request, CancellationToken cancellationToken) =>
+        (await consoleService.SaveDietPlanMealAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+
+    [HttpDelete("diet-plans/meals/{dietPlanMealId:guid}")]
+    public async Task<IActionResult> DeleteDietPlanMeal(Guid dietPlanMealId, CancellationToken cancellationToken) =>
+        (await consoleService.DeleteDietPlanMealAsync(SessionToken, dietPlanMealId, ClientIp, cancellationToken)).ToActionResult(logger);
 
     /* --------------------------------- users -------------------------------- */
 

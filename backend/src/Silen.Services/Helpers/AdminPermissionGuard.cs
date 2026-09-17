@@ -64,4 +64,43 @@ public static class AdminPermissionGuard
 
         return (actor, new HashSet<string>(permissions, StringComparer.Ordinal));
     }
+
+    /// <summary>
+    /// Same resolution and actor shape as <see cref="RequireWithPermissionsAsync"/>, but
+    /// passes when the operator holds *any* one of the supplied permissions.
+    ///
+    /// This exists for the two content-library reads that other editors depend on: an
+    /// operator allowed to edit splits still has to populate the split-day exercise
+    /// picker, and one allowed to edit diet plans still has to populate the meal-slot
+    /// picker - whether or not they also hold the library's own read permission. Gating
+    /// those reads on `.read` alone left write-only operators with empty dropdowns and
+    /// a message wrongly claiming the library itself was empty.
+    /// </summary>
+    public static async Task<(AdminActorModel Actor, IReadOnlySet<string> Permissions)> RequireAnyAsync(
+        IAdminProvider adminProvider,
+        IAdminRbacProvider adminRbacProvider,
+        string? sessionToken,
+        IReadOnlyCollection<string> permissions,
+        string? clientIp,
+        CancellationToken cancellationToken)
+    {
+        var session = await AdminSessionResolver.ResolveOrThrowAsync(adminProvider, sessionToken, cancellationToken);
+        var granted = await adminRbacProvider.GetPermissionsAsync(session.AdminUserId, cancellationToken);
+
+        if (!permissions.Any(granted.Contains))
+        {
+            throw new ForbiddenException(
+                $"Operator tag {LogRedaction.Tag(session.Username)} called an endpoint requiring one of " +
+                $"'{string.Join("', '", permissions)}' without holding any of them.");
+        }
+
+        var actor = new AdminActorModel
+        {
+            AdminUserId = session.AdminUserId,
+            Username = session.Username,
+            Ip = clientIp
+        };
+
+        return (actor, new HashSet<string>(granted, StringComparer.Ordinal));
+    }
 }

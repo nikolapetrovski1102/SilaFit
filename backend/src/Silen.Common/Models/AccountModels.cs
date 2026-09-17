@@ -62,3 +62,10 @@ public sealed class AccountExportModel
     public List<WorkoutSetLogEntryModel> WorkoutSetLogs { get; set; } = [];
     public UserSubscriptionModel? Subscription { get; set; }
 }
+
+/// <summary>Confirmation returned to the app once the export has been emailed -
+/// the export payload itself never reaches the client, only this receipt.</summary>
+public sealed class AccountExportRequestResultModel
+{
+    public string Email { get; set; } = string.Empty;
+}

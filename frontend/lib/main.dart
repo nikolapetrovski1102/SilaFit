@@ -12,6 +12,11 @@ import 'core/theme/app_theme.dart';
 import 'features/account/account_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/auth_repository.dart';
+import 'features/diet_guides/diet_guide_controller.dart';
+import 'features/diet_guides/diet_guide_repository.dart';
+import 'features/diet_plans/diet_plan_controller.dart';
+import 'features/diet_plans/diet_plan_repository.dart';
+import 'features/exercises/exercises_repository.dart';
 import 'features/meals/meal_controller.dart';
 import 'features/meals/meal_repository.dart';
 import 'features/notifications/notifications_repository.dart';
@@ -28,6 +33,8 @@ import 'features/settings/settings_controller.dart';
 import 'features/settings/settings_repository.dart';
 import 'features/splits/splits_controller.dart';
 import 'features/splits/splits_repository.dart';
+import 'features/today/active_workout_draft_store.dart';
+import 'features/today/exercise_memory_store.dart';
 import 'features/today/today_controller.dart';
 import 'features/today/today_repository.dart';
 import 'root_shell.dart';
@@ -42,18 +49,93 @@ void main() async {
 /// reads its repository/controller through Provider instead of
 /// constructing its own copy - the "shared methods, no duplicates" rule
 /// applied to the app's plumbing.
-class SilenApp extends StatelessWidget {
+class SilenApp extends StatefulWidget {
   const SilenApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final sessionStore = SessionStore();
-    final apiClient = ApiClient(sessionStore: sessionStore);
-    final notificationsRepository = NotificationsRepository(apiClient);
-    // App-scoped so the FCM token-refresh subscription lives as long as the
-    // app does; every registration path goes through this one instance.
-    final pushMessagingService = PushMessagingService(notificationsRepository);
+  State<SilenApp> createState() => _SilenAppState();
+}
 
+class _SilenAppState extends State<SilenApp> {
+  // Owned here, above the reload key, so a reload never tears down the device
+  // identity, the HTTP client, or the FCM token-refresh subscription - only
+  // the per-run controllers and screens below are rebuilt.
+  final _sessionStore = SessionStore();
+  late final _apiClient = ApiClient(sessionStore: _sessionStore);
+  late final _notificationsRepository = NotificationsRepository(_apiClient);
+  // App-scoped so the FCM token-refresh subscription lives as long as the
+  // app does; every registration path goes through this one instance.
+  late final _pushMessagingService =
+      PushMessagingService(_notificationsRepository);
+
+  // Also above the reload key, so a snackbar queued right before a reload
+  // (e.g. "Your account has been deleted.") is carried into the fresh tree.
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+  // One key per "app run". Bumping it rebuilds every provider, controller, and
+  // screen below from scratch - a genuine cold-start reload rather than a
+  // partial reset that leaves stale state behind.
+  Key _runKey = UniqueKey();
+
+  /// Wired as `AuthController`'s reload hook, so this is what sign-out and
+  /// account deletion run. It discards the SharedPreferences-backed per-user
+  /// caches - which, unlike the provider graph, outlive the key bump - before
+  /// rebuilding the run, so neither the incoming guest nor a later account
+  /// ever sees the outgoing user's in-progress workout or remembered weights.
+  Future<void> _reload() async {
+    await _clearLocalUserCache();
+    if (!mounted) return;
+    setState(() => _runKey = UniqueKey());
+  }
+
+  /// Best-effort: a storage hiccup must never stop the reload that actually
+  /// signs the user out.
+  Future<void> _clearLocalUserCache() async {
+    try {
+      await ActiveWorkoutDraftStore.instance.clear();
+    } catch (_) {}
+    try {
+      await ExerciseMemoryStore.instance.clear();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _AppRun(
+      key: _runKey,
+      sessionStore: _sessionStore,
+      apiClient: _apiClient,
+      notificationsRepository: _notificationsRepository,
+      pushMessagingService: _pushMessagingService,
+      messengerKey: _messengerKey,
+      onReload: _reload,
+    );
+  }
+}
+
+/// The dependency graph for one app run. Rebuilt wholesale when the root bumps
+/// its key, which is what makes sign-out/account deletion a real reload rather
+/// than just a navigation change.
+class _AppRun extends StatelessWidget {
+  const _AppRun({
+    super.key,
+    required this.sessionStore,
+    required this.apiClient,
+    required this.notificationsRepository,
+    required this.pushMessagingService,
+    required this.messengerKey,
+    required this.onReload,
+  });
+
+  final SessionStore sessionStore;
+  final ApiClient apiClient;
+  final NotificationsRepository notificationsRepository;
+  final PushMessagingService pushMessagingService;
+  final GlobalKey<ScaffoldMessengerState> messengerKey;
+  final Future<void> Function() onReload;
+
+  @override
+  Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         Provider.value(value: sessionStore),
@@ -61,6 +143,9 @@ class SilenApp extends StatelessWidget {
         Provider(create: (_) => AuthRepository(apiClient)),
         Provider(create: (_) => TodayRepository(apiClient)),
         Provider(create: (_) => SplitsRepository(apiClient)),
+        Provider(create: (_) => ExercisesRepository(apiClient)),
+        Provider(create: (_) => DietPlanRepository(apiClient)),
+        Provider(create: (_) => DietGuideRepository(apiClient)),
         Provider(create: (_) => ProgressRepository(apiClient)),
         Provider(create: (_) => AnalyticsRepository(apiClient)),
         Provider(create: (_) => PlansRepository(apiClient)),
@@ -70,13 +155,28 @@ class SilenApp extends StatelessWidget {
         Provider.value(value: pushMessagingService),
         Provider(create: (_) => AccountRepository(apiClient)),
         ChangeNotifierProvider(
-            create: (ctx) =>
-                AuthController(ctx.read<AuthRepository>(), sessionStore)
-                  ..bootstrap()),
+            create: (ctx) => AuthController(
+                  ctx.read<AuthRepository>(),
+                  sessionStore,
+                  onReload: onReload,
+                )..bootstrap()),
         ChangeNotifierProvider(
             create: (ctx) => TodayController(ctx.read<TodayRepository>())),
         ChangeNotifierProvider(
             create: (ctx) => SplitsController(ctx.read<SplitsRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) => MySplitsController(ctx.read<SplitsRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) => DietPlansController(ctx.read<DietPlanRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) =>
+                MyDietPlansController(ctx.read<DietPlanRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) =>
+                ActiveDietPlanController(ctx.read<DietPlanRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) =>
+                DietGuidesController(ctx.read<DietGuideRepository>())),
         ChangeNotifierProvider(
             create: (ctx) =>
                 ProgressController(ctx.read<ProgressRepository>())),
@@ -111,6 +211,7 @@ class SilenApp extends StatelessWidget {
           return MaterialApp(
             title: 'SilaFit',
             debugShowCheckedModeBanner: false,
+            scaffoldMessengerKey: messengerKey,
             theme: buildSilenTheme(Brightness.light),
             darkTheme: buildSilenTheme(Brightness.dark),
             themeMode: themeMode,

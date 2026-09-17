@@ -20,11 +20,14 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IWorkoutSessionProvider, WorkoutSessionProvider>();
         services.AddScoped<ISplitsProvider, SplitsProvider>();
         services.AddScoped<IExercisesProvider, ExercisesProvider>();
+        services.AddScoped<IDietPlansProvider, DietPlansProvider>();
+        services.AddScoped<IDietGuidesProvider, DietGuidesProvider>();
         services.AddScoped<IPlansProvider, PlansProvider>();
         services.AddScoped<IUserProfileProvider, UserProfileProvider>();
         services.AddScoped<IMealPlanningProvider, MealPlanningProvider>();
         services.AddScoped<IAnalyticsProvider, AnalyticsProvider>();
         services.AddScoped<IMonthlyReviewProvider, MonthlyReviewProvider>();
+        services.AddScoped<IWeeklyPlanGenerationProvider, WeeklyPlanGenerationProvider>();
         services.AddScoped<INotificationProvider, NotificationProvider>();
         services.AddScoped<IAdminProvider, AdminProvider>();
         services.AddScoped<IAdminRbacProvider, AdminRbacProvider>();

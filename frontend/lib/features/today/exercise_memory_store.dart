@@ -58,4 +58,11 @@ class ExerciseMemoryStore {
     await prefs.setString(
         _key, jsonEncode(all.map((id, memory) => MapEntry(id, memory.toJson()))));
   }
+
+  /// Drops every remembered exercise. Called on sign-out so the outgoing
+  /// user's weights never seed the next account/guest's fresh set table.
+  Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
 }

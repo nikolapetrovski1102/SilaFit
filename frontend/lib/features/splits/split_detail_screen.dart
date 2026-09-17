@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/utils/duration_format.dart';
 import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../today/today_controller.dart';
+import 'split_builder_screen.dart';
 import 'split_recommendation.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
+import 'splits_repository.dart';
 
 class SplitDetailScreen extends StatefulWidget {
   final SplitDetailController controller;
@@ -42,8 +47,24 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
     final ok = await widget.controller.activate();
     if (!mounted) return;
     if (ok) {
+      // Home's dashboard is loaded once and cached, so without this the newly
+      // activated split's session (and its exercises) would not appear until a
+      // manual pull-to-refresh.
+      context.read<TodayController>().load(force: true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${widget.splitName} is now your active split.')));
+    } else if (widget.controller.actionError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.controller.actionError!)));
+    }
+  }
+
+  Future<void> _keep() async {
+    final ok = await widget.controller.keep();
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('This split is now permanently yours.')));
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.controller.actionError!)));
@@ -55,9 +76,27 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          title: Text(widget.splitName, style: AppTypography.headlineSm)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(widget.splitName, style: AppTypography.headlineSm),
+        actions: [
+          if (widget.controller.state.data?.split.isEditableByMe == true)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () async {
+                final repository = context.read<SplitsRepository>();
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SplitBuilderScreen(
+                    controller: SplitBuilderController(repository,
+                        splitId: widget.controller.splitId),
+                  ),
+                ));
+                if (!mounted) return;
+                widget.controller.load(force: true);
+              },
+            ),
+        ],
+      ),
       body: AnimatedBuilder(
         animation: widget.controller,
         builder: (context, _) => SafeArea(
@@ -69,7 +108,8 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
               builder: (context, detail) => _DetailBody(
                   detail: detail,
                   controller: widget.controller,
-                  onActivate: _activate),
+                  onActivate: _activate,
+                  onKeep: _keep),
             ),
           ),
         ),
@@ -82,11 +122,13 @@ class _DetailBody extends StatelessWidget {
   final SplitDetail detail;
   final SplitDetailController controller;
   final VoidCallback onActivate;
+  final VoidCallback onKeep;
 
   const _DetailBody(
       {required this.detail,
       required this.controller,
-      required this.onActivate});
+      required this.onActivate,
+      required this.onKeep});
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +192,22 @@ class _DetailBody extends StatelessWidget {
                 isLoading: controller.isActivating,
                 onPressed: controller.activated ? null : onActivate,
               ),
+              if (detail.split.isAiGenerated &&
+                  detail.split.aiKeptAtUtc == null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                SecondaryPillButton(
+                  label: controller.isKeeping ? 'Keeping...' : 'Keep This Plan',
+                  icon: Icons.push_pin_outlined,
+                  onPressed: controller.isKeeping ? null : onKeep,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  "AI-generated for this week. Keep it and it's yours for good — "
+                  'otherwise it refreshes next Sunday.',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurfaceVariant),
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               Text('WEEKLY BREAKDOWN', style: AppTypography.labelCaps),
               const SizedBox(height: AppSpacing.sm),
@@ -239,7 +297,7 @@ class _DayCard extends StatelessWidget {
                 ),
               ),
               if (!day.day.isRestDay)
-                Text('${day.day.estimatedMinutes} min',
+                Text(formatMinutesLabel(day.day.estimatedMinutes),
                     style: AppTypography.labelSm
                         .copyWith(color: AppColors.onSurfaceVariant)),
             ],

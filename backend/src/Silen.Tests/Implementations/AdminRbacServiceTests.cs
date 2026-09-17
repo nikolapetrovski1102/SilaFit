@@ -339,6 +339,87 @@ public class AdminRbacServiceTests
         Assert.Equal(404, result.StatusCode);
     }
 
+    /* ------------------------------- ResendOperatorEmailConfirmationAsync ------------------------------ */
+
+    [Fact]
+    public async Task ResendOperatorEmailConfirmationAsync_UnknownOperator_ReturnsNotFoundFailure()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
+        adminRbacProvider.Setup(p => p.GetOperatorByUsernameAsync("ghost", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AdminOperatorModel?)null);
+
+        var result = await sut.ResendOperatorEmailConfirmationAsync(token, new AdminOperatorResendConfirmationRequest { Username = "ghost" }, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(404, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResendOperatorEmailConfirmationAsync_NoEmailOnFile_ReturnsValidationFailure()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
+        adminRbacProvider.Setup(p => p.GetOperatorByUsernameAsync("tode", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminOperatorModel { AdminUserId = Guid.NewGuid(), Username = "tode", Email = null, EmailConfirmedAtUtc = null });
+
+        var result = await sut.ResendOperatorEmailConfirmationAsync(token, new AdminOperatorResendConfirmationRequest { Username = "tode" }, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResendOperatorEmailConfirmationAsync_AlreadyConfirmed_ReturnsConflictWithoutSendingAgain()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
+        adminRbacProvider.Setup(p => p.GetOperatorByUsernameAsync("new-op", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminOperatorModel
+            {
+                AdminUserId = Guid.NewGuid(),
+                Username = "new-op",
+                Email = "new-op@example.com",
+                EmailConfirmedAtUtc = DateTime.UtcNow
+            });
+
+        var result = await sut.ResendOperatorEmailConfirmationAsync(token, new AdminOperatorResendConfirmationRequest { Username = "new-op" }, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(409, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResendOperatorEmailConfirmationAsync_HappyPath_ResendsToTheAddressOnFile()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.OperatorsManage);
+        var adminUserId = Guid.NewGuid();
+        adminRbacProvider.Setup(p => p.GetOperatorByUsernameAsync("new-op", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminOperatorModel
+            {
+                AdminUserId = adminUserId,
+                Username = "new-op",
+                Email = "new-op@example.com",
+                EmailConfirmedAtUtc = null
+            });
+        emailSender.Setup(e => e.SendAsync("new-op@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.ResendOperatorEmailConfirmationAsync(token, new AdminOperatorResendConfirmationRequest { Username = "new-op" }, null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(adminUserId, result.Data!.Id);
+        Assert.Equal("Confirmation email sent to new-op@example.com.", result.Data.Message);
+    }
+
+    [Fact]
+    public async Task ResendOperatorEmailConfirmationAsync_WithoutOperatorsManagePermission_ReturnsForbiddenFailure()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.AuditRead);
+
+        var result = await sut.ResendOperatorEmailConfirmationAsync(token, new AdminOperatorResendConfirmationRequest { Username = "new-op" }, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
     /* ------------------------------- GetRecentAuditAsync ------------------------------ */
 
     [Fact]

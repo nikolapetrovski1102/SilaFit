@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Silen.Common\Silen.Common.csproj" />
+    <ProjectReference Include="..\Silen.Data\Silen.Data.csproj" />
+    <ProjectReference Include="..\Silen.Services\Silen.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Optional, gitignored local overrides (real connection string + Firebase
+         service-account path) loaded when DOTNET_ENVIRONMENT=Development. -->
+    <None Update="appsettings.Development.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Microsoft.Data.SqlClient requires ICU/globalization to open a connection;
+         invariant mode throws NotSupportedException on TryOpen. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

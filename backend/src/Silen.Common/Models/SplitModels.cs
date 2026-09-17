@@ -45,6 +45,26 @@ public sealed class WorkoutSplitModel
     public string? TargetGender { get; set; }
     public string? WorkoutTypeLabel { get; set; }
     public string? SourceCategoriesJson { get; set; }
+
+    /// <summary>Set from the WorkoutSplits row when the caller built this split themselves
+    /// via the in-app builder (see 044_WorkoutSplitsUserOwnership.sql). Not serialized to the
+    /// client directly - <see cref="IsEditableByMe"/> is what the API exposes.</summary>
+    public Guid? OwnerUserId { get; set; }
+
+    /// <summary>Computed by SplitService: true only when OwnerUserId matches the
+    /// authenticated caller. Trainer-assigned and system splits are never editable,
+    /// regardless of who is asking.</summary>
+    public bool IsEditableByMe { get; set; }
+
+    /// <summary>True when Silen.Tools.WeeklyPlanGeneration wrote this split rather than the
+    /// user building it by hand (see 051_WeeklyAiPlans.sql).</summary>
+    public bool IsAiGenerated { get; set; }
+
+    /// <summary>Null while this AI-generated split is still eligible to be overwritten by
+    /// next Sunday's run; set once the user taps "Keep this plan", after which it is
+    /// permanent and the next run creates a fresh split instead. Always null for a
+    /// non-AI-generated split.</summary>
+    public DateTime? AiKeptAtUtc { get; set; }
 }
 
 public sealed class SplitDayModel
@@ -60,8 +80,21 @@ public sealed class SplitDayModel
 public sealed class SplitDayExerciseModel
 {
     public Guid SplitDayId { get; set; }
+
+    /// <summary>Identity of this row within SplitDayExercises - needed by the
+    /// in-app builder to address a specific exercise slot for edit/delete
+    /// (ExerciseId alone is not unique per day: the same exercise can appear
+    /// twice, e.g. warm-up and working sets).</summary>
+    public Guid SplitDayExerciseId { get; set; }
+
     public Guid ExerciseId { get; set; }
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>Coarse catalogue muscle group (chest/back/legs/shoulders/arms/core).
+    /// Surfaced to the builder so it can suggest more of what a day already
+    /// trains when the day's title is generic ("Push", "Day 1").</summary>
+    public string MuscleGroup { get; set; } = string.Empty;
+
     public byte SortOrder { get; set; }
     public byte TargetSets { get; set; }
     public byte TargetRepsLow { get; set; }
@@ -90,4 +123,15 @@ public sealed class ExerciseModel
     public string? EquipmentType { get; set; }
     public bool IsCompound { get; set; }
     public string? DemoVideoUrl { get; set; }
+
+    /// <summary>Set only by the suggestion read (<c>ExercisesService.SuggestAsync</c>):
+    /// higher means a better fit for this person's equipment and experience level.
+    /// Null on plain search results, so a client can tell the two apart.</summary>
+    public int? MatchScore { get; set; }
+
+    /// <summary>Short human-readable justification, shown beside a suggestion. Every
+    /// applicable signal is included, joined with " · ", so a beginner with dumbbells
+    /// is told both why it suits their level and why it's doable with their kit.
+    /// Null when nothing specific stood out.</summary>
+    public string? MatchReason { get; set; }
 }

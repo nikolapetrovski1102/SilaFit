@@ -8,11 +8,10 @@ class AccountRepository {
 
   AccountRepository(this._client);
 
-  /// Raw export payload, kept as the untyped JSON the server returns rather
-  /// than parsed into models - it's written straight to a file for sharing,
-  /// never displayed or edited in the app.
-  Future<Map<String, dynamic>> exportData() =>
-      _client.get('/account/export', (json) => json as Map<String, dynamic>);
+  /// Triggers the server to email the full data export to the account's
+  /// address; returns that address so the UI can confirm where it went.
+  Future<String> exportData() => _client.post(
+      '/account/export', (json) => (json as Map<String, dynamic>)['email'] as String);
 
   Future<void> deleteAccount() => _client.delete('/account', (_) => null);
 }

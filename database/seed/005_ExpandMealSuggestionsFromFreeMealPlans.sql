@@ -1,6 +1,11 @@
 USE SilenDb;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Expands the "Suggested this month" catalog (003_SeedMealSuggestions.sql,
 -- 004_ExpandMealSuggestions.sql) with 157 real recipes extracted from the
 -- 13 free 7-day meal-plan PDFs at

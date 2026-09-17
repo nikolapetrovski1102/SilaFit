@@ -36,12 +36,17 @@
      that will actually be accepted. */
   var MUSCLE_GROUPS = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core'];
   var MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-  var SPLIT_CATEGORIES = ['PushPullLegs', 'UpperLower', 'FullBody', 'ArnoldSplit', 'PHUL', 'PHAT', 'BroSplit', 'Circuit', 'Powerlifting', 'Calisthenics', 'GluteFocus'];
+  // 'Custom' is a real, server-accepted category (a user-built split keeps it),
+  // and it was missing here: opening such a split left the <select> with no
+  // matching option, so the browser fell back to the first entry and saving
+  // silently recategorised the split.
+  var SPLIT_CATEGORIES = ['PushPullLegs', 'UpperLower', 'FullBody', 'ArnoldSplit', 'PHUL', 'PHAT', 'BroSplit', 'Circuit', 'Powerlifting', 'Calisthenics', 'GluteFocus', 'Custom'];
   var SPLIT_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
   var RECOMMENDED_GOALS = ['BuildMuscle', 'LoseFat', 'MaintainActive'];
   /* Mirrors Silen.Services.Helpers.AdminContentFieldRules.SplitVisibilities:
      Private = owner only, Public = every app user, Shared = assigned users. */
   var SPLIT_VISIBILITIES = ['Private', 'Public', 'Shared'];
+  var DIET_PLAN_PERIODS = ['Weekly', 'Monthly'];
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   /* ---------------- Toasts ---------------- */
@@ -161,7 +166,7 @@
   var myPermissions = [];
   function has(permission) { return myPermissions.indexOf(permission) > -1; }
 
-  var CONTENT_NAV_IDS = ['navSplits', 'navSuggestions', 'navExercises', 'navPlans', 'navUsers'];
+  var CONTENT_NAV_IDS = ['navSplits', 'navDietPlans', 'navSuggestions', 'navExercises', 'navPlans', 'navUsers'];
 
   function applyContentNavGating() {
     CONTENT_NAV_IDS.forEach(function (id) {
@@ -177,7 +182,50 @@
   var suggestionsCache = [];
   var plansCache = [];
   var splitsCache = [];
+  var dietPlansCache = [];
   var usersCache = [];
+
+  /* ================================================================
+     Shared picker helpers.
+
+     Both sub-editors (a split day's exercises, a diet day's meals) let the
+     operator search, filter and change the referenced library row, so the
+     option markup lives here instead of being duplicated per editor. Every
+     option carries the row's key details - muscle group, meal type, calories -
+     so the choice can be made without leaving the editor.
+     ================================================================ */
+
+  /// Options for an exercise <select>, alphabetised, filtered by an optional
+  /// free-text term and/or muscle group, with `selectedId` pre-selected.
+  function exerciseOptionHtml(selectedId, search, muscle) {
+    var term = (search || '').trim().toLowerCase();
+    return exercisesCache.filter(function (e) {
+      if (muscle && e.muscleGroup !== muscle) return false;
+      if (!term) return true;
+      return (e.name || '').toLowerCase().indexOf(term) !== -1;
+    }).sort(function (a, b) { return a.name.localeCompare(b.name); })
+      .map(function (e) {
+        return '<option value="' + e.exerciseId + '"' +
+          (e.exerciseId === selectedId ? ' selected' : '') + '>' +
+          esc(e.name) + ' (' + esc(e.muscleGroup) + ')</option>';
+      }).join('');
+  }
+
+  /// Options for a meal <select>, alphabetised, filtered by an optional
+  /// free-text term and/or meal type, with `selectedId` pre-selected.
+  function mealOptionHtml(selectedId, search, mealType) {
+    var term = (search || '').trim().toLowerCase();
+    return suggestionsCache.filter(function (s) {
+      if (mealType && s.mealType !== mealType) return false;
+      if (!term) return true;
+      return (s.title || '').toLowerCase().indexOf(term) !== -1;
+    }).sort(function (a, b) { return a.title.localeCompare(b.title); })
+      .map(function (s) {
+        return '<option value="' + s.mealSuggestionId + '"' +
+          (s.mealSuggestionId === selectedId ? ' selected' : '') + '>' +
+          esc(s.title) + ' · ' + esc(s.mealType) + ' (' + s.caloriesKcal + ' kcal)</option>';
+      }).join('');
+  }
 
   /* ================================================================
      OVERVIEW
@@ -222,6 +270,7 @@
 
     var libraryRows = [
       has('content.splits.read') ? { label: 'Splits', value: splitsCache.length, sub: splitsCache.reduce(function (s, x) { return s + x.dayCount; }, 0) + ' days total', view: 'splits' } : null,
+      has('content.diet_plans.read') ? { label: 'Diet plans', value: dietPlansCache.length, sub: dietPlansCache.reduce(function (s, x) { return s + x.dayCount; }, 0) + ' days total', view: 'diet-plans' } : null,
       has('content.exercises.read') ? { label: 'Exercises', value: exercisesCache.length, sub: 'reference library', view: 'exercises' } : null,
       has('content.suggestions.read') ? { label: 'Meal suggestions', value: suggestionsCache.length, sub: 'app + landing strip', view: 'suggestions' } : null,
       has('content.plans.read') ? { label: 'Subscription plans', value: plansCache.length, sub: plansCache.reduce(function (s, x) { return s + x.activeSubscriberCount; }, 0) + ' active subs', view: 'plans' } : null
@@ -403,7 +452,17 @@
           '</select></div>' +
         '<div class="field field--full"><label>Description</label>' +
           '<textarea class="textarea" id="spDesc" placeholder="Who is this split for?">' + esc(s.description || '') + '</textarea></div>' +
-        '<div class="field field--full"><label>Hero image URL</label><input class="input" id="spHero" value="' + esc(s.heroImageUrl || '') + '" placeholder="https://…" /></div>' +
+        '<div class="field field--full"><label>Hero image</label>' +
+          '<input class="input" id="spHero" value="' + esc(s.heroImageUrl || '') + '" placeholder="https://…" />' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-top:8px">' +
+            '<input type="file" id="spHeroFile" accept="image/png,image/jpeg,image/webp" style="display:none" />' +
+            '<button type="button" class="btn btn--ghost btn--sm" id="spHeroUploadBtn">Upload image…</button>' +
+            '<span class="label-sm" id="spHeroUploadStatus" style="color:var(--on-surface-variant)"></span>' +
+          '</div>' +
+          (s.heroImageUrl
+            ? '<img id="spHeroPreview" src="' + esc(s.heroImageUrl) + '" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:block" />'
+            : '<img id="spHeroPreview" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:none" />') +
+        '</div>' +
       '</div>' +
       '<div class="modal__actions">' +
         '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
@@ -411,6 +470,26 @@
       '</div>'
     );
     wireClose(backdrop);
+
+    $('#spHeroUploadBtn').addEventListener('click', function () {
+      $('#spHeroFile').click();
+    });
+
+    $('#spHeroFile').addEventListener('change', function () {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      var status = $('#spHeroUploadStatus');
+      status.textContent = 'Uploading…';
+      auth.uploadImage(file).then(function (result) {
+        if (!toastOnFailure(result, 'Could not upload image.')) { status.textContent = ''; return; }
+        var url = result.data && result.data.url;
+        $('#spHero').value = url || '';
+        var preview = $('#spHeroPreview');
+        if (url) { preview.src = url; preview.style.display = 'block'; }
+        status.textContent = 'Uploaded.';
+        toast('Image uploaded.');
+      });
+    });
 
     $('#spSave').addEventListener('click', function () {
       var payload = {
@@ -443,8 +522,14 @@
     var activeDayId = null; /* null when a brand-new, unsaved day is selected */
     var draftDay = null;
 
+    var showAllExercises = false;
+
     var backdrop = openModal(
       modalHead('Manage days') +
+      '<div class="modal__actions" style="justify-content:flex-start;margin-bottom:8px;">' +
+        '<button class="btn btn--ghost btn--sm" id="splitAllExercisesToggle">All exercises in this split</button>' +
+      '</div>' +
+      '<div id="splitAllExercisesPanel" style="display:none"></div>' +
       '<div class="week-tabs" id="splitDayTabs"></div>' +
       '<div id="splitDayBody"></div>' +
       '<div class="modal__actions">' +
@@ -454,6 +539,53 @@
     );
     wireClose(backdrop);
 
+    $('#splitAllExercisesToggle').addEventListener('click', function () {
+      showAllExercises = !showAllExercises;
+      renderAllExercisesPanel();
+    });
+
+    function renderAllExercisesPanel() {
+      var panel = $('#splitAllExercisesPanel');
+      var tabs = $('#splitDayTabs');
+      var body = $('#splitDayBody');
+      $('#splitAllExercisesToggle').textContent = showAllExercises ? 'Hide all exercises' : 'All exercises in this split';
+
+      if (!showAllExercises) {
+        panel.style.display = 'none';
+        tabs.style.display = '';
+        body.style.display = '';
+        return;
+      }
+      tabs.style.display = 'none';
+      body.style.display = 'none';
+      panel.style.display = '';
+
+      var byDay = {};
+      detail.dayExercises.forEach(function (ex) {
+        (byDay[ex.splitDayId] = byDay[ex.splitDayId] || []).push(ex);
+      });
+
+      if (!detail.days.length) {
+        panel.innerHTML = '<div class="empty-state" style="padding:24px"><div class="body-sm">No days yet.</div></div>';
+        return;
+      }
+
+      panel.innerHTML = detail.days.map(function (d) {
+        var rows = (byDay[d.splitDayId] || []).sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+        var heading = 'Day ' + d.dayIndex + (d.title ? ' — ' + esc(d.title) : '') + (d.isRestDay ? ' (rest)' : '');
+        var rowsHtml = rows.length
+          ? rows.map(function (ex) {
+              return '<div class="meal-slot" style="padding:8px 12px;">' +
+                '<span class="body-sm">' + esc(ex.exerciseName) + '</span>' +
+                '<span class="label-sm" style="color:var(--on-surface-variant);margin-left:8px;">' +
+                  ex.targetSets + ' × ' + ex.targetRepsLow + '–' + ex.targetRepsHigh + '</span>' +
+              '</div>';
+            }).join('')
+          : '<p class="body-sm" style="color:var(--on-surface-variant);padding:0 12px;">No exercises on this day.</p>';
+        return '<div class="eyebrow" style="margin-top:16px;">' + heading + '</div>' + rowsHtml;
+      }).join('');
+    }
+
     function load() {
       return auth.getSplitDetail(splitId).then(function (result) {
         if (!toastOnFailure(result, 'Could not load the split.')) { closeModal(); return; }
@@ -462,6 +594,7 @@
         if (draftDay) {
           renderTabs();
           renderDayBody();
+          renderAllExercisesPanel();
           return;
         }
         if (!activeDayId && detail.days.length) activeDayId = detail.days[0].splitDayId;
@@ -470,6 +603,7 @@
         }
         renderTabs();
         renderDayBody();
+        renderAllExercisesPanel();
       });
     }
 
@@ -578,7 +712,7 @@
         return (
           '<div class="meal-slot" data-exercise-row="' + ex.splitDayExerciseId + '">' +
             '<div class="meal-slot__grid">' +
-              '<div class="field field--full"><label>Exercise</label><input class="input" value="' + esc(ex.exerciseName) + ' (' + esc(ex.muscleGroup) + ')" disabled /></div>' +
+              '<div class="field field--full"><label>Exercise</label><select class="select" data-ex-field="exerciseId">' + exerciseOptionHtml(ex.exerciseId) + '</select></div>' +
               '<div class="field"><label>Sets</label><input class="input" type="number" min="1" data-ex-field="targetSets" value="' + ex.targetSets + '" /></div>' +
               '<div class="field"><label>Reps low</label><input class="input" type="number" min="1" data-ex-field="targetRepsLow" value="' + ex.targetRepsLow + '" /></div>' +
               '<div class="field"><label>Reps high</label><input class="input" type="number" min="1" data-ex-field="targetRepsHigh" value="' + ex.targetRepsHigh + '" /></div>' +
@@ -600,7 +734,7 @@
           var payload = {
             splitDayExerciseId: id,
             splitDayId: day.splitDayId,
-            exerciseId: ex.exerciseId,
+            exerciseId: $('[data-ex-field="exerciseId"]', row).value,
             sortOrder: ex.sortOrder,
             targetSets: num($('[data-ex-field="targetSets"]', row).value),
             targetRepsLow: num($('[data-ex-field="targetRepsLow"]', row).value),
@@ -625,22 +759,43 @@
         });
       });
 
-      var options = exercisesCache.slice().sort(function (a, b) { return a.name.localeCompare(b.name); })
-        .map(function (e) { return '<option value="' + e.exerciseId + '">' + esc(e.name) + ' (' + esc(e.muscleGroup) + ')</option>'; }).join('');
+      if (!exercisesCache.length) {
+        // Only reached when the library itself is unavailable - not when a
+        // filter happens to match nothing (the picker below handles that).
+        $('#dayExerciseAddRow').innerHTML =
+          '<p class="body-sm">No exercises are available to add. Add some in the Exercises view first.</p>';
+        return;
+      }
 
       $('#dayExerciseAddRow').innerHTML =
         '<div class="meal-slot__grid">' +
-          '<div class="field field--full"><label>Add exercise</label><select class="select" id="addExSelect">' + options + '</select></div>' +
+          '<div class="field field--full"><label>Search exercises</label>' +
+            '<input class="input" id="addExSearch" placeholder="Filter by name…" autocomplete="off" /></div>' +
+          '<div class="field"><label>Muscle group</label>' +
+            '<select class="select" id="addExMuscle"><option value="">Any muscle group</option>' +
+              MUSCLE_GROUPS.map(function (g) {
+                return '<option value="' + g + '">' + g.charAt(0).toUpperCase() + g.slice(1) + '</option>';
+              }).join('') +
+            '</select></div>' +
+          '<div class="field field--full"><label>Exercise <span id="addExCount"></span></label>' +
+            '<select class="select" id="addExSelect"></select></div>' +
           '<div class="field"><label>Sets</label><input class="input" type="number" min="1" id="addExSets" value="3" /></div>' +
           '<div class="field"><label>Reps low</label><input class="input" type="number" min="1" id="addExRepsLow" value="8" /></div>' +
           '<div class="field"><label>Reps high</label><input class="input" type="number" min="1" id="addExRepsHigh" value="12" /></div>' +
           '<button class="btn btn--secondary btn--sm" id="addExBtn">Add</button>' +
         '</div>';
 
-      if (!options) {
-        $('#dayExerciseAddRow').innerHTML = '<p class="body-sm">Add exercises to the library first.</p>';
-        return;
+      function refreshAddExerciseOptions() {
+        var html = exerciseOptionHtml(null, $('#addExSearch').value, $('#addExMuscle').value);
+        $('#addExSelect').innerHTML = html || '<option value="">No exercises match this filter</option>';
+        var count = html ? $('#addExSelect').options.length : 0;
+        $('#addExCount').textContent = count ? '(' + count + ')' : '';
+        $('#addExBtn').disabled = count === 0;
       }
+
+      refreshAddExerciseOptions();
+      $('#addExSearch').addEventListener('input', refreshAddExerciseOptions);
+      $('#addExMuscle').addEventListener('change', refreshAddExerciseOptions);
 
       $('#addExBtn').addEventListener('click', function () {
         var payload = {
@@ -794,6 +949,542 @@
         $('#assignActive').checked = false;
         load();
         loadSplits();
+      });
+    });
+
+    load();
+  }
+
+  /* ================================================================
+     DIET PLANS — weekly/monthly meal templates (structural clone of Splits)
+     ================================================================ */
+  var dietPlanPeriodFilter = 'all';
+
+  function renderDietPlanFilters() {
+    var sel = $('#dietPlanPeriodFilter');
+    if (!sel) return;
+    sel.innerHTML = '<option value="all">All periods</option>' +
+      DIET_PLAN_PERIODS.map(function (p) {
+        return '<option value="' + p + '"' + (dietPlanPeriodFilter === p ? ' selected' : '') + '>' + p + '</option>';
+      }).join('');
+  }
+
+  function loadDietPlans() {
+    return auth.getDietPlans().then(function (result) {
+      if (!toastOnFailure(result, 'Could not load diet plans.')) return;
+      dietPlansCache = result.data || [];
+      renderDietPlans();
+    });
+  }
+
+  function renderDietPlans() {
+    renderDietPlanFilters();
+    var plans = dietPlansCache.filter(function (p) {
+      return dietPlanPeriodFilter === 'all' || p.periodType === dietPlanPeriodFilter;
+    });
+
+    var grid = $('#dietPlanGrid');
+    if (!grid) return;
+    if (!plans.length) {
+      grid.innerHTML =
+        '<div class="card empty-state" style="grid-column:1/-1">' +
+          '<img src="assets/img/mascot/ready.png" alt="Mascot ready" />' +
+          '<div class="headline-sm">No diet plans yet</div>' +
+          '<p class="body-sm">Create a plan, then add its days and meals.</p>' +
+        '</div>';
+      return;
+    }
+
+    grid.innerHTML = plans.map(function (p) {
+      /* A trainer only ever gets the controls for plans they own (canManage is
+         computed server-side from ownership + content.diet_plans.manage_all). */
+      var actions = p.canManage ? (
+        '<button class="icon-btn" data-edit-diet-plan="' + p.dietPlanId + '" title="Edit details">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
+        '</button>' +
+        '<button class="icon-btn icon-btn--danger" data-del-diet-plan="' + p.dietPlanId + '" title="Delete">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
+        '</button>'
+      ) : '';
+
+      var foot = '';
+      if (p.canManage) {
+        foot += '<button class="btn btn--secondary btn--sm" data-manage-diet-days="' + p.dietPlanId + '">Manage days</button>';
+        if (has('content.diet_plans.assign')) {
+          foot += '<button class="btn btn--primary btn--sm" data-assign-diet-plan="' + p.dietPlanId + '">Assign to clients</button>';
+        }
+      }
+
+      return (
+        '<article class="card mp-card">' +
+          '<div class="mp-card__head">' +
+            '<span class="chip chip--accent">' + esc(p.periodType) + '</span>' +
+            (p.isSystemDefault ? '<span class="chip">System</span>' : '') +
+            '<span class="spacer"></span>' +
+            '<div class="row-actions">' + actions + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="headline-sm">' + esc(p.name) + '</div>' +
+            '<div class="mp-card__desc" style="margin-top:6px">' + esc(p.description || '') + '</div>' +
+          '</div>' +
+          '<div class="mp-card__targets">' +
+            '<span class="chip">' + esc(p.visibility || 'Public') + '</span>' +
+            '<span class="chip">' + p.durationDays + ' days</span>' +
+            '<span class="chip">' + p.dayCount + ' scheduled</span>' +
+            '<span class="chip">' + p.mealCount + ' meals</span>' +
+            (p.ownerUsername ? '<span class="chip">by ' + esc(p.ownerUsername) + '</span>' : '') +
+            (p.assignedUserCount ? '<span class="chip chip--gold">' + p.assignedUserCount + ' assigned</span>' : '') +
+            (p.activeUserCount ? '<span class="chip chip--accent">' + p.activeUserCount + ' active users</span>' : '') +
+          '</div>' +
+          (foot ? '<div class="mp-card__foot">' + foot + '</div>' : '') +
+        '</article>'
+      );
+    }).join('');
+
+    $$('[data-edit-diet-plan]').forEach(function (b) {
+      b.addEventListener('click', function () { openDietPlanEditor(b.getAttribute('data-edit-diet-plan')); });
+    });
+    $$('[data-manage-diet-days]').forEach(function (b) {
+      b.addEventListener('click', function () { openDietPlanDaysEditor(b.getAttribute('data-manage-diet-days')); });
+    });
+    $$('[data-assign-diet-plan]').forEach(function (b) {
+      b.addEventListener('click', function () { openDietPlanAssignments(b.getAttribute('data-assign-diet-plan')); });
+    });
+    $$('[data-del-diet-plan]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = dietPlansCache.find(function (x) { return x.dietPlanId === b.getAttribute('data-del-diet-plan'); });
+        if (!p) return;
+        confirmDelete('Delete "' + p.name + '"?', 'Refused while any user has this plan active.', function () {
+          auth.deleteDietPlan(p.dietPlanId).then(function (result) {
+            if (!toastOnFailure(result, 'Could not delete diet plan.')) return;
+            toast((result.data && result.data.message) || 'Diet plan deleted.');
+            loadDietPlans();
+          });
+        });
+      });
+    });
+  }
+
+  function openDietPlanEditor(dietPlanId) {
+    var isNew = !dietPlanId;
+    var p = isNew
+      ? { name: '', periodType: DIET_PLAN_PERIODS[0], durationDays: 7, description: '', heroImageUrl: '', visibility: 'Private', sortOrder: 0 }
+      : dietPlansCache.find(function (x) { return x.dietPlanId === dietPlanId; });
+    if (!isNew && !p) return;
+
+    var backdrop = openModal(
+      modalHead(isNew ? 'New diet plan' : 'Edit diet plan') +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Name</label>' +
+          '<input class="input" id="dpName" value="' + esc(p.name) + '" placeholder="High Protein Cut — 7 Day" /></div>' +
+        '<div class="field"><label>Period</label>' +
+          '<select class="select" id="dpPeriod">' +
+            DIET_PLAN_PERIODS.map(function (t) { return '<option' + (p.periodType === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+          '</select></div>' +
+        '<div class="field"><label>Visibility</label>' +
+          '<select class="select" id="dpVisibility">' +
+            SPLIT_VISIBILITIES.map(function (v) { return '<option' + (p.visibility === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+          '</select></div>' +
+        '<div class="field field--full"><span class="label-sm" style="color:var(--on-surface-variant)">' +
+          'Private: only you. Public: every app user. Shared: only the clients you assign it to.' +
+        '</span></div>' +
+        '<div class="field"><label>Duration (days)</label><input class="input" type="number" min="1" max="31" id="dpDuration" value="' + p.durationDays + '" /></div>' +
+        '<div class="field field--full"><label>Description</label>' +
+          '<textarea class="textarea" id="dpDesc" placeholder="Who is this plan for?">' + esc(p.description || '') + '</textarea></div>' +
+        '<div class="field field--full"><label>Hero image URL</label><input class="input" id="dpHero" value="' + esc(p.heroImageUrl || '') + '" placeholder="https://…" /></div>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
+        '<button class="btn btn--primary" id="dpSave">' + (isNew ? 'Create plan' : 'Save changes') + '</button>' +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    $('#dpSave').addEventListener('click', function () {
+      var payload = {
+        dietPlanId: isNew ? null : p.dietPlanId,
+        name: $('#dpName').value.trim(),
+        periodType: $('#dpPeriod').value,
+        durationDays: num($('#dpDuration').value),
+        description: $('#dpDesc').value.trim(),
+        heroImageUrl: $('#dpHero').value.trim(),
+        visibility: $('#dpVisibility').value,
+        sortOrder: p.sortOrder || 0
+      };
+      if (!payload.name) { toast('Give the plan a name first', true); return; }
+      auth.saveDietPlan(payload).then(function (result) {
+        if (!toastOnFailure(result, 'Could not save diet plan.')) return;
+        toast((result.data && result.data.message) || 'Diet plan saved.');
+        closeModal();
+        loadDietPlans().then(function () {
+          if (isNew && result.data && result.data.id) openDietPlanDaysEditor(result.data.id);
+        });
+      });
+    });
+  }
+
+  /* ----- Days + meal-slot editor ----- */
+  function openDietPlanDaysEditor(dietPlanId) {
+    var detail = null;
+    var activeDayId = null; /* null when a brand-new, unsaved day is selected */
+    var draftDay = null;
+
+    var backdrop = openModal(
+      modalHead('Manage days') +
+      '<div class="week-tabs" id="dietPlanDayTabs"></div>' +
+      '<div id="dietPlanDayBody"></div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Close</button>' +
+      '</div>',
+      true
+    );
+    wireClose(backdrop);
+
+    function load() {
+      return auth.getDietPlanDetail(dietPlanId).then(function (result) {
+        if (!toastOnFailure(result, 'Could not load the diet plan.')) { closeModal(); return; }
+        detail = result.data;
+        detail.days.sort(function (a, b) { return a.dayIndex - b.dayIndex; });
+        if (draftDay) {
+          renderTabs();
+          renderDayBody();
+          return;
+        }
+        if (!activeDayId && detail.days.length) activeDayId = detail.days[0].dietPlanDayId;
+        if (activeDayId && !detail.days.some(function (d) { return d.dietPlanDayId === activeDayId; })) {
+          activeDayId = detail.days.length ? detail.days[0].dietPlanDayId : null;
+        }
+        renderTabs();
+        renderDayBody();
+      });
+    }
+
+    function renderTabs() {
+      var tabs = detail.days.map(function (d) {
+        var isActive = !draftDay && d.dietPlanDayId === activeDayId;
+        return '<button class="week-tab' + (isActive ? ' is-active' : '') + '" data-day-id="' + d.dietPlanDayId + '">' +
+          'Day ' + d.dayIndex + '</button>';
+      }).join('');
+      tabs += '<button class="week-tab' + (draftDay ? ' is-active' : '') + '" id="addDietDayTab">+ Add day</button>';
+      $('#dietPlanDayTabs').innerHTML = tabs;
+
+      $$('#dietPlanDayTabs [data-day-id]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          draftDay = null;
+          activeDayId = b.getAttribute('data-day-id');
+          renderTabs();
+          renderDayBody();
+        });
+      });
+      $('#addDietDayTab').addEventListener('click', function () {
+        var nextIndex = detail.days.reduce(function (m, d) { return Math.max(m, d.dayIndex); }, 0) + 1;
+        draftDay = { dietPlanDayId: null, dietPlanId: dietPlanId, dayIndex: nextIndex, title: '' };
+        renderTabs();
+        renderDayBody();
+      });
+    }
+
+    function currentDay() {
+      if (draftDay) return draftDay;
+      return detail.days.find(function (d) { return d.dietPlanDayId === activeDayId; }) || null;
+    }
+
+    function renderDayBody() {
+      var day = currentDay();
+      if (!day) {
+        $('#dietPlanDayBody').innerHTML = '<div class="empty-state" style="padding:24px"><div class="body-sm">No days yet — add one to get started.</div></div>';
+        return;
+      }
+
+      var dayMeals = day.dietPlanDayId
+        ? detail.meals.filter(function (m) { return m.dietPlanDayId === day.dietPlanDayId; }).sort(function (a, b) { return a.sortOrder - b.sortOrder; })
+        : [];
+
+      $('#dietPlanDayBody').innerHTML =
+        '<div class="form-grid" style="margin-top:16px;">' +
+          '<div class="field field--full"><label>Title</label><input class="input" id="dietDayTitle" value="' + esc(day.title || '') + '" placeholder="High protein reset" /></div>' +
+        '</div>' +
+        '<div class="modal__actions" style="justify-content:flex-start;gap:8px;">' +
+          '<button class="btn btn--primary btn--sm" id="dietDaySave">' + (day.dietPlanDayId ? 'Save day' : 'Add day') + '</button>' +
+          (day.dietPlanDayId ? '<button class="btn btn--danger btn--sm" id="dietDayDelete">Delete day</button>' : '') +
+        '</div>' +
+        (day.dietPlanDayId ? (
+          '<div class="eyebrow" style="margin-top:20px;">Meals</div>' +
+          '<div id="dietDayMealRows"></div>' +
+          '<div class="meal-slot" id="dietDayMealAddRow"></div>'
+        ) : '<p class="body-sm" style="margin-top:12px;">Save the day first, then add meals to it.</p>');
+
+      $('#dietDaySave').addEventListener('click', function () {
+        var payload = {
+          dietPlanDayId: day.dietPlanDayId,
+          dietPlanId: dietPlanId,
+          dayIndex: day.dayIndex,
+          title: $('#dietDayTitle').value.trim() || null
+        };
+        auth.saveDietPlanDay(payload).then(function (result) {
+          if (!toastOnFailure(result, 'Could not save day.')) return;
+          toast((result.data && result.data.message) || 'Day saved.');
+          draftDay = null;
+          if (result.data && result.data.id) activeDayId = result.data.id;
+          load();
+          loadDietPlans();
+        });
+      });
+
+      var deleteDietDayBtn = $('#dietDayDelete');
+      if (deleteDietDayBtn) {
+        deleteDietDayBtn.addEventListener('click', function () {
+          confirmDelete('Delete this day?', 'Every meal slot on it is removed too.', function () {
+            auth.deleteDietPlanDay(day.dietPlanDayId).then(function (result) {
+              if (!toastOnFailure(result, 'Could not delete day.')) return;
+              toast((result.data && result.data.message) || 'Day removed.');
+              activeDayId = null;
+              load();
+              loadDietPlans();
+            });
+          });
+        });
+      }
+
+      if (day.dietPlanDayId) renderMealRows(day, dayMeals);
+    }
+
+    function renderMealRows(day, dayMeals) {
+      $('#dietDayMealRows').innerHTML = dayMeals.map(function (m) {
+        return (
+          '<div class="meal-slot" data-meal-row="' + m.dietPlanMealId + '">' +
+            '<div class="meal-slot__grid">' +
+              '<div class="field field--full"><label>Meal</label><select class="select" data-meal-field="mealSuggestionId">' + mealOptionHtml(m.mealSuggestionId) + '</select></div>' +
+              '<div class="field"><label>Meal type</label>' +
+                '<select class="select" data-meal-field="mealType">' +
+                  MEAL_TYPES.map(function (t) { return '<option' + (m.mealType === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+                '</select></div>' +
+              '<button class="icon-btn" data-save-meal-row title="Save">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>' +
+              '</button>' +
+              '<button class="icon-btn icon-btn--danger" data-remove-meal-row title="Remove">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
+              '</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+
+      $$('[data-meal-row]').forEach(function (row) {
+        var id = row.getAttribute('data-meal-row');
+        var m = dayMeals.find(function (x) { return x.dietPlanMealId === id; });
+        $('[data-save-meal-row]', row).addEventListener('click', function () {
+          var payload = {
+            dietPlanMealId: id,
+            dietPlanDayId: day.dietPlanDayId,
+            mealSuggestionId: $('[data-meal-field="mealSuggestionId"]', row).value,
+            sortOrder: m.sortOrder,
+            mealType: $('[data-meal-field="mealType"]', row).value
+          };
+          auth.saveDietPlanMeal(payload).then(function (result) {
+            if (!toastOnFailure(result, 'Could not save meal.')) return;
+            toast('Meal updated.');
+            load();
+            loadDietPlans();
+          });
+        });
+        $('[data-remove-meal-row]', row).addEventListener('click', function () {
+          confirmDelete('Remove ' + m.mealSuggestionTitle + '?', 'It comes off this day only.', function () {
+            auth.deleteDietPlanMeal(id).then(function (result) {
+              if (!toastOnFailure(result, 'Could not remove meal.')) return;
+              toast('Meal removed.');
+              load();
+              loadDietPlans();
+            });
+          });
+        });
+      });
+
+      if (!suggestionsCache.length) {
+        $('#dietDayMealAddRow').innerHTML =
+          '<p class="body-sm">No meal suggestions are available to add. Add some in the Meal Suggestions view first.</p>';
+        return;
+      }
+
+      $('#dietDayMealAddRow').innerHTML =
+        '<div class="meal-slot__grid">' +
+          '<div class="field field--full"><label>Search meals</label>' +
+            '<input class="input" id="addMealSearch" placeholder="Filter by name…" autocomplete="off" /></div>' +
+          '<div class="field"><label>Meal type filter</label>' +
+            '<select class="select" id="addMealFilter"><option value="">Any meal type</option>' +
+              MEAL_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('') +
+            '</select></div>' +
+          '<div class="field field--full"><label>Meal <span id="addMealCount"></span></label>' +
+            '<select class="select" id="addMealSelect"></select></div>' +
+          '<div class="field"><label>Meal type for this slot</label>' +
+            '<select class="select" id="addMealType">' +
+              MEAL_TYPES.map(function (t) { return '<option>' + t + '</option>'; }).join('') +
+            '</select></div>' +
+          '<button class="btn btn--secondary btn--sm" id="addMealBtn">Add</button>' +
+        '</div>';
+
+      function refreshAddMealOptions() {
+        var html = mealOptionHtml(null, $('#addMealSearch').value, $('#addMealFilter').value);
+        $('#addMealSelect').innerHTML = html || '<option value="">No meals match this filter</option>';
+        var count = html ? $('#addMealSelect').options.length : 0;
+        $('#addMealCount').textContent = count ? '(' + count + ')' : '';
+        $('#addMealBtn').disabled = count === 0;
+      }
+
+      refreshAddMealOptions();
+      $('#addMealSearch').addEventListener('input', refreshAddMealOptions);
+      $('#addMealFilter').addEventListener('change', refreshAddMealOptions);
+
+      $('#addMealBtn').addEventListener('click', function () {
+        var payload = {
+          dietPlanMealId: null,
+          dietPlanDayId: day.dietPlanDayId,
+          mealSuggestionId: $('#addMealSelect').value,
+          sortOrder: dayMeals.length,
+          mealType: $('#addMealType').value
+        };
+        auth.saveDietPlanMeal(payload).then(function (result) {
+          if (!toastOnFailure(result, 'Could not add meal.')) return;
+          toast('Meal added.');
+          load();
+          loadDietPlans();
+        });
+      });
+    }
+
+    load();
+  }
+
+  /* ----- Assigning a diet plan to specific clients ----- */
+  function openDietPlanAssignments(dietPlanId) {
+    var plan = dietPlansCache.find(function (x) { return x.dietPlanId === dietPlanId; });
+    if (!plan) return;
+
+    var assignments = [];
+    var users = [];
+    var search = '';
+
+    var backdrop = openModal(
+      modalHead('Assign "' + plan.name + '"') +
+      '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
+        'Assigned clients can see this plan in the app. Tick "make it their active plan" to set it as their program right away.' +
+      '</p>' +
+      '<div class="eyebrow">Assigned clients</div>' +
+      '<div id="dietAssignList"></div>' +
+      '<div class="eyebrow" style="margin:20px 0 10px;">Add a client</div>' +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Search users</label>' +
+          '<input class="input" id="dietAssignSearch" placeholder="Name or email…" /></div>' +
+        '<div class="field field--full"><label>Client (plan shown so you can see who is paying)</label>' +
+          '<select class="select" id="dietAssignUser"></select></div>' +
+        '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
+          '<label class="switch"><input type="checkbox" id="dietAssignActive" /><span class="track"></span></label>' +
+          '<span class="label-sm">Make it their active plan</span>' +
+        '</div>' +
+      '</div>' +
+      '<div id="dietAssignHint"></div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Close</button>' +
+        '<button class="btn btn--primary" id="dietAssignSave">Assign</button>' +
+      '</div>',
+      true
+    );
+    wireClose(backdrop);
+
+    function planLabel(x) {
+      if (x.subscriptionStatus === 'Active' && x.activePlanCode) {
+        return x.activePlanCode + (x.billingCycle ? ' · ' + x.billingCycle : '');
+      }
+      if (x.activePlanCode) return x.activePlanCode + ' · ' + (x.subscriptionStatus || 'inactive');
+      return x.accountTier === 'Guest' ? 'No account' : 'No paid plan';
+    }
+
+    function renderUserOptions() {
+      var assignedIds = assignments.map(function (a) { return a.userId; });
+      var q = search.toLowerCase();
+      var available = users.filter(function (u) {
+        if (assignedIds.indexOf(u.userId) > -1) return false;
+        if (!q) return true;
+        return ((u.displayName || '') + ' ' + (u.email || '')).toLowerCase().indexOf(q) > -1;
+      });
+
+      var sel = $('#dietAssignUser');
+      sel.innerHTML = available.map(function (u) {
+        return '<option value="' + u.userId + '">' +
+          esc((u.displayName || u.email || u.userId) + ' — ' + planLabel(u)) + '</option>';
+      }).join('');
+
+      $('#dietAssignHint').innerHTML = available.length ? '' :
+        '<p class="body-sm" style="color:var(--on-surface-variant)">' +
+          (users.length ? 'No matching unassigned clients.' : 'No users available (the user list needs users.read).') +
+        '</p>';
+      $('#dietAssignSave').disabled = !available.length;
+    }
+
+    function renderAssignments() {
+      $('#dietAssignList').innerHTML = assignments.length ? assignments.map(function (a) {
+        return (
+          '<div class="activity-item">' +
+            '<div class="body-md" style="font-size:13.5px;flex:1">' +
+              '<b>' + esc(a.displayName || a.email || a.userId) + '</b>' +
+              '<div class="row-sub">' + esc(a.email || '') + ' · ' + esc(planLabel(a)) +
+                (a.isActive ? ' · <span class="chip chip--accent">Active plan</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<button class="icon-btn icon-btn--danger" data-diet-unassign="' + a.userId + '" title="Unassign">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
+            '</button>' +
+          '</div>'
+        );
+      }).join('') : '<div class="empty-state" style="padding:16px"><div class="body-sm">Not assigned to anyone yet.</div></div>';
+
+      $$('[data-diet-unassign]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var userId = b.getAttribute('data-diet-unassign');
+          var a = assignments.find(function (x) { return x.userId === userId; });
+          if (!a) return;
+          confirmDelete('Unassign ' + (a.displayName || a.email || 'this client') + '?',
+            'They lose access; if it was their active plan it is cleared.', function () {
+              auth.removeDietPlanAssignment(dietPlanId, userId).then(function (result) {
+                if (!toastOnFailure(result, 'Could not unassign.')) return;
+                toast('Client unassigned.');
+                load();
+                loadDietPlans();
+              });
+            });
+        });
+      });
+    }
+
+    function load() {
+      return Promise.all([
+        auth.getDietPlanAssignments(dietPlanId),
+        auth.getUsers('', 200)
+      ]).then(function (results) {
+        var assignmentResult = results[0];
+        var userResult = results[1];
+        if (!toastOnFailure(assignmentResult, 'Could not load assignments.')) { closeModal(); return; }
+        assignments = assignmentResult.data || [];
+        users = userResult && userResult.ok ? (userResult.data || []) : [];
+        renderAssignments();
+        renderUserOptions();
+      });
+    }
+
+    $('#dietAssignSearch').addEventListener('input', function () {
+      search = $('#dietAssignSearch').value.trim();
+      renderUserOptions();
+    });
+
+    $('#dietAssignSave').addEventListener('click', function () {
+      var userId = $('#dietAssignUser').value;
+      if (!userId) { toast('Pick a client first', true); return; }
+      auth.assignDietPlan(dietPlanId, userId, $('#dietAssignActive').checked).then(function (result) {
+        if (!toastOnFailure(result, 'Could not assign diet plan.')) return;
+        toast((result.data && result.data.message) || 'Diet plan assigned.');
+        $('#dietAssignActive').checked = false;
+        load();
+        loadDietPlans();
       });
     });
 
@@ -1162,6 +1853,15 @@
       '<div class="eyebrow" style="margin:20px 0 10px;">Feature list' + (isNew ? ' (save the plan first)' : '') + '</div>' +
       '<div id="featureRows"></div>' +
       (isNew ? '' : '<button class="btn btn--secondary btn--sm" id="addFeatureBtn" style="margin-top:10px;width:100%">+ Add feature</button>') +
+      '<div class="eyebrow" style="margin:20px 0 10px;">Entitlements</div>' +
+      '<div class="form-grid">' +
+        '<div class="field"><label>Max active splits</label><input class="input" type="number" min="0" id="entMaxSplits" placeholder="Blank = unlimited" /></div>' +
+        '<div class="field"><label>Max active diet plans</label><input class="input" type="number" min="0" id="entMaxDietPlans" placeholder="Blank = unlimited" /></div>' +
+        '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
+          '<label class="switch"><input type="checkbox" id="entAllowAi" /><span class="track"></span></label>' +
+          '<span class="label-sm">Allow AI-generated splits &amp; diet plans</span>' +
+        '</div>' +
+      '</div>' +
       '<div class="modal__actions">' +
         '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
         '<button class="btn btn--primary" id="spSave">' + (isNew ? 'Create plan' : 'Save changes') + '</button>' +
@@ -1222,6 +1922,24 @@
       });
     }
 
+    function nullableInt(value) {
+      var trimmed = (value || '').trim();
+      if (!trimmed) return null;
+      var n = parseInt(trimmed, 10);
+      return isNaN(n) ? null : n;
+    }
+
+    function loadEntitlements() {
+      if (isNew) return;
+      auth.getPlanEntitlements(p.planId).then(function (result) {
+        if (!toastOnFailure(result, 'Could not load entitlements.')) return;
+        var e = result.data;
+        $('#entMaxSplits').value = (e && e.maxActiveSplits != null) ? e.maxActiveSplits : '';
+        $('#entMaxDietPlans').value = (e && e.maxActiveDietPlans != null) ? e.maxActiveDietPlans : '';
+        $('#entAllowAi').checked = !!(e && e.allowAiGeneration);
+      });
+    }
+
     var addFeatureBtn = $('#addFeatureBtn');
     if (addFeatureBtn) {
       addFeatureBtn.addEventListener('click', function () {
@@ -1245,21 +1963,36 @@
         sortOrder: p.sortOrder || 0
       };
       if (!payload.name || !payload.code) { toast('Code and name are required', true); return; }
+
+      var entitlementsPayload = {
+        planId: isNew ? null : p.planId,
+        maxActiveSplits: nullableInt($('#entMaxSplits').value),
+        maxActiveDietPlans: nullableInt($('#entMaxDietPlans').value),
+        allowAiGeneration: $('#entAllowAi').checked
+      };
+
       auth.savePlan(payload).then(function (result) {
         if (!toastOnFailure(result, 'Could not save plan.')) return;
-        toast((result.data && result.data.message) || 'Plan saved.');
-        if (isNew && result.data && result.data.id) {
-          closeModal();
-          loadPlans().then(function () { openSubPlanEditor(result.data.id); });
-        } else {
-          closeModal();
-          loadPlans();
-        }
+        var planId = (isNew && result.data && result.data.id) ? result.data.id : p.planId;
+        entitlementsPayload.planId = planId;
+
+        auth.savePlanEntitlements(entitlementsPayload).then(function (entResult) {
+          toastOnFailure(entResult, 'Plan saved, but entitlements could not be saved.');
+          toast((result.data && result.data.message) || 'Plan saved.');
+          if (isNew && planId) {
+            closeModal();
+            loadPlans().then(function () { openSubPlanEditor(planId); });
+          } else {
+            closeModal();
+            loadPlans();
+          }
+        });
       });
     });
 
     loadFeatures();
     renderFeatures();
+    loadEntitlements();
   }
 
   /* ================================================================
@@ -1416,6 +2149,7 @@
      ================================================================ */
   function openCreate(kind) {
     if (kind === 'split') openSplitEditor(null);
+    else if (kind === 'diet-plan') openDietPlanEditor(null);
     else if (kind === 'suggestion') openSuggestionEditor(null);
     else if (kind === 'exercise') openExerciseEditor(null);
     else if (kind === 'plan') openSubPlanEditor(null);
@@ -1430,6 +2164,13 @@
     splitCategorySelect.addEventListener('change', function (e) {
       splitCategoryFilter = e.target.value;
       renderSplits();
+    });
+  }
+  var dietPlanPeriodSelect = $('#dietPlanPeriodFilter');
+  if (dietPlanPeriodSelect) {
+    dietPlanPeriodSelect.addEventListener('change', function (e) {
+      dietPlanPeriodFilter = e.target.value;
+      renderDietPlans();
     });
   }
   $('#suggestionSearch').addEventListener('input', function (e) {
@@ -1466,8 +2207,13 @@
 
     var loaders = [];
     if (has('content.splits.read')) loaders.push(loadSplits());
-    if (has('content.suggestions.read')) loaders.push(loadSuggestions());
-    if (has('content.exercises.read')) loaders.push(loadExercises());
+    if (has('content.diet_plans.read')) loaders.push(loadDietPlans());
+    // The split-day editor and the diet-plan day editor fill their pickers from
+    // these two caches, so an operator who may write those areas needs them
+    // loaded even without the library's own read permission. The API accepts
+    // either permission on those two reads for exactly this reason.
+    if (has('content.suggestions.read') || has('content.diet_plans.write')) loaders.push(loadSuggestions());
+    if (has('content.exercises.read') || has('content.splits.write')) loaders.push(loadExercises());
     if (has('content.plans.read')) loaders.push(loadPlans());
     if (has('users.read')) loaders.push(loadUsers());
 

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
 from bs4 import BeautifulSoup, Tag
@@ -64,8 +64,40 @@ def text_of(node: Tag | None) -> str | None:
     return clean_text(node.get_text(" ", strip=True)) if node else None
 
 
+# Analytics and ad platforms decorate links in the live DOM before the collector
+# reads their href, so a plain pagination link like "/workouts/women?page=1"
+# arrives carrying Google's cross-domain linker (_gl) and GA4 client ids
+# (_ga, _ga_<measurement-id>). Requesting those decorated URLs both looks
+# abnormal to the source site's bot protection -- which answers them with a
+# Cloudflare verification page -- and gives each paginated page a different
+# cache key, so pagination is re-fetched on every run instead of resuming.
+# Strip them before any request is made.
+TRACKING_PARAM_PREFIXES = ("utm_", "_ga", "_gl")
+TRACKING_PARAMS = frozenset({"gclid", "fbclid", "msclkid", "mc_cid", "mc_eid", "igshid"})
+
+
+def strip_tracking_params(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.query:
+        return url
+    pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    kept = [
+        (key, value)
+        for key, value in pairs
+        if key not in TRACKING_PARAMS
+        and not any(key.startswith(prefix) for prefix in TRACKING_PARAM_PREFIXES)
+    ]
+    if len(kept) == len(pairs):
+        return url
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, urlencode(kept, doseq=True), parsed.fragment)
+    )
+
+
 def absolute_url(value: str | None) -> str | None:
-    return urljoin(BASE_URL, value) if value else None
+    if not value:
+        return None
+    return strip_tracking_params(urljoin(BASE_URL, value))
 
 
 def field_text(soup: BeautifulSoup, field_name: str) -> str | None:

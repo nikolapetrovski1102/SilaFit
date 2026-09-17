@@ -175,3 +175,89 @@ BEGIN
     ORDER BY CASE WHEN SuggestedMonth = @Month THEN 0 ELSE 1 END, SortOrder;
 END
 GO
+
+-- =============================================================================
+-- Diet plan browse/detail - the app's diet-plan library. Same visibility
+-- predicate shape as usp_Splits_GetAll/usp_Splits_GetDetail (see Splits.sql):
+-- system/shipped plans and Public ones are always visible, a plan the caller
+-- owns or was assigned is visible to them, everything else is not. @UserId is
+-- optional so the library is browseable by guests.
+-- =============================================================================
+
+CREATE OR ALTER PROCEDURE dbo.usp_DietPlans_GetAll
+    @UserId UNIQUEIDENTIFIER = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT TOP (2500) dp.DietPlanId,
+           dp.Name,
+           dp.Description,
+           dp.HeroImageUrl,
+           dp.PeriodType,
+           dp.DurationDays,
+           dp.IsSystemDefault,
+           dp.SortOrder,
+           dp.Visibility,
+           dp.OwnerUserId,
+           dp.IsAiGenerated,
+           dp.AiKeptAtUtc
+    FROM dbo.NutritionPlans dp
+    WHERE dp.IsSystemDefault = 1
+       OR dp.Visibility = N'Public'
+       OR (@UserId IS NOT NULL AND dp.OwnerUserId = @UserId)
+       OR (@UserId IS NOT NULL
+           AND EXISTS (SELECT 1
+                       FROM dbo.DietPlanAssignments a
+                       WHERE a.DietPlanId = dp.DietPlanId
+                         AND a.UserId = @UserId))
+    ORDER BY dp.SortOrder;
+END
+GO
+
+-- Result set 1: plan header. Result set 2: its days. Result set 3: each day's
+-- meal slots with the referenced MealSuggestions row. All three are always
+-- emitted (empty when invisible), same convention as usp_Splits_GetDetail.
+CREATE OR ALTER PROCEDURE dbo.usp_DietPlans_GetDetail
+    @DietPlanId UNIQUEIDENTIFIER,
+    @UserId UNIQUEIDENTIFIER = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @Visible BIT = 0;
+
+    SELECT @Visible = 1
+    FROM dbo.NutritionPlans dp
+    WHERE dp.DietPlanId = @DietPlanId
+      AND (dp.IsSystemDefault = 1
+           OR dp.Visibility = N'Public'
+           OR (@UserId IS NOT NULL AND dp.OwnerUserId = @UserId)
+           OR (@UserId IS NOT NULL
+               AND EXISTS (SELECT 1
+                           FROM dbo.DietPlanAssignments a
+                           WHERE a.DietPlanId = dp.DietPlanId
+                             AND a.UserId = @UserId)));
+
+    SELECT DietPlanId, Name, Description, HeroImageUrl, PeriodType, DurationDays,
+           IsSystemDefault, SortOrder, Visibility, OwnerUserId, IsAiGenerated, AiKeptAtUtc
+    FROM dbo.NutritionPlans
+    WHERE DietPlanId = @DietPlanId
+      AND @Visible = 1;
+
+    SELECT DietPlanDayId, DayIndex, Title
+    FROM dbo.DietPlanDays
+    WHERE DietPlanId = @DietPlanId
+      AND @Visible = 1
+    ORDER BY DayIndex;
+
+    SELECT d.DietPlanDayId, m.DietPlanMealId, m.MealType, ms.MealSuggestionId, ms.Title, ms.Description,
+           ms.CaloriesKcal, ms.ProteinG, ms.CarbsG, ms.FatsG, m.SortOrder
+    FROM dbo.DietPlanDays d
+    INNER JOIN dbo.DietPlanMeals m ON m.DietPlanDayId = d.DietPlanDayId
+    INNER JOIN dbo.MealSuggestions ms ON ms.MealSuggestionId = m.MealSuggestionId
+    WHERE d.DietPlanId = @DietPlanId
+      AND @Visible = 1
+    ORDER BY d.DayIndex, m.SortOrder;
+END
+GO

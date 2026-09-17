@@ -16,16 +16,22 @@ class MealController extends ChangeNotifier {
   ResourceState<MealDay> state = const ResourceState.loading();
   String? actionError;
 
+  /// True while a day fetch is in flight. The previously selected day's data
+  /// stays in [state] for the duration, so the ring/macro bars interpolate to
+  /// the new values instead of the whole section collapsing to a spinner.
+  bool isDayLoading = false;
+
   // Loaded once per screen visit rather than per selected day - suggestions
   // are keyed off the calendar month, not the day being viewed, so there's
   // no need to re-fetch when the day strip selection changes.
   ResourceState<List<MealSuggestion>> suggestionsState =
       const ResourceState.loading();
 
-  // App-wide provider: guard the day and the suggestions independently so a
-  // remount/retry can't refetch one the other screen already loaded.
-  bool _dayLoading = false;
+  // App-wide provider: guard the suggestions independently so a remount/retry
+  // can't refetch what another screen already loaded. Day fetches are instead
+  // tracked by request id (below) so a newer tap supersedes an in-flight one.
   bool _suggestionsLoading = false;
+  int _dayRequestId = 0;
 
   MealController(this._repository);
 
@@ -69,23 +75,35 @@ class MealController extends ChangeNotifier {
   }
 
   Future<void> _loadFor(DateTime date, {bool force = false}) async {
-    if (_dayLoading) return;
     if (!force && _isSameDay(date, _selectedDate) && state.hasData) return;
+
+    // Request id rather than a simple "already loading" guard: tapping day B
+    // then C must land on C, not have C dropped because B is still in flight.
+    final requestId = ++_dayRequestId;
+    final previous = state.data;
     _selectedDate = date;
-    _dayLoading = true;
-    state = const ResourceState.loading();
+    isDayLoading = true;
+    // Keep the current day's numbers on screen while the next one loads, so
+    // switching days interpolates the ring/macros instead of flashing a
+    // spinner over everything (only a cold start has no data to keep).
+    if (previous == null) state = const ResourceState.loading();
     notifyListeners();
     try {
       final day = await _repository.getDay(date);
+      if (requestId != _dayRequestId) return;
       state = ResourceState.data(day);
     } on ApiException catch (e) {
+      if (requestId != _dayRequestId) return;
       state = ResourceState.error(e.userMessage);
     } catch (_) {
+      if (requestId != _dayRequestId) return;
       state = const ResourceState.error(ApiException.genericMessage);
     } finally {
-      _dayLoading = false;
+      if (requestId == _dayRequestId) {
+        isDayLoading = false;
+        notifyListeners();
+      }
     }
-    notifyListeners();
   }
 
   static bool _isSameDay(DateTime a, DateTime b) =>

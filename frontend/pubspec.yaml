@@ -58,11 +58,13 @@ dependencies:
   video_player: ^2.9.5
   lottie: ^3.5.1
 
-  # Support/Privacy links open the real hosted pages (sila.fitness) in the
-  # system browser; the exported-data JSON goes out through the native share
-  # sheet, written to a temp file first - no in-app browser/viewer exists for
-  # either, and building one would be a large undertaking for no benefit over
-  # the OS's own browser/share UI.
+  # Support/Privacy links open the real hosted pages (sila.fitness) in an
+  # in-app WebView (see core/widgets/in_app_web_view.dart), so the user stays
+  # in the app; url_launcher remains the fallback that hands a link off to the
+  # system browser (and is what opens non-http schemes like mailto/tel). The
+  # exported-data JSON goes out through the native share sheet, written to a
+  # temp file first.
+  webview_flutter: ^4.14.1
   url_launcher: ^6.3.1
   share_plus: ^10.1.3
   path_provider: ^2.1.5

@@ -49,6 +49,12 @@ services:
       Push__ServiceAccountJsonPath: "/secrets/fcm-service-account.json"
     volumes:
       - ./deploy/secrets:/secrets:ro
+      # Uploaded split/plan images (see Silen.Common.Options.ImageUploadOptions).
+      # Bind-mounted so they survive a container rebuild and are inspectable from
+      # the host while developing; served back out by the API itself locally
+      # (appsettings.Development.json's ImageUploads:PublicBaseUrl) since there's
+      # no images.sila.fitness nginx vhost on a dev machine.
+      - ./uploads:/app/uploads
     ports:
       - "5080:8080"
 

@@ -22,6 +22,7 @@ set -euo pipefail
 # ---- config -----------------------------------------------------------------
 DOMAIN="sila.fitness"
 API_DOMAIN="api.$DOMAIN"
+IMAGES_DOMAIN="images.$DOMAIN"
 LE_EMAIL="nikpetrovski007@gmail.com"
 DB_NAME="SilenDb"
 SWAP_GB=4
@@ -218,6 +219,14 @@ if [ ! -s "$SCRIPT_DIR/secrets/fcm-service-account.json" ]; then
   warn "No deploy/secrets/fcm-service-account.json yet — push reminders will be composed but not delivered (log-only sender). Drop the Firebase service account there and set PUSH_ENABLED=true in $ENV_FILE to enable delivery."
 fi
 
+# ---- 6c. uploaded-image storage ---------------------------------------------
+# Bind-mounted into silen-api at /app/uploads (see docker-compose.yml) and read
+# straight off disk by nginx's images.sila.fitness vhost - world-readable so the
+# nginx worker (www-data) can serve files the API container (running as root)
+# writes into it.
+mkdir -p "$SCRIPT_DIR/uploads"
+chmod 755 "$SCRIPT_DIR/uploads"
+
 # ---- 7. create database + apply schema/procedures/seed ----------------------
 # Same three directories, same order, as database/scripts/deploy.sh (local dev) —
 # every file is a plain idempotent .sql script (CREATE ... IF NOT EXISTS, or
@@ -244,7 +253,7 @@ for stage in schema procedures seed; do
     fi
 
     docker cp "$f" "silen-sqlserver:/tmp/$fname"
-    run_sql_file "$DB_NAME" "/tmp/$fname" >/dev/null
+    run_sql_file "$DB_NAME" "/tmp/$fname"
     ok "$fname"
   done
 done
@@ -351,13 +360,25 @@ log "Ensuring HTTPS + nginx TLS block for $DOMAIN and $API_DOMAIN"
 # Best-effort: DNS for $DOMAIN/$API_DOMAIN might not point at this box yet (or
 # might have moved on, e.g. after a server migration), in which case ACME
 # validation fails by design. Treating that as fatal used to abort the script
-# here, before the monthly-review / notification-publish cron steps, leaving
+# here, before the monthly-review / notification-publish / weekly-plan-generation cron steps, leaving
 # them stale. certbot rolls its nginx edits back on failure, so it is safe to
 # warn and continue.
 if certbot --nginx -d "$DOMAIN" -d "$API_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect; then
   ok "HTTPS certificate + nginx TLS block ensured"
 else
   warn "certbot could not (re)issue a certificate for $DOMAIN/$API_DOMAIN — continuing; verify DNS points at this server and TLS is set up correctly."
+fi
+
+# Issued separately from $DOMAIN/$API_DOMAIN on purpose: certbot's multi-SAN
+# issuance is all-or-nothing, so if images.sila.fitness's DNS record isn't
+# created yet (or hasn't propagated), bundling it into the call above would
+# fail the *whole* request and take down the already-working sila.fitness/
+# api.sila.fitness cert along with it. Keeping it independent means a not-yet-
+# ready images subdomain only warns here, never touches the other two.
+if certbot --nginx -d "$IMAGES_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect; then
+  ok "HTTPS certificate + nginx TLS block ensured for $IMAGES_DOMAIN"
+else
+  warn "certbot could not (re)issue a certificate for $IMAGES_DOMAIN — continuing; add a DNS A record for $IMAGES_DOMAIN pointing at this server, then re-run deploy.sh."
 fi
 systemctl reload nginx
 
@@ -428,6 +449,32 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 CRON
 chmod 644 /etc/cron.d/silen-notification-publish
 ok "cron installed: /etc/cron.d/silen-notification-publish -> $SCRIPT_DIR/run-notification-publish.sh"
+
+# ---- 13. weekly AI plan generation cron -------------------------------------
+# Generates + delivers a fresh custom split + diet plan for every active
+# ADVANCED subscriber opted into ReceiveWeeklyAiPlans (see the
+# silen-weekly-plan-generation compose service). Runs Sunday morning so the
+# week it summarizes (Mon-Sun) has just closed. Re-running deploy.sh just
+# rewrites the same two files; WeeklyAiPlanDeliveries dedupes any overlap.
+log "Installing weekly AI plan generation cron (06:00 on Sundays)"
+cat > "$SCRIPT_DIR/run-weekly-plan-generation.sh" <<'WRAPPER'
+#!/usr/bin/env bash
+# Installed by deploy.sh - runs the weekly AI plan generation batch for the week that just ended.
+# Output is captured to /var/log/silen-weekly-plan-generation.log by the cron entry.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+exec docker compose --profile tools run --rm --build silen-weekly-plan-generation
+WRAPPER
+chmod 750 "$SCRIPT_DIR/run-weekly-plan-generation.sh"
+
+cat > /etc/cron.d/silen-weekly-plan-generation <<CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# m h dom mon dow user command
+0 6 * * 0 root $SCRIPT_DIR/run-weekly-plan-generation.sh >> /var/log/silen-weekly-plan-generation.log 2>&1
+CRON
+chmod 644 /etc/cron.d/silen-weekly-plan-generation
+ok "cron installed: /etc/cron.d/silen-weekly-plan-generation -> $SCRIPT_DIR/run-weekly-plan-generation.sh"
 
 log "DONE"
 echo "  DB      : SQL Server 2022 (container silen-sqlserver), database $DB_NAME"

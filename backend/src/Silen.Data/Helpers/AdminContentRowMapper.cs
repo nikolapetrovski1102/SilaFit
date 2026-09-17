@@ -109,6 +109,14 @@ public static class AdminContentRowMapper
         IsHighlighted = reader.GetBoolValue("IsHighlighted")
     };
 
+    public static AdminPlanEntitlementsModel MapPlanEntitlements(SqlDataReader reader) => new()
+    {
+        PlanId = reader.GetGuidValue("PlanId"),
+        MaxActiveSplits = reader.GetNullableInt32("MaxActiveSplits"),
+        MaxActiveDietPlans = reader.GetNullableInt32("MaxActiveDietPlans"),
+        AllowAiGeneration = reader.GetBoolValue("AllowAiGeneration")
+    };
+
     public static AdminSplitModel MapSplit(SqlDataReader reader) => new()
     {
         SplitId = reader.GetGuidValue("SplitId"),
@@ -170,6 +178,65 @@ public static class AdminContentRowMapper
         TargetSets = reader.GetByteValue("TargetSets"),
         TargetRepsLow = reader.GetByteValue("TargetRepsLow"),
         TargetRepsHigh = reader.GetByteValue("TargetRepsHigh")
+    };
+
+    public static AdminDietPlanModel MapDietPlan(SqlDataReader reader) => new()
+    {
+        DietPlanId = reader.GetGuidValue("DietPlanId"),
+        Name = reader.GetStringValue("Name"),
+        Description = reader.GetNullableString("Description"),
+        HeroImageUrl = reader.GetNullableString("HeroImageUrl"),
+        PeriodType = reader.GetStringValue("PeriodType"),
+        DurationDays = reader.GetByteValue("DurationDays"),
+        IsSystemDefault = reader.GetBoolValue("IsSystemDefault"),
+        Visibility = reader.GetStringValue("Visibility"),
+        OwnerAdminUserId = reader.GetNullableGuid("OwnerAdminUserId"),
+        OwnerUsername = reader.GetNullableString("OwnerUsername"),
+        SortOrder = reader.GetInt32Value("SortOrder"),
+        CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
+        DayCount = reader.GetInt32Value("DayCount"),
+        MealCount = reader.GetInt32Value("MealCount"),
+        ActiveUserCount = reader.GetInt32Value("ActiveUserCount"),
+        AssignedUserCount = reader.GetInt32Value("AssignedUserCount")
+    };
+
+    public static AdminDietPlanAssignmentModel MapDietPlanAssignment(SqlDataReader reader) => new()
+    {
+        DietPlanId = reader.GetGuidValue("DietPlanId"),
+        UserId = reader.GetGuidValue("UserId"),
+        DisplayName = reader.GetNullableString("DisplayName"),
+        Email = reader.GetNullableString("Email"),
+        AccountTier = reader.GetStringValue("AccountTier"),
+        AssignedAtUtc = reader.GetDateTimeValue("AssignedAtUtc"),
+        AssignedByUsername = reader.GetNullableString("AssignedByUsername"),
+        IsActive = reader.GetBoolValue("IsActive"),
+        ActivePlanCode = reader.GetNullableString("ActivePlanCode"),
+        BillingCycle = reader.GetNullableString("BillingCycle"),
+        SubscriptionStatus = reader.GetNullableString("SubscriptionStatus")
+    };
+
+    public static AdminDietPlanDayModel MapDietPlanDay(SqlDataReader reader) => new()
+    {
+        DietPlanDayId = reader.GetGuidValue("DietPlanDayId"),
+        DietPlanId = reader.GetGuidValue("DietPlanId"),
+        DayIndex = reader.GetByteValue("DayIndex"),
+        Title = reader.GetNullableString("Title"),
+        MealCount = reader.GetInt32Value("MealCount")
+    };
+
+    public static AdminDietPlanMealModel MapDietPlanMeal(SqlDataReader reader) => new()
+    {
+        DietPlanMealId = reader.GetGuidValue("DietPlanMealId"),
+        DietPlanDayId = reader.GetGuidValue("DietPlanDayId"),
+        DayIndex = reader.GetByteValue("DayIndex"),
+        MealType = reader.GetStringValue("MealType"),
+        MealSuggestionId = reader.GetGuidValue("MealSuggestionId"),
+        MealSuggestionTitle = reader.GetStringValue("MealSuggestionTitle"),
+        CaloriesKcal = reader.GetInt16Value("CaloriesKcal"),
+        ProteinG = reader.GetInt16Value("ProteinG"),
+        CarbsG = reader.GetInt16Value("CarbsG"),
+        FatsG = reader.GetInt16Value("FatsG"),
+        SortOrder = reader.GetInt32Value("SortOrder")
     };
 
     public static AdminUserSummaryModel MapUserSummary(SqlDataReader reader) => new()

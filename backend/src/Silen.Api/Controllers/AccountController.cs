@@ -14,7 +14,9 @@ namespace Silen.Api.Controllers;
 [Authorize]
 public sealed class AccountController(IAccountService accountService, ILogger<AccountController> logger) : ControllerBase
 {
-    [HttpGet("export")]
+    /// <summary>Emails the export to the account's address rather than returning it in
+    /// the response - POST, not GET, since it has that side effect.</summary>
+    [HttpPost("export")]
     public async Task<IActionResult> Export(CancellationToken cancellationToken)
     {
         var result = await accountService.ExportAsync(User.GetUserId(), cancellationToken);
