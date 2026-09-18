@@ -242,7 +242,12 @@ class OnboardingController extends ChangeNotifier {
 
   /// Persists the collected answers. Returns true on success; the caller
   /// proceeds into the app only after the profile has been saved.
-  Future<bool> submit() async {
+  ///
+  /// [forceSplitReassign] is set only by the Settings screen's dev-only
+  /// onboarding replay toggle, to bypass the backend's "never override a
+  /// manually picked split" guard so the recommender can be re-tested;
+  /// real onboarding submissions never set it.
+  Future<bool> submit({bool forceSplitReassign = false}) async {
     if (gender == null ||
         goal == null ||
         trainingDaysPerWeek == null ||
@@ -267,6 +272,7 @@ class OnboardingController extends ChangeNotifier {
         trainingExperience: trainingExperience,
         equipmentAccess: equipmentAccess,
         dailyActivityLevel: dailyActivityLevel,
+        forceSplitReassign: forceSplitReassign,
       );
       _isSubmitting = false;
       notifyListeners();

@@ -91,6 +91,28 @@ public class SplitServiceTests
     }
 
     [Fact]
+    public async Task AutoAssignRecommendedAsync_ForceReassign_OverridesUserPickedSplit()
+    {
+        var userId = Guid.NewGuid();
+        var profile = Profile("BuildMuscle");
+        var userPicked = Active(Guid.NewGuid(), isAutoAssigned: false);
+        var best = Split("Best", "BuildMuscle", isSystemDefault: true);
+
+        splitsProvider.Setup(p => p.GetActiveAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(userPicked);
+        splitsProvider.Setup(p => p.GetAllAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([best]);
+        splitsProvider.Setup(p => p.SetActiveAsync(userId, best.SplitId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Active(best.SplitId, isAutoAssigned: true));
+
+        var result = await sut.AutoAssignRecommendedAsync(userId, profile, forceReassign: true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(best.SplitId, result.Data!.SplitId);
+        splitsProvider.Verify(p => p.SetActiveAsync(userId, best.SplitId, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task AutoAssignRecommendedAsync_AutoAssignedSplitActive_SwitchesWhenABetterRecommendationExists()
     {
         var userId = Guid.NewGuid();

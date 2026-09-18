@@ -25,7 +25,11 @@ public interface ISplitService
     /// the active split; once the user activates one for themselves via <see cref="ActivateAsync"/>,
     /// this becomes a permanent no-op (null Data, still a success result) for that user. Also a
     /// no-op when the profile has no goal yet.</summary>
-    Task<ServiceResult<ActiveSplitModel?>> AutoAssignRecommendedAsync(Guid userId, UserProfileModel profile, CancellationToken cancellationToken = default);
+    /// <param name="forceReassign">Dev-only escape hatch for replaying onboarding from the
+    /// Settings screen's debug toggle: bypasses the "never override a manually picked split"
+    /// guard so the recommender can be re-tested against a fresh set of answers. Never set from
+    /// a production onboarding submission.</param>
+    Task<ServiceResult<ActiveSplitModel?>> AutoAssignRecommendedAsync(Guid userId, UserProfileModel profile, bool forceReassign = false, CancellationToken cancellationToken = default);
 
     /* ----------------------------- user-owned splits ----------------------------- */
 

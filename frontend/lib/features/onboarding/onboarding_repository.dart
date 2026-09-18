@@ -22,6 +22,7 @@ class OnboardingRepository {
     String? trainingExperience,
     String? equipmentAccess,
     String? dailyActivityLevel,
+    bool forceSplitReassign = false,
   }) =>
       _client.put(
         '/profile',
@@ -41,6 +42,7 @@ class OnboardingRepository {
           if (equipmentAccess != null) 'equipmentAccess': equipmentAccess,
           if (dailyActivityLevel != null)
             'dailyActivityLevel': dailyActivityLevel,
+          if (forceSplitReassign) 'forceSplitReassign': forceSplitReassign,
         },
       );
 }

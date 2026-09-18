@@ -37,7 +37,7 @@ public sealed class UserProfileService(
             // fail the profile save itself. `AutoAssignRecommendedAsync` is
             // itself a no-op for anyone who already has an active split, so
             // this is safe to run on every profile edit, not just the first.
-            await splitService.AutoAssignRecommendedAsync(userId, profile, cancellationToken);
+            await splitService.AutoAssignRecommendedAsync(userId, profile, request.ForceSplitReassign, cancellationToken);
 
             // Targets are derived from the profile (weight/height/age/gender/goal/
             // activity), so a profile save is the moment they should be refreshed

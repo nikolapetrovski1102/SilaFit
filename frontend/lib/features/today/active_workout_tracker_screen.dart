@@ -15,6 +15,7 @@ import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/silen_button.dart';
 import '../exercises/exercise_picker_sheet.dart';
 import '../exercises/exercise_video_sheet.dart';
+import '../exercises/exercise_web_search.dart';
 import '../exercises/exercises_models.dart';
 import '../notifications/notifications_repository.dart';
 import '../settings/settings_controller.dart';
@@ -873,6 +874,14 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                     url: _currentExercise.demoVideoUrl!,
                                     exerciseName: _currentExercise.name,
                                   ),
+                                )
+                              else
+                                _WatchDemoChip(
+                                  isSearch: true,
+                                  onTap: () => openExerciseWebSearch(
+                                    context,
+                                    exerciseName: _currentExercise.name,
+                                  ),
                                 ),
                             ],
                           ),
@@ -1143,12 +1152,28 @@ class _ExerciseMenuChip extends StatelessWidget {
 
 class _WatchDemoChip extends StatelessWidget {
   final bool isVideo;
+
+  /// True for exercises with no `demoVideoUrl` - opens a web search instead
+  /// of the in-app demo sheet. Takes precedence over [isVideo].
+  final bool isSearch;
+
   final VoidCallback onTap;
 
-  const _WatchDemoChip({required this.isVideo, required this.onTap});
+  const _WatchDemoChip({
+    this.isVideo = false,
+    this.isSearch = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final icon = isSearch
+        ? Icons.travel_explore_rounded
+        : isVideo
+            ? Icons.play_circle_fill_rounded
+            : Icons.image_rounded;
+    final label = isSearch ? 'Search form' : (isVideo ? 'Watch form' : 'View form');
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1160,10 +1185,9 @@ class _WatchDemoChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isVideo ? Icons.play_circle_fill_rounded : Icons.image_rounded,
-                size: 16, color: AppColors.accent),
+            Icon(icon, size: 16, color: AppColors.accent),
             const SizedBox(width: 4),
-            Text(isVideo ? 'Watch form' : 'View form',
+            Text(label,
                 style: AppTypography.labelCaps
                     .copyWith(color: AppColors.onSurface, fontSize: 10)),
           ],

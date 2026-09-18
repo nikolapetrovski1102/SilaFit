@@ -367,6 +367,11 @@
 
       return (
         '<article class="card mp-card">' +
+          '<div class="mp-card__thumb">' +
+            (s.heroImageUrl
+              ? '<img src="' + esc(s.heroImageUrl) + '" alt="" loading="lazy" />'
+              : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>') +
+          '</div>' +
           '<div class="mp-card__head">' +
             '<span class="chip chip--accent">' + esc(s.level) + '</span>' +
             '<span class="chip chip--gold">' + esc(s.category) + '</span>' +

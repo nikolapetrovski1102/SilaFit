@@ -9,6 +9,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/section_card.dart';
 import '../auth/widgets/auth_blob_background.dart';
+import '../today/today_controller.dart';
 import 'split_builder_screen.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
@@ -49,6 +50,11 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
     try {
       await repository.activate(split.splitId);
       if (!mounted) return;
+      // Home's dashboard is loaded once and cached, so without this the newly
+      // activated split's session (and its exercises) would not appear until
+      // a manual pull-to-refresh - see the matching comment in
+      // split_detail_screen.dart.
+      context.read<TodayController>().load(force: true);
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${split.name} is now your active split.')));
     } on ApiException catch (e) {

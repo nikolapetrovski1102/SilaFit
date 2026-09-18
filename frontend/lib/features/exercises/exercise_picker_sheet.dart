@@ -9,6 +9,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import 'exercise_focus.dart';
 import 'exercise_video_sheet.dart';
+import 'exercise_web_search.dart';
 import 'exercises_models.dart';
 import 'exercises_repository.dart';
 
@@ -40,6 +41,7 @@ Future<ExerciseSummary?> showExercisePickerSheet(
   return showModalBottomSheet<ExerciseSummary>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: AppColors.surfaceContainer,
     shape: const RoundedRectangleBorder(
         borderRadius:
@@ -359,9 +361,11 @@ class _ExerciseTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (demoUrl != null)
-            _ViewFormButton(url: demoUrl, exerciseName: exercise.name),
+            _ViewFormButton(url: demoUrl, exerciseName: exercise.name)
+          else
+            _SearchFormButton(exerciseName: exercise.name),
           if (trailing != null) ...[
-            if (demoUrl != null) const SizedBox(width: AppSpacing.xxs),
+            const SizedBox(width: AppSpacing.xxs),
             Text(trailing!,
                 style: AppTypography.labelCaps.copyWith(
                     color: trailingColor ?? AppColors.onSurfaceVariant)),
@@ -369,6 +373,32 @@ class _ExerciseTile extends StatelessWidget {
         ],
       ),
       onTap: () => Navigator.of(context).pop(exercise),
+    );
+  }
+}
+
+/// Icon-only button shown in place of [_ViewFormButton] when an exercise has
+/// no `demoVideoUrl` - opens an in-app web search for the exercise's form
+/// instead, so there's still a one-tap way to look it up.
+class _SearchFormButton extends StatelessWidget {
+  final String exerciseName;
+
+  const _SearchFormButton({required this.exerciseName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Search for form',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () =>
+            openExerciseWebSearch(context, exerciseName: exerciseName),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(Icons.travel_explore_rounded,
+              size: 20, color: AppColors.onSurfaceVariant),
+        ),
+      ),
     );
   }
 }

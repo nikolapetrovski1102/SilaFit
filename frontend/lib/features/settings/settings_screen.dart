@@ -823,7 +823,9 @@ class _ReminderTimeRow extends StatelessWidget {
 /// Turning it off immediately drops into [OnboardingFlowScreen]; turning it
 /// back on just marks onboarding complete again without navigating, since
 /// the dev is presumably still inside that replayed flow or back in
-/// Settings already.
+/// Settings already. The replay is started with `forceSplitReassign: true`
+/// so completing it re-runs the split recommender even over a manually
+/// picked split - real onboarding never does this.
 class _OnboardingDebugToggle extends StatefulWidget {
   const _OnboardingDebugToggle();
 
@@ -867,7 +869,9 @@ class _OnboardingDebugToggleState extends State<_OnboardingDebugToggle> {
     setState(() {});
     if (!value) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const OnboardingFlowScreen()),
+        MaterialPageRoute(
+          builder: (_) => const OnboardingFlowScreen(forceSplitReassign: true),
+        ),
         (route) => false,
       );
     }

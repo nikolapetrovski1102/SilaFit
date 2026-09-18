@@ -26,7 +26,13 @@ import 'widgets/training_preference_question.dart';
 /// into [RootShell] once it's done, however the user got there (finished,
 /// skipped, or logged into an existing account mid-flow).
 class OnboardingFlowScreen extends StatelessWidget {
-  const OnboardingFlowScreen({super.key});
+  /// Set only by the Settings screen's dev-only onboarding replay toggle, so
+  /// completing this replay re-runs the split recommender even if the
+  /// current active split was manually picked. Never set for a real
+  /// first-launch flow.
+  final bool forceSplitReassign;
+
+  const OnboardingFlowScreen({super.key, this.forceSplitReassign = false});
 
   @override
   Widget build(BuildContext context) {
@@ -36,13 +42,15 @@ class OnboardingFlowScreen extends StatelessWidget {
         ctx.read<NotificationsRepository>(),
         pushMessaging: ctx.read<PushMessagingService>(),
       ),
-      child: const _OnboardingFlowView(),
+      child: _OnboardingFlowView(forceSplitReassign: forceSplitReassign),
     );
   }
 }
 
 class _OnboardingFlowView extends StatelessWidget {
-  const _OnboardingFlowView();
+  final bool forceSplitReassign;
+
+  const _OnboardingFlowView({this.forceSplitReassign = false});
 
   Future<void> _enterApp(BuildContext context) async {
     await context.read<SessionStore>().markOnboardingComplete();
@@ -56,7 +64,8 @@ class _OnboardingFlowView extends StatelessWidget {
 
   Future<void> _finish(BuildContext context, bool notificationsAllowed) async {
     final controller = context.read<OnboardingController>();
-    final saved = await controller.submit();
+    final saved =
+        await controller.submit(forceSplitReassign: forceSplitReassign);
     if (!context.mounted) return;
     if (!saved) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

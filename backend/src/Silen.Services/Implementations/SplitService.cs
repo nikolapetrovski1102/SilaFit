@@ -84,7 +84,7 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
             await splitsProvider.SetActiveAsync(userId, request.SplitId, isAutoAssigned: false, cancellationToken: cancellationToken)
                 ?? throw new NotFoundException($"Split '{request.SplitId}' could not be activated for user '{userId}'.", "That split couldn't be activated."));
 
-    public Task<ServiceResult<ActiveSplitModel?>> AutoAssignRecommendedAsync(Guid userId, UserProfileModel profile, CancellationToken cancellationToken = default) =>
+    public Task<ServiceResult<ActiveSplitModel?>> AutoAssignRecommendedAsync(Guid userId, UserProfileModel profile, bool forceReassign = false, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
             var active = await splitsProvider.GetActiveAsync(userId, cancellationToken);
@@ -94,8 +94,11 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
             // own pick (IsAutoAssigned) is ever eligible for a re-check, so
             // this stays a one-time default for anyone who has made their own
             // choice, while still tracking later onboarding answers for
-            // anyone who hasn't.
-            if (active is not null && !active.IsAutoAssigned)
+            // anyone who hasn't. `forceReassign` bypasses this for the
+            // Settings screen's dev-only onboarding replay toggle, so the
+            // recommender can be re-tested without hand-clearing the active
+            // split first - it must never be set from a real user submission.
+            if (active is not null && !active.IsAutoAssigned && !forceReassign)
             {
                 return (ActiveSplitModel?)null;
             }

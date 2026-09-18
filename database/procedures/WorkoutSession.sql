@@ -51,9 +51,9 @@ BEGIN
         WHERE d.CyclePos = @CycleIndex;
     END
 
-    DECLARE @WorkoutSessionId UNIQUEIDENTIFIER;
+    DECLARE @WorkoutSessionId UNIQUEIDENTIFIER, @ExistingSplitDayId UNIQUEIDENTIFIER, @StartedAtUtc DATETIME2(3);
 
-    SELECT @WorkoutSessionId = WorkoutSessionId
+    SELECT @WorkoutSessionId = WorkoutSessionId, @ExistingSplitDayId = SplitDayId, @StartedAtUtc = StartedAtUtc
     FROM dbo.WorkoutSessions
     WHERE UserId = @UserId AND ScheduledDateUtc = @Today;
 
@@ -63,6 +63,20 @@ BEGIN
 
         INSERT INTO dbo.WorkoutSessions (WorkoutSessionId, UserId, SplitDayId, ScheduledDateUtc, Status)
         VALUES (@WorkoutSessionId, @UserId, @SplitDayId, @Today, 'Scheduled');
+    END
+    ELSE IF @WorkoutSessionId IS NOT NULL AND @StartedAtUtc IS NULL
+         AND ISNULL(@ExistingSplitDayId, '00000000-0000-0000-0000-000000000000')
+             <> ISNULL(@SplitDayId, '00000000-0000-0000-0000-000000000000')
+    BEGIN
+        -- Today's session already exists but the user switched splits (or
+        -- their split day's ordinal shifted) before ever opening the workout
+        -- tracker for it, so re-point it at the newly active split's day
+        -- instead of leaving it stuck on the old one. Once StartedAtUtc is
+        -- set the tracker is mid-session, so a switch after that point must
+        -- not yank the split out from under an in-progress workout.
+        UPDATE dbo.WorkoutSessions
+        SET SplitDayId = @SplitDayId
+        WHERE WorkoutSessionId = @WorkoutSessionId;
     END
 
     SELECT

@@ -396,13 +396,19 @@ public sealed class WeeklyPlanGenerationService(
             throw new ConflictException("AI returned no split days.", "AI plan generation is temporarily unavailable.");
         }
 
+        // The model chooses from the same closed set WorkoutSplits.Category is
+        // constrained to (CK_WorkoutSplits_Category, schema 005/044) - the JSON
+        // schema enum already keeps it in-set, this is belt-and-braces in case a
+        // backend ever ignores strict mode.
         var trainingDays = days.Count(d => !d.IsRestDay);
-        var category = trainingDays switch
-        {
-            <= 3 => "FullBody",
-            4 => "UpperLower",
-            _ => "PushPullLegs"
-        };
+        var category = AdminContentFieldRules.SplitCategories.Contains(aiResult.Category)
+            ? aiResult.Category
+            : trainingDays switch
+            {
+                <= 3 => "FullBody",
+                4 => "UpperLower",
+                _ => "PushPullLegs"
+            };
 
         var recommendedGoal = profile?.Goal is { } goal && AdminContentFieldRules.RecommendedGoals.Contains(goal)
             ? goal
@@ -909,12 +915,14 @@ public sealed class WeeklyPlanGenerationService(
     private static JsonElement BuildSplitSchema(IEnumerable<Guid> exerciseIds)
     {
         var enumJson = string.Join(",", exerciseIds.Select(id => $"\"{id}\""));
+        var categoryEnumJson = string.Join(",", AdminContentFieldRules.SplitCategories.Select(c => $"\"{c}\""));
         var json = $$"""
         {
           "type": "object",
           "properties": {
             "keepCurrentSplit": { "type": "boolean" },
             "keepReason": { "type": "string" },
+            "category": { "type": "string", "enum": [{{categoryEnumJson}}] },
             "days": {
               "type": "array",
               "items": {
@@ -944,7 +952,7 @@ public sealed class WeeklyPlanGenerationService(
               }
             }
           },
-          "required": ["keepCurrentSplit", "keepReason", "days"],
+          "required": ["keepCurrentSplit", "keepReason", "category", "days"],
           "additionalProperties": false
         }
         """;
@@ -970,13 +978,12 @@ public sealed class WeeklyPlanGenerationService(
               "items": {
                 "type": "object",
                 "properties": {
-                  "title": { "type": ["string", "null"] },
                   "breakfastId": { "type": "string", "enum": [{{breakfastEnum}}] },
                   "lunchId": { "type": "string", "enum": [{{lunchEnum}}] },
                   "dinnerId": { "type": "string", "enum": [{{dinnerEnum}}] },
                   "snackId": { "type": "string", "enum": [{{snackEnum}}] }
                 },
-                "required": ["title", "breakfastId", "lunchId", "dinnerId", "snackId"],
+                "required": ["breakfastId", "lunchId", "dinnerId", "snackId"],
                 "additionalProperties": false
               }
             }
@@ -992,6 +999,7 @@ public sealed class WeeklyPlanGenerationService(
     {
         public bool KeepCurrentSplit { get; set; }
         public string? KeepReason { get; set; }
+        public string Category { get; set; } = string.Empty;
         public List<AiSplitDayDto> Days { get; set; } = new();
     }
 
@@ -1019,7 +1027,6 @@ public sealed class WeeklyPlanGenerationService(
 
     private sealed class AiDietDayDto
     {
-        public string? Title { get; set; }
         public Guid BreakfastId { get; set; }
         public Guid LunchId { get; set; }
         public Guid DinnerId { get; set; }
