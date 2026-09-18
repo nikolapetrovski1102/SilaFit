@@ -14,9 +14,10 @@ import 'diet_plan_models.dart';
 import 'diet_plan_repository.dart';
 
 /// Read-only detail view for a diet plan - the meal-planning equivalent of
-/// `SplitDetailScreen`. No "activate" affordance yet: `UserActiveDietPlans`
-/// exists server-side but isn't wired to anything the app surfaces (see the
-/// plan's rollout notes) - this screen is purely browse + (if owned) edit.
+/// `SplitDetailScreen`. Besides browse + (if owned) edit, it offers the
+/// activate action: since weekly AI plans are no longer auto-activated, this
+/// is how the user adopts a freshly generated plan or switches back to an
+/// older one.
 class DietPlanDetailScreen extends StatefulWidget {
   final DietPlanDetailController controller;
   final String planName;
@@ -39,6 +40,21 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
   void dispose() {
     widget.controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _activate() async {
+    final ok = await widget.controller.activate();
+    if (!mounted) return;
+    if (ok) {
+      // The Nutrition screen's active-plan section is cached, so refresh it
+      // rather than waiting for its next manual load.
+      context.read<ActiveDietPlanController>().load(force: true);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${widget.planName} is now your active plan.')));
+    } else if (widget.controller.actionError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.controller.actionError!)));
+    }
   }
 
   Future<void> _keep() async {
@@ -90,6 +106,7 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
               builder: (context, detail) => _DetailBody(
                   detail: detail,
                   controller: widget.controller,
+                  onActivate: _activate,
                   onKeep: _keep),
             ),
           ),
@@ -102,10 +119,14 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
 class _DetailBody extends StatelessWidget {
   final DietPlanDetail detail;
   final DietPlanDetailController controller;
+  final VoidCallback onActivate;
   final VoidCallback onKeep;
 
   const _DetailBody(
-      {required this.detail, required this.controller, required this.onKeep});
+      {required this.detail,
+      required this.controller,
+      required this.onActivate,
+      required this.onKeep});
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +161,16 @@ class _DetailBody extends StatelessWidget {
           Text(detail.plan.description!, style: AppTypography.bodyMd),
           const SizedBox(height: AppSpacing.md),
         ],
+        PrimaryPillButton(
+          label:
+              controller.activated ? 'Plan Activated' : 'Activate This Plan',
+          icon: controller.activated
+              ? Icons.check_rounded
+              : Icons.play_arrow_rounded,
+          isLoading: controller.isActivating,
+          onPressed: controller.activated ? null : onActivate,
+        ),
+        const SizedBox(height: AppSpacing.md),
         if (detail.plan.isAiGenerated && detail.plan.aiKeptAtUtc == null) ...[
           SecondaryPillButton(
             label: controller.isKeeping ? 'Keeping...' : 'Keep This Plan',
@@ -161,6 +192,41 @@ class _DetailBody extends StatelessWidget {
           ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex))) ...[
           _DayCard(day: day),
           const SizedBox(height: AppSpacing.sm),
+        ],
+        if (detail.shoppingList.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text('SHOPPING LIST', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.sm),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Everything you need for the week.',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurfaceVariant),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                for (final ingredient in detail.shoppingList)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.circle_outlined,
+                            size: 16, color: AppColors.accent),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: Text(ingredient,
+                              style: AppTypography.bodySm.copyWith(
+                                  color: AppColors.onSurface)),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ],
     );

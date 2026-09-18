@@ -14,7 +14,9 @@ public interface IDietPlansProvider
 
     /// <param name="userId">Same visibility filter as <see cref="GetAllAsync"/>; an
     /// invisible plan comes back as a null header rather than a readable detail.</param>
-    Task<(DietPlanModel? Plan, List<DietPlanDayModel> Days, List<DietPlanMealModel> Meals)> GetDetailAsync(
+    /// <returns>The plan header, days, meal slots, and the raw ingredient lines behind
+    /// those meals in plan order (for <see cref="Silen.Common.Dtos.DietPlanDetailDto.ShoppingList"/>).</returns>
+    Task<(DietPlanModel? Plan, List<DietPlanDayModel> Days, List<DietPlanMealModel> Meals, List<string> Ingredients)> GetDetailAsync(
         Guid dietPlanId, Guid? userId, CancellationToken cancellationToken = default);
 
     /* --------------------------- user-owned diet plans --------------------------- */
@@ -45,7 +47,6 @@ public interface IDietPlansProvider
 
     /// <summary>Sets a user's current diet plan (usp_UserActiveDietPlan_Set), the diet-plan
     /// counterpart of <see cref="ISplitsProvider.SetActiveAsync"/>. Called by the app's
-    /// activate endpoint and by Silen.Tools.WeeklyPlanGeneration for users with
-    /// AutoActivateAiPlans on.</summary>
+    /// activate endpoint and by on-demand AI generation in Silen.Services.</summary>
     Task SetActiveDietPlanAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default);
 }

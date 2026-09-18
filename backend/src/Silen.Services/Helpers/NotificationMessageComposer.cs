@@ -90,10 +90,11 @@ public static class NotificationMessageComposer
     /// Splits), where the freshly generated split - and a link into the new
     /// diet plan - both land.
     /// </summary>
-    public static NotificationContent WeeklyAiPlanReady(Guid userId, string? displayName)
+    public static NotificationContent WeeklyAiPlanReady(Guid userId, string? displayName, bool splitKept = false)
     {
-        var index = StableIndex(userId, DateOnly.FromDateTime(DateTime.UtcNow), NotificationCategories.WeeklyAiPlanReady, WeeklyAiPlanReadyTemplates.Length);
-        var (title, body) = WeeklyAiPlanReadyTemplates[index];
+        var templates = splitKept ? WeeklyAiPlanReadyKeptSplitTemplates : WeeklyAiPlanReadyTemplates;
+        var index = StableIndex(userId, DateOnly.FromDateTime(DateTime.UtcNow), NotificationCategories.WeeklyAiPlanReady, templates.Length);
+        var (title, body) = templates[index];
         return new NotificationContent(title, body.Replace("{name}", Name(displayName)), "splits");
     }
 
@@ -104,6 +105,16 @@ public static class NotificationMessageComposer
         ("this week, sorted ✅", "your AI coach built next week's training and food plan. it's in My Splits."),
         ("no more guessing this week", "{name}, your personalized split + diet plan are ready to go."),
         ("built from your data 📊", "last week's training became this week's plan. go see it."),
+    ];
+
+    // Sent when the model decided the user's current split already fits, so only
+    // the meals (and their shopping list) actually changed this week.
+    private static readonly (string Title, string Body)[] WeeklyAiPlanReadyKeptSplitTemplates =
+    [
+        ("your week's meals are ready 🍽️", "{name}, your split already looked right, so we kept it. this week's meal plan and shopping list are ready."),
+        ("split kept, meals refreshed", "{name}, no training changes needed this week. your new meal plan is waiting."),
+        ("this week's food, sorted ✅", "your current split still fits. we built the week's meals and shopping list - take a look."),
+        ("meals planned, split kept", "{name}, we kept your split and planned your week of meals. check the shopping list."),
     ];
 
     private static NotificationContent Pick(

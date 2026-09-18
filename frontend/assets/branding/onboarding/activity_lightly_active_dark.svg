@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <g fill="none" stroke="#D2F639" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Head -->
+    <circle cx="256" cy="118" r="44" fill="#D2F639"/>
+    <!-- Torso upright with gentle walking stride -->
+    <path d="M256 168 L256 280" stroke-width="32"/>
+    <!-- Forward walking leg -->
+    <path d="M256 280 L290 350 L324 430" stroke-width="30"/>
+    <!-- Trailing back leg with bent knee -->
+    <path d="M256 280 L216 350 L188 424" stroke-width="30"/>
+    <!-- Left arm swinging forward gently -->
+    <path d="M256 200 L210 240 L190 286" stroke-width="28"/>
+    <!-- Right arm swinging back gently -->
+    <path d="M256 200 L300 242 L320 284" stroke-width="28"/>
+    <!-- Ground surface line -->
+    <line x1="140" y1="438" x2="372" y2="438" stroke="#526E65" stroke-width="18" stroke-dasharray="8 12"/>
+  </g>
+</svg>

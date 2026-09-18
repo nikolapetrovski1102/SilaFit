@@ -26,10 +26,10 @@ public class DietPlanServiceTests
         DurationDays = 7
     };
 
-    private static (DietPlanModel? Plan, List<DietPlanDayModel> Days, List<DietPlanMealModel> Meals)
+    private static (DietPlanModel? Plan, List<DietPlanDayModel> Days, List<DietPlanMealModel> Meals, List<string> Ingredients)
         Detail(DietPlanModel? plan) =>
         (plan, new List<DietPlanDayModel> { new() { DietPlanDayId = Guid.NewGuid(), DayIndex = 1 } },
-            new List<DietPlanMealModel>());
+            new List<DietPlanMealModel>(), new List<string>());
 
     [Fact]
     public async Task GetActiveAsync_NoActivePlan_ReturnsSuccessWithNoData()
@@ -72,6 +72,24 @@ public class DietPlanServiceTests
         Assert.Single(result.Data.Days);
         // Plan() has no OwnerUserId, so it is not editable by the caller.
         Assert.False(result.Data.Plan.IsEditableByMe);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_DeduplicatesShoppingListInFirstSeenOrder()
+    {
+        var planId = Guid.NewGuid();
+        provider
+            .Setup(p => p.GetDetailAsync(planId, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((
+                Plan(planId),
+                new List<DietPlanDayModel> { new() { DietPlanDayId = Guid.NewGuid(), DayIndex = 1 } },
+                new List<DietPlanMealModel>(),
+                new List<string> { "2 eggs", "1 cup oats", "2 eggs", " 1 cup oats ", "1 banana" }));
+
+        var result = await sut.GetDetailAsync(planId, null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new[] { "2 eggs", "1 cup oats", "1 banana" }, result.Data!.ShoppingList);
     }
 
     [Fact]

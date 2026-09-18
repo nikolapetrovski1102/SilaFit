@@ -31,7 +31,7 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
     public Task<ServiceResult<DietPlanDetailDto>> GetDetailAsync(Guid dietPlanId, Guid? userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
-            var (plan, days, meals) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
+            var (plan, days, meals, ingredients) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
 
             if (plan is null)
             {
@@ -43,7 +43,7 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
                 plan.IsEditableByMe = plan.OwnerUserId == callerId;
             }
 
-            return BuildDetail(plan, days, meals);
+            return BuildDetail(plan, days, meals, ingredients);
         });
 
     public Task<ServiceResult<DietPlanDetailDto?>> GetActiveAsync(Guid userId, CancellationToken cancellationToken = default) =>
@@ -58,14 +58,14 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
                 return null;
             }
 
-            var (plan, days, meals) = await dietPlansProvider.GetDetailAsync(active.DietPlanId, userId, cancellationToken);
+            var (plan, days, meals, ingredients) = await dietPlansProvider.GetDetailAsync(active.DietPlanId, userId, cancellationToken);
             if (plan is null)
             {
                 return null;
             }
 
             plan.IsEditableByMe = plan.OwnerUserId == userId;
-            return BuildDetail(plan, days, meals);
+            return BuildDetail(plan, days, meals, ingredients);
         });
 
     public Task<ServiceResult<AdminWriteResultDto>> ActivateAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default) =>
@@ -73,7 +73,7 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
         {
             // Reuse the detail read as the visibility check: a private/shared plan
             // the caller can't see comes back null, so it can't be activated.
-            var (plan, _, _) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
+            var (plan, _, _, _) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
             if (plan is null)
             {
                 throw new NotFoundException($"Diet plan '{dietPlanId}' was not found.", "That diet plan couldn't be found.");
@@ -88,8 +88,23 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
         });
 
     private static DietPlanDetailDto BuildDetail(
-        DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals) =>
-        new()
+        DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals, List<string> ingredients)
+    {
+        // Same ingredient line can appear for several meals across the week
+        // ("2 scoops whey protein"); the shopping list shows each distinct line
+        // once, in the order it first appears, so it reads as one buy list.
+        var shoppingList = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ingredient in ingredients)
+        {
+            var trimmed = ingredient.Trim();
+            if (trimmed.Length > 0 && seen.Add(trimmed))
+            {
+                shoppingList.Add(trimmed);
+            }
+        }
+
+        return new DietPlanDetailDto
         {
             Plan = plan,
             Days = days
@@ -102,8 +117,10 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
                         .OrderBy(m => m.SortOrder)
                         .ToList()
                 })
-                .ToList()
+                .ToList(),
+            ShoppingList = shoppingList
         };
+    }
 
     /* ----------------------------- user-owned diet plans ----------------------------- */
 

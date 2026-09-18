@@ -5,9 +5,9 @@ import '../../core/api/api_client.dart';
 import '../../core/session/session_store.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/login_screen.dart';
+import '../auth/widgets/auth_blob_background.dart';
 import '../notifications/notifications_repository.dart';
 import '../notifications/push_messaging_service.dart';
-import '../settings/settings_repository.dart';
 import '../../root_shell.dart';
 import 'onboarding_controller.dart';
 import 'onboarding_repository.dart';
@@ -19,11 +19,9 @@ import 'widgets/onboarding_step_transition.dart';
 import 'widgets/option_row_selector.dart';
 import 'widgets/question_scaffold.dart';
 import 'widgets/training_preference_question.dart';
-import 'widgets/weekly_ai_plans_question.dart';
 
-/// The first-launch flow: 2 intro slides, 9 profile questions, the AI weekly
-/// plans opt-in, then a notification-permission screen. Owns its own
-/// [OnboardingController] -
+/// The first-launch flow: 2 intro slides, 9 profile questions, then a
+/// notification-permission screen. Owns its own [OnboardingController] -
 /// nothing outside this flow needs the in-progress answers - and hands off
 /// into [RootShell] once it's done, however the user got there (finished,
 /// skipped, or logged into an existing account mid-flow).
@@ -36,7 +34,6 @@ class OnboardingFlowScreen extends StatelessWidget {
       create: (ctx) => OnboardingController(
         OnboardingRepository(ctx.read<ApiClient>()),
         ctx.read<NotificationsRepository>(),
-        settingsRepository: ctx.read<SettingsRepository>(),
         pushMessaging: ctx.read<PushMessagingService>(),
       ),
       child: const _OnboardingFlowView(),
@@ -67,8 +64,6 @@ class _OnboardingFlowView extends StatelessWidget {
       ));
       return;
     }
-    await controller.submitAiPlanPreferences();
-    if (!context.mounted) return;
     await controller.submitNotificationOptIn(notificationsAllowed);
     if (!context.mounted) return;
     await _enterApp(context);
@@ -89,56 +84,66 @@ class _OnboardingFlowView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: ClipRect(
-        child: AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 360),
-          reverseDuration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 280),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeIn,
-          layoutBuilder: (currentChild, previousChildren) => Stack(
-            fit: StackFit.expand,
-            children: [
-              for (final child in previousChildren)
-                ExcludeSemantics(child: IgnorePointer(child: child)),
-              if (currentChild != null) currentChild,
-            ],
-          ),
-          // Screen navigation stays route-like and predictable. The softer
-          // fade/fall treatment is supplied to opted-in content descendants,
-          // never to the background, navigation chrome or bottom CTA.
-          transitionBuilder: (child, animation) {
-            return AnimatedBuilder(
-              animation: animation,
-              child: child,
-              builder: (context, child) {
-                final incoming = animation.status != AnimationStatus.reverse;
-                final progress = animation.value.clamp(0.0, 1.0);
-                final direction = controller.lastDirection.toDouble();
-                final horizontalOffset = incoming
-                    ? direction * (1 - progress)
-                    : -direction * (1 - progress);
-                return Transform.translate(
-                  offset: Offset(
-                    MediaQuery.sizeOf(context).width * horizontalOffset,
-                    0,
-                  ),
-                  child: OnboardingStepTransitionScope(
-                    animation: animation,
-                    child: child!,
-                  ),
+      body: Stack(
+        children: [
+          // Same premium floating-blob backdrop as login/register, present
+          // from the first frame and re-laid-out - via AuthBlobBackground's
+          // own AnimatedAlign glide - on every step change, so onboarding
+          // shares that screen's dynamic-background language end to end.
+          Positioned.fill(child: AuthBlobBackground(layout: controller.stepIndex)),
+          ClipRect(
+            child: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 360),
+              reverseDuration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 280),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeIn,
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  for (final child in previousChildren)
+                    ExcludeSemantics(child: IgnorePointer(child: child)),
+                  if (currentChild != null) currentChild,
+                ],
+              ),
+              // Screen navigation stays route-like and predictable. The softer
+              // fade/fall treatment is supplied to opted-in content descendants,
+              // never to the background, navigation chrome or bottom CTA.
+              transitionBuilder: (child, animation) {
+                return AnimatedBuilder(
+                  animation: animation,
+                  child: child,
+                  builder: (context, child) {
+                    final incoming =
+                        animation.status != AnimationStatus.reverse;
+                    final progress = animation.value.clamp(0.0, 1.0);
+                    final direction = controller.lastDirection.toDouble();
+                    final horizontalOffset = incoming
+                        ? direction * (1 - progress)
+                        : -direction * (1 - progress);
+                    return Transform.translate(
+                      offset: Offset(
+                        MediaQuery.sizeOf(context).width * horizontalOffset,
+                        0,
+                      ),
+                      child: OnboardingStepTransitionScope(
+                        animation: animation,
+                        child: child!,
+                      ),
+                    );
+                  },
                 );
               },
-            );
-          },
-          child: KeyedSubtree(
-            key: ValueKey(controller.step),
-            child: _buildStep(context, controller),
+              child: KeyedSubtree(
+                key: ValueKey(controller.step),
+                child: _buildStep(context, controller),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -183,10 +188,10 @@ class _OnboardingFlowView extends StatelessWidget {
             options: const ['Male', 'Female', 'Other'],
             selected: controller.gender,
             onSelected: controller.selectGender,
-            iconFor: (value) => const {
-              'Male': Icons.male_rounded,
-              'Female': Icons.female_rounded,
-              'Other': Icons.transgender_rounded,
+            badgeAssetFor: (value) => const {
+              'Male': 'gender_male',
+              'Female': 'gender_female',
+              'Other': 'gender_other',
             }[value],
           ),
           ctaLabel: 'Continue',
@@ -270,10 +275,10 @@ class _OnboardingFlowView extends StatelessWidget {
             labelFor: (value) => _goalLabels[value] ?? value,
             selected: controller.goal,
             onSelected: controller.selectGoal,
-            iconFor: (value) => const {
-              'BuildMuscle': Icons.fitness_center_rounded,
-              'LoseFat': Icons.local_fire_department_rounded,
-              'MaintainActive': Icons.directions_walk_rounded,
+            badgeAssetFor: (value) => const {
+              'BuildMuscle': 'goal_build_muscle',
+              'LoseFat': 'goal_lose_fat',
+              'MaintainActive': 'goal_stay_active',
             }[value],
           ),
           ctaLabel: 'Continue',
@@ -291,18 +296,6 @@ class _OnboardingFlowView extends StatelessWidget {
           progressStepCount: controller.questionStepCount,
           onBack: controller.goBack,
           onNext: controller.goNext,
-        );
-
-      case OnboardingStep.aiPlans:
-        return WeeklyAiPlansQuestion(
-          onBack: controller.goBack,
-          progressStep: controller.questionProgressStep!,
-          progressStepCount: controller.questionStepCount,
-          receiveWeeklyAiPlans: controller.receiveWeeklyAiPlans,
-          autoActivateAiPlans: controller.autoActivateAiPlans,
-          onReceiveChanged: controller.setReceiveWeeklyAiPlans,
-          onAutoActivateChanged: controller.setAutoActivateAiPlans,
-          onCta: controller.goNext,
         );
 
       case OnboardingStep.notifications:

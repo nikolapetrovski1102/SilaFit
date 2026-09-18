@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import 'onboarding_icon_badge.dart';
 
 /// Simple, accessible answer rows shared by onboarding questions.
 /// Labels can wrap at larger text sizes; the entire row is interactive.
@@ -11,13 +12,16 @@ import '../../../core/theme/app_typography.dart';
 /// [options] carries the values [onSelected] fires (and [selected] is
 /// compared against) - typically the backend's canonical enum strings.
 /// [labelFor] maps each value to the text a tile actually displays.
-/// [iconFor] maps each value to a Material icon shown at the leading edge.
+/// [badgeAssetFor] maps each value to a branded [OnboardingIconBadge] asset
+/// name shown at the leading edge; where it returns null, [iconFor] (a
+/// plain Material icon) is used as a fallback.
 class OptionRowSelector extends StatelessWidget {
   final List<String> options;
   final String? selected;
   final ValueChanged<String> onSelected;
   final String Function(String value)? labelFor;
   final IconData? Function(String value)? iconFor;
+  final String? Function(String value)? badgeAssetFor;
 
   const OptionRowSelector(
       {super.key,
@@ -25,7 +29,8 @@ class OptionRowSelector extends StatelessWidget {
       required this.selected,
       required this.onSelected,
       this.labelFor,
-      this.iconFor});
+      this.iconFor,
+      this.badgeAssetFor});
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +40,7 @@ class OptionRowSelector extends StatelessWidget {
           _OptionTile(
             label: labelFor?.call(option) ?? option,
             icon: iconFor?.call(option),
+            badgeAsset: badgeAssetFor?.call(option),
             selected: option == selected,
             onTap: () => onSelected(option),
           ),
@@ -48,12 +54,14 @@ class OptionRowSelector extends StatelessWidget {
 class _OptionTile extends StatelessWidget {
   final String label;
   final IconData? icon;
+  final String? badgeAsset;
   final bool selected;
   final VoidCallback onTap;
 
   const _OptionTile(
       {required this.label,
       this.icon,
+      this.badgeAsset,
       required this.selected,
       required this.onTap});
 
@@ -83,7 +91,11 @@ class _OptionTile extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               child: Row(children: [
-                if (icon != null) ...[
+                if (badgeAsset != null) ...[
+                  ExcludeSemantics(
+                      child: OnboardingIconBadge(badgeAsset!, size: 40)),
+                  const SizedBox(width: 16),
+                ] else if (icon != null) ...[
                   ExcludeSemantics(
                       child: Icon(icon,
                           size: 26,

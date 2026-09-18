@@ -13,11 +13,5 @@ public sealed class UserSettingsModel
     public decimal BarbellStandardKg { get; set; }
     public string AppearanceMode { get; set; } = "Device";
 
-    /// <summary>Whether the Sunday batch (<c>IWeeklyPlanGenerationService</c>) considers this user at all.</summary>
-    public bool ReceiveWeeklyAiPlans { get; set; }
-
-    /// <summary>Whether each newly generated split/diet plan becomes active automatically, or just lands in the user's list.</summary>
-    public bool AutoActivateAiPlans { get; set; }
-
     public DateTime UpdatedAtUtc { get; set; }
 }

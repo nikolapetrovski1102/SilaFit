@@ -4,10 +4,14 @@ using Silen.Common.Dtos;
 namespace Silen.Services.Abstractions;
 
 /// <summary>
-/// Weekly batch that, for every user opted into ReceiveWeeklyAiPlans with an active
-/// Advanced subscription, looks at what they actually trained and ate last week and
-/// generates a brand-new custom split and diet plan for the upcoming week - the
-/// weekly, content-generating counterpart of <see cref="IMonthlyReviewService"/>.
+/// Weekly batch that, for every active Advanced subscriber, looks at what they
+/// actually trained and ate last week and generates a brand-new custom split and
+/// diet plan for the upcoming week - the weekly, content-generating counterpart
+/// of <see cref="IMonthlyReviewService"/>. The model may decide the current
+/// split already fits and recommend keeping it; the diet plan always covers the
+/// full week (Monday-Sunday, breakfast/lunch/dinner/snack) and carries a
+/// week-long shopping list aggregated from the meals' ingredients. Generated
+/// plans are left inactive for the user to activate themselves.
 /// Designed to run every Sunday and be safely re-runnable: a user already settled for
 /// a given week (see <c>IWeeklyPlanGenerationProvider.GetProcessedUserIdsAsync</c>) is
 /// skipped on a later run for that same week.

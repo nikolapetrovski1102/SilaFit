@@ -225,7 +225,7 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                   footer: Column(children: [
                     if (_loadingWeight)
                       const Padding(
-                          padding: EdgeInsets.all(24),
+                          padding: EdgeInsets.all(16),
                           child: CircularProgressIndicator())
                     else ...[
                       Text(
@@ -277,14 +277,7 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                         Text(_weightError!,
                             style: AppTypography.bodySm
                                 .copyWith(color: AppColors.error)),
-                      const SizedBox(height: AppSpacing.md),
-                      SecondaryPillButton(
-                          label: _saving ? 'Saving…' : 'Save weight & continue',
-                          onPressed: _saving ? null : _saveWeight),
                     ],
-                    const SizedBox(height: AppSpacing.sm),
-                    Text('Optional. You can continue without saving.',
-                        style: AppTypography.bodySm),
                   ]),
                 ),
                 _AiVerdictSlide(analytics: analytics),
@@ -308,9 +301,15 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                 label: _page == _slideCount - 1
                     ? 'Continue to dashboard'
                     : _page == 4
-                        ? 'Skip for now'
+                        ? (_weightEdited
+                            ? (_saving ? 'Saving…' : 'Save weight & continue')
+                            : 'Skip for now')
                         : 'Next',
-                onPressed: _saving ? null : _next,
+                onPressed: _saving
+                    ? null
+                    : _page == 4 && _weightEdited
+                        ? _saveWeight
+                        : _next,
               ),
             ),
           ])),

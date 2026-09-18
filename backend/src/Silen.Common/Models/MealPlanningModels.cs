@@ -47,6 +47,11 @@ public sealed class MealSuggestionModel
     public short CarbsG { get; set; }
     public short FatsG { get; set; }
 
+    /// <summary>True when at least one dbo.MealSuggestionIngredients row exists for this
+    /// suggestion, so it can back a real shopping list. Only ingredient-backed meals are
+    /// offered to the weekly plan generator as diet-plan candidates.</summary>
+    public bool HasIngredients { get; set; }
+
     /// <summary>1-12, or null when the suggestion is evergreen (shown every month).</summary>
     public byte? SuggestedMonth { get; set; }
     public bool IsSystemDefault { get; set; }

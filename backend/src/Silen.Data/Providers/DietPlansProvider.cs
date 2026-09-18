@@ -15,7 +15,7 @@ public sealed class DietPlansProvider(ISqlExecutor sqlExecutor) : IDietPlansProv
             reader => SqlResultSetReader.ReadListAsync(reader, DietPlanRowMapper.MapDietPlan, cancellationToken),
             cancellationToken);
 
-    public Task<(DietPlanModel? Plan, List<DietPlanDayModel> Days, List<DietPlanMealModel> Meals)> GetDetailAsync(
+    public Task<(DietPlanModel? Plan, List<DietPlanDayModel> Days, List<DietPlanMealModel> Meals, List<string> Ingredients)> GetDetailAsync(
         Guid dietPlanId, Guid? userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_DietPlans_GetDetail",
@@ -27,7 +27,9 @@ public sealed class DietPlansProvider(ISqlExecutor sqlExecutor) : IDietPlansProv
                 var days = await SqlResultSetReader.ReadListAsync(reader, DietPlanRowMapper.MapDietPlanDay, cancellationToken);
                 await reader.NextResultAsync(cancellationToken);
                 var meals = await SqlResultSetReader.ReadListAsync(reader, DietPlanRowMapper.MapDietPlanMeal, cancellationToken);
-                return (plan, days, meals);
+                await reader.NextResultAsync(cancellationToken);
+                var ingredients = await SqlResultSetReader.ReadListAsync(reader, DietPlanRowMapper.MapIngredientText, cancellationToken);
+                return (plan, days, meals, ingredients);
             },
             cancellationToken);
 

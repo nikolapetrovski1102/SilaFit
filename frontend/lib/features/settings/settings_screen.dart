@@ -429,43 +429,6 @@ class _PreferencesSections extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
-        const SectionEyebrow('AI Weekly Plans'),
-        const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _SwitchRow(
-                label: 'Let AI build your weekly plan',
-                value: settings.receiveWeeklyAiPlans,
-                onChanged: controller.setReceiveWeeklyAiPlans,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Every Sunday, generates a fresh custom split and diet plan '
-                'from what you actually trained and logged last week.',
-                style: AppTypography.bodySm
-                    .copyWith(color: AppColors.onSurfaceVariant),
-              ),
-              if (settings.receiveWeeklyAiPlans) ...[
-                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-                _SwitchRow(
-                  label: 'Auto-activate it each week',
-                  value: settings.autoActivateAiPlans,
-                  onChanged: controller.setAutoActivateAiPlans,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Off: the new plan just lands in "My Splits"/"My Diet '
-                  'Plans" for you to activate yourself.',
-                  style: AppTypography.bodySm
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-              ],
-            ],
-          ),
-        ),
       ],
     );
   }

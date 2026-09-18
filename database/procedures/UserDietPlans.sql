@@ -470,9 +470,9 @@ END
 GO
 
 -- Sets a user's current diet plan, mirroring dbo.usp_UserActiveSplit_Set
--- (see Splits.sql). Written by the app's activate endpoint and by
--- Silen.Tools.WeeklyPlanGeneration, for a user whose AutoActivateAiPlans
--- setting is on. UserActiveDietPlans is still just a label (048_DietPlanTrainerSharing.sql):
+-- (see Splits.sql). Written by the app's activate endpoint and, for on-demand
+-- AI generation only, by Silen.Services. UserActiveDietPlans is still just a
+-- label (048_DietPlanTrainerSharing.sql):
 -- it does not pre-populate MealLogs; the Nutrition screen reads it through
 -- usp_UserActiveDietPlan_Get and renders the plan's meals for the viewed day.
 CREATE OR ALTER PROCEDURE dbo.usp_UserActiveDietPlan_Set

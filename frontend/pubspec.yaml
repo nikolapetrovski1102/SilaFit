@@ -71,6 +71,12 @@ dependencies:
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
 
+  # Renders the onboarding assessment icons (gender/goal/equipment/activity
+  # badges, see assets/branding/onboarding/) from their vector source
+  # instead of rasterizing each one - stays crisp at any size and keeps the
+  # asset set small next to bundling a PNG per icon per theme.
+  flutter_svg: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -86,6 +92,7 @@ flutter:
   # avatar placeholder (see lib/core/theme/app_images.dart).
   assets:
     - assets/branding/
+    - assets/branding/onboarding/
     - assets/mascot/
     - assets/lottie_animations/
 
@@ -107,28 +114,35 @@ flutter:
 
 # --- flutter_launcher_icons: generates the real app-store/launcher icons
 # from the SilaFit mark for every platform. `image_path` is the flattened
-# mark on dark green (used as-is for iOS, which doesn't want transparency);
-# `adaptive_icon_*` gives Android's adaptive-icon system a transparent
-# foreground so it isn't clipped by the circular/squircle/rounded masks.
+# light-background mark (used as-is for iOS default + legacy Android +
+# web/macos/windows, none of which have a theme-aware icon mechanism here);
+# `image_path_ios_dark_transparent` gives iOS 18+ its automatic dark-mode
+# app icon. `adaptive_icon_*` gives Android's adaptive-icon system a
+# transparent foreground so it isn't clipped by the circular/squircle/
+# rounded masks; the background is a *color resource*
+# (android/app/src/main/res/values/colors.xml), which is why
+# res/values-night/colors.xml can override it with the dark background for
+# Android's own theme-based swap - see that file for details.
 # Run: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/branding/app_icon.png"
+  image_path: "assets/branding/app_icon_light.png"
+  image_path_ios_dark_transparent: "assets/branding/app_icon_dark.png"
   min_sdk_android: 21
-  adaptive_icon_background: "#172d30"
+  adaptive_icon_background: "#f2ebd9"
   adaptive_icon_foreground: "assets/branding/app_icon_adaptive_fg.png"
   web:
     generate: true
-    image_path: "assets/branding/app_icon.png"
-    background_color: "#172d30"
-    theme_color: "#172d30"
+    image_path: "assets/branding/app_icon_light.png"
+    background_color: "#f2ebd9"
+    theme_color: "#f2ebd9"
   macos:
     generate: true
-    image_path: "assets/branding/app_icon.png"
+    image_path: "assets/branding/app_icon_light.png"
   windows:
     generate: true
-    image_path: "assets/branding/app_icon.png"
+    image_path: "assets/branding/app_icon_light.png"
 
 # --- flutter_native_splash: the native (pre-Flutter-engine) splash screen,
 # shown instantly on cold start before AppColors/ThemeMode can even run -

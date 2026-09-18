@@ -10,6 +10,7 @@ import '../auth/widgets/auth_blob_background.dart';
 import '../exercises/exercise_picker_sheet.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
+import 'widgets/reorder_sheet.dart';
 
 /// Build/edit screen for one day within a split the user owns - day header
 /// (title/focus/rest toggle) plus its exercise list. A brand-new day (no
@@ -75,13 +76,14 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
   Future<void> _saveHeader() async {
     final title = _title.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Give this day a title.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Give this day a title.')));
       return;
     }
     final existingDays = widget.builderController.detail?.days ?? const [];
     final dayIndex = _findDay()?.day.dayIndex ?? existingDays.length + 1;
-    final hours = int.tryParse(_hours.text.trim()) ?? _defaultEstimatedMinutes ~/ 60;
+    final hours =
+        int.tryParse(_hours.text.trim()) ?? _defaultEstimatedMinutes ~/ 60;
     final minutes = hours * 60 + (int.tryParse(_minutes.text.trim()) ?? 0);
     final ok = await widget.builderController.saveDay(
       splitDayId: _splitDayId,
@@ -98,8 +100,8 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
           .showSnackBar(const SnackBar(content: Text('Day saved.')));
       setState(() {});
     } else if (widget.builderController.actionError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.builderController.actionError!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.builderController.actionError!)));
     }
   }
 
@@ -108,7 +110,8 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
   String? _findLatestDayId(int previousCount) {
     final days = widget.builderController.detail?.days ?? const [];
     if (days.length <= previousCount) return null;
-    final sorted = [...days]..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
+    final sorted = [...days]
+      ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
     return sorted.last.day.splitDayId;
   }
 
@@ -136,8 +139,8 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     if (ok) {
       Navigator.of(context).pop();
     } else if (widget.builderController.actionError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.builderController.actionError!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.builderController.actionError!)));
     }
   }
 
@@ -176,8 +179,8 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     );
     if (!mounted) return;
     if (!ok && widget.builderController.actionError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.builderController.actionError!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.builderController.actionError!)));
     } else {
       setState(() {});
     }
@@ -201,19 +204,47 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     );
     if (!mounted) return;
     if (!ok && widget.builderController.actionError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.builderController.actionError!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.builderController.actionError!)));
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _reorderExercises() async {
+    final dayId = _splitDayId;
+    if (dayId == null) return;
+    final exercises = [...?_findDay()?.exercises]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final order = await showReorderSheet<SplitDayExercise>(
+      context,
+      title: 'Reorder exercises',
+      subtitle: 'Press and drag the handle to change what comes next.',
+      items: exercises,
+      idOf: (e) => e.splitDayExerciseId,
+      titleOf: (e) => e.name,
+      subtitleOf: (e) =>
+          '${e.targetSets} x ${e.targetRepsLow}-${e.targetRepsHigh}',
+    );
+    if (order == null || !mounted) return;
+    final ok = await widget.builderController.reorderDayExercises(
+        dayId, order.map((e) => e.splitDayExerciseId).toList());
+    if (!mounted) return;
+    if (!ok && widget.builderController.actionError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.builderController.actionError!)));
     } else {
       setState(() {});
     }
   }
 
   Future<void> _deleteExercise(String splitDayExerciseId) async {
-    final ok = await widget.builderController.deleteDayExercise(splitDayExerciseId);
+    final ok =
+        await widget.builderController.deleteDayExercise(splitDayExerciseId);
     if (!mounted) return;
     if (!ok && widget.builderController.actionError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.builderController.actionError!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.builderController.actionError!)));
     } else {
       setState(() {});
     }
@@ -372,10 +403,22 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const SectionEyebrow('Exercises'),
-                          TextButton.icon(
-                            onPressed: _addExercise,
-                            icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('Add exercise'),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if ((_findDay()?.exercises.length ?? 0) > 1)
+                                IconButton(
+                                  icon: const Icon(Icons.reorder_rounded,
+                                      size: 20),
+                                  tooltip: 'Reorder exercises',
+                                  onPressed: _reorderExercises,
+                                ),
+                              TextButton.icon(
+                                onPressed: _addExercise,
+                                icon: const Icon(Icons.add_rounded, size: 18),
+                                label: const Text('Add exercise'),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -398,7 +441,8 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Text('No exercises yet - tap "Add exercise" to build this day.',
-            style: AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant)),
+            style: AppTypography.bodySm
+                .copyWith(color: AppColors.onSurfaceVariant)),
       );
     }
     return Column(

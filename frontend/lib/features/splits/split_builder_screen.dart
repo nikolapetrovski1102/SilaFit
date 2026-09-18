@@ -8,6 +8,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
 import '../../core/widgets/silen_slide_route.dart';
+import 'widgets/reorder_sheet.dart';
 import '../auth/widgets/auth_blob_background.dart';
 import '../today/today_controller.dart';
 import 'split_day_editor_screen.dart';
@@ -174,6 +175,32 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
     setState(() {});
   }
 
+  Future<void> _reorderDays() async {
+    final days = <SplitDayWithExercises>[
+      ...widget.controller.detail?.days ?? const []
+    ]..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
+    final order = await showReorderSheet<SplitDayWithExercises>(
+      context,
+      title: 'Reorder days',
+      subtitle: 'Press and drag the handle to change what comes next.',
+      items: days,
+      idOf: (d) => d.day.splitDayId,
+      titleOf: (d) => d.day.title,
+      subtitleOf: (d) =>
+          d.day.isRestDay ? 'Rest day' : '${d.exercises.length} exercises',
+    );
+    if (order == null || !mounted) return;
+    final ok = await widget.controller
+        .reorderDays(order.map((d) => d.day.splitDayId).toList());
+    if (!mounted) return;
+    if (!ok && widget.controller.actionError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.controller.actionError!)));
+    } else {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -312,10 +339,23 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const SectionEyebrow('Workout days'),
-                          TextButton.icon(
-                            onPressed: () => _openDay(),
-                            icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('Add day'),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if ((widget.controller.detail?.days.length ?? 0) >
+                                  1)
+                                IconButton(
+                                  icon: const Icon(Icons.reorder_rounded,
+                                      size: 20),
+                                  tooltip: 'Reorder days',
+                                  onPressed: _reorderDays,
+                                ),
+                              TextButton.icon(
+                                onPressed: () => _openDay(),
+                                icon: const Icon(Icons.add_rounded, size: 18),
+                                label: const Text('Add day'),
+                              ),
+                            ],
                           ),
                         ],
                       ),

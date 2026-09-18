@@ -161,18 +161,22 @@ GO
 -- Month-matched suggestions first, then evergreen (SuggestedMonth IS NULL)
 -- ones, each group by SortOrder. MealSuggestions is system-authored content,
 -- not user data, so it stays plaintext. TOP caps the response as a safety valve
--- for seeded content that grows over time.
+-- for seeded content that grows over time. HasIngredients tells the weekly AI
+-- plan generator which meals can back a real week-long shopping list.
 CREATE OR ALTER PROCEDURE dbo.usp_MealSuggestions_GetForMonth
     @Month TINYINT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT TOP (500) MealSuggestionId, Title, MealType, Description, CaloriesKcal, ProteinG, CarbsG, FatsG,
-           SuggestedMonth, IsSystemDefault, SortOrder
-    FROM dbo.MealSuggestions
-    WHERE SuggestedMonth = @Month OR SuggestedMonth IS NULL
-    ORDER BY CASE WHEN SuggestedMonth = @Month THEN 0 ELSE 1 END, SortOrder;
+    SELECT TOP (500) ms.MealSuggestionId, ms.Title, ms.MealType, ms.Description, ms.CaloriesKcal, ms.ProteinG,
+           ms.CarbsG, ms.FatsG, ms.SuggestedMonth, ms.IsSystemDefault, ms.SortOrder,
+           CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.MealSuggestionIngredients i
+                                  WHERE i.MealSuggestionId = ms.MealSuggestionId)
+                     THEN 1 ELSE 0 END AS BIT) AS HasIngredients
+    FROM dbo.MealSuggestions ms
+    WHERE ms.SuggestedMonth = @Month OR ms.SuggestedMonth IS NULL
+    ORDER BY CASE WHEN ms.SuggestedMonth = @Month THEN 0 ELSE 1 END, ms.SortOrder;
 END
 GO
 
@@ -216,8 +220,10 @@ END
 GO
 
 -- Result set 1: plan header. Result set 2: its days. Result set 3: each day's
--- meal slots with the referenced MealSuggestions row. All three are always
--- emitted (empty when invisible), same convention as usp_Splits_GetDetail.
+-- meal slots with the referenced MealSuggestions row. Result set 4: the
+-- ingredient lines behind those meal suggestions, in plan order, for the
+-- week-long shopping list. All four are always emitted (empty when invisible),
+-- same convention as usp_Splits_GetDetail.
 CREATE OR ALTER PROCEDURE dbo.usp_DietPlans_GetDetail
     @DietPlanId UNIQUEIDENTIFIER,
     @UserId UNIQUEIDENTIFIER = NULL
@@ -259,5 +265,13 @@ BEGIN
     WHERE d.DietPlanId = @DietPlanId
       AND @Visible = 1
     ORDER BY d.DayIndex, m.SortOrder;
+
+    SELECT i.IngredientText
+    FROM dbo.DietPlanDays d
+    INNER JOIN dbo.DietPlanMeals m ON m.DietPlanDayId = d.DietPlanDayId
+    INNER JOIN dbo.MealSuggestionIngredients i ON i.MealSuggestionId = m.MealSuggestionId
+    WHERE d.DietPlanId = @DietPlanId
+      AND @Visible = 1
+    ORDER BY d.DayIndex, m.SortOrder, i.SortOrder;
 END
 GO

@@ -6,6 +6,11 @@ public sealed class DietPlanDetailDto
 {
     public DietPlanModel Plan { get; set; } = new();
     public List<DietPlanDayWithMealsDto> Days { get; set; } = new();
+
+    /// <summary>Deduplicated ingredient lines across every meal in the plan - the
+    /// week's shopping list. Empty when none of the referenced meal suggestions
+    /// have ingredient data (see dbo.MealSuggestionIngredients).</summary>
+    public List<string> ShoppingList { get; set; } = new();
 }
 
 public sealed class DietPlanDayWithMealsDto

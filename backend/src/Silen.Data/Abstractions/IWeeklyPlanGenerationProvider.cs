@@ -21,6 +21,6 @@ public interface IWeeklyPlanGenerationProvider
 
     Task RecordDeliveryAsync(WeeklyAiPlanDeliveryModel delivery, CancellationToken cancellationToken = default);
 
-    /// <summary>Active ADVANCED subscribers who have opted into ReceiveWeeklyAiPlans.</summary>
+    /// <summary>Active ADVANCED subscribers.</summary>
     Task<List<PlanSubscriberModel>> GetCandidateUsersAsync(CancellationToken cancellationToken = default);
 }

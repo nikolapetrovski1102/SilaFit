@@ -14,7 +14,13 @@ public static class WeeklyPlanEmailRenderer
     public static string BuildSubject(DateTime weekStartUtc) =>
         $"Your plan for the week of {weekStartUtc:MMM d} is ready";
 
-    public static string BuildHtml(string? displayName, string splitName, string dietPlanName, DateTime weekStartUtc)
+    public static string BuildHtml(
+        string? displayName,
+        string splitName,
+        bool splitKept,
+        string dietPlanName,
+        IReadOnlyList<string> shoppingList,
+        DateTime weekStartUtc)
     {
         var name = string.IsNullOrWhiteSpace(displayName) ? "Athlete" : displayName.Trim();
         var weekLabel = weekStartUtc.ToString("MMM d", CultureInfo.InvariantCulture);
@@ -27,9 +33,25 @@ public static class WeeklyPlanEmailRenderer
                     "trained and ate last week and built you a fresh plan for this one.</p>");
 
         body.Append("<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;font-size:14px;\">");
-        body.Append(SummaryRow("New split", splitName));
-        body.Append(SummaryRow("New diet plan", dietPlanName));
+        body.Append(splitKept
+            ? SummaryRow("Your split", "Kept your current split")
+            : SummaryRow("New split", splitName));
+        body.Append(SummaryRow("New meal plan", dietPlanName));
         body.Append("</table>");
+
+        if (shoppingList.Count > 0)
+        {
+            body.Append("<h2 style=\"font-size:16px;margin:28px 0 8px;\">Your shopping list</h2>");
+            body.Append("<p style=\"margin:0 0 10px;color:#6b7280;font-size:13px;\">" +
+                        "Everything you need for the week's meals.</p>");
+            body.Append("<ul style=\"margin:0;padding-left:20px;font-size:14px;\">");
+            foreach (var ingredient in shoppingList)
+            {
+                body.Append($"<li style=\"margin:2px 0;\">{Encode(ingredient)}</li>");
+            }
+
+            body.Append("</ul>");
+        }
 
         body.Append("<p style=\"margin:24px 0 0;font-size:14px;\">Open the app to see the full breakdown - " +
                     "and tap \"Keep this plan\" on either one if you want it to stick around past this week.</p>");

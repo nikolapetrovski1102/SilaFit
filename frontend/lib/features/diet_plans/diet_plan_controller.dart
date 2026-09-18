@@ -43,8 +43,10 @@ class DietPlanDetailController extends ChangeNotifier {
   final String dietPlanId;
 
   ResourceState<DietPlanDetail> state = const ResourceState.loading();
+  bool isActivating = false;
   bool isKeeping = false;
   String? actionError;
+  bool activated = false;
 
   DietPlanDetailController(this._repository, this.dietPlanId);
 
@@ -67,6 +69,30 @@ class DietPlanDetailController extends ChangeNotifier {
       _isLoading = false;
     }
     notifyListeners();
+  }
+
+  /// Makes this plan the user's active one, mirroring
+  /// [SplitDetailController.activate]. AI-generated weekly plans are no longer
+  /// auto-activated, so this is how the user adopts a freshly generated plan
+  /// (or switches back to an older one).
+  Future<bool> activate() async {
+    isActivating = true;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _repository.activate(dietPlanId);
+      activated = true;
+      isActivating = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      actionError = e.userMessage;
+    } catch (_) {
+      actionError = ApiException.genericMessage;
+    }
+    isActivating = false;
+    notifyListeners();
+    return false;
   }
 
   /// Marks an AI-generated diet plan permanent, so next Sunday's generation

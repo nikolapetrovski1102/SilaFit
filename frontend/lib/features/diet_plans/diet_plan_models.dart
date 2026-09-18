@@ -144,7 +144,15 @@ class DietPlanDetail {
   final DietPlan plan;
   final List<DietPlanDayWithMeals> days;
 
-  const DietPlanDetail({required this.plan, required this.days});
+  /// Deduplicated ingredient lines across the plan's meals - the week's
+  /// shopping list. Empty when the referenced meals have no ingredient data.
+  final List<String> shoppingList;
+
+  const DietPlanDetail({
+    required this.plan,
+    required this.days,
+    this.shoppingList = const [],
+  });
 
   factory DietPlanDetail.fromJson(dynamic json) {
     final map = json as Map<String, dynamic>;
@@ -152,6 +160,9 @@ class DietPlanDetail {
       plan: DietPlan.fromJson(map['plan']),
       days: (map['days'] as List<dynamic>? ?? [])
           .map((e) => DietPlanDayWithMeals.fromJson(e))
+          .toList(),
+      shoppingList: (map['shoppingList'] as List<dynamic>? ?? [])
+          .map((e) => e as String)
           .toList(),
     );
   }

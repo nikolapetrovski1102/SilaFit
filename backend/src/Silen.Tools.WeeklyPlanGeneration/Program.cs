@@ -1,9 +1,13 @@
 // Weekly AI plan generation batch - see deploy/README.md ("Weekly AI splits & diet plans").
 //
-// For every active Advanced subscriber opted into ReceiveWeeklyAiPlans, looks at what
-// they actually trained and ate last week (AnalyticsProvider.GetPeriodSnapshotAsync) and
-// generates a brand-new custom split and diet plan for the upcoming week, written into
-// the same user-owned tables the manual "My Splits"/"My Diet Plans" builder uses.
+// For every active Advanced subscriber, looks at what they actually trained and ate
+// last week (AnalyticsProvider.GetPeriodSnapshotAsync) and generates a brand-new custom
+// split and diet plan for the upcoming week, written into the same user-owned tables the
+// manual "My Splits"/"My Diet Plans" builder uses. The model may recommend keeping the
+// user's current split (no training change); the diet plan always covers Monday-Sunday
+// with breakfast/lunch/dinner/snack and carries a week-long shopping list built from the
+// meals' stored ingredients. The plans are left inactive so the user chooses whether to
+// activate the new one or keep their current plan.
 //
 // Idempotent: a user already recorded in WeeklyAiPlanDeliveries for the target week is
 // skipped, so re-running (or an overlapping run) is harmless.

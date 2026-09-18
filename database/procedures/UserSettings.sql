@@ -14,7 +14,7 @@ BEGIN
 
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           ReceiveWeeklyAiPlans, AutoActivateAiPlans, UpdatedAtUtc
+           UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 END
@@ -44,9 +44,7 @@ CREATE OR ALTER PROCEDURE dbo.usp_UserSettings_Update
     @DistanceUnit NVARCHAR(3),
     @RestTimerSoundEnabled BIT,
     @BarbellStandardKg DECIMAL(5, 2),
-    @AppearanceMode NVARCHAR(10),
-    @ReceiveWeeklyAiPlans BIT = 0,
-    @AutoActivateAiPlans BIT = 0
+    @AppearanceMode NVARCHAR(10)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -61,14 +59,12 @@ BEGIN
         RestTimerSoundEnabled = @RestTimerSoundEnabled,
         BarbellStandardKg = @BarbellStandardKg,
         AppearanceMode = @AppearanceMode,
-        ReceiveWeeklyAiPlans = @ReceiveWeeklyAiPlans,
-        AutoActivateAiPlans = @AutoActivateAiPlans,
         UpdatedAtUtc = SYSUTCDATETIME()
     WHERE UserId = @UserId;
 
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           ReceiveWeeklyAiPlans, AutoActivateAiPlans, UpdatedAtUtc
+           UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 END

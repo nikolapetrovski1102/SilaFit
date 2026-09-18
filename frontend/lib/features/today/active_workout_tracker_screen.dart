@@ -578,6 +578,34 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     _syncLiveWorkout();
   }
 
+  /// Opens the drag-and-drop reorder sheet and, once confirmed, applies the
+  /// returned permutation to both [_exercises] and [_setsByExercise] in
+  /// lockstep so a set's logged progress stays attached to its exercise
+  /// across the move. [_exerciseIndex] is re-pointed at wherever the
+  /// exercise that was active before the reorder ended up, rather than left
+  /// at a raw index, so reordering never silently jumps the screen to a
+  /// different exercise than the lifter was just looking at.
+  Future<void> _reorderExercises() async {
+    final order = await showModalBottomSheet<List<int>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+      builder: (_) => _ReorderExercisesSheet(exercises: _exercises),
+    );
+    if (order == null || !mounted) return;
+    setState(() {
+      final activeExerciseIndex = _exerciseIndex;
+      _exercises = [for (final i in order) _exercises[i]];
+      _setsByExercise = [for (final i in order) _setsByExercise[i]];
+      _exerciseIndex = order.indexOf(activeExerciseIndex);
+    });
+    _saveDraft();
+    _syncLiveWorkout();
+  }
+
   void _adjustWeight(int index, double directionSign) {
     setState(() {
       final floor = _weightFloorKg;
@@ -799,6 +827,9 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                   child: _TelemetryBar(
                     onClose: _confirmExit,
                     elapsedLabel: _formatElapsed(_elapsed),
+                    onSwap: _swapExercise,
+                    onAdd: _addExercise,
+                    onReorder: _reorderExercises,
                   ),
                 ),
                 Expanded(
@@ -833,7 +864,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                     style: AppTypography.labelCaps
                                         .copyWith(color: AppColors.accent)),
                               ),
-                              if (_currentExercise.demoVideoUrl != null) ...[
+                              if (_currentExercise.demoVideoUrl != null)
                                 _WatchDemoChip(
                                   isVideo: isVideoUrl(
                                       _currentExercise.demoVideoUrl!),
@@ -843,12 +874,6 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                     exerciseName: _currentExercise.name,
                                   ),
                                 ),
-                                const SizedBox(width: AppSpacing.xxs),
-                              ],
-                              _ExerciseMenuChip(
-                                onSwap: _swapExercise,
-                                onAdd: _addExercise,
-                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -984,10 +1009,16 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
 class _TelemetryBar extends StatelessWidget {
   final VoidCallback onClose;
   final String elapsedLabel;
+  final VoidCallback onSwap;
+  final VoidCallback onAdd;
+  final VoidCallback onReorder;
 
   const _TelemetryBar({
     required this.onClose,
     required this.elapsedLabel,
+    required this.onSwap,
+    required this.onAdd,
+    required this.onReorder,
   });
 
   @override
@@ -1012,16 +1043,24 @@ class _TelemetryBar extends StatelessWidget {
                 AppTypography.numericUnit.copyWith(color: AppColors.onSurface)),
         const Spacer(),
         // Balances the close button's width so the elapsed time stays
-        // visually centered now that nothing sits to its right.
-        const SizedBox(width: 40),
+        // visually centered.
+        SizedBox(
+          width: 40,
+          height: 40,
+          child: Center(
+            child: _ExerciseMenuChip(
+                onSwap: onSwap, onAdd: onAdd, onReorder: onReorder),
+          ),
+        ),
       ],
     );
   }
 }
 
 /// Compact icon-only chip opening a bottom sheet with "Swap exercise" /
-/// "Add exercise" - the entry point for the session-local exercise
-/// swap/add feature (see `_swapExercise`/`_addExercise`). A plain circular
+/// "Add exercise" / "Reorder exercises" - the entry point for the
+/// session-local exercise swap/add/reorder feature (see
+/// `_swapExercise`/`_addExercise`/`_reorderExercises`). A plain circular
 /// icon rather than another labeled pill like [_WatchDemoChip], since it's
 /// always present (unlike the demo chip, which only shows up when the
 /// exercise has a reference video) and doesn't need to compete for width in
@@ -1029,8 +1068,13 @@ class _TelemetryBar extends StatelessWidget {
 class _ExerciseMenuChip extends StatelessWidget {
   final VoidCallback onSwap;
   final VoidCallback onAdd;
+  final VoidCallback onReorder;
 
-  const _ExerciseMenuChip({required this.onSwap, required this.onAdd});
+  const _ExerciseMenuChip({
+    required this.onSwap,
+    required this.onAdd,
+    required this.onReorder,
+  });
 
   Future<void> _openSheet(BuildContext context) async {
     final action = await showModalBottomSheet<VoidCallback>(
@@ -1060,6 +1104,14 @@ class _ExerciseMenuChip extends StatelessWidget {
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
               onTap: () => Navigator.of(sheetContext).pop(onAdd),
+            ),
+            ListTile(
+              leading: Icon(Icons.reorder_rounded, color: AppColors.onSurface),
+              title: Text('Reorder exercises', style: AppTypography.bodyMd),
+              subtitle: Text('Drag to change what comes next',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+              onTap: () => Navigator.of(sheetContext).pop(onReorder),
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -1658,4 +1710,130 @@ Future<double?> _showQuickEntrySheet(
       );
     },
   );
+}
+
+/// Drag-and-drop reorder sheet for this session's exercise order - opened
+/// from [_ExerciseMenuChip]'s "Reorder exercises" option (see
+/// `_reorderExercises`). Works on a local copy of the order (a permutation
+/// of indices into [exercises]) so nothing on the tracker screen changes
+/// until "Done" is tapped; dismissing the sheet any other way pops `null`,
+/// which the caller treats as a no-op.
+class _ReorderExercisesSheet extends StatefulWidget {
+  final List<TargetExercise> exercises;
+
+  const _ReorderExercisesSheet({required this.exercises});
+
+  @override
+  State<_ReorderExercisesSheet> createState() => _ReorderExercisesSheetState();
+}
+
+class _ReorderExercisesSheetState extends State<_ReorderExercisesSheet> {
+  late final List<int> _order =
+      List<int>.generate(widget.exercises.length, (i) => i);
+
+  void _onReorder(int oldIndex, int newIndex) {
+    setState(() => _order.insert(newIndex, _order.removeAt(oldIndex)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+            left: AppSpacing.marginMobile,
+            right: AppSpacing.marginMobile,
+            top: AppSpacing.marginMobile,
+            bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.sm),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Reorder exercises', style: AppTypography.headlineMd),
+            const SizedBox(height: AppSpacing.xxs),
+            Text('Press and drag the handle to change what comes next.',
+                style: AppTypography.bodyMd
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: AppSpacing.sm),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: ReorderableListView.builder(
+                shrinkWrap: true,
+                buildDefaultDragHandles: false,
+                itemCount: _order.length,
+                onReorderItem: _onReorder,
+                itemBuilder: (context, index) => _ReorderExerciseTile(
+                  key: ValueKey(_order[index]),
+                  index: index,
+                  exercise: widget.exercises[_order[index]],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            PrimaryPillButton(
+              label: 'Done',
+              onPressed: () => Navigator.of(context).pop(_order),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One draggable row in [_ReorderExercisesSheet]: position number, exercise
+/// name/muscle group, and a trailing drag handle that's the only part of
+/// the row wired to start a drag - so nothing fires on an accidental tap
+/// elsewhere on the tile.
+class _ReorderExerciseTile extends StatelessWidget {
+  final int index;
+  final TargetExercise exercise;
+
+  const _ReorderExerciseTile({
+    super.key,
+    required this.index,
+    required this.exercise,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.xxs),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppRadius.inset),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 22,
+            child: Text('${index + 1}',
+                style: AppTypography.labelCaps
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(exercise.name, style: AppTypography.bodyMd),
+                Text(exercise.muscleGroup,
+                    style: AppTypography.labelSm
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          ReorderableDragStartListener(
+            index: index,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xxs),
+              child: Icon(Icons.drag_handle_rounded,
+                  color: AppColors.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

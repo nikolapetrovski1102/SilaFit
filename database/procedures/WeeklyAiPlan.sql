@@ -100,10 +100,10 @@ BEGIN
 END
 GO
 
--- The weekly batch's audience: active ADVANCED subscribers who have opted
--- into ReceiveWeeklyAiPlans (see 051_WeeklyAiPlans.sql). Same join shape as
--- usp_Plans_GetActiveSubscribers, with the UserSettings opt-in folded in so
--- the service doesn't need a per-user settings lookup for every subscriber.
+-- The weekly batch's audience: every active ADVANCED subscriber. Building a
+-- fresh weekly split/diet plan is part of what the ADVANCED plan buys, so
+-- there is no opt-in flag - the generated plans are simply left inactive for
+-- the user to activate themselves.
 CREATE OR ALTER PROCEDURE dbo.usp_WeeklyAiPlan_GetCandidateUsers
 AS
 BEGIN
@@ -118,11 +118,9 @@ BEGIN
     FROM dbo.UserSubscriptions us
     INNER JOIN dbo.SubscriptionPlans sp ON sp.PlanId = us.PlanId
     INNER JOIN dbo.Users u ON u.UserId = us.UserId
-    INNER JOIN dbo.UserSettings st ON st.UserId = u.UserId
     WHERE sp.Code = N'ADVANCED'
       AND us.Status = 'Active'
       AND u.IsActive = 1
-      AND st.ReceiveWeeklyAiPlans = 1
       AND (us.ExpiresAtUtc IS NULL OR us.ExpiresAtUtc > SYSUTCDATETIME())
     ORDER BY u.CreatedAtUtc;
 END

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <g fill="none" stroke="#D2F639" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Head -->
+    <circle cx="256" cy="112" r="44" fill="#D2F639"/>
+    <!-- Strong upright standing torso -->
+    <path d="M256 162 L256 288" stroke-width="32"/>
+    <!-- Left standing leg firmly planted -->
+    <path d="M256 288 L218 360 L218 436" stroke-width="30"/>
+    <!-- Right standing leg firmly planted -->
+    <path d="M256 288 L294 360 L294 436" stroke-width="30"/>
+    <!-- Standing arms akimbo on hips showing standing posture -->
+    <path d="M256 196 L186 230 L198 288" stroke-width="28"/>
+    <path d="M256 196 L326 230 L314 288" stroke-width="28"/>
+    <!-- Foot contact indicators / standing stance platform -->
+    <ellipse cx="218" cy="442" rx="26" ry="8" fill="#D2F639"/>
+    <ellipse cx="294" cy="442" rx="26" ry="8" fill="#D2F639"/>
+    <!-- Active vibration / standing presence indicator arcs -->
+    <path d="M136 210 C120 250 120 300 136 340" stroke="#526E65" stroke-width="16"/>
+    <path d="M376 210 C392 250 392 300 376 340" stroke="#526E65" stroke-width="16"/>
+  </g>
+</svg>

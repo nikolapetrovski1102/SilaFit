@@ -55,6 +55,10 @@ public static class DietPlanRowMapper
         SortOrder = reader.GetInt32Value("SortOrder")
     };
 
+    /// <summary>One dbo.MealSuggestionIngredients.IngredientText line from the
+    /// shopping-list result set of usp_DietPlans_GetDetail.</summary>
+    public static string MapIngredientText(SqlDataReader reader) => reader.GetStringValue("IngredientText");
+
     private static bool HasColumn(SqlDataReader reader, string column)
     {
         for (var i = 0; i < reader.FieldCount; i++)

@@ -58,6 +58,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
     final String? selected;
     final ValueChanged<String> onSelected;
     final IconData? Function(String)? iconFor;
+    final String? Function(String)? badgeAssetFor;
     switch (step) {
       case OnboardingStep.trainingDays:
         headline = 'Training days per week?';
@@ -71,6 +72,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
         onSelected =
             (value) => controller.setTrainingDaysPerWeek(int.parse(value));
         iconFor = null;
+        badgeAssetFor = null;
         break;
       case OnboardingStep.equipmentAccess:
         headline = 'What equipment can you use?';
@@ -85,6 +87,11 @@ class TrainingPreferenceQuestion extends StatelessWidget {
               'FullGym': Icons.storefront_outlined,
               'Dumbbells': Icons.fitness_center_rounded,
               'Bodyweight': Icons.accessibility_new_rounded,
+            }[value];
+        badgeAssetFor = (value) => const {
+              'FullGym': 'equipment_full_gym',
+              'Dumbbells': 'equipment_dumbbells',
+              'Bodyweight': 'equipment_bodyweight',
             }[value];
         break;
       case OnboardingStep.dailyActivity:
@@ -103,6 +110,12 @@ class TrainingPreferenceQuestion extends StatelessWidget {
               'Active': Icons.directions_walk_rounded,
               'VeryActive': Icons.construction_rounded,
             }[value];
+        badgeAssetFor = (value) => const {
+              'Sedentary': 'activity_sedentary',
+              'LightlyActive': 'activity_lightly_active',
+              'Active': 'activity_active',
+              'VeryActive': 'activity_very_active',
+            }[value];
         break;
       default:
         throw ArgumentError('Not a training preference step: $step');
@@ -117,7 +130,8 @@ class TrainingPreferenceQuestion extends StatelessWidget {
           labelFor: (value) => options[value]!,
           selected: selected,
           onSelected: onSelected,
-          iconFor: iconFor),
+          iconFor: iconFor,
+          badgeAssetFor: badgeAssetFor),
       ctaLabel: isLast ? 'Finish' : 'Continue',
       ctaLoading: isLast && controller.isSubmitting,
       onCta: selected != null && !controller.isSubmitting ? onNext : null,
