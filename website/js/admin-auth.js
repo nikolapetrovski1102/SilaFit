@@ -382,6 +382,15 @@
       return request('/api/admin/content/users' + (params.length ? '?' + params.join('&') : ''), 'GET');
     },
 
+    /* Client overview (users.data.read): a user's onboarding profile plus the
+       workouts/sets, meals, bodyweight and hydration they logged over the last
+       `days` days. A trainer may only open a user they assigned a split or diet
+       plan to; the API enforces that and returns 403 otherwise. */
+    getClientOverview: function (userId, days) {
+      var suffix = days ? '?days=' + encodeURIComponent(days) : '';
+      return request('/api/admin/content/users/' + encodeURIComponent(userId) + '/overview' + suffix, 'GET');
+    },
+
     /* Super-admin only (users.mock_data): replace one user's logs with a generated
        month of history so the monthly overview has something to show. Destructive
        and slow — the modal warns before calling this. */

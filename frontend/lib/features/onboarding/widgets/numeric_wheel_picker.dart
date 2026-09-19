@@ -31,6 +31,11 @@ class NumericWheelPicker extends StatefulWidget {
   final String? selectedUnit;
   final ValueChanged<String>? onUnitChanged;
 
+  /// Height of the scrubbable filmstrip. Callers embedding the picker in a
+  /// tighter space (e.g. a summary card) can shrink this independently of
+  /// the default used by the full-screen onboarding steps.
+  final double filmHeight;
+
   const NumericWheelPicker({
     super.key,
     required this.value,
@@ -45,6 +50,7 @@ class NumericWheelPicker extends StatefulWidget {
     this.unitOptions,
     this.selectedUnit,
     this.onUnitChanged,
+    this.filmHeight = 172,
   });
 
   @override
@@ -55,7 +61,6 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
     with TickerProviderStateMixin {
   static const _pxPerUnit = 72.0;
   static const _viewportWidth = 320.0;
-  static const _filmHeight = 172.0;
   static const _slotRadius = 1; // slots rendered on each side of center
 
   // Extra px of spacing straddling the centered value only - the two gaps
@@ -248,7 +253,7 @@ class _NumericWheelPickerState extends State<NumericWheelPicker>
                 children: [
                   SizedBox(
                     width: fullWidth,
-                    height: _filmHeight,
+                    height: widget.filmHeight,
                     child: ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
                         colors: [

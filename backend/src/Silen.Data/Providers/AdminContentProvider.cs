@@ -1,13 +1,19 @@
+using Microsoft.Extensions.Options;
 using Silen.Common.Dtos;
 using Silen.Common.Models;
+using Silen.Common.Options;
 using Silen.Data.Abstractions;
 using Silen.Data.Helpers;
 
 namespace Silen.Data.Providers;
 
 /// <inheritdoc cref="IAdminContentProvider"/>
-public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminContentProvider
+public sealed class AdminContentProvider(
+    ISqlExecutor sqlExecutor,
+    IOptions<EncryptionOptions> encryptionOptions) : IAdminContentProvider
 {
+    private readonly byte[] _key = Convert.FromBase64String(encryptionOptions.Value.MasterKeyBase64);
+
     /* ------------------------------- exercises ------------------------------ */
 
     public Task<List<AdminExerciseModel>> GetExercisesAsync(CancellationToken cancellationToken = default) =>
@@ -329,6 +335,128 @@ public sealed class AdminContentProvider(ISqlExecutor sqlExecutor) : IAdminConte
             [SqlParameterBuilder.Create("@Search", search), SqlParameterBuilder.Create("@Limit", limit)],
             reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapUserSummary, cancellationToken),
             cancellationToken);
+
+    public Task<bool> IsClientAssignedToAsync(Guid adminUserId, Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_Client_IsAssignedTo",
+            [SqlParameterBuilder.Create("@AdminUserId", adminUserId), SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(
+                reader, r => r.GetBoolValue("IsAssigned"), cancellationToken),
+            cancellationToken);
+
+    public Task<AdminClientOverviewModel?> GetClientOverviewAsync(
+        Guid userId, DateTime fromDateUtc, DateTime toDateUtc, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync<AdminClientOverviewModel?>(
+            "dbo.usp_Admin_Client_GetOverview",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@FromDateUtc", fromDateUtc.Date),
+                SqlParameterBuilder.Create("@ToDateUtc", toDateUtc.Date)
+            ],
+            async reader =>
+            {
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    return null;
+                }
+
+                var model = new AdminClientOverviewModel
+                {
+                    Account = AdminContentRowMapper.MapUserSummary(reader),
+                    Profile = AdminContentRowMapper.MapClientProfile(reader, _key),
+                    Targets = AdminContentRowMapper.MapClientTargets(reader, _key),
+                    FromDateUtc = fromDateUtc.Date,
+                    ToDateUtc = toDateUtc.Date
+                };
+
+                if (reader.GetNullableGuid("ActiveSplitId") is { } splitId)
+                {
+                    model.ActiveSplit = new AdminClientActiveSplitModel
+                    {
+                        SplitId = splitId,
+                        Name = reader.GetNullableString("ActiveSplitName") ?? string.Empty,
+                        Category = reader.GetNullableString("ActiveSplitCategory") ?? string.Empty,
+                        Level = reader.GetNullableString("ActiveSplitLevel") ?? string.Empty,
+                        ActivatedAtUtc = reader.GetNullableDateTime("ActiveSplitActivatedAtUtc") ?? default
+                    };
+                }
+
+                if (reader.GetNullableGuid("ActiveDietPlanId") is { } dietPlanId)
+                {
+                    model.ActiveDietPlan = new AdminClientActiveDietPlanModel
+                    {
+                        DietPlanId = dietPlanId,
+                        Name = reader.GetNullableString("ActiveDietPlanName") ?? string.Empty,
+                        PeriodType = reader.GetNullableString("ActiveDietPlanPeriodType") ?? string.Empty,
+                        ActivatedAtUtc = reader.GetNullableDateTime("ActiveDietPlanActivatedAtUtc") ?? default
+                    };
+                }
+
+                await reader.NextResultAsync(cancellationToken);
+                model.Sessions = await SqlResultSetReader.ReadListAsync(
+                    reader, AdminContentRowMapper.MapClientSession, cancellationToken);
+
+                await reader.NextResultAsync(cancellationToken);
+                var sets = await SqlResultSetReader.ReadListAsync(
+                    reader, AdminContentRowMapper.MapClientSet, cancellationToken);
+                var setsBySession = sets.GroupBy(s => s.WorkoutSessionId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var session in model.Sessions)
+                {
+                    if (setsBySession.TryGetValue(session.WorkoutSessionId, out var sessionSets))
+                    {
+                        session.Sets = sessionSets;
+                    }
+                }
+
+                await reader.NextResultAsync(cancellationToken);
+                model.Meals = await SqlResultSetReader.ReadListAsync(
+                    reader, r => AdminContentRowMapper.MapClientMeal(r, _key), cancellationToken);
+
+                await reader.NextResultAsync(cancellationToken);
+                model.Bodyweight = await SqlResultSetReader.ReadListAsync(
+                    reader, r => AdminContentRowMapper.MapClientBodyweight(r, _key), cancellationToken);
+
+                await reader.NextResultAsync(cancellationToken);
+                model.Hydration = await SqlResultSetReader.ReadListAsync(
+                    reader, AdminContentRowMapper.MapClientHydration, cancellationToken);
+
+                model.Summary = BuildClientSummary(model);
+                return model;
+            },
+            cancellationToken);
+
+    /// <summary>Derives the headline figures in C# because the columns behind
+    /// them (meal calories, bodyweight) are ciphertext and can't be aggregated in SQL.</summary>
+    private static AdminClientSummaryModel BuildClientSummary(AdminClientOverviewModel model)
+    {
+        var completed = model.Sessions
+            .Where(s => string.Equals(s.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var withRpe = completed.Where(s => s.RpeScore is not null).ToList();
+        var mealDays = model.Meals
+            .GroupBy(m => m.LogDateUtc.Date)
+            .Select(g => g.Sum(m => m.CaloriesKcal))
+            .ToList();
+
+        return new AdminClientSummaryModel
+        {
+            CompletedSessions = completed.Count,
+            ScheduledSessions = model.Sessions.Count(s =>
+                !string.Equals(s.Status, "ActiveRest", StringComparison.OrdinalIgnoreCase)),
+            TotalTonnageKg = completed.Sum(s => s.TonnageKg ?? 0m),
+            AvgRpe = withRpe.Count == 0 ? 0m : Math.Round(withRpe.Average(s => s.RpeScore!.Value), 1),
+            TotalSets = model.Sessions.Sum(s => s.Sets.Count),
+            LoggedMeals = model.Meals.Count,
+            LoggedMealDays = mealDays.Count,
+            TotalDaysInRange = Math.Max(1, (model.ToDateUtc.Date - model.FromDateUtc.Date).Days + 1),
+            AvgCaloriesLogged = mealDays.Count == 0 ? null : Math.Round((decimal)mealDays.Average(), 0),
+            StartWeightKg = model.Bodyweight.Count == 0 ? null : model.Bodyweight[0].WeightKg,
+            EndWeightKg = model.Bodyweight.Count == 0 ? null : model.Bodyweight[^1].WeightKg,
+            AvgHydrationMl = model.Hydration.Count == 0
+                ? 0
+                : (int)Math.Round(model.Hydration.Average(h => h.TotalMl))
+        };
+    }
 
     /* ------------------------------- diet plans ------------------------------ */
 

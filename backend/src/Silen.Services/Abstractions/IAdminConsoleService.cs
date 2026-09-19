@@ -166,6 +166,16 @@ public interface IAdminConsoleService
     Task<ServiceResult<List<AdminUserSummaryModel>>> GetUsersAsync(string? sessionToken, string? search, int limit, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// One client's logged data over the last <paramref name="days"/> days - profile,
+    /// recent sessions with their sets, meals, bodyweight and hydration, plus the
+    /// active split/diet plan. Requires users.data.read; an operator without
+    /// users.data.read_all (a trainer) may only open a user they have assigned a
+    /// split or diet plan to.
+    /// </summary>
+    Task<ServiceResult<AdminClientOverviewModel>> GetClientOverviewAsync(
+        string? sessionToken, Guid userId, int days, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Regenerates one user's logs with a month of mock history and puts them on the
     /// chosen tier profile, so the monthly overview can be exercised on demand.
     /// Requires users.mock_data (granted to super-admin only) and is destructive to

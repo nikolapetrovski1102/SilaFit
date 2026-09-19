@@ -18,7 +18,8 @@ public class SplitRecommendationScorerTests
         string? equipmentRequired = null,
         string? targetGender = null,
         short? minSessionMinutes = null,
-        short? maxSessionMinutes = null) => new()
+        short? maxSessionMinutes = null,
+        string? sourceCategoriesJson = null) => new()
     {
         SplitId = Guid.NewGuid(),
         Name = name,
@@ -32,7 +33,8 @@ public class SplitRecommendationScorerTests
         EquipmentRequired = equipmentRequired,
         TargetGender = targetGender,
         MinSessionMinutes = minSessionMinutes,
-        MaxSessionMinutes = maxSessionMinutes
+        MaxSessionMinutes = maxSessionMinutes,
+        SourceCategoriesJson = sourceCategoriesJson
     };
 
     [Fact]
@@ -245,6 +247,44 @@ public class SplitRecommendationScorerTests
         // ...but the auto-assign filter must not hand it to him.
         var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
         Assert.Equal(unisex.SplitId, pick!.SplitId);
+    }
+
+    [Fact]
+    public void PickForAutoAssign_RejectsWomenProgramTaggedMaleAndFemale()
+    {
+        // Reported bug: the imported women's programs the scraper blanket-tagged
+        // "Male & Female" slipped past the audience gate. The source categories
+        // (Women, no Men) must still exclude them for a male user.
+        var fit = PersonFit.From(185, 90, 24, 5, 45, "Advanced", "FullGym", "Sedentary", "Male");
+        var women = Split("3 Day Full Body Toning Workout for Women", "FullBody", "Intermediate", 3, "LoseFat",
+            isSystemDefault: true, targetGender: "Male & Female",
+            sourceCategoriesJson: "[\"Women\",\"Fat Loss\",\"Full Body\"]");
+        var unisex = Split("General Full Body", "FullBody", "Intermediate", 4, "LoseFat",
+            isSystemDefault: true, targetGender: "Male & Female",
+            sourceCategoriesJson: "[\"Women\",\"Fat Loss\",\"Men\",\"Full Body\"]");
+
+        var ranked = SplitRecommendationScorer.Rank([women, unisex], fit, "LoseFat");
+        var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
+
+        Assert.Equal(unisex.SplitId, pick!.SplitId);
+    }
+
+    [Fact]
+    public void Rank_ReadsAudienceFromSourceCategories_WhenTagIsAmbiguous()
+    {
+        var male = PersonFit.From(180, 80, 28, 3, 45, "Intermediate", "FullGym", "Active", "Male");
+        var female = PersonFit.From(165, 60, 28, 3, 45, "Intermediate", "FullGym", "Active", "Female");
+        var women = Split("Women", "FullBody", "Intermediate", 3, "LoseFat", targetGender: "Male & Female",
+            sourceCategoriesJson: "[\"Women\",\"Fat Loss\"]");
+        var unisex = Split("Unisex", "FullBody", "Intermediate", 3, "LoseFat", targetGender: "Male & Female",
+            sourceCategoriesJson: "[\"Women\",\"Men\",\"Fat Loss\"]");
+
+        var maleRanked = SplitRecommendationScorer.Rank([women, unisex], male, "LoseFat");
+        var femaleRanked = SplitRecommendationScorer.Rank([women, unisex], female, "LoseFat");
+
+        Assert.Equal(unisex.SplitId, maleRanked[0].SplitId);
+        Assert.Equal(women.SplitId, femaleRanked[0].SplitId);
+        Assert.Contains("Designed for your profile", femaleRanked[0].MatchReason);
     }
 
     [Fact]

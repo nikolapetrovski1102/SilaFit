@@ -99,14 +99,14 @@ public class AnalyticsServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(snapshot);
 
-        var template = new AiPromptTemplateModel { TemplateKey = "MonthlyAnalytics", SystemPrompt = "sys", UserPromptTemplate = "Hi {{DisplayName}}" };
+        var template = new AiPromptTemplateModel { TemplateKey = "MonthlyAnalytics", SystemPrompt = "sys", UserPromptTemplate = "Hi {{DisplayName}}", Model = "openai/gpt-4.1" };
         analyticsProvider
             .Setup(p => p.GetPromptTemplateAsync("MonthlyAnalytics", It.IsAny<CancellationToken>()))
             .ReturnsAsync(template);
 
         const string aiJson = """{"strengths":["Consistent squats"],"improvements":[{"area":"Sleep","recommendation":"Sleep more","priority":"Medium"}],"focusForNextMonth":"Add another leg day"}""";
         openRouterClient
-            .Setup(c => c.GenerateJsonAsync("sys", It.IsAny<string>(), It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GenerateJsonAsync("sys", It.IsAny<string>(), It.IsAny<JsonElement>(), "openai/gpt-4.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(aiJson);
 
         var generatedAt = new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc);
@@ -249,14 +249,14 @@ public class AnalyticsServiceTests
             .Setup(p => p.GetPeriodSnapshotAsync(userId, weekStart, weekEnd, It.IsAny<CancellationToken>()))
             .ReturnsAsync(snapshot);
 
-        var template = new AiPromptTemplateModel { TemplateKey = "WeeklyAnalytics", SystemPrompt = "wsys", UserPromptTemplate = "Hi" };
+        var template = new AiPromptTemplateModel { TemplateKey = "WeeklyAnalytics", SystemPrompt = "wsys", UserPromptTemplate = "Hi", Model = "openai/gpt-4.1" };
         analyticsProvider
             .Setup(p => p.GetPromptTemplateAsync("WeeklyAnalytics", It.IsAny<CancellationToken>()))
             .ReturnsAsync(template);
 
         const string aiJson = """{"strengths":["Nice week"],"improvements":[],"focusForNextWeek":"Add mobility work"}""";
         openRouterClient
-            .Setup(c => c.GenerateJsonAsync("wsys", It.IsAny<string>(), It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GenerateJsonAsync("wsys", It.IsAny<string>(), It.IsAny<JsonElement>(), "openai/gpt-4.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(aiJson);
 
         var generatedAt = weekEnd.AddDays(1);

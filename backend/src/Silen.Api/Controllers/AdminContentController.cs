@@ -217,6 +217,16 @@ public sealed class AdminContentController(
     public async Task<IActionResult> GetUsers([FromQuery] string? search, [FromQuery] int limit, CancellationToken cancellationToken) =>
         (await consoleService.GetUsersAsync(SessionToken, search, limit, cancellationToken)).ToActionResult(logger);
 
+    /// <summary>
+    /// One client's logged data (profile, sessions/sets, meals, bodyweight, hydration,
+    /// active plans) over the last <c>days</c> (default 30). Requires users.data.read;
+    /// a trainer may only open a user they have assigned a split or diet plan to.
+    /// </summary>
+    [HttpGet("users/{userId:guid}/overview")]
+    public async Task<IActionResult> GetClientOverview(Guid userId, [FromQuery] int days, CancellationToken cancellationToken) =>
+        (await consoleService.GetClientOverviewAsync(SessionToken, userId, days <= 0 ? 30 : days, cancellationToken))
+            .ToActionResult(logger);
+
     /// <summary>Super-admin only: replace one user's logs with generated mock history.</summary>
     [HttpPost("users/mock-data")]
     public async Task<IActionResult> SeedUserMockData([FromBody] AdminMockDataRequest request, CancellationToken cancellationToken) =>

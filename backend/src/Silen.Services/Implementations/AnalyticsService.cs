@@ -233,7 +233,7 @@ public sealed class AnalyticsService(
         var userPrompt = BuildUserPrompt(template.UserPromptTemplate, snapshot, period.PeriodLabel)
             + BuildEvidenceBlock(period, snapshot);
 
-        var aiJson = await openRouterClient.GenerateJsonAsync(template.SystemPrompt, userPrompt, period.ResultSchema, cancellationToken)
+        var aiJson = await openRouterClient.GenerateJsonAsync(template.SystemPrompt, userPrompt, period.ResultSchema, template.Model, cancellationToken)
             .ConfigureAwait(false);
 
         snapshot.RealDataOnly = true;

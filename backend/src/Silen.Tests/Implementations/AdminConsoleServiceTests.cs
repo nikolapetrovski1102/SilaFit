@@ -520,4 +520,84 @@ public class AdminConsoleServiceTests
         Assert.Equal(userId, result.Data!.Id);
         Assert.Equal("Generated 30 day(s) of Advanced mock data: 25 workouts, 90 meals logged.", result.Data.Message);
     }
+
+    /* ----------------------------- client overview ---------------------------- */
+
+    [Fact]
+    public async Task GetClientOverviewAsync_WithoutThosePermissions_ReturnsForbidden()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersRead);
+
+        var result = await sut.GetClientOverviewAsync(token, Guid.NewGuid(), 30);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetClientOverviewAsync_TrainerNotAssignedToUser_ReturnsForbidden()
+    {
+        var (token, adminUserId) = ArrangeSession(AdminPermissions.UsersDataRead);
+        var userId = Guid.NewGuid();
+        contentProvider
+            .Setup(p => p.IsClientAssignedToAsync(adminUserId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await sut.GetClientOverviewAsync(token, userId, 30);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetClientOverviewAsync_TrainerAssignedToUser_ReturnsOverview()
+    {
+        var (token, adminUserId) = ArrangeSession(AdminPermissions.UsersDataRead);
+        var userId = Guid.NewGuid();
+        contentProvider
+            .Setup(p => p.IsClientAssignedToAsync(adminUserId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        contentProvider
+            .Setup(p => p.GetClientOverviewAsync(userId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminClientOverviewModel { Account = new AdminUserSummaryModel { UserId = userId } });
+
+        var result = await sut.GetClientOverviewAsync(token, userId, 30);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(userId, result.Data!.Account.UserId);
+    }
+
+    [Fact]
+    public async Task GetClientOverviewAsync_WithReadAll_SkipsAssignedClientCheck()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersDataRead, AdminPermissions.UsersDataReadAll);
+        var userId = Guid.NewGuid();
+        /* Strict mock: no IsClientAssignedToAsync setup, so the call would throw if the
+           service asked - proving read_all bypasses the per-client check. */
+        contentProvider
+            .Setup(p => p.GetClientOverviewAsync(userId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminClientOverviewModel { Account = new AdminUserSummaryModel { UserId = userId } });
+
+        var result = await sut.GetClientOverviewAsync(token, userId, 30);
+
+        Assert.True(result.IsSuccess);
+        contentProvider.Verify(
+            p => p.IsClientAssignedToAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetClientOverviewAsync_UnknownUser_ReturnsNotFound()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersDataRead, AdminPermissions.UsersDataReadAll);
+        var userId = Guid.NewGuid();
+        contentProvider
+            .Setup(p => p.GetClientOverviewAsync(userId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AdminClientOverviewModel?)null);
+
+        var result = await sut.GetClientOverviewAsync(token, userId, 30);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(404, result.StatusCode);
+    }
 }

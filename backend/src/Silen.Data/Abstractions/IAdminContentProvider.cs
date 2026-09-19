@@ -10,7 +10,8 @@ namespace Silen.Data.Abstractions;
 /// Reads and writes are separate procedures from the app's own (Exercises.sql,
 /// MealPlanning.sql, Plans.sql, Splits.sql) because they serve a different caller
 /// and return different shapes; the app never sees a usage count or a subscriber
-/// count, and the console never sees a person's logs.
+/// count. One person's logs are readable only through the client overview below,
+/// which the service gates on users.data.read and an assigned-client check.
 ///
 /// Every write takes an <see cref="AdminActorModel"/>: the audit row is written by
 /// the procedure inside the same transaction as the change.
@@ -81,6 +82,15 @@ public interface IAdminContentProvider
     Task<AdminMutationResultModel> DeleteSplitDayExerciseAsync(Guid splitDayExerciseId, AdminActorModel actor, CancellationToken cancellationToken = default);
 
     Task<List<AdminUserSummaryModel>> GetUsersAsync(string? search, int limit, CancellationToken cancellationToken = default);
+
+    /// <summary>True when this operator assigned the user a split or diet plan -
+    /// i.e. the user is one of their clients, which is what lets a trainer
+    /// (holder of users.data.read without users.data.read_all) open the overview.</summary>
+    Task<bool> IsClientAssignedToAsync(Guid adminUserId, Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>One user's logged data over the window. Null when the user doesn't exist.</summary>
+    Task<AdminClientOverviewModel?> GetClientOverviewAsync(
+        Guid userId, DateTime fromDateUtc, DateTime toDateUtc, CancellationToken cancellationToken = default);
 
     /* ------------------------------- diet plans ------------------------------ */
 

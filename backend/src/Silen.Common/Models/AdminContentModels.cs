@@ -347,3 +347,144 @@ public sealed class AdminUserSummaryModel
     public string? SubscriptionStatus { get; set; }
     public DateTime? ExpiresAtUtc { get; set; }
 }
+
+/// <summary>
+/// One client's logged data as the console shows it to an operator who may see
+/// clients (trainer/super-admin/analyst). Account/onboarding answers plus the
+/// last <see cref="FromDateUtc"/>-<see cref="ToDateUtc"/> window of training,
+/// meals, bodyweight and hydration. Encrypted columns are decrypted in the
+/// provider, never in SQL.
+/// </summary>
+public sealed class AdminClientOverviewModel
+{
+    public AdminUserSummaryModel Account { get; set; } = new();
+
+    /// <summary>Null when the user never completed onboarding (no UserProfiles row).</summary>
+    public AdminClientProfileModel? Profile { get; set; }
+
+    public AdminClientActiveSplitModel? ActiveSplit { get; set; }
+    public AdminClientActiveDietPlanModel? ActiveDietPlan { get; set; }
+
+    public AdminClientTargetsModel? Targets { get; set; }
+
+    public DateTime FromDateUtc { get; set; }
+    public DateTime ToDateUtc { get; set; }
+
+    public AdminClientSummaryModel Summary { get; set; } = new();
+    public List<AdminClientSessionModel> Sessions { get; set; } = [];
+    public List<AdminClientMealModel> Meals { get; set; } = [];
+    public List<AdminClientBodyweightModel> Bodyweight { get; set; } = [];
+    public List<AdminClientHydrationModel> Hydration { get; set; } = [];
+}
+
+public sealed class AdminClientProfileModel
+{
+    public string? Gender { get; set; }
+    public int? AgeYears { get; set; }
+    public decimal? HeightCm { get; set; }
+    public decimal? WeightKg { get; set; }
+    public string? Goal { get; set; }
+    public int? TrainingDaysPerWeek { get; set; }
+    public int? SessionDurationMinutes { get; set; }
+    public string? TrainingExperience { get; set; }
+    public string? EquipmentAccess { get; set; }
+    public string? DailyActivityLevel { get; set; }
+}
+
+public sealed class AdminClientTargetsModel
+{
+    public int TargetCalories { get; set; }
+    public int TargetProteinG { get; set; }
+    public int TargetCarbsG { get; set; }
+    public int TargetFatsG { get; set; }
+}
+
+public sealed class AdminClientActiveSplitModel
+{
+    public Guid SplitId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string Level { get; set; } = string.Empty;
+    public DateTime ActivatedAtUtc { get; set; }
+}
+
+public sealed class AdminClientActiveDietPlanModel
+{
+    public Guid DietPlanId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string PeriodType { get; set; } = string.Empty;
+    public DateTime ActivatedAtUtc { get; set; }
+}
+
+public sealed class AdminClientSummaryModel
+{
+    public int CompletedSessions { get; set; }
+    public int ScheduledSessions { get; set; }
+    public decimal TotalTonnageKg { get; set; }
+    public decimal AvgRpe { get; set; }
+    public int TotalSets { get; set; }
+    public int LoggedMeals { get; set; }
+    public int LoggedMealDays { get; set; }
+    public int TotalDaysInRange { get; set; }
+    public decimal? AvgCaloriesLogged { get; set; }
+    public decimal? StartWeightKg { get; set; }
+    public decimal? EndWeightKg { get; set; }
+    public int AvgHydrationMl { get; set; }
+}
+
+public sealed class AdminClientSessionModel
+{
+    public Guid WorkoutSessionId { get; set; }
+    public DateTime ScheduledDateUtc { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? CompletedAtUtc { get; set; }
+    public int? DurationMinutes { get; set; }
+    public decimal? RpeScore { get; set; }
+    public decimal? TonnageKg { get; set; }
+    public string? SplitDayTitle { get; set; }
+    public string? SplitDayFocus { get; set; }
+    public int SetCount { get; set; }
+    public List<AdminClientSetModel> Sets { get; set; } = [];
+}
+
+public sealed class AdminClientSetModel
+{
+    public Guid WorkoutSetLogId { get; set; }
+
+    /// <summary>Used to attach the set to its session in the provider; not part
+    /// of the console's display model beyond that.</summary>
+    public Guid WorkoutSessionId { get; set; }
+
+    public string ExerciseName { get; set; } = string.Empty;
+    public string MuscleGroup { get; set; } = string.Empty;
+    public int SetNumber { get; set; }
+    public decimal WeightKg { get; set; }
+    public int Reps { get; set; }
+    public DateTime CompletedAtUtc { get; set; }
+}
+
+public sealed class AdminClientMealModel
+{
+    public Guid MealLogId { get; set; }
+    public DateTime LogDateUtc { get; set; }
+    public string MealType { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public int CaloriesKcal { get; set; }
+    public int ProteinG { get; set; }
+    public int CarbsG { get; set; }
+    public int FatsG { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? LoggedAtUtc { get; set; }
+}
+
+public sealed class AdminClientBodyweightModel
+{
+    public DateTime LoggedAtUtc { get; set; }
+    public decimal WeightKg { get; set; }
+}
+
+public sealed class AdminClientHydrationModel
+{
+    public DateTime LogDateUtc { get; set; }
+    public int TotalMl { get; set; }
+}

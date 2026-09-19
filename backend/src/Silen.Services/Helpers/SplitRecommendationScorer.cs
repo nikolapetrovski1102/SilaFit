@@ -1,4 +1,5 @@
 using Silen.Common.Models;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Silen.Services.Helpers;
@@ -160,7 +161,7 @@ public static class SplitRecommendationScorer
         score += ScheduleFit(split, fit);
 
         score += EquipmentFit(split, fit.EquipmentAccess);
-        score += AudienceFit(split.TargetGender, fit.Gender);
+        score += AudienceFit(split, fit.Gender);
 
         if (goal is not null && split.RecommendedGoal == goal)
         {
@@ -411,6 +412,66 @@ public static class SplitRecommendationScorer
     }
 
     /// <summary>
+    /// The audience a split is actually for. <see cref="WorkoutSplitModel.TargetGender"/>
+    /// wins when it names a single gender; when it is missing or the import's
+    /// catch-all "Male &amp; Female" (<see cref="Audience.Unisex"/>), the source
+    /// categories break the tie: a program categorised for women and not men is
+    /// women's, and vice versa. Without that fallback the imported women's
+    /// programs the scraper blanket-tagged "Male &amp; Female" stayed eligible to
+    /// men - see database/seed/007_TagSplitAudience.sql, which re-tags the stored
+    /// rows the same way.
+    /// </summary>
+    private static Audience AudienceFor(WorkoutSplitModel split)
+    {
+        var explicitAudience = AudienceOf(split.TargetGender);
+        if (explicitAudience is Audience.Women or Audience.Men)
+        {
+            return explicitAudience;
+        }
+
+        var (includesWomen, includesMen) = SourceCategoryGenders(split.SourceCategoriesJson);
+        if (includesWomen && !includesMen)
+        {
+            return Audience.Women;
+        }
+
+        return includesMen && !includesWomen ? Audience.Men : explicitAudience;
+    }
+
+    /// <summary>Gender cues carried by a split's <c>SourceCategoriesJson</c>
+    /// (e.g. ["Women","Fat Loss","Full Body"]). Absent or unparseable JSON has no cues.</summary>
+    private static (bool IncludesWomen, bool IncludesMen) SourceCategoryGenders(string? sourceCategoriesJson)
+    {
+        if (string.IsNullOrWhiteSpace(sourceCategoriesJson))
+        {
+            return (false, false);
+        }
+
+        string[] categories;
+        try
+        {
+            categories = JsonSerializer.Deserialize<string[]>(sourceCategoriesJson) ?? [];
+        }
+        catch (JsonException)
+        {
+            return (false, false);
+        }
+
+        return (categories.Any(IsWomenCategory), categories.Any(IsMenCategory));
+    }
+
+    // Substring for "women" so "Women"/"Women's" both count; the word boundary for
+    // "men" keeps it from matching inside "women", and "male" is exact so it does
+    // not match inside "female".
+    private static bool IsWomenCategory(string category) =>
+        category.Contains("women", StringComparison.OrdinalIgnoreCase) ||
+        category.Equals("female", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMenCategory(string category) =>
+        Regex.IsMatch(category, @"\bmen\b", RegexOptions.IgnoreCase) ||
+        category.Equals("male", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// True only when the publisher explicitly tagged a program for the opposite
     /// of the person's gender. Unisex/untagged programs are never a mismatch, so
     /// they remain eligible for everyone.
@@ -423,7 +484,7 @@ public static class SplitRecommendationScorer
         }
 
         var gender = fit.Gender.ToLowerInvariant();
-        return AudienceOf(split.TargetGender) switch
+        return AudienceFor(split) switch
         {
             Audience.Women => gender is "male" or "man",
             Audience.Men => gender is "female" or "woman",
@@ -431,7 +492,7 @@ public static class SplitRecommendationScorer
         };
     }
 
-    private static int AudienceFit(string? targetGender, string? profileGender)
+    private static int AudienceFit(WorkoutSplitModel split, string? profileGender)
     {
         if (string.IsNullOrWhiteSpace(profileGender))
         {
@@ -439,7 +500,7 @@ public static class SplitRecommendationScorer
         }
 
         var gender = profileGender.ToLowerInvariant();
-        return AudienceOf(targetGender) switch
+        return AudienceFor(split) switch
         {
             Audience.Women when gender is "female" or "woman" => AudienceMatchPoints,
             Audience.Women when gender is "male" or "man" => -AudienceMismatchPenalty,
@@ -625,7 +686,7 @@ public static class SplitRecommendationScorer
                 : $"{splitDays} days - just over your {days}-day week");
         }
 
-        if (AudienceFit(split.TargetGender, fit.Gender) == AudienceMatchPoints)
+        if (AudienceFit(split, fit.Gender) == AudienceMatchPoints)
         {
             parts.Add("Designed for your profile");
         }

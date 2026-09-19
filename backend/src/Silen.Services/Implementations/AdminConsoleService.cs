@@ -516,6 +516,36 @@ public sealed class AdminConsoleService(
             return await contentProvider.GetUsersAsync(search, limit <= 0 ? 200 : limit, cancellationToken);
         });
 
+    public Task<ServiceResult<AdminClientOverviewModel>> GetClientOverviewAsync(
+        string? sessionToken, Guid userId, int days, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            if (userId == Guid.Empty)
+            {
+                throw new ValidationException("Client overview requested without a user.", "Choose a user first.");
+            }
+
+            // RequireWithPermissionsAsync, not RequireAsync: whether the operator may
+            // open someone who is not their client depends on a second permission.
+            var (actor, permissions) = await AdminPermissionGuard.RequireWithPermissionsAsync(
+                adminProvider, adminRbacProvider, sessionToken, AdminPermissions.UsersDataRead, null, cancellationToken);
+
+            if (!permissions.Contains(AdminPermissions.UsersDataReadAll)
+                && !await contentProvider.IsClientAssignedToAsync(actor.AdminUserId ?? Guid.Empty, userId, cancellationToken))
+            {
+                throw new ForbiddenException(
+                    $"Operator {LogRedaction.Tag(actor.Username)} called the client overview for a user who is not " +
+                    $"their client and lacks '{AdminPermissions.UsersDataReadAll}'.");
+            }
+
+            var toDate = DateTime.UtcNow.Date;
+            var fromDate = toDate.AddDays(-Math.Clamp(days, 1, 365) + 1);
+
+            return await contentProvider.GetClientOverviewAsync(userId, fromDate, toDate, cancellationToken)
+                ?? throw new NotFoundException(
+                    $"Client overview requested for unknown user {userId}.", "That user no longer exists.");
+        });
+
     public Task<ServiceResult<AdminWriteResultDto>> SeedUserMockDataAsync(
         string? sessionToken,
         AdminMockDataRequest request,

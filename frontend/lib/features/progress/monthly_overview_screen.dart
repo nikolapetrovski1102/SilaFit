@@ -262,6 +262,7 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                               value: _weightTenths,
                               valueFontSize: _weightTenths >= 1000 ? 44 : 52,
                               neighborFontSize: 20,
+                              filmHeight: 110,
                               min: 300,
                               max: 3000,
                               displayFormatter: (v) =>
@@ -490,36 +491,52 @@ class _SlideScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.marginMobile, vertical: AppSpacing.xl),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _RecapIcon(icon: icon),
-          const SizedBox(height: AppSpacing.lg),
-          SectionEyebrow(eyebrow, color: AppColors.accent),
-          const SizedBox(height: AppSpacing.sm),
-          Text(headline,
-              textAlign: TextAlign.center,
-              style: AppTypography.displayStatMobile.copyWith(fontSize: 34)),
-          const SizedBox(height: AppSpacing.sm),
-          Text(subhead,
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMd
-                  .copyWith(color: AppColors.onSurfaceVariant, height: 1.4)),
-          const SizedBox(height: AppSpacing.xl),
-          Row(
-            children: [
-              for (var i = 0; i < stats.length; i++) ...[
-                Expanded(child: stats[i]),
-                if (i != stats.length - 1) const SizedBox(width: AppSpacing.sm),
+    // A Column's mainAxisAlignment has nothing to center against once it's
+    // the child of a SingleChildScrollView (unbounded height), so it just
+    // stacks from the top. Constraining it to at least the viewport height
+    // lets `.center` actually center short content while still allowing
+    // taller content (e.g. with a footer) to scroll normally.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.marginMobile, vertical: AppSpacing.xl),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight - AppSpacing.xl * 2,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _RecapIcon(icon: icon),
+                const SizedBox(height: AppSpacing.lg),
+                SectionEyebrow(eyebrow, color: AppColors.accent),
+                const SizedBox(height: AppSpacing.sm),
+                Text(headline,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.displayStatMobile
+                        .copyWith(fontSize: 34)),
+                const SizedBox(height: AppSpacing.sm),
+                Text(subhead,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyMd.copyWith(
+                        color: AppColors.onSurfaceVariant, height: 1.4)),
+                const SizedBox(height: AppSpacing.xl),
+                Row(
+                  children: [
+                    for (var i = 0; i < stats.length; i++) ...[
+                      Expanded(child: stats[i]),
+                      if (i != stats.length - 1)
+                        const SizedBox(width: AppSpacing.sm),
+                    ],
+                  ],
+                ),
+                if (footer != null) footer!,
               ],
-            ],
+            ),
           ),
-          if (footer != null) footer!,
-        ],
-      ),
+        );
+      },
     );
   }
 }

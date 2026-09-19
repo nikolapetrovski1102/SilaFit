@@ -15,7 +15,8 @@ namespace Silen.Services.Implementations;
 public sealed class OpenRouterClient(HttpClient httpClient, IOptions<OpenRouterOptions> options) : IOpenRouterClient
 {
     public async Task<string> GenerateJsonAsync(
-        string systemPrompt, string userPrompt, JsonElement schema, CancellationToken cancellationToken = default)
+        string systemPrompt, string userPrompt, JsonElement schema, string? model = null,
+        CancellationToken cancellationToken = default)
     {
         var settings = options.Value;
         if (string.IsNullOrWhiteSpace(settings.ApiKey))
@@ -23,9 +24,14 @@ public sealed class OpenRouterClient(HttpClient httpClient, IOptions<OpenRouterO
             throw new ConflictException("OpenRouter API key is not configured.", "AI insights are temporarily unavailable.");
         }
 
+        // The prompt template's own model wins: the deployment-wide OpenRouter:Model
+        // override may point at a free/experimental model that doesn't honour
+        // json_schema, which would otherwise break every structured response.
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? settings.Model : model;
+
         var body = new
         {
-            model = settings.Model,
+            model = effectiveModel,
             messages = new[]
             {
                 new { role = "system", content = systemPrompt },

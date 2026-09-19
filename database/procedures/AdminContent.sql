@@ -707,8 +707,10 @@ BEGIN
     IF @Limit IS NULL OR @Limit < 1 SET @Limit = 200;
     IF @Limit > 500 SET @Limit = 500;
 
-    -- Account tier, join date and current subscription only - the app's own data
-    -- (logs, bodyweight, nutrition) stays out of the console entirely.
+    -- Account tier, join date and current subscription only. A user's own data
+    -- (logs, bodyweight, nutrition) is served by the separately gated client
+    -- overview in AdminClients.sql - users.data.read, plus an assigned-client
+    -- check for trainers - and never by this list.
     SELECT TOP (@Limit)
            u.UserId,
            u.DisplayName,

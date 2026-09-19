@@ -31,6 +31,24 @@
     return isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   }
 
+  /* For the client overview's numeric columns, where 0 is a real value (not "no
+     data") - a missing key is "—", a present one is formatted. */
+  function fmtInt(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    var n = Number(v);
+    return isNaN(n) ? '—' : Math.round(n).toLocaleString();
+  }
+
+  function fmtDec1(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    var n = Number(v);
+    return isNaN(n) ? '—' : (Math.round(n * 10) / 10).toLocaleString();
+  }
+
+  function fmtDay(iso) {
+    return iso ? String(iso).slice(0, 10) : '—';
+  }
+
   /* Closed sets mirrored from Silen.Services.Helpers.AdminContentFieldRules —
      the API is the real gate, this is just so the selects only offer values
      that will actually be accepted. */
@@ -2033,9 +2051,15 @@
     /* The mock-data action is destructive, so it is hidden unless the operator holds
        users.mock_data (super-admin only). The API enforces the same permission. */
     var canSeed = has('users.mock_data');
+    /* The client overview (profile, sets, meals, bodyweight) is gated on
+       users.data.read; a trainer holding it without users.data.read_all may only
+       open the clients they have assigned a split or diet plan to - the API
+       returns 403 for anyone else, this button just surfaces the entry point. */
+    var canViewClient = has('users.data.read');
+    var hasActions = canViewClient || canSeed;
 
     var head = '<thead><tr><th>User</th><th>Plan</th><th>Billing</th><th>Joined</th><th>Status</th>' +
-      (canSeed ? '<th></th>' : '') + '</tr></thead>';
+      (hasActions ? '<th></th>' : '') + '</tr></thead>';
     var body = allUsers.map(function (u) {
       var name = u.displayName || u.email || 'Unnamed user';
       var planChip = !u.activePlanCode ? '<span class="chip">Free</span>' : '<span class="chip chip--gold">' + esc(u.activePlanCode) + '</span>';
@@ -2053,16 +2077,29 @@
           '<td>' + (u.isActive
             ? '<span class="chip chip--accent">Active</span>'
             : '<span class="chip chip--error">Inactive</span>') + '</td>' +
-          (canSeed
-            ? '<td style="text-align:right;white-space:nowrap;"><button class="btn btn--secondary btn--sm" data-mock-user="' + esc(u.userId) + '">Mock data</button></td>'
+          (hasActions
+            ? '<td style="text-align:right;white-space:nowrap;">' +
+                (canViewClient ? '<button class="btn btn--secondary btn--sm" data-view-client="' + esc(u.userId) + '">View</button>' : '') +
+                (canSeed ? '<button class="btn btn--secondary btn--sm" data-mock-user="' + esc(u.userId) + '"' + (canViewClient ? ' style="margin-left:6px;"' : '') + '>Mock data</button>' : '') +
+              '</td>'
             : '') +
         '</tr>'
       );
     }).join('');
 
     $('#usersTable').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="' + (canSeed ? 6 : 5) + '"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No users match</div></div></td></tr>') +
+      (body || '<tr><td colspan="' + (hasActions ? 6 : 5) + '"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No users match</div></div></td></tr>') +
     '</tbody>';
+
+    if (canViewClient) {
+      $$('#usersTable [data-view-client]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var userId = btn.getAttribute('data-view-client');
+          var user = allUsers.find(function (u) { return u.userId === userId; });
+          if (user) openClientOverview(user);
+        });
+      });
+    }
 
     if (canSeed) {
       $$('#usersTable [data-mock-user]').forEach(function (btn) {
@@ -2073,6 +2110,162 @@
         });
       });
     }
+  }
+
+  /* ================================================================
+     CLIENT OVERVIEW — what one user actually logged (users.data.read).
+     Read-only; the API refuses a user the operator isn't the client of
+     unless they also hold users.data.read_all.
+     ================================================================ */
+
+  function openClientOverview(user) {
+    var label = user.displayName || user.email || 'this client';
+    var backdrop = openModal(
+      modalHead('Client overview') +
+      '<div id="clientOverviewBody" class="body-sm">Loading ' + esc(label) + '…</div>',
+      true
+    );
+    wireClose(backdrop);
+
+    auth.getClientOverview(user.userId, 30).then(function (result) {
+      var body = $('#clientOverviewBody');
+      if (!body) return;
+      if (!toastOnFailure(result, 'Could not load the client overview.')) {
+        body.textContent = 'Could not load this client.';
+        return;
+      }
+
+      body.innerHTML = renderClientOverview(result.data || {});
+      var closeBtn = $('#clientOverviewClose');
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    });
+  }
+
+  /* A titled card. Keeps the overview's sections visually separated without
+     inventing new CSS. */
+  function clientSection(title, html) {
+    return '<div class="card" style="margin-top:12px;padding:14px;">' +
+      '<div class="label-sm" style="margin-bottom:8px;">' + esc(title) + '</div>' + html + '</div>';
+  }
+
+  function renderClientOverview(o) {
+    var a = o.account || {};
+    var p = o.profile;
+    var s = o.summary || {};
+    var name = a.displayName || a.email || 'Client';
+    var parts = [];
+
+    parts.push(
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+        '<div class="headline-md">' + esc(name) + '</div>' +
+        '<span class="chip">' + esc(a.accountTier || 'Registered') + '</span>' +
+        (a.activePlanCode ? '<span class="chip chip--gold">' + esc(a.activePlanCode) + '</span>' : '<span class="chip">Free</span>') +
+        (a.isActive ? '<span class="chip chip--accent">Active</span>' : '<span class="chip chip--error">Inactive</span>') +
+      '</div>' +
+      '<div class="body-sm" style="margin-top:6px;">' + esc(a.email || '—') +
+        ' · joined ' + fmtDate(a.createdAtUtc) +
+        ' · last login ' + fmtDate(a.lastLoginAtUtc) +
+        ' · showing ' + esc(fmtDay(o.fromDateUtc)) + ' to ' + esc(fmtDay(o.toDateUtc)) + '</div>'
+    );
+
+    var kcal = fmtInt(s.avgCaloriesLogged);
+    var target = o.targets ? fmtInt(o.targets.targetCalories) : '—';
+    var kpis = [
+      { l: 'Workouts', v: fmtInt(s.completedSessions) + ' / ' + fmtInt(s.scheduledSessions), sub: 'completed / scheduled' },
+      { l: 'Sets logged', v: fmtInt(s.totalSets), sub: 'in window' },
+      { l: 'Tonnage', v: fmtInt(s.totalTonnageKg) + ' kg', sub: 'avg RPE ' + fmtDec1(s.avgRpe) },
+      { l: 'Meal days', v: fmtInt(s.loggedMealDays) + ' / ' + fmtInt(s.totalDaysInRange), sub: kcal + ' kcal/day (target ' + target + ')' },
+      { l: 'Weight', v: fmtDec1(s.startWeightKg) + ' → ' + fmtDec1(s.endWeightKg) + ' kg', sub: 'start → end' },
+      { l: 'Hydration', v: fmtInt(s.avgHydrationMl) + ' ml', sub: 'avg / day' }
+    ];
+    parts.push('<div class="user-kpi-row" style="margin-top:12px;">' + kpis.map(function (k) {
+      return '<div class="user-kpi"><div class="user-kpi__label">' + k.l + '</div><div class="user-kpi__val">' + k.v + '</div><div class="user-kpi__sub">' + k.sub + '</div></div>';
+    }).join('') + '</div>');
+
+    var profileRows = p ? [
+      ['Gender', p.gender],
+      ['Age', p.ageYears],
+      ['Height', p.heightCm == null ? '—' : fmtDec1(p.heightCm) + ' cm'],
+      ['Onboarding weight', p.weightKg == null ? '—' : fmtDec1(p.weightKg) + ' kg'],
+      ['Goal', p.goal],
+      ['Training days / week', p.trainingDaysPerWeek],
+      ['Session length', p.sessionDurationMinutes == null ? '—' : p.sessionDurationMinutes + ' min'],
+      ['Experience', p.trainingExperience],
+      ['Equipment', p.equipmentAccess],
+      ['Daily activity', p.dailyActivityLevel]
+    ] : [];
+    parts.push(clientSection('Onboarding profile', profileRows.length
+      ? '<div class="form-grid">' + profileRows.map(function (r) {
+          return '<div class="field"><label>' + esc(r[0]) + '</label><div class="body-sm">' + esc(r[1] == null || r[1] === '' ? '—' : r[1]) + '</div></div>';
+        }).join('') + '</div>'
+      : '<div class="body-sm">This user has not completed onboarding.</div>'));
+
+    var programs = [];
+    if (o.activeSplit) {
+      programs.push('<div class="body-sm"><b>Split:</b> ' + esc(o.activeSplit.name) + ' · ' + esc(o.activeSplit.category) + ' · ' + esc(o.activeSplit.level) + ' · since ' + fmtDate(o.activeSplit.activatedAtUtc) + '</div>');
+    }
+    if (o.activeDietPlan) {
+      programs.push('<div class="body-sm" style="margin-top:4px;"><b>Diet plan:</b> ' + esc(o.activeDietPlan.name) + ' · ' + esc(o.activeDietPlan.periodType) + ' · since ' + fmtDate(o.activeDietPlan.activatedAtUtc) + '</div>');
+    }
+    parts.push(clientSection('Active programs', programs.length ? programs.join('') : '<div class="body-sm">Nothing active.</div>'));
+
+    var sessions = o.sessions || [];
+    var sessionHtml = sessions.length
+      ? sessions.slice(0, 30).map(function (ws) {
+          var sets = ws.sets || [];
+          var meta = fmtDay(ws.scheduledDateUtc) + ' · ' + esc(ws.status) +
+            (ws.durationMinutes ? ' · ' + ws.durationMinutes + ' min' : '') +
+            (ws.rpeScore != null ? ' · RPE ' + fmtDec1(ws.rpeScore) : '') +
+            (ws.tonnageKg != null ? ' · ' + fmtInt(ws.tonnageKg) + ' kg' : '') +
+            ' · ' + sets.length + ' sets';
+          var setsTable = sets.length
+            ? '<div class="table-scroll"><table class="data" style="margin-top:8px;"><thead><tr><th>#</th><th>Exercise</th><th>Muscle</th><th>Weight</th><th>Reps</th><th>Logged</th></tr></thead><tbody>' +
+                sets.map(function (st) {
+                  return '<tr><td>' + fmtInt(st.setNumber) + '</td><td class="row-title">' + esc(st.exerciseName) + '</td>' +
+                    '<td class="label-sm">' + esc(st.muscleGroup) + '</td><td>' + fmtDec1(st.weightKg) + ' kg</td>' +
+                    '<td>' + fmtInt(st.reps) + '</td><td class="label-sm">' + fmtDate(st.completedAtUtc) + '</td></tr>';
+                }).join('') + '</tbody></table></div>'
+            : '<div class="body-sm" style="margin-top:6px;">No sets logged for this session.</div>';
+          return '<details style="margin-top:8px;"><summary style="cursor:pointer;">' +
+            '<span class="row-title">' + esc(ws.splitDayTitle || 'Workout') + '</span> ' +
+            '<span class="row-sub">' + meta + '</span></summary>' + setsTable + '</details>';
+        }).join('')
+      : '<div class="body-sm">No sessions in this window.</div>';
+    parts.push(clientSection('Training — sessions and logged sets', sessionHtml));
+
+    var meals = o.meals || [];
+    var mealHtml = meals.length
+      ? '<div class="table-scroll"><table class="data"><thead><tr><th>Date</th><th>Meal</th><th>Title</th><th>Kcal</th><th>P</th><th>C</th><th>F</th><th>Status</th></tr></thead><tbody>' +
+          meals.slice(0, 80).map(function (m) {
+            return '<tr><td class="label-sm">' + esc(fmtDay(m.logDateUtc)) + '</td><td>' + esc(m.mealType) + '</td>' +
+              '<td class="row-title">' + esc(m.title) + '</td><td>' + fmtInt(m.caloriesKcal) + '</td>' +
+              '<td>' + fmtInt(m.proteinG) + '</td><td>' + fmtInt(m.carbsG) + '</td><td>' + fmtInt(m.fatsG) + '</td>' +
+              '<td class="label-sm">' + esc(m.status) + '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+      : '<div class="body-sm">No meals logged in this window.</div>';
+    parts.push(clientSection('Nutrition — logged meals', mealHtml));
+
+    var bw = o.bodyweight || [];
+    parts.push(clientSection('Bodyweight', bw.length
+      ? '<div class="body-sm">' + bw.slice(-14).map(function (b) {
+          return esc(fmtDay(b.loggedAtUtc)) + ': <b>' + fmtDec1(b.weightKg) + ' kg</b>';
+        }).join(' &nbsp;·&nbsp; ') + '</div>'
+      : '<div class="body-sm">No bodyweight logs in this window.</div>'));
+
+    var hydration = o.hydration || [];
+    parts.push(clientSection('Hydration', hydration.length
+      ? '<div class="body-sm">' + hydration.slice(-14).map(function (h) {
+          return esc(fmtDay(h.logDateUtc)) + ': <b>' + fmtInt(h.totalMl) + ' ml</b>';
+        }).join(' &nbsp;·&nbsp; ') + '</div>'
+      : '<div class="body-sm">No hydration logs in this window.</div>'));
+
+    parts.push(
+      '<div class="modal__actions">' +
+        '<button class="btn btn--secondary btn--sm" id="clientOverviewClose">Close</button>' +
+      '</div>'
+    );
+
+    return parts.join('');
   }
 
   /* Super-admin only: generate a month of history for one user so the monthly

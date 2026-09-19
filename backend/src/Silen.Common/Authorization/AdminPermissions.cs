@@ -46,6 +46,21 @@ public static class AdminPermissions
     public const string UsersRead = "users.read";
 
     /// <summary>
+    /// Open one app user's client overview - their onboarding profile plus the
+    /// workouts/sets, meals, bodyweight and hydration they actually logged. Held by
+    /// trainer, super-admin and analyst; a trainer is still limited to the clients
+    /// they have assigned a split or diet plan to (see <see cref="UsersDataReadAll"/>).
+    /// </summary>
+    public const string UsersDataRead = "users.data.read";
+
+    /// <summary>
+    /// View any user's logged data, not just the operator's assigned clients. Held
+    /// by super-admin and analyst; deliberately not granted to the shipped trainer
+    /// role so a trainer's client list stays the boundary of what they can see.
+    /// </summary>
+    public const string UsersDataReadAll = "users.data.read_all";
+
+    /// <summary>
     /// Replace one app user's logs with a generated month of mock history so the
     /// monthly overview can be exercised. Destructive (it wipes and regenerates the
     /// user's workouts/meals/hydration/bodyweight), so it ships granted only to
@@ -83,6 +98,8 @@ public static class AdminPermissions
         new(SuggestionsRead, "Meal suggestions", "View meal suggestions", "The month-tagged suggestion catalog."),
         new(SuggestionsWrite, "Meal suggestions", "Edit meal suggestions", "Add, change and remove suggestions."),
         new(UsersRead, "Users", "View app users", "Account tier, join date and current subscription - never anyone's logs or body data."),
+        new(UsersDataRead, "Users", "View client logs", "One user's onboarding profile and the workouts/sets, meals, bodyweight and hydration they logged."),
+        new(UsersDataReadAll, "Users", "View any client's logs", "Open a user who is not one of your assigned clients."),
         new(UsersMockData, "Users", "Generate mock data", "Replace one user's logs with a generated month of workouts, meals, hydration and bodyweight for testing."),
         new(OperatorsManage, "Operators", "Manage operators", "Move operators between roles and deactivate them."),
         new(RolesManage, "Roles", "Manage custom roles", "Create custom roles and choose what each may do."),

@@ -9,11 +9,34 @@ GO
 -- a program tagged for one gender is never auto-activated for the other while a
 -- unisex or matching option exists, and a matching program gets a ranking boost.
 --
--- The imported catalogue (006) never populated the column, so the women-specific
--- programs shipped as unisex and the onboarding gender answer had no effect. This
--- seed stage runs after the imports, so tagging here reaches both fresh and
--- already-seeded databases. Unisex programs keep TargetGender NULL and stay
--- eligible to everyone.
+-- The imported catalogue (006) only partially populated the column: many programs
+-- whose source audience is a single gender arrived as the scraper's catch-all
+-- 'Male & Female', so the onboarding gender answer had no effect on them and a
+-- male could be auto-assigned e.g. "3 Day Full Body Toning Workout for Women".
+-- Tagging here therefore *recomputes* the audience, not just fills NULLs, and
+-- prefers the source categories (a real audience signal) over the name. Unisex
+-- programs (categories name both genders, or neither) stay NULL / 'Male & Female'
+-- and remain eligible to everyone. This stage runs after the imports, so it
+-- reaches both fresh and already-seeded databases.
+
+-- Source categories name one gender only: that is the program's audience.
+UPDATE dbo.WorkoutSplits
+SET TargetGender = N'Female'
+WHERE TargetGender <> N'Female'
+  AND SourceCategoriesJson LIKE N'%"Women"%'
+  AND SourceCategoriesJson NOT LIKE N'%"Men"%';
+GO
+
+UPDATE dbo.WorkoutSplits
+SET TargetGender = N'Male'
+WHERE TargetGender <> N'Male'
+  AND SourceCategoriesJson LIKE N'%"Men"%'
+  AND SourceCategoriesJson NOT LIKE N'%"Women"%';
+GO
+
+-- Rows with no source categories fall back to the name/source-url cues that the
+-- original tagging used. Guarded on the tag still being unset so a program whose
+-- categories deliberately span both genders is not overridden by its name.
 UPDATE dbo.WorkoutSplits
 SET TargetGender = N'Female'
 WHERE TargetGender IS NULL

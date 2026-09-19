@@ -376,7 +376,7 @@ public sealed class WeeklyPlanGenerationService(
 
         var schema = BuildSplitSchema(candidateExercises.Select(e => e.ExerciseId));
         var aiJson = await openRouterClient
-            .GenerateJsonAsync(template.SystemPrompt, userPrompt, schema, cancellationToken)
+            .GenerateJsonAsync(template.SystemPrompt, userPrompt, schema, template.Model, cancellationToken)
             .ConfigureAwait(false);
 
         var aiResult = JsonSerializer.Deserialize<AiSplitResultDto>(aiJson, JsonOptions)
@@ -616,7 +616,7 @@ public sealed class WeeklyPlanGenerationService(
             candidatesBySlot["Dinner"].Select(m => m.MealSuggestionId),
             candidatesBySlot["Snack"].Select(m => m.MealSuggestionId));
         var aiJson = await openRouterClient
-            .GenerateJsonAsync(template.SystemPrompt, userPrompt, schema, cancellationToken)
+            .GenerateJsonAsync(template.SystemPrompt, userPrompt, schema, template.Model, cancellationToken)
             .ConfigureAwait(false);
 
         var aiResult = JsonSerializer.Deserialize<AiDietResultDto>(aiJson, JsonOptions)
