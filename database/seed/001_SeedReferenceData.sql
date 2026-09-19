@@ -93,6 +93,21 @@ INNER JOIN (VALUES
 WHERE s.RecommendedGoal IS NULL;
 GO
 
+-- Re-runnable correction: earlier versions of this file numbered SplitDays
+-- from 0, but every save path (AdminConsoleService.SaveSplitDayAsync,
+-- SplitService.SaveMySplitDayAsync, and the matching stored procedures)
+-- rejects DayIndex < 1, so a split that still has a "Day 0" can be viewed
+-- but never saved or managed from the admin dashboard. Shift any split that
+-- still starts at 0 up by one so its numbering matches the 1-based VALUES
+-- below - safe to re-run since a split only qualifies while MIN(DayIndex) = 0.
+UPDATE sd
+SET sd.DayIndex = sd.DayIndex + 1
+FROM dbo.SplitDays sd
+WHERE sd.SplitId IN (
+    SELECT SplitId FROM dbo.SplitDays GROUP BY SplitId HAVING MIN(DayIndex) = 0
+);
+GO
+
 ----------------------------------------------------------------------------
 -- Split days for PPL Hypertrophy Protocol
 ----------------------------------------------------------------------------
@@ -101,12 +116,12 @@ DECLARE @PplSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits WH
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @PplSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Push A: Chest, Delts & Triceps', N'Hypertrophy Focus', 45),
-    (1, N'Pull A: Back & Biceps', N'Posterior Chain', 50),
-    (2, N'Legs A: Quads & Calves', N'Quad Power & Calf', 55),
-    (3, N'Push B: Chest, Delts & Triceps', N'Hypertrophy Focus', 45),
-    (4, N'Pull B: Back & Biceps', N'Posterior Chain', 50),
-    (5, N'Legs B: Quads & Calves', N'Quad Power & Calf', 55)
+    (1, N'Push A: Chest, Delts & Triceps', N'Hypertrophy Focus', 45),
+    (2, N'Pull A: Back & Biceps', N'Posterior Chain', 50),
+    (3, N'Legs A: Quads & Calves', N'Quad Power & Calf', 55),
+    (4, N'Push B: Chest, Delts & Triceps', N'Hypertrophy Focus', 45),
+    (5, N'Pull B: Back & Biceps', N'Posterior Chain', 50),
+    (6, N'Legs B: Quads & Calves', N'Quad Power & Calf', 55)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @PplSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @PplSplitId AND d.DayIndex = v.DayIndex);
@@ -120,24 +135,24 @@ DECLARE @PplSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits WH
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
-    (0, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
-    (0, N'Cable Standing Flyes', 3, 3, 12, 15),
-    (1, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
-    (1, N'Wide-Grip Lat Pulldown', 2, 3, 10, 12),
-    (1, N'Incline Dumbbell Hammer Curl', 3, 3, 12, 12),
-    (2, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
-    (2, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
-    (2, N'Seated Leg Extension', 3, 3, 12, 15),
-    (3, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
-    (3, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
-    (3, N'Cable Standing Flyes', 3, 3, 12, 15),
-    (4, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
-    (4, N'Wide-Grip Lat Pulldown', 2, 3, 10, 12),
-    (4, N'Incline Dumbbell Hammer Curl', 3, 3, 12, 12),
-    (5, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
-    (5, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
-    (5, N'Seated Leg Extension', 3, 3, 12, 15)
+    (1, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
+    (1, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
+    (1, N'Cable Standing Flyes', 3, 3, 12, 15),
+    (2, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
+    (2, N'Wide-Grip Lat Pulldown', 2, 3, 10, 12),
+    (2, N'Incline Dumbbell Hammer Curl', 3, 3, 12, 12),
+    (3, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
+    (3, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
+    (3, N'Seated Leg Extension', 3, 3, 12, 15),
+    (4, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
+    (4, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
+    (4, N'Cable Standing Flyes', 3, 3, 12, 15),
+    (5, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
+    (5, N'Wide-Grip Lat Pulldown', 2, 3, 10, 12),
+    (5, N'Incline Dumbbell Hammer Curl', 3, 3, 12, 12),
+    (6, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
+    (6, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
+    (6, N'Seated Leg Extension', 3, 3, 12, 15)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @PplSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -155,10 +170,10 @@ DECLARE @UpperLowerSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSp
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @UpperLowerSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Upper A: Chest, Back & Shoulders', N'Upper Body Strength', 50),
-    (1, N'Lower A: Quads & Hamstrings', N'Lower Body Strength', 45),
-    (2, N'Upper B: Chest, Back & Shoulders', N'Upper Body Hypertrophy', 50),
-    (3, N'Lower B: Quads & Hamstrings', N'Lower Body Hypertrophy', 45)
+    (1, N'Upper A: Chest, Back & Shoulders', N'Upper Body Strength', 50),
+    (2, N'Lower A: Quads & Hamstrings', N'Lower Body Strength', 45),
+    (3, N'Upper B: Chest, Back & Shoulders', N'Upper Body Hypertrophy', 50),
+    (4, N'Lower B: Quads & Hamstrings', N'Lower Body Hypertrophy', 45)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @UpperLowerSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @UpperLowerSplitId AND d.DayIndex = v.DayIndex);
@@ -172,18 +187,18 @@ DECLARE @UpperLowerSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSp
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Barbell Bench Press', 1, 4, 6, 8),
-    (0, N'Chest-Supported T-Bar Row', 2, 4, 8, 10),
-    (0, N'Cable Lateral Raise', 3, 3, 12, 15),
-    (1, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
-    (1, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
-    (1, N'Bulgarian Split Squat', 3, 3, 10, 12),
-    (2, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
-    (2, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
-    (2, N'Overhead Rope Extension', 3, 3, 12, 15),
-    (3, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
-    (3, N'Seated Leg Extension', 2, 3, 12, 15),
-    (3, N'Bulgarian Split Squat', 3, 3, 10, 12)
+    (1, N'Incline Barbell Bench Press', 1, 4, 6, 8),
+    (1, N'Chest-Supported T-Bar Row', 2, 4, 8, 10),
+    (1, N'Cable Lateral Raise', 3, 3, 12, 15),
+    (2, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
+    (2, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
+    (2, N'Bulgarian Split Squat', 3, 3, 10, 12),
+    (3, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
+    (3, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
+    (3, N'Overhead Rope Extension', 3, 3, 12, 15),
+    (4, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
+    (4, N'Seated Leg Extension', 2, 3, 12, 15),
+    (4, N'Bulgarian Split Squat', 3, 3, 10, 12)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @UpperLowerSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -201,9 +216,9 @@ DECLARE @FullBodySplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSpli
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @FullBodySplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Full Body A', N'General Strength', 40),
-    (1, N'Full Body B', N'General Strength', 40),
-    (2, N'Full Body C', N'General Strength', 40)
+    (1, N'Full Body A', N'General Strength', 40),
+    (2, N'Full Body B', N'General Strength', 40),
+    (3, N'Full Body C', N'General Strength', 40)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @FullBodySplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @FullBodySplitId AND d.DayIndex = v.DayIndex);
@@ -217,15 +232,15 @@ DECLARE @FullBodySplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSpli
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Dumbbell Bench Press', 1, 3, 8, 10),
-    (0, N'Wide-Grip Lat Pulldown', 2, 3, 8, 10),
-    (0, N'Barbell High-Bar Back Squat', 3, 3, 8, 10),
-    (1, N'Seated Dumbbell Overhead Press', 1, 3, 10, 12),
-    (1, N'Barbell Conventional Deadlift', 2, 3, 6, 8),
-    (1, N'Bulgarian Split Squat', 3, 3, 10, 12),
-    (2, N'Incline Barbell Bench Press', 1, 3, 8, 10),
-    (2, N'Chest-Supported T-Bar Row', 2, 3, 8, 10),
-    (2, N'Romanian Deadlift (Dumbbells)', 3, 3, 8, 10)
+    (1, N'Incline Dumbbell Bench Press', 1, 3, 8, 10),
+    (1, N'Wide-Grip Lat Pulldown', 2, 3, 8, 10),
+    (1, N'Barbell High-Bar Back Squat', 3, 3, 8, 10),
+    (2, N'Seated Dumbbell Overhead Press', 1, 3, 10, 12),
+    (2, N'Barbell Conventional Deadlift', 2, 3, 6, 8),
+    (2, N'Bulgarian Split Squat', 3, 3, 10, 12),
+    (3, N'Incline Barbell Bench Press', 1, 3, 8, 10),
+    (3, N'Chest-Supported T-Bar Row', 2, 3, 8, 10),
+    (3, N'Romanian Deadlift (Dumbbells)', 3, 3, 8, 10)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @FullBodySplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -243,12 +258,12 @@ DECLARE @ArnoldSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @ArnoldSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Chest & Back A', N'Hypertrophy Focus', 55),
-    (1, N'Shoulders & Arms A', N'Hypertrophy Focus', 45),
-    (2, N'Legs A', N'Quad & Posterior Chain', 55),
-    (3, N'Chest & Back B', N'Hypertrophy Focus', 55),
-    (4, N'Shoulders & Arms B', N'Hypertrophy Focus', 45),
-    (5, N'Legs B', N'Quad & Posterior Chain', 55)
+    (1, N'Chest & Back A', N'Hypertrophy Focus', 55),
+    (2, N'Shoulders & Arms A', N'Hypertrophy Focus', 45),
+    (3, N'Legs A', N'Quad & Posterior Chain', 55),
+    (4, N'Chest & Back B', N'Hypertrophy Focus', 55),
+    (5, N'Shoulders & Arms B', N'Hypertrophy Focus', 45),
+    (6, N'Legs B', N'Quad & Posterior Chain', 55)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @ArnoldSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @ArnoldSplitId AND d.DayIndex = v.DayIndex);
@@ -262,24 +277,24 @@ DECLARE @ArnoldSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
-    (0, N'Chest-Supported T-Bar Row', 2, 4, 8, 10),
-    (0, N'Cable Standing Flyes', 3, 3, 12, 15),
-    (1, N'Seated Dumbbell Overhead Press', 1, 4, 8, 10),
-    (1, N'Cable Lateral Raise', 2, 3, 12, 15),
-    (1, N'Incline Dumbbell Hammer Curl', 3, 3, 10, 12),
-    (2, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
-    (2, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
-    (2, N'Seated Leg Extension', 3, 3, 12, 15),
-    (3, N'Incline Barbell Bench Press', 1, 4, 6, 8),
-    (3, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
-    (3, N'Cable Standing Flyes', 3, 3, 12, 15),
-    (4, N'Seated Dumbbell Overhead Press', 1, 4, 8, 10),
-    (4, N'Cable Lateral Raise', 2, 3, 12, 15),
-    (4, N'Overhead Rope Extension', 3, 3, 12, 15),
-    (5, N'Bulgarian Split Squat', 1, 3, 10, 12),
-    (5, N'Barbell Conventional Deadlift', 2, 4, 5, 6),
-    (5, N'Seated Leg Extension', 3, 3, 12, 15)
+    (1, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
+    (1, N'Chest-Supported T-Bar Row', 2, 4, 8, 10),
+    (1, N'Cable Standing Flyes', 3, 3, 12, 15),
+    (2, N'Seated Dumbbell Overhead Press', 1, 4, 8, 10),
+    (2, N'Cable Lateral Raise', 2, 3, 12, 15),
+    (2, N'Incline Dumbbell Hammer Curl', 3, 3, 10, 12),
+    (3, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
+    (3, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
+    (3, N'Seated Leg Extension', 3, 3, 12, 15),
+    (4, N'Incline Barbell Bench Press', 1, 4, 6, 8),
+    (4, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
+    (4, N'Cable Standing Flyes', 3, 3, 12, 15),
+    (5, N'Seated Dumbbell Overhead Press', 1, 4, 8, 10),
+    (5, N'Cable Lateral Raise', 2, 3, 12, 15),
+    (5, N'Overhead Rope Extension', 3, 3, 12, 15),
+    (6, N'Bulgarian Split Squat', 1, 3, 10, 12),
+    (6, N'Barbell Conventional Deadlift', 2, 4, 5, 6),
+    (6, N'Seated Leg Extension', 3, 3, 12, 15)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @ArnoldSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -297,10 +312,10 @@ DECLARE @PhulSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits W
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @PhulSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Upper Power', N'Heavy Compounds', 55),
-    (1, N'Lower Power', N'Heavy Compounds', 50),
-    (2, N'Upper Hypertrophy', N'Volume Work', 55),
-    (3, N'Lower Hypertrophy', N'Volume Work', 50)
+    (1, N'Upper Power', N'Heavy Compounds', 55),
+    (2, N'Lower Power', N'Heavy Compounds', 50),
+    (3, N'Upper Hypertrophy', N'Volume Work', 55),
+    (4, N'Lower Hypertrophy', N'Volume Work', 50)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @PhulSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @PhulSplitId AND d.DayIndex = v.DayIndex);
@@ -314,22 +329,22 @@ DECLARE @PhulSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits W
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Barbell Bench Press', 1, 3, 4, 6),
-    (0, N'Barbell Bent-Over Row', 2, 3, 4, 6),
-    (0, N'Seated Dumbbell Overhead Press', 3, 3, 6, 8),
-    (0, N'Barbell Curl', 4, 3, 8, 10),
-    (1, N'Barbell High-Bar Back Squat', 1, 4, 3, 5),
-    (1, N'Barbell Conventional Deadlift', 2, 3, 3, 5),
-    (1, N'Standing Calf Raise (Machine)', 3, 3, 10, 12),
-    (2, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
-    (2, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
-    (2, N'Cable Lateral Raise', 3, 3, 12, 15),
-    (2, N'Close-Grip Bench Press', 4, 3, 10, 12),
-    (2, N'Incline Dumbbell Hammer Curl', 5, 3, 10, 12),
-    (3, N'Barbell Front Squat', 1, 4, 8, 10),
-    (3, N'Romanian Deadlift (Dumbbells)', 2, 3, 10, 12),
-    (3, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
-    (3, N'Seated Leg Extension', 4, 3, 12, 15)
+    (1, N'Incline Barbell Bench Press', 1, 3, 4, 6),
+    (1, N'Barbell Bent-Over Row', 2, 3, 4, 6),
+    (1, N'Seated Dumbbell Overhead Press', 3, 3, 6, 8),
+    (1, N'Barbell Curl', 4, 3, 8, 10),
+    (2, N'Barbell High-Bar Back Squat', 1, 4, 3, 5),
+    (2, N'Barbell Conventional Deadlift', 2, 3, 3, 5),
+    (2, N'Standing Calf Raise (Machine)', 3, 3, 10, 12),
+    (3, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
+    (3, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
+    (3, N'Cable Lateral Raise', 3, 3, 12, 15),
+    (3, N'Close-Grip Bench Press', 4, 3, 10, 12),
+    (3, N'Incline Dumbbell Hammer Curl', 5, 3, 10, 12),
+    (4, N'Barbell Front Squat', 1, 4, 8, 10),
+    (4, N'Romanian Deadlift (Dumbbells)', 2, 3, 10, 12),
+    (4, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
+    (4, N'Seated Leg Extension', 4, 3, 12, 15)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @PhulSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -347,11 +362,11 @@ DECLARE @PhatSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits W
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @PhatSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Upper Power', N'Heavy Compounds', 55),
-    (1, N'Lower Power', N'Heavy Compounds', 50),
-    (2, N'Back & Shoulders Hypertrophy', N'Volume Work', 55),
-    (3, N'Chest & Arms Hypertrophy', N'Volume Work', 50),
-    (4, N'Legs Hypertrophy', N'Volume Work', 55)
+    (1, N'Upper Power', N'Heavy Compounds', 55),
+    (2, N'Lower Power', N'Heavy Compounds', 50),
+    (3, N'Back & Shoulders Hypertrophy', N'Volume Work', 55),
+    (4, N'Chest & Arms Hypertrophy', N'Volume Work', 50),
+    (5, N'Legs Hypertrophy', N'Volume Work', 55)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @PhatSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @PhatSplitId AND d.DayIndex = v.DayIndex);
@@ -365,28 +380,28 @@ DECLARE @PhatSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits W
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Barbell Bench Press', 1, 4, 3, 5),
-    (0, N'Barbell Bent-Over Row', 2, 4, 3, 5),
-    (0, N'Seated Dumbbell Overhead Press', 3, 3, 5, 6),
-    (0, N'Barbell Curl', 4, 3, 6, 8),
-    (1, N'Barbell High-Bar Back Squat', 1, 4, 3, 5),
-    (1, N'Barbell Conventional Deadlift', 2, 3, 3, 5),
-    (1, N'Standing Calf Raise (Machine)', 3, 3, 8, 10),
-    (2, N'Wide-Grip Lat Pulldown', 1, 4, 8, 10),
-    (2, N'Chest-Supported T-Bar Row', 2, 4, 8, 10),
-    (2, N'Face Pull', 3, 3, 15, 15),
-    (2, N'Cable Lateral Raise', 4, 3, 12, 15),
-    (2, N'Barbell Shrug', 5, 3, 12, 12),
-    (3, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
-    (3, N'Cable Standing Flyes', 2, 3, 12, 15),
-    (3, N'Close-Grip Bench Press', 3, 3, 10, 12),
-    (3, N'Incline Dumbbell Hammer Curl', 4, 3, 10, 12),
-    (3, N'Overhead Rope Extension', 5, 3, 12, 15),
-    (4, N'Barbell Front Squat', 1, 4, 8, 10),
-    (4, N'Romanian Deadlift (Dumbbells)', 2, 4, 10, 12),
-    (4, N'Bulgarian Split Squat', 3, 3, 10, 12),
-    (4, N'Seated Leg Extension', 4, 3, 15, 15),
-    (4, N'Standing Calf Raise (Machine)', 5, 3, 15, 15)
+    (1, N'Incline Barbell Bench Press', 1, 4, 3, 5),
+    (1, N'Barbell Bent-Over Row', 2, 4, 3, 5),
+    (1, N'Seated Dumbbell Overhead Press', 3, 3, 5, 6),
+    (1, N'Barbell Curl', 4, 3, 6, 8),
+    (2, N'Barbell High-Bar Back Squat', 1, 4, 3, 5),
+    (2, N'Barbell Conventional Deadlift', 2, 3, 3, 5),
+    (2, N'Standing Calf Raise (Machine)', 3, 3, 8, 10),
+    (3, N'Wide-Grip Lat Pulldown', 1, 4, 8, 10),
+    (3, N'Chest-Supported T-Bar Row', 2, 4, 8, 10),
+    (3, N'Face Pull', 3, 3, 15, 15),
+    (3, N'Cable Lateral Raise', 4, 3, 12, 15),
+    (3, N'Barbell Shrug', 5, 3, 12, 12),
+    (4, N'Incline Dumbbell Bench Press', 1, 4, 8, 10),
+    (4, N'Cable Standing Flyes', 2, 3, 12, 15),
+    (4, N'Close-Grip Bench Press', 3, 3, 10, 12),
+    (4, N'Incline Dumbbell Hammer Curl', 4, 3, 10, 12),
+    (4, N'Overhead Rope Extension', 5, 3, 12, 15),
+    (5, N'Barbell Front Squat', 1, 4, 8, 10),
+    (5, N'Romanian Deadlift (Dumbbells)', 2, 4, 10, 12),
+    (5, N'Bulgarian Split Squat', 3, 3, 10, 12),
+    (5, N'Seated Leg Extension', 4, 3, 15, 15),
+    (5, N'Standing Calf Raise (Machine)', 5, 3, 15, 15)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @PhatSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -404,11 +419,11 @@ DECLARE @BroSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits WH
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @BroSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Chest Day', N'Hypertrophy Focus', 50),
-    (1, N'Back Day', N'Hypertrophy Focus', 50),
-    (2, N'Shoulders Day', N'Hypertrophy Focus', 45),
-    (3, N'Arms Day', N'Hypertrophy Focus', 45),
-    (4, N'Legs Day', N'Hypertrophy Focus', 55)
+    (1, N'Chest Day', N'Hypertrophy Focus', 50),
+    (2, N'Back Day', N'Hypertrophy Focus', 50),
+    (3, N'Shoulders Day', N'Hypertrophy Focus', 45),
+    (4, N'Arms Day', N'Hypertrophy Focus', 45),
+    (5, N'Legs Day', N'Hypertrophy Focus', 55)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @BroSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @BroSplitId AND d.DayIndex = v.DayIndex);
@@ -422,28 +437,28 @@ DECLARE @BroSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits WH
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Incline Barbell Bench Press', 1, 4, 8, 10),
-    (0, N'Incline Dumbbell Bench Press', 2, 3, 10, 12),
-    (0, N'Cable Standing Flyes', 3, 3, 12, 15),
-    (0, N'Push-Up', 4, 3, 12, 15),
-    (1, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
-    (1, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
-    (1, N'Chest-Supported T-Bar Row', 3, 3, 8, 10),
-    (1, N'Seated Cable Row', 4, 3, 10, 12),
-    (2, N'Seated Dumbbell Overhead Press', 1, 4, 8, 10),
-    (2, N'Cable Lateral Raise', 2, 3, 12, 15),
-    (2, N'Dumbbell Lateral Raise', 3, 3, 12, 15),
-    (2, N'Face Pull', 4, 3, 15, 15),
-    (3, N'Close-Grip Bench Press', 1, 4, 8, 10),
-    (3, N'Barbell Curl', 2, 4, 8, 10),
-    (3, N'Incline Dumbbell Hammer Curl', 3, 3, 10, 12),
-    (3, N'Overhead Rope Extension', 4, 3, 12, 15),
-    (3, N'Bodyweight Dip', 5, 3, 10, 12),
-    (4, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
-    (4, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
-    (4, N'Bulgarian Split Squat', 3, 3, 10, 12),
-    (4, N'Seated Leg Extension', 4, 3, 12, 15),
-    (4, N'Standing Calf Raise (Machine)', 5, 4, 12, 15)
+    (1, N'Incline Barbell Bench Press', 1, 4, 8, 10),
+    (1, N'Incline Dumbbell Bench Press', 2, 3, 10, 12),
+    (1, N'Cable Standing Flyes', 3, 3, 12, 15),
+    (1, N'Push-Up', 4, 3, 12, 15),
+    (2, N'Barbell Conventional Deadlift', 1, 4, 5, 6),
+    (2, N'Wide-Grip Lat Pulldown', 2, 4, 8, 10),
+    (2, N'Chest-Supported T-Bar Row', 3, 3, 8, 10),
+    (2, N'Seated Cable Row', 4, 3, 10, 12),
+    (3, N'Seated Dumbbell Overhead Press', 1, 4, 8, 10),
+    (3, N'Cable Lateral Raise', 2, 3, 12, 15),
+    (3, N'Dumbbell Lateral Raise', 3, 3, 12, 15),
+    (3, N'Face Pull', 4, 3, 15, 15),
+    (4, N'Close-Grip Bench Press', 1, 4, 8, 10),
+    (4, N'Barbell Curl', 2, 4, 8, 10),
+    (4, N'Incline Dumbbell Hammer Curl', 3, 3, 10, 12),
+    (4, N'Overhead Rope Extension', 4, 3, 12, 15),
+    (4, N'Bodyweight Dip', 5, 3, 10, 12),
+    (5, N'Barbell High-Bar Back Squat', 1, 4, 6, 8),
+    (5, N'Romanian Deadlift (Dumbbells)', 2, 3, 8, 10),
+    (5, N'Bulgarian Split Squat', 3, 3, 10, 12),
+    (5, N'Seated Leg Extension', 4, 3, 12, 15),
+    (5, N'Standing Calf Raise (Machine)', 5, 4, 12, 15)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @BroSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -461,11 +476,11 @@ DECLARE @CircuitSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplit
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @CircuitSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Full Body Circuit A', N'Calorie Burn', 35),
-    (1, N'Full Body Circuit B', N'Calorie Burn', 35),
-    (2, N'Full Body Circuit C', N'Calorie Burn', 35),
-    (3, N'Full Body Circuit D', N'Calorie Burn', 35),
-    (4, N'Full Body Circuit E', N'Calorie Burn', 35)
+    (1, N'Full Body Circuit A', N'Calorie Burn', 35),
+    (2, N'Full Body Circuit B', N'Calorie Burn', 35),
+    (3, N'Full Body Circuit C', N'Calorie Burn', 35),
+    (4, N'Full Body Circuit D', N'Calorie Burn', 35),
+    (5, N'Full Body Circuit E', N'Calorie Burn', 35)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @CircuitSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @CircuitSplitId AND d.DayIndex = v.DayIndex);
@@ -479,27 +494,27 @@ DECLARE @CircuitSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplit
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Kettlebell Swing', 1, 3, 15, 20),
-    (0, N'Push-Up', 2, 3, 12, 15),
-    (0, N'Dumbbell Goblet Squat', 3, 3, 15, 15),
-    (0, N'Inverted Row (Bodyweight)', 4, 3, 12, 15),
-    (0, N'Plank Hold', 5, 3, 30, 45),
-    (1, N'Barbell Front Squat', 1, 3, 12, 15),
-    (1, N'Seated Cable Row', 2, 3, 12, 15),
-    (1, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
-    (1, N'Cable Crunch', 4, 3, 15, 20),
-    (2, N'Kettlebell Swing', 1, 3, 15, 20),
-    (2, N'Bodyweight Dip', 2, 3, 10, 12),
-    (2, N'Cable Pull-Through', 3, 3, 15, 15),
-    (2, N'Hanging Leg Raise', 4, 3, 10, 12),
-    (3, N'Dumbbell Goblet Squat', 1, 3, 15, 15),
-    (3, N'Pull-Up', 2, 3, 8, 10),
-    (3, N'Barbell Hip Thrust', 3, 3, 12, 15),
-    (3, N'Plank Hold', 4, 3, 30, 45),
-    (4, N'Push-Up', 1, 3, 15, 15),
-    (4, N'Kettlebell Swing', 2, 3, 20, 20),
-    (4, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
-    (4, N'Cable Crunch', 4, 3, 20, 20)
+    (1, N'Kettlebell Swing', 1, 3, 15, 20),
+    (1, N'Push-Up', 2, 3, 12, 15),
+    (1, N'Dumbbell Goblet Squat', 3, 3, 15, 15),
+    (1, N'Inverted Row (Bodyweight)', 4, 3, 12, 15),
+    (1, N'Plank Hold', 5, 3, 30, 45),
+    (2, N'Barbell Front Squat', 1, 3, 12, 15),
+    (2, N'Seated Cable Row', 2, 3, 12, 15),
+    (2, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
+    (2, N'Cable Crunch', 4, 3, 15, 20),
+    (3, N'Kettlebell Swing', 1, 3, 15, 20),
+    (3, N'Bodyweight Dip', 2, 3, 10, 12),
+    (3, N'Cable Pull-Through', 3, 3, 15, 15),
+    (3, N'Hanging Leg Raise', 4, 3, 10, 12),
+    (4, N'Dumbbell Goblet Squat', 1, 3, 15, 15),
+    (4, N'Pull-Up', 2, 3, 8, 10),
+    (4, N'Barbell Hip Thrust', 3, 3, 12, 15),
+    (4, N'Plank Hold', 4, 3, 30, 45),
+    (5, N'Push-Up', 1, 3, 15, 15),
+    (5, N'Kettlebell Swing', 2, 3, 20, 20),
+    (5, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
+    (5, N'Cable Crunch', 4, 3, 20, 20)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @CircuitSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -517,9 +532,9 @@ DECLARE @LeanFullBodySplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.Workout
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @LeanFullBodySplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Full Body A', N'Fat Loss', 40),
-    (1, N'Full Body B', N'Fat Loss', 40),
-    (2, N'Full Body C', N'Fat Loss', 40)
+    (1, N'Full Body A', N'Fat Loss', 40),
+    (2, N'Full Body B', N'Fat Loss', 40),
+    (3, N'Full Body C', N'Fat Loss', 40)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @LeanFullBodySplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @LeanFullBodySplitId AND d.DayIndex = v.DayIndex);
@@ -533,18 +548,18 @@ DECLARE @LeanFullBodySplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.Workout
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Barbell High-Bar Back Squat', 1, 3, 8, 10),
-    (0, N'Incline Dumbbell Bench Press', 2, 3, 10, 12),
-    (0, N'Seated Cable Row', 3, 3, 12, 15),
-    (0, N'Cable Crunch', 4, 3, 15, 20),
-    (1, N'Romanian Deadlift (Dumbbells)', 1, 3, 10, 12),
-    (1, N'Push-Up', 2, 3, 12, 15),
-    (1, N'Wide-Grip Lat Pulldown', 3, 3, 10, 12),
-    (1, N'Plank Hold', 4, 3, 30, 45),
-    (2, N'Dumbbell Goblet Squat', 1, 3, 12, 15),
-    (2, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
-    (2, N'Inverted Row (Bodyweight)', 3, 3, 10, 12),
-    (2, N'Kettlebell Swing', 4, 3, 15, 20)
+    (1, N'Barbell High-Bar Back Squat', 1, 3, 8, 10),
+    (1, N'Incline Dumbbell Bench Press', 2, 3, 10, 12),
+    (1, N'Seated Cable Row', 3, 3, 12, 15),
+    (1, N'Cable Crunch', 4, 3, 15, 20),
+    (2, N'Romanian Deadlift (Dumbbells)', 1, 3, 10, 12),
+    (2, N'Push-Up', 2, 3, 12, 15),
+    (2, N'Wide-Grip Lat Pulldown', 3, 3, 10, 12),
+    (2, N'Plank Hold', 4, 3, 30, 45),
+    (3, N'Dumbbell Goblet Squat', 1, 3, 12, 15),
+    (3, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
+    (3, N'Inverted Row (Bodyweight)', 3, 3, 10, 12),
+    (3, N'Kettlebell Swing', 4, 3, 15, 20)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @LeanFullBodySplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -562,10 +577,10 @@ DECLARE @GluteSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits 
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @GluteSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Glutes & Hamstrings A', N'Lower Body Focus', 45),
-    (1, N'Core & Conditioning', N'Calorie Burn', 35),
-    (2, N'Glutes & Hamstrings B', N'Lower Body Focus', 45),
-    (3, N'Lower Body & Core Finisher', N'Calorie Burn', 40)
+    (1, N'Glutes & Hamstrings A', N'Lower Body Focus', 45),
+    (2, N'Core & Conditioning', N'Calorie Burn', 35),
+    (3, N'Glutes & Hamstrings B', N'Lower Body Focus', 45),
+    (4, N'Lower Body & Core Finisher', N'Calorie Burn', 40)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @GluteSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @GluteSplitId AND d.DayIndex = v.DayIndex);
@@ -579,22 +594,22 @@ DECLARE @GluteSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutSplits 
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Barbell Hip Thrust', 1, 4, 10, 12),
-    (0, N'Romanian Deadlift (Dumbbells)', 2, 4, 10, 12),
-    (0, N'Cable Pull-Through', 3, 3, 12, 15),
-    (0, N'Plank Hold', 4, 3, 30, 45),
-    (1, N'Hanging Leg Raise', 1, 3, 12, 15),
-    (1, N'Cable Crunch', 2, 3, 15, 20),
-    (1, N'Kettlebell Swing', 3, 3, 15, 20),
-    (1, N'Plank Hold', 4, 3, 45, 45),
-    (2, N'Barbell Hip Thrust', 1, 4, 12, 15),
-    (2, N'Bulgarian Split Squat', 2, 3, 10, 12),
-    (2, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
-    (2, N'Standing Calf Raise (Machine)', 4, 3, 15, 15),
-    (3, N'Dumbbell Goblet Squat', 1, 3, 12, 15),
-    (3, N'Cable Pull-Through', 2, 3, 15, 15),
-    (3, N'Hanging Leg Raise', 3, 3, 12, 15),
-    (3, N'Cable Crunch', 4, 3, 20, 20)
+    (1, N'Barbell Hip Thrust', 1, 4, 10, 12),
+    (1, N'Romanian Deadlift (Dumbbells)', 2, 4, 10, 12),
+    (1, N'Cable Pull-Through', 3, 3, 12, 15),
+    (1, N'Plank Hold', 4, 3, 30, 45),
+    (2, N'Hanging Leg Raise', 1, 3, 12, 15),
+    (2, N'Cable Crunch', 2, 3, 15, 20),
+    (2, N'Kettlebell Swing', 3, 3, 15, 20),
+    (2, N'Plank Hold', 4, 3, 45, 45),
+    (3, N'Barbell Hip Thrust', 1, 4, 12, 15),
+    (3, N'Bulgarian Split Squat', 2, 3, 10, 12),
+    (3, N'Walking Lunge (Dumbbells)', 3, 3, 12, 12),
+    (3, N'Standing Calf Raise (Machine)', 4, 3, 15, 15),
+    (4, N'Dumbbell Goblet Squat', 1, 3, 12, 15),
+    (4, N'Cable Pull-Through', 2, 3, 15, 15),
+    (4, N'Hanging Leg Raise', 3, 3, 12, 15),
+    (4, N'Cable Crunch', 4, 3, 20, 20)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @GluteSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -612,10 +627,10 @@ DECLARE @PowerliftingSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.Workout
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @PowerliftingSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Squat Day', N'Max Strength', 60),
-    (1, N'Bench Day', N'Max Strength', 55),
-    (2, N'Deadlift Day', N'Max Strength', 60),
-    (3, N'Accessory & Weak Point Day', N'Supplemental Strength', 50)
+    (1, N'Squat Day', N'Max Strength', 60),
+    (2, N'Bench Day', N'Max Strength', 55),
+    (3, N'Deadlift Day', N'Max Strength', 60),
+    (4, N'Accessory & Weak Point Day', N'Supplemental Strength', 50)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @PowerliftingSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @PowerliftingSplitId AND d.DayIndex = v.DayIndex);
@@ -629,19 +644,19 @@ DECLARE @PowerliftingSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.Workout
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Barbell High-Bar Back Squat', 1, 5, 3, 5),
-    (0, N'Barbell Front Squat', 2, 3, 5, 5),
-    (0, N'Seated Leg Extension', 3, 3, 10, 12),
-    (1, N'Incline Barbell Bench Press', 1, 5, 3, 5),
-    (1, N'Close-Grip Bench Press', 2, 3, 5, 6),
-    (1, N'Cable Standing Flyes', 3, 3, 10, 12),
-    (2, N'Barbell Conventional Deadlift', 1, 5, 3, 5),
-    (2, N'Barbell Bent-Over Row', 2, 3, 5, 6),
-    (2, N'Barbell Shrug', 3, 3, 8, 10),
-    (3, N'Bulgarian Split Squat', 1, 3, 8, 10),
-    (3, N'Seated Dumbbell Overhead Press', 2, 3, 6, 8),
-    (3, N'Wide-Grip Lat Pulldown', 3, 3, 8, 10),
-    (3, N'Barbell Curl', 4, 3, 8, 10)
+    (1, N'Barbell High-Bar Back Squat', 1, 5, 3, 5),
+    (1, N'Barbell Front Squat', 2, 3, 5, 5),
+    (1, N'Seated Leg Extension', 3, 3, 10, 12),
+    (2, N'Incline Barbell Bench Press', 1, 5, 3, 5),
+    (2, N'Close-Grip Bench Press', 2, 3, 5, 6),
+    (2, N'Cable Standing Flyes', 3, 3, 10, 12),
+    (3, N'Barbell Conventional Deadlift', 1, 5, 3, 5),
+    (3, N'Barbell Bent-Over Row', 2, 3, 5, 6),
+    (3, N'Barbell Shrug', 3, 3, 8, 10),
+    (4, N'Bulgarian Split Squat', 1, 3, 8, 10),
+    (4, N'Seated Dumbbell Overhead Press', 2, 3, 6, 8),
+    (4, N'Wide-Grip Lat Pulldown', 3, 3, 8, 10),
+    (4, N'Barbell Curl', 4, 3, 8, 10)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @PowerliftingSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -659,9 +674,9 @@ DECLARE @CalisthenicsSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.Workout
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @CalisthenicsSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Push Foundations', N'Bodyweight Strength', 35),
-    (1, N'Pull Foundations', N'Bodyweight Strength', 35),
-    (2, N'Legs & Core Foundations', N'Bodyweight Strength', 35)
+    (1, N'Push Foundations', N'Bodyweight Strength', 35),
+    (2, N'Pull Foundations', N'Bodyweight Strength', 35),
+    (3, N'Legs & Core Foundations', N'Bodyweight Strength', 35)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @CalisthenicsSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @CalisthenicsSplitId AND d.DayIndex = v.DayIndex);
@@ -675,15 +690,15 @@ DECLARE @CalisthenicsSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.Workout
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Push-Up', 1, 4, 10, 15),
-    (0, N'Bodyweight Dip', 2, 3, 8, 10),
-    (0, N'Plank Hold', 3, 3, 30, 45),
-    (1, N'Pull-Up', 1, 4, 6, 10),
-    (1, N'Inverted Row (Bodyweight)', 2, 3, 10, 12),
-    (1, N'Hanging Leg Raise', 3, 3, 10, 12),
-    (2, N'Bodyweight Squat', 1, 4, 15, 20),
+    (1, N'Push-Up', 1, 4, 10, 15),
+    (1, N'Bodyweight Dip', 2, 3, 8, 10),
+    (1, N'Plank Hold', 3, 3, 30, 45),
+    (2, N'Pull-Up', 1, 4, 6, 10),
     (2, N'Inverted Row (Bodyweight)', 2, 3, 10, 12),
-    (2, N'Plank Hold', 3, 3, 45, 45)
+    (2, N'Hanging Leg Raise', 3, 3, 10, 12),
+    (3, N'Bodyweight Squat', 1, 4, 15, 20),
+    (3, N'Inverted Row (Bodyweight)', 2, 3, 10, 12),
+    (3, N'Plank Hold', 3, 3, 45, 45)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @CalisthenicsSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
@@ -701,8 +716,8 @@ DECLARE @MaintenanceSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutS
 INSERT INTO dbo.SplitDays (SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes)
 SELECT @MaintenanceSplitId, v.DayIndex, v.Title, v.FocusLabel, v.EstimatedMinutes
 FROM (VALUES
-    (0, N'Full Body A', N'General Strength', 40),
-    (1, N'Full Body B', N'General Strength', 40)
+    (1, N'Full Body A', N'General Strength', 40),
+    (2, N'Full Body B', N'General Strength', 40)
 ) AS v(DayIndex, Title, FocusLabel, EstimatedMinutes)
 WHERE @MaintenanceSplitId IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SplitDays d WHERE d.SplitId = @MaintenanceSplitId AND d.DayIndex = v.DayIndex);
@@ -716,14 +731,14 @@ DECLARE @MaintenanceSplitId UNIQUEIDENTIFIER = (SELECT SplitId FROM dbo.WorkoutS
 INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 SELECT sd.SplitDayId, e.ExerciseId, v.SortOrder, v.TargetSets, v.TargetRepsLow, v.TargetRepsHigh
 FROM (VALUES
-    (0, N'Barbell High-Bar Back Squat', 1, 3, 8, 10),
-    (0, N'Push-Up', 2, 3, 12, 15),
-    (0, N'Seated Cable Row', 3, 3, 10, 12),
-    (0, N'Plank Hold', 4, 3, 30, 45),
-    (1, N'Romanian Deadlift (Dumbbells)', 1, 3, 10, 12),
-    (1, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
-    (1, N'Wide-Grip Lat Pulldown', 3, 3, 10, 12),
-    (1, N'Cable Crunch', 4, 3, 15, 20)
+    (1, N'Barbell High-Bar Back Squat', 1, 3, 8, 10),
+    (1, N'Push-Up', 2, 3, 12, 15),
+    (1, N'Seated Cable Row', 3, 3, 10, 12),
+    (1, N'Plank Hold', 4, 3, 30, 45),
+    (2, N'Romanian Deadlift (Dumbbells)', 1, 3, 10, 12),
+    (2, N'Seated Dumbbell Overhead Press', 2, 3, 10, 12),
+    (2, N'Wide-Grip Lat Pulldown', 3, 3, 10, 12),
+    (2, N'Cable Crunch', 4, 3, 15, 20)
 ) AS v(DayIndex, ExerciseName, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh)
 INNER JOIN dbo.SplitDays sd ON sd.SplitId = @MaintenanceSplitId AND sd.DayIndex = v.DayIndex
 INNER JOIN dbo.Exercises e ON e.Name = v.ExerciseName
