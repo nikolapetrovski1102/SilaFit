@@ -825,3 +825,21 @@ table.data .num { font-variant-numeric: tabular-nums; }
   /* The library's SVG has no baked-in quiet zone beyond its own margin — the
      padding above supplies the rest, so scanners get a clean white border. */
 }
+
+/* ----------------------------------------------------------------
+   Suggested-exercise chips (split-day exercise picker)
+   ---------------------------------------------------------------- */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+button.chip {
+  border: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+button.chip:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}

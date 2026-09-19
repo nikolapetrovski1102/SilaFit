@@ -213,20 +213,84 @@
      so the choice can be made without leaving the editor.
      ================================================================ */
 
+  /// True if every word of `term` appears somewhere in the exercise's name,
+  /// muscle group or equipment type - so a search for "dumbbell legs" (or just
+  /// "legs", or just "dumbbell") surfaces related matches, not only exercises
+  /// whose name literally contains the typed text.
+  function matchesExerciseSearch(e, term) {
+    if (!term) return true;
+    var haystack = ((e.name || '') + ' ' + (e.muscleGroup || '') + ' ' + (e.equipmentType || '')).toLowerCase();
+    return term.split(/\s+/).every(function (word) {
+      return word && haystack.indexOf(word) !== -1;
+    });
+  }
+
   /// Options for an exercise <select>, alphabetised, filtered by an optional
-  /// free-text term and/or muscle group, with `selectedId` pre-selected.
+  /// free-text term (matched against name, muscle group and equipment) and/or
+  /// muscle group, with `selectedId` pre-selected.
   function exerciseOptionHtml(selectedId, search, muscle) {
     var term = (search || '').trim().toLowerCase();
     return exercisesCache.filter(function (e) {
       if (muscle && e.muscleGroup !== muscle) return false;
-      if (!term) return true;
-      return (e.name || '').toLowerCase().indexOf(term) !== -1;
+      return matchesExerciseSearch(e, term);
     }).sort(function (a, b) { return a.name.localeCompare(b.name); })
       .map(function (e) {
         return '<option value="' + e.exerciseId + '"' +
           (e.exerciseId === selectedId ? ' selected' : '') + '>' +
           esc(e.name) + ' (' + esc(e.muscleGroup) + ')</option>';
       }).join('');
+  }
+
+  /// Coarse muscle groups (from MUSCLE_GROUPS) implied by a day's title/focus
+  /// text, so "Push Day" suggests chest/shoulders/arms and "Leg Day" suggests
+  /// legs even though neither name is a MUSCLE_GROUPS value itself.
+  var MUSCLE_GROUP_KEYWORDS = {
+    chest: ['chest'],
+    back: ['back', 'lat', 'row', 'pull-up', 'pullup'],
+    legs: ['leg', 'quad', 'hamstring', 'glute', 'calf', 'squat', 'lower body', 'lower-body'],
+    shoulders: ['shoulder', 'delt', 'overhead'],
+    arms: ['arm', 'bicep', 'tricep', 'curl'],
+    core: ['core', 'ab', 'abs', 'plank', 'oblique']
+  };
+  var COMPOUND_KEYWORDS = {
+    push: ['chest', 'shoulders', 'arms'],
+    pull: ['back', 'arms'],
+    upper: ['chest', 'back', 'shoulders', 'arms'],
+    'full body': ['chest', 'back', 'legs', 'shoulders', 'arms', 'core'],
+    'full-body': ['chest', 'back', 'legs', 'shoulders', 'arms', 'core']
+  };
+  function inferMuscleGroupsFromText(text) {
+    var haystack = (text || '').toLowerCase();
+    var groups = [];
+    function add(g) { if (groups.indexOf(g) === -1) groups.push(g); }
+    MUSCLE_GROUPS.forEach(function (group) {
+      if (haystack.indexOf(group) !== -1) add(group);
+      (MUSCLE_GROUP_KEYWORDS[group] || []).forEach(function (kw) {
+        if (haystack.indexOf(kw) !== -1) add(group);
+      });
+    });
+    Object.keys(COMPOUND_KEYWORDS).forEach(function (kw) {
+      if (haystack.indexOf(kw) !== -1) COMPOUND_KEYWORDS[kw].forEach(add);
+    });
+    return groups;
+  }
+
+  /// Ranked "suggested for this day" picks: exercises in the day's inferred (or
+  /// filter-selected) muscle groups, not already on the day, compound movements
+  /// and more-used exercises first. Falls back to popular compound exercises
+  /// across every group when nothing can be inferred, so the panel is never empty.
+  function suggestedExercisesForDay(day, dayExercises, muscleFilter) {
+    var groups = muscleFilter ? [muscleFilter] : inferMuscleGroupsFromText((day.title || '') + ' ' + (day.focusLabel || ''));
+    var usedIds = (dayExercises || []).map(function (e) { return e.exerciseId; });
+    var pool = exercisesCache.filter(function (e) {
+      if (usedIds.indexOf(e.exerciseId) !== -1) return false;
+      return groups.length === 0 || groups.indexOf(e.muscleGroup) !== -1;
+    });
+    return pool.sort(function (a, b) {
+      if (!!b.isCompound !== !!a.isCompound) return b.isCompound ? 1 : -1;
+      if ((b.usageCount || 0) !== (a.usageCount || 0)) return (b.usageCount || 0) - (a.usageCount || 0);
+      return a.name.localeCompare(b.name);
+    }).slice(0, 6);
   }
 
   /// Options for a meal <select>, alphabetised, filtered by an optional
@@ -791,9 +855,10 @@
       }
 
       $('#dayExerciseAddRow').innerHTML =
+        '<div id="addExSuggestions" class="chip-row" style="margin-bottom:10px;"></div>' +
         '<div class="meal-slot__grid">' +
           '<div class="field field--full"><label>Search exercises</label>' +
-            '<input class="input" id="addExSearch" placeholder="Filter by name…" autocomplete="off" /></div>' +
+            '<input class="input" id="addExSearch" placeholder="Try a name, muscle group or equipment…" autocomplete="off" /></div>' +
           '<div class="field"><label>Muscle group</label>' +
             '<select class="select" id="addExMuscle"><option value="">Any muscle group</option>' +
               MUSCLE_GROUPS.map(function (g) {
@@ -816,9 +881,34 @@
         $('#addExBtn').disabled = count === 0;
       }
 
+      function refreshSuggestions() {
+        var picks = suggestedExercisesForDay(day, dayExercises, $('#addExMuscle').value);
+        var box = $('#addExSuggestions');
+        if (!picks.length) { box.innerHTML = ''; return; }
+        box.innerHTML = '<span class="body-sm" style="margin-right:6px;">Suggested for this day:</span>' +
+          picks.map(function (e) {
+            return '<button type="button" class="chip" data-suggest-exercise="' + e.exerciseId + '">' +
+              esc(e.name) + ' <span class="body-sm">(' + esc(e.muscleGroup) + ')</span></button>';
+          }).join('');
+        $$('[data-suggest-exercise]', box).forEach(function (chip) {
+          chip.addEventListener('click', function () {
+            var id = chip.getAttribute('data-suggest-exercise');
+            var ex = exercisesCache.find(function (e) { return e.exerciseId === id; });
+            $('#addExSearch').value = ex ? ex.name : '';
+            $('#addExMuscle').value = '';
+            refreshAddExerciseOptions();
+            $('#addExSelect').value = id;
+          });
+        });
+      }
+
       refreshAddExerciseOptions();
+      refreshSuggestions();
       $('#addExSearch').addEventListener('input', refreshAddExerciseOptions);
-      $('#addExMuscle').addEventListener('change', refreshAddExerciseOptions);
+      $('#addExMuscle').addEventListener('change', function () {
+        refreshAddExerciseOptions();
+        refreshSuggestions();
+      });
 
       $('#addExBtn').addEventListener('click', function () {
         var payload = {
