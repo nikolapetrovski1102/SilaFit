@@ -90,19 +90,9 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
     private static DietPlanDetailDto BuildDetail(
         DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals, List<string> ingredients)
     {
-        // Same ingredient line can appear for several meals across the week
-        // ("2 scoops whey protein"); the shopping list shows each distinct line
-        // once, in the order it first appears, so it reads as one buy list.
-        var shoppingList = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var ingredient in ingredients)
-        {
-            var trimmed = ingredient.Trim();
-            if (trimmed.Length > 0 && seen.Add(trimmed))
-            {
-                shoppingList.Add(trimmed);
-            }
-        }
+        // Combine compatible quantities across the week's meals: three "2
+        // eggs" rows become one "Eggs ×6" line rather than "2 eggs ×3".
+        var shoppingList = IngredientSummaryFormatter.Summarize(ingredients);
 
         return new DietPlanDetailDto
         {

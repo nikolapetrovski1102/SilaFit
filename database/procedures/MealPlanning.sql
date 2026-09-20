@@ -162,7 +162,11 @@ GO
 -- ones, each group by SortOrder. MealSuggestions is system-authored content,
 -- not user data, so it stays plaintext. TOP caps the response as a safety valve
 -- for seeded content that grows over time. HasIngredients tells the weekly AI
--- plan generator which meals can back a real week-long shopping list.
+-- plan generator which meals can back a real week-long shopping list. The
+-- ingredient preview is deliberately capped at four unique ordered lines:
+-- enough for AI review and the weekly recap without turning either into a full
+-- recipe. Exact repeated lines are collapsed in this per-meal preview; the
+-- weekly shopping list performs full quantity aggregation in the service.
 CREATE OR ALTER PROCEDURE dbo.usp_MealSuggestions_GetForMonth
     @Month TINYINT
 AS
@@ -171,10 +175,37 @@ BEGIN
 
     SELECT TOP (500) ms.MealSuggestionId, ms.Title, ms.MealType, ms.Description, ms.CaloriesKcal, ms.ProteinG,
            ms.CarbsG, ms.FatsG, ms.SuggestedMonth, ms.IsSystemDefault, ms.SortOrder,
-           CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.MealSuggestionIngredients i
-                                  WHERE i.MealSuggestionId = ms.MealSuggestionId)
-                     THEN 1 ELSE 0 END AS BIT) AS HasIngredients
+           CAST(CASE WHEN ingredientTotals.IngredientCount > 0 THEN 1 ELSE 0 END AS BIT) AS HasIngredients,
+           ingredientPreview.IngredientPreview,
+           ingredientTotals.IngredientCount
     FROM dbo.MealSuggestions ms
+    CROSS APPLY
+    (
+        SELECT COUNT(*) AS IngredientCount
+        FROM
+        (
+            SELECT LTRIM(RTRIM(i.IngredientText)) AS IngredientText
+            FROM dbo.MealSuggestionIngredients i
+            WHERE i.MealSuggestionId = ms.MealSuggestionId
+            GROUP BY LTRIM(RTRIM(i.IngredientText))
+        ) uniqueIngredients
+    ) ingredientTotals
+    OUTER APPLY
+    (
+        SELECT STUFF((
+            SELECT TOP (4) N' · ' + groupedIngredients.IngredientText
+            FROM
+            (
+                SELECT LTRIM(RTRIM(i.IngredientText)) AS IngredientText,
+                       MIN(i.SortOrder) AS FirstSortOrder
+                FROM dbo.MealSuggestionIngredients i
+                WHERE i.MealSuggestionId = ms.MealSuggestionId
+                GROUP BY LTRIM(RTRIM(i.IngredientText))
+            ) groupedIngredients
+            ORDER BY groupedIngredients.FirstSortOrder
+            FOR XML PATH(N''), TYPE
+        ).value(N'.', N'nvarchar(max)'), 1, 3, N'') AS IngredientPreview
+    ) ingredientPreview
     WHERE ms.SuggestedMonth = @Month OR ms.SuggestedMonth IS NULL
     ORDER BY CASE WHEN ms.SuggestedMonth = @Month THEN 0 ELSE 1 END, ms.SortOrder;
 END

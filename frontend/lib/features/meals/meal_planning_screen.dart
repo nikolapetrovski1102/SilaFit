@@ -21,7 +21,7 @@ import 'widgets/suggested_diet_plans_section.dart';
 /// with its macro bars beside it on the right, a 7-day pill strip below that
 /// connects up to the ring via a thin accent line, the active diet plan's
 /// meals for the selected day, a "Suggested This Month" strip of diet plans
-/// (with on-demand generation), and a quick-add FAB.
+/// and a quick-add FAB.
 class MealPlanningScreen extends StatefulWidget {
   const MealPlanningScreen({super.key});
 

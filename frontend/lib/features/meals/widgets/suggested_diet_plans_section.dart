@@ -5,23 +5,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/section_eyebrow.dart';
-import '../../../core/widgets/silen_button.dart';
 import '../../diet_plans/diet_plan_controller.dart';
 import '../../diet_plans/diet_plan_models.dart';
 import '../../diet_plans/diet_plans_screen.dart';
 import '../../diet_plans/widgets/diet_plan_card.dart';
 
 /// The "Suggested This Month" strip on Nutrition - diet-plan listings rather
-/// than one-off meal recipes, plus a "Generate plan" action that builds a fresh
-/// plan from the user's calorie/macro targets (the on-demand counterpart of the
-/// weekly AI batch).
+/// than one-off meal recipes.
 class SuggestedDietPlansSection extends StatelessWidget {
   const SuggestedDietPlansSection({super.key});
 
   @override
   Widget build(BuildContext context) {
     final plansController = context.watch<DietPlansController>();
-    final activeController = context.watch<ActiveDietPlanController>();
 
     final plans = plansController.state.data ?? const <DietPlan>[];
     final isLoading = plansController.state.isLoading;
@@ -91,27 +87,7 @@ class SuggestedDietPlansSection extends StatelessWidget {
                   DietPlanCard(plan: plans[i], width: 230, compact: true),
             ),
           ),
-        const SizedBox(height: AppSpacing.md),
-        PrimaryPillButton(
-          label: activeController.isGenerating
-              ? 'Generating...'
-              : 'Generate a plan for me',
-          icon: Icons.auto_awesome_rounded,
-          isLoading: activeController.isGenerating,
-          onPressed: () => _generate(context, activeController),
-        ),
       ],
     );
-  }
-
-  Future<void> _generate(
-      BuildContext context, ActiveDietPlanController controller) async {
-    final ok = await controller.generate();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok
-          ? 'Your plan is ready.'
-          : controller.actionError ?? 'Could not generate a plan right now.'),
-    ));
   }
 }

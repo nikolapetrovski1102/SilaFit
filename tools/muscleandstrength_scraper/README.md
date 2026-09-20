@@ -59,6 +59,10 @@ python scrape.py --max-workouts 1 --max-diets 1 --max-recipes 3
 # Refresh only workouts (existing diet and recipe JSON is retained).
 python scrape.py --datasets workouts --headed
 
+# Import only the selected routines and use the CSV Program Name values as titles.
+python scrape.py --datasets workouts \
+  --workout-checklist /path/to/workout_import_checklist.csv --headed
+
 # Use even more conservative request and category pauses.
 python scrape.py --delay-min 20 --delay-max 30 \
   --category-delay-min 120 --category-delay-max 180
@@ -92,6 +96,15 @@ After collecting or editing the JSON, regenerate the idempotent database seed:
 
 ```bash
 python3 tools/muscleandstrength_scraper/generate_sql.py
+```
+
+For an intentional one-time replacement that removes every existing workout
+split before inserting the selected catalog, generate a separate deployment file:
+
+```bash
+python3 tools/muscleandstrength_scraper/generate_sql.py \
+  --replace-all-workouts --workouts-only \
+  --output /tmp/replace-all-workouts.sql
 ```
 
 This writes `database/seed/006_ImportMuscleAndStrength.sql`. Apply

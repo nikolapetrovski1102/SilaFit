@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import hashlib
 import json
 import random
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +53,28 @@ USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"
 )
+WORKOUT_URL_PREFIXES = (f"{BASE_URL}/workouts/", f"{BASE_URL}/content/")
+
+# The checklist deliberately uses shorter, product-facing titles. These entries
+# resolve titles that are not exact matches for the source catalog. Exact title
+# matches continue to resolve automatically.
+WORKOUT_TITLE_URLS = {
+    "P.H.U.L. (Power Hypertrophy Upper Lower)": f"{BASE_URL}/workouts/phul-workout",
+    "6 Day Push/Pull/Legs (PPL) Split & Meal Plan": f"{BASE_URL}/workouts/6-day-powerbuilding-split-meal-plan",
+    "M-F Workout Routine: 5 Day Body Part Split": f"{BASE_URL}/workouts/m-f-workout-routine",
+    "10 Week Mass Building Program for Hardgainers": f"{BASE_URL}/workouts/10-week-mass-building-program.html",
+    "5 Day Dumbbell Only Workout": f"{BASE_URL}/workouts/5-day-dumbbell-only-workout-split",
+    "Dumbbell Only Workout: 4 Day Upper/Lower": f"{BASE_URL}/workouts/dumbbell-only-upper-lower-workout-routine",
+    "3 Day Push/Pull/Legs (PPL) for Beginners": f"{BASE_URL}/workouts/3-day-PPL-workout-for-beginners",
+    "8-Week Muscle Building Program for Adults 40+": f"{BASE_URL}/content/8-week-muscle-building-program-adults-40",
+    "The Butt Builder Workout": f"{BASE_URL}/workouts/the-butt-builder.html",
+    "Body Like A God: Bodyweight Muscle Building Plan": f"{BASE_URL}/workouts/body-god-complete-bodyweight-muscle-building-plan",
+    "Michael B. Jordan Inspired Workout (Killmonger)": f"{BASE_URL}/workouts/michael-b-jordan-workout-program",
+    "Chris Evans Inspired Workout (Captain America)": f"{BASE_URL}/workouts/chris-evans-workout-program",
+    "Scarlett Johansson Inspired Workout (Black Widow)": f"{BASE_URL}/workouts/scarlett-johansson-workout-program",
+    "Brie Larson Inspired Workout (Captain Marvel)": f"{BASE_URL}/workouts/brie-larson-workout-routine",
+    "6 Week Navy SEAL Workout Routine": f"{BASE_URL}/workouts/6-week-navy-seal-workout-routine",
+}
 
 
 def clean_text(value: str | None) -> str | None:
@@ -166,6 +190,12 @@ def ordered_unique(values: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
 
+def normalized_title(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    value = value.replace("'", "")
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
 def next_section_container(heading: Tag) -> Tag | None:
     """Return the first following grid before the next same-level heading."""
     for sibling in heading.next_siblings:
@@ -180,7 +210,10 @@ def next_section_container(heading: Tag) -> Tag | None:
     return heading.find_next(class_="grid-x")
 
 
-def parse_cards(container: Tag | BeautifulSoup, link_prefix: str | None = None) -> list[dict[str, Any]]:
+def parse_cards(
+    container: Tag | BeautifulSoup,
+    link_prefix: str | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     seen: set[str] = set()
     # Main-page cards use .has-attributes; taxonomy/category pages place the
@@ -190,7 +223,8 @@ def parse_cards(container: Tag | BeautifulSoup, link_prefix: str | None = None) 
         if not link:
             continue
         url = absolute_url(str(link.get("href")))
-        if not url or url in seen or (link_prefix and not url.startswith(link_prefix)):
+        allowed_prefixes = (link_prefix,) if isinstance(link_prefix, str) else link_prefix
+        if not url or url in seen or (allowed_prefixes and not url.startswith(allowed_prefixes)):
             continue
         seen.add(url)
         meta = [text_of(x) for x in card.select(".node-meta span")]
@@ -225,7 +259,7 @@ def parse_popular_workout_cards(html: str) -> list[dict[str, Any]]:
     container = next_section_container(heading)
     if not container:
         raise ValueError("Could not find workout cards after Best Workouts")
-    cards = parse_cards(container, f"{BASE_URL}/workouts/")
+    cards = parse_cards(container, WORKOUT_URL_PREFIXES)
     for rank, card in enumerate(cards, 1):
         card["popularity_rank"] = rank
         card["popularity_window"] = "most downloaded in the past 24 hours"
@@ -233,7 +267,7 @@ def parse_popular_workout_cards(html: str) -> list[dict[str, Any]]:
 
 
 def parse_workout_cards(html: str) -> list[dict[str, Any]]:
-    return parse_cards(BeautifulSoup(html, "html.parser"), f"{BASE_URL}/workouts/")
+    return parse_cards(BeautifulSoup(html, "html.parser"), WORKOUT_URL_PREFIXES)
 
 
 def parse_diet_cards(html: str) -> list[dict[str, Any]]:
@@ -273,10 +307,21 @@ def parse_table(table: Tag) -> list[dict[str, str | None]]:
     rows = table.select("tr")
     if not rows:
         return []
-    header_cells = rows[0].find_all(["th", "td"], recursive=False)
+    header_index = 0
+    header_cells: list[Tag] = []
+    for candidate_index, row in enumerate(rows):
+        candidate_cells = row.find_all(["th", "td"], recursive=False)
+        # Some legacy tables begin with one or more full-width title rows.
+        # The actual Exercise/Sets/Reps header is the first multi-cell row.
+        if len(candidate_cells) >= 2:
+            header_index = candidate_index
+            header_cells = candidate_cells
+            break
+    if not header_cells:
+        return []
     headers = [text_of(cell) or f"column_{i + 1}" for i, cell in enumerate(header_cells)]
     parsed: list[dict[str, str | None]] = []
-    for row in rows[1:]:
+    for row in rows[header_index + 1:]:
         cells = row.find_all(["th", "td"], recursive=False)
         if len(cells) != len(headers):
             continue
@@ -302,6 +347,10 @@ def parse_article_sections(body: Tag | None) -> list[dict[str, Any]]:
             current = {"heading": text_of(child), "text": [], "tables": [], "lists": []}
         elif child.name == "table":
             current["tables"].append(parse_table(child))
+        elif child.find("table"):
+            # Older workout pages wrap their responsive tables in one or more
+            # divs instead of placing the table directly under the body field.
+            current["tables"].extend(parse_table(table) for table in child.find_all("table"))
         elif child.name in {"ul", "ol"}:
             current["lists"].append([text_of(item) for item in child.find_all("li", recursive=False)])
         else:
@@ -470,6 +519,7 @@ class CollectorConfig:
     datasets: tuple[str, ...]
     category_delay_min: float
     category_delay_max: float
+    workout_checklist: Path | None
 
 
 class BotChallenge(RuntimeError):
@@ -633,9 +683,71 @@ async def discover_workouts(collector: BrowserCollector) -> dict[str, dict[str, 
     return discovered
 
 
+def checklist_workout_cards(checklist_path: Path, catalog_path: Path) -> list[dict[str, Any]]:
+    if not checklist_path.exists():
+        raise FileNotFoundError(f"Workout checklist not found: {checklist_path}")
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8")) if catalog_path.exists() else []
+    by_title = {
+        normalized_title(item.get("title") or ""): item
+        for item in catalog
+        if isinstance(item, dict) and item.get("title") and item.get("url")
+    }
+    by_url = {
+        item["url"]: item
+        for item in catalog
+        if isinstance(item, dict) and item.get("url")
+    }
+
+    with checklist_path.open(newline="", encoding="utf-8-sig") as source:
+        rows = list(csv.DictReader(source))
+    if not rows or "Program Name" not in rows[0]:
+        raise ValueError("Workout checklist must contain a 'Program Name' column")
+
+    cards: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for rank, row in enumerate(rows, start=1):
+        import_title = clean_text(row.get("Program Name"))
+        if not import_title:
+            raise ValueError(f"Checklist row {rank + 1} has no Program Name")
+        source_url = WORKOUT_TITLE_URLS.get(import_title)
+        catalog_item = by_url.get(source_url) if source_url else by_title.get(normalized_title(import_title))
+        if catalog_item:
+            source_url = catalog_item["url"]
+        if not source_url:
+            raise ValueError(
+                f"Could not match checklist workout {import_title!r}; add its source URL to WORKOUT_TITLE_URLS"
+            )
+        if source_url in seen_urls:
+            raise ValueError(f"Checklist maps more than one row to {source_url}")
+        seen_urls.add(source_url)
+        card = dict(catalog_item or {})
+        card.update(
+            {
+                "title": card.get("title") or import_title,
+                "url": source_url,
+                "summary": card.get("summary") or clean_text(row.get("Notes")),
+                "tag": card.get("tag"),
+                "metadata": card.get("metadata") or [
+                    value for value in (clean_text(row.get("Reads")), clean_text(row.get("Comments"))) if value
+                ],
+                "source_categories": card.get("source_categories") or [],
+                "catalog_rank": rank,
+                "import_title": import_title,
+            }
+        )
+        cards.append(card)
+    return cards
+
+
 async def collect_workouts(collector: BrowserCollector) -> list[dict[str, Any]]:
-    cards_by_url = await discover_workouts(collector)
-    cards = list(cards_by_url.values())
+    if collector.config.workout_checklist:
+        cards = checklist_workout_cards(
+            collector.config.workout_checklist,
+            collector.config.output_dir / "workout_catalog.json",
+        )
+    else:
+        cards_by_url = await discover_workouts(collector)
+        cards = list(cards_by_url.values())
     if collector.config.max_workouts is not None:
         cards = cards[:collector.config.max_workouts]
 
@@ -660,6 +772,9 @@ async def collect_workouts(collector: BrowserCollector) -> list[dict[str, Any]]:
                 "catalog_metadata": card["metadata"],
             }
         )
+        if card.get("import_title"):
+            detail["source_title"] = detail.get("source_title") or detail.get("title")
+            detail["title"] = card["import_title"]
         records.append(detail)
         write_json(output, records)
     return records
@@ -778,6 +893,11 @@ def parse_args() -> CollectorConfig:
     parser.add_argument("--max-workouts", type=int)
     parser.add_argument("--max-diets", type=int)
     parser.add_argument("--max-recipes", type=int)
+    parser.add_argument(
+        "--workout-checklist",
+        type=Path,
+        help="Import only the workouts in this CSV and use Program Name as each imported title.",
+    )
     parser.add_argument(
         "--datasets", nargs="+", choices=("workouts", "diets", "recipes"),
         default=("workouts", "diets", "recipes"),

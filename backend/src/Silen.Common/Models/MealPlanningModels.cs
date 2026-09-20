@@ -52,6 +52,15 @@ public sealed class MealSuggestionModel
     /// offered to the weekly plan generator as diet-plan candidates.</summary>
     public bool HasIngredients { get; set; }
 
+    /// <summary>Compact, ordered preview of at most four ingredient lines. This
+    /// gives the weekly AI review enough food-composition context without sending
+    /// or rendering the full recipe.</summary>
+    public string? IngredientPreview { get; set; }
+
+    /// <summary>Total ingredient-line count, used to append a concise "+N more"
+    /// indicator when <see cref="IngredientPreview"/> is truncated.</summary>
+    public int IngredientCount { get; set; }
+
     /// <summary>1-12, or null when the suggestion is evergreen (shown every month).</summary>
     public byte? SuggestedMonth { get; set; }
     public bool IsSystemDefault { get; set; }

@@ -201,8 +201,39 @@ def header() -> list[str]:
     ]
 
 
-def render_workouts(items: list[dict[str, Any]]) -> list[str]:
-    out = ["----------------------------------------------------------------------------", "-- Complete workout catalog", "----------------------------------------------------------------------------"]
+def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> list[str]:
+    selected_urls = ",\n        ".join(sql_text(item["url"], 500) for item in items)
+    selection = (
+        ["SELECT SplitId INTO #RemovedWorkoutSplits FROM dbo.WorkoutSplits;"]
+        if replace_all
+        else [
+            "SELECT SplitId INTO #RemovedWorkoutSplits FROM dbo.WorkoutSplits",
+            "WHERE SourceUrl IS NULL OR SourceUrl NOT IN (",
+            f"        {selected_urls}",
+            "  );",
+        ]
+    )
+    out = [
+        "----------------------------------------------------------------------------",
+        "-- Selected workout catalog",
+        "----------------------------------------------------------------------------",
+        "-- Remove every routine outside the selected CSV catalog.",
+        "-- Historical sessions and generation deliveries are retained with a NULL split reference.",
+        "IF OBJECT_ID(N'tempdb..#RemovedWorkoutSplits') IS NOT NULL DROP TABLE #RemovedWorkoutSplits;",
+        *selection,
+        "UPDATE dbo.WorkoutSessions SET SplitDayId=NULL",
+        "WHERE SplitDayId IN (SELECT SplitDayId FROM dbo.SplitDays WHERE SplitId IN (SELECT SplitId FROM #RemovedWorkoutSplits));",
+        "IF OBJECT_ID(N'dbo.WeeklyAiPlanDeliveries', N'U') IS NOT NULL",
+        "    UPDATE dbo.WeeklyAiPlanDeliveries SET SplitId=NULL WHERE SplitId IN (SELECT SplitId FROM #RemovedWorkoutSplits);",
+        "DELETE FROM dbo.UserActiveSplits WHERE SplitId IN (SELECT SplitId FROM #RemovedWorkoutSplits);",
+        "DELETE FROM dbo.SplitDayExercises",
+        "WHERE SplitDayId IN (SELECT SplitDayId FROM dbo.SplitDays WHERE SplitId IN (SELECT SplitId FROM #RemovedWorkoutSplits));",
+        "DELETE FROM dbo.SplitDays WHERE SplitId IN (SELECT SplitId FROM #RemovedWorkoutSplits);",
+        "DELETE FROM dbo.WorkoutSplits WHERE SplitId IN (SELECT SplitId FROM #RemovedWorkoutSplits);",
+        "DROP TABLE #RemovedWorkoutSplits;",
+        "GO",
+        "",
+    ]
     exercise_names = workout_exercise_names(items)
     for name in exercise_names:
         out.extend([
@@ -347,20 +378,39 @@ def render_recipes(items: list[dict[str, Any]]) -> list[str]:
     return out
 
 
-def generate(input_dir: Path, output: Path) -> None:
+def generate(
+    input_dir: Path,
+    output: Path,
+    replace_all_workouts: bool = False,
+    workouts_only: bool = False,
+) -> None:
     workouts = json.loads((input_dir / "workouts.json").read_text(encoding="utf-8"))
-    diets = json.loads((input_dir / "diets.json").read_text(encoding="utf-8"))
-    recipes = json.loads((input_dir / "recipes.json").read_text(encoding="utf-8"))
-    lines = header() + render_workouts(workouts) + render_diets(diets) + render_recipes(recipes)
+    diets = [] if workouts_only else json.loads((input_dir / "diets.json").read_text(encoding="utf-8"))
+    recipes = [] if workouts_only else json.loads((input_dir / "recipes.json").read_text(encoding="utf-8"))
+    lines = header()
+    if replace_all_workouts:
+        lines.extend(["BEGIN TRANSACTION;", "GO", ""])
+    lines.extend(render_workouts(workouts, replace_all_workouts))
+    if not workouts_only:
+        lines.extend(render_diets(diets))
+        lines.extend(render_recipes(recipes))
     lines.extend([
         "SELECT",
-        "    (SELECT COUNT(*) FROM dbo.WorkoutSplits WHERE SourceUrl LIKE N'https://www.muscleandstrength.com/workouts/%') AS ImportedWorkouts,",
+        "    (SELECT COUNT(*) FROM dbo.WorkoutSplits WHERE SourceUrl LIKE N'https://www.muscleandstrength.com/workouts/%' OR SourceUrl LIKE N'https://www.muscleandstrength.com/content/%') AS ImportedWorkouts,",
         "    (SELECT COUNT(*) FROM dbo.DietPlans WHERE SourceUrl LIKE N'https://www.muscleandstrength.com/diet-plans/%') AS ImportedDietPlans,",
         "    (SELECT COUNT(*) FROM dbo.MealSuggestions WHERE SourceUrl LIKE N'https://www.muscleandstrength.com/%') AS ImportedRecipes,",
         "    (SELECT COUNT(*) FROM dbo.MealSuggestionIngredients i INNER JOIN dbo.MealSuggestions m ON m.MealSuggestionId=i.MealSuggestionId WHERE m.SourceUrl LIKE N'https://www.muscleandstrength.com/%') AS ImportedIngredients;",
         "GO",
         "",
     ])
+    if replace_all_workouts:
+        lines.extend([
+            f"IF (SELECT COUNT(*) FROM dbo.WorkoutSplits) <> {len(workouts)}",
+            f"    THROW 51000, 'Expected exactly {len(workouts)} workout splits after replacement.', 1;",
+            "COMMIT TRANSACTION;",
+            "GO",
+            "",
+        ])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines), encoding="utf-8")
     print(f"Generated {output} from {len(workouts)} workouts, {len(diets)} diets, and {len(recipes)} recipes")
@@ -370,8 +420,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--replace-all-workouts",
+        action="store_true",
+        help="Delete every existing workout split before inserting the selected workout catalog.",
+    )
+    parser.add_argument(
+        "--workouts-only",
+        action="store_true",
+        help="Generate only the workout catalog portion of the import.",
+    )
     args = parser.parse_args()
-    generate(args.input_dir, args.output)
+    generate(args.input_dir, args.output, args.replace_all_workouts, args.workouts_only)
 
 
 if __name__ == "__main__":

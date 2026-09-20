@@ -75,7 +75,7 @@ public class DietPlanServiceTests
     }
 
     [Fact]
-    public async Task GetDetailAsync_DeduplicatesShoppingListInFirstSeenOrder()
+    public async Task GetDetailAsync_AggregatesCompatibleIngredientQuantities()
     {
         var planId = Guid.NewGuid();
         provider
@@ -84,12 +84,12 @@ public class DietPlanServiceTests
                 Plan(planId),
                 new List<DietPlanDayModel> { new() { DietPlanDayId = Guid.NewGuid(), DayIndex = 1 } },
                 new List<DietPlanMealModel>(),
-                new List<string> { "2 eggs", "1 cup oats", "2 eggs", " 1 cup oats ", "1 banana" }));
+                new List<string> { "2 eggs", "1 cup oats", "4 eggs", " 1 cup oats ", "1 banana" }));
 
         var result = await sut.GetDetailAsync(planId, null);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(new[] { "2 eggs", "1 cup oats", "1 banana" }, result.Data!.ShoppingList);
+        Assert.Equal(new[] { "Eggs ×6", "Oats ×2 cups", "Banana ×1" }, result.Data!.ShoppingList);
     }
 
     [Fact]

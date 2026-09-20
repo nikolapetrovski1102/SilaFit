@@ -91,8 +91,7 @@ class ActiveDietPlanSection extends StatelessWidget {
     final plan = state.data!.plan;
     if (plan == null) {
       return _MessageCard(
-        message: 'No active plan yet. Pick one below, or generate a plan '
-            'matched to your calorie target.',
+        message: 'No active plan yet. Pick one from the suggestions below.',
         actionLabel: 'BROWSE PLANS',
         onAction: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const DietPlansScreen())),

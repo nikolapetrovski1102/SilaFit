@@ -132,6 +132,8 @@ class MealSuggestion {
   final int proteinG;
   final int carbsG;
   final int fatsG;
+  final String? ingredientPreview;
+  final int ingredientCount;
 
   /// The library's curated position, used only as a stable tie-breaker when
   /// two meals score identically in `meal_recommendation.dart`.
@@ -155,6 +157,8 @@ class MealSuggestion {
     required this.proteinG,
     required this.carbsG,
     required this.fatsG,
+    this.ingredientPreview,
+    this.ingredientCount = 0,
     this.sortOrder = 0,
     this.matchScore,
     this.matchReason,
@@ -171,9 +175,20 @@ class MealSuggestion {
       proteinG: map['proteinG'] as int? ?? 0,
       carbsG: map['carbsG'] as int? ?? 0,
       fatsG: map['fatsG'] as int? ?? 0,
+      ingredientPreview: map['ingredientPreview'] as String?,
+      ingredientCount: map['ingredientCount'] as int? ?? 0,
       sortOrder: map['sortOrder'] as int? ?? 0,
       matchScore: map['matchScore'] as int?,
       matchReason: map['matchReason'] as String?,
     );
+  }
+
+  /// Four ingredients at most, followed by a count instead of expanding into
+  /// the complete recipe inside compact recommendation surfaces.
+  String? get compactIngredientSummary {
+    final preview = ingredientPreview?.trim();
+    if (preview == null || preview.isEmpty) return null;
+    final remaining = ingredientCount - 4;
+    return remaining > 0 ? '$preview · +$remaining more' : preview;
   }
 }

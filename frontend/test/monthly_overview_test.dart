@@ -234,6 +234,10 @@ void main() {
     }
     expect(find.text('Fuel the week ahead'), findsOneWidget);
     expect(find.text('Grilled chicken & rice bowl'), findsOneWidget);
+    expect(
+        find.text(
+            'Ingredients · Chicken breast · brown rice · broccoli · olive oil · +2 more'),
+        findsOneWidget);
     expect(find.text('Add to today’s plan'), findsWidgets);
     await advance(tester);
     expect(find.text('Ready for a change?'), findsOneWidget);

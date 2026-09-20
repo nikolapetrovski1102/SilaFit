@@ -144,8 +144,8 @@ class DietPlanDetail {
   final DietPlan plan;
   final List<DietPlanDayWithMeals> days;
 
-  /// Deduplicated ingredient lines across the plan's meals - the week's
-  /// shopping list. Empty when the referenced meals have no ingredient data.
+  /// Quantity-aggregated ingredient lines across the plan's meals - the
+  /// week's shopping list. Empty when the meals have no ingredient data.
   final List<String> shoppingList;
 
   const DietPlanDetail({

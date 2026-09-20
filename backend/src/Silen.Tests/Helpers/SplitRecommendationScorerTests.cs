@@ -232,8 +232,9 @@ public class SplitRecommendationScorerTests
     [Fact]
     public void PickForAutoAssign_NeverPicksOppositeGenderProgram()
     {
-        // The women's program is the better goal match, but a male user must still
-        // get the unisex split: an explicit opposite-gender program is filtered out.
+        // The women's program is the better goal match, but a male user must never
+        // see it as his top pick: the audience constraint outranks the goal match,
+        // in the ranked list and in the auto-assign pick alike.
         var fit = PersonFit.From(170, 70, 30, 3, 60, "Beginner", "FullGym", "Active", "Male");
         var womenOnly = Split("Women's Program", "FullBody", "Beginner", 3, "BuildMuscle",
             isSystemDefault: true, targetGender: "Female");
@@ -242,11 +243,82 @@ public class SplitRecommendationScorerTests
 
         var ranked = SplitRecommendationScorer.Rank([womenOnly, unisex], fit, "BuildMuscle");
 
-        // The mismatched program still wins on raw score (it is goal-matched)...
-        Assert.Equal(womenOnly.SplitId, ranked[0].SplitId);
-        // ...but the auto-assign filter must not hand it to him.
+        // The goal-matched women's program cannot outrank the unisex one.
+        Assert.Equal(unisex.SplitId, ranked[0].SplitId);
         var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
         Assert.Equal(unisex.SplitId, pick!.SplitId);
+    }
+
+    [Fact]
+    public void Rank_ExcludesGymProgramForBodyweightUser_RegardlessOfGoalMatch()
+    {
+        // A barbell program matches the goal exactly, but a bodyweight user cannot
+        // run it. The doable bodyweight split must rank first.
+        var fit = PersonFit.From(170, 75, 28, 3, 45, "Beginner", "Bodyweight", "Active");
+        var barbell = Split("Barbell Mass", "UpperLower", "Beginner", 3, "BuildMuscle",
+            isSystemDefault: true, equipmentRequired: "Barbell, Cables, Machines");
+        var bodyweight = Split("Bodyweight Builder", "Calisthenics", "Beginner", 3, "BuildMuscle",
+            isSystemDefault: true, equipmentRequired: "Bodyweight");
+
+        var ranked = SplitRecommendationScorer.Rank([barbell, bodyweight], fit, "BuildMuscle");
+
+        Assert.Equal(bodyweight.SplitId, ranked[0].SplitId);
+        var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
+        Assert.Equal(bodyweight.SplitId, pick!.SplitId);
+    }
+
+    [Fact]
+    public void Rank_PrefersShorterSession_ForTimeCrunchedUser()
+    {
+        // Both fit the week and the goal; the 30-minute user should not be handed
+        // the 75-minute block.
+        var fit = PersonFit.From(170, 75, 30, 3, 30, "Intermediate", "FullGym", "Active");
+        var longSession = Split("Long Block", "UpperLower", "Intermediate", 3, "BuildMuscle",
+            isSystemDefault: true, minSessionMinutes: 60, maxSessionMinutes: 90);
+        var shortSession = Split("Short Block", "FullBody", "Intermediate", 3, "BuildMuscle",
+            isSystemDefault: true, minSessionMinutes: 25, maxSessionMinutes: 35);
+
+        var ranked = SplitRecommendationScorer.Rank([longSession, shortSession], fit, "BuildMuscle");
+        var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
+
+        Assert.Equal(shortSession.SplitId, ranked[0].SplitId);
+        Assert.Equal(shortSession.SplitId, pick!.SplitId);
+    }
+
+    [Fact]
+    public void PickForAutoAssign_NeverPicksSpecialisationOrUtility_WhileAProgramExists()
+    {
+        // A 4-day week and a goal match make the dedicated arm plan and the deload
+        // attractive to the scorer, but neither is a weekly program: the real
+        // full-body block must win.
+        var fit = PersonFit.From(175, 78, 30, 4, 60, "Intermediate", "FullGym", "Active");
+        var real = Split("Upper / Lower Block", "UpperLower", "Intermediate", 4, "BuildMuscle", isSystemDefault: true);
+        var arms = Split("Awesome Arms", "BroSplit", "Intermediate", 4, "BuildMuscle", isSystemDefault: true);
+        arms.WorkoutTypeLabel = "Single Muscle Group";
+        var deload = Split("2-Week Deload Workout Program", "BroSplit", "Intermediate", 4, "BuildMuscle", isSystemDefault: true);
+
+        var ranked = SplitRecommendationScorer.Rank([arms, deload, real], fit, "BuildMuscle");
+        var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
+
+        Assert.Equal(real.SplitId, pick!.SplitId);
+        Assert.True(SplitRecommendationScorer.IsAutoAssignable(arms) is false);
+        Assert.True(SplitRecommendationScorer.IsAutoAssignable(deload) is false);
+    }
+
+    [Fact]
+    public void Rank_DumbbellUser_PrefersDumbbellProgram_OverGymProgram()
+    {
+        var fit = PersonFit.From(175, 75, 30, 4, 45, "Intermediate", "Dumbbells", "Active");
+        var gym = Split("Gym PPL", "PushPullLegs", "Intermediate", 4, "BuildMuscle",
+            isSystemDefault: true, equipmentRequired: "Barbell, Cables, Machines");
+        var dumbbell = Split("Dumbbell Upper / Lower", "UpperLower", "Intermediate", 4, "BuildMuscle",
+            isSystemDefault: true, equipmentRequired: "Dumbbells, Bodyweight");
+
+        var ranked = SplitRecommendationScorer.Rank([gym, dumbbell], fit, "BuildMuscle");
+
+        Assert.Equal(dumbbell.SplitId, ranked[0].SplitId);
+        Assert.True(SplitRecommendationScorer.IsEquipmentCompatible(dumbbell, fit));
+        Assert.False(SplitRecommendationScorer.IsEquipmentCompatible(gym, fit));
     }
 
     [Fact]

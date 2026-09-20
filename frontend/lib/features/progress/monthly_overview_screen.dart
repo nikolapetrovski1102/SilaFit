@@ -897,6 +897,15 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
                         style: AppTypography.bodySm
                             .copyWith(color: AppColors.onSurfaceVariant)),
                   ],
+                  if (suggestion.compactIngredientSummary
+                      case final ingredients?) ...[
+                    const SizedBox(height: 6),
+                    Text('Ingredients · $ingredients',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodySm
+                            .copyWith(color: AppColors.onSurfaceVariant)),
+                  ],
                   const SizedBox(height: AppSpacing.sm),
                   SecondaryPillButton(
                     icon: _addedIds.contains(suggestion.mealSuggestionId)

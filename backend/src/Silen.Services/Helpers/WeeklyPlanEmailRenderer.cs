@@ -11,6 +11,8 @@ namespace Silen.Services.Helpers;
 /// </summary>
 public static class WeeklyPlanEmailRenderer
 {
+    private const int IngredientPreviewLimit = 4;
+
     public static string BuildSubject(DateTime weekStartUtc) =>
         $"Your plan for the week of {weekStartUtc:MMM d} is ready";
 
@@ -41,16 +43,20 @@ public static class WeeklyPlanEmailRenderer
 
         if (shoppingList.Count > 0)
         {
-            body.Append("<h2 style=\"font-size:16px;margin:28px 0 8px;\">Your shopping list</h2>");
+            var preview = shoppingList.Take(IngredientPreviewLimit).Select(Encode);
+            var remaining = shoppingList.Count - IngredientPreviewLimit;
+
+            body.Append("<h2 style=\"font-size:16px;margin:28px 0 8px;\">Ingredients preview</h2>");
             body.Append("<p style=\"margin:0 0 10px;color:#6b7280;font-size:13px;\">" +
-                        "Everything you need for the week's meals.</p>");
-            body.Append("<ul style=\"margin:0;padding-left:20px;font-size:14px;\">");
-            foreach (var ingredient in shoppingList)
+                        "A quick look at the week's meals. The full list is in the app.</p>");
+            body.Append("<p style=\"margin:0;font-size:14px;\">")
+                .Append(string.Join(" &middot; ", preview));
+            if (remaining > 0)
             {
-                body.Append($"<li style=\"margin:2px 0;\">{Encode(ingredient)}</li>");
+                body.Append($" <strong>+{remaining} more</strong>");
             }
 
-            body.Append("</ul>");
+            body.Append("</p>");
         }
 
         body.Append("<p style=\"margin:24px 0 0;font-size:14px;\">Open the app to see the full breakdown - " +

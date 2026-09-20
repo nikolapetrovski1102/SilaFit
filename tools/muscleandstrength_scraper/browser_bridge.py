@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -46,6 +47,8 @@ def main() -> None:
     if repaired:
         print(f"repaired {repaired} workout day-table references", flush=True)
     chunks: dict[tuple[str, str], dict[int, str]] = {}
+    chunk_lock = threading.Lock()
+    save_lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
@@ -67,14 +70,17 @@ def main() -> None:
                 total = int(query.get("total", [""])[0])
                 chunk = query.get("data", [""])[0]
                 key = (dataset, record_id)
-                parts = chunks.setdefault(key, {})
-                parts[index] = chunk
-                if len(parts) == total:
-                    encoded = "".join(parts[i] for i in range(total))
+                with chunk_lock:
+                    parts = chunks.setdefault(key, {})
+                    parts[index] = chunk
+                    complete = len(parts) == total
+                    if complete:
+                        encoded = "".join(parts[i] for i in range(total))
+                        del chunks[key]
+                if complete:
                     padding = "=" * (-len(encoded) % 4)
                     record = json.loads(base64.urlsafe_b64decode(encoded + padding))
                     self._save_record(dataset, record)
-                    del chunks[key]
             except (ValueError, KeyError, json.JSONDecodeError) as exc:
                 self.send_error(400, str(exc))
                 return
@@ -132,37 +138,40 @@ def main() -> None:
                 })
                 dataset = "workouts"
                 record = parsed
-            destination = args.output_dir / f"{dataset}.json"
-            if isinstance(record, dict) and "__replace__" in record:
-                value = record["__replace__"]
-            elif dataset == "manifest":
-                value = record
-            else:
-                value = []
-                if destination.exists():
-                    loaded = json.loads(destination.read_text(encoding="utf-8"))
-                    if isinstance(loaded, list):
-                        value = loaded
-                assert isinstance(value, list)
-                source_url = record.get("url") if isinstance(record, dict) else None
-                if source_url:
-                    previous = next(
-                        (item for item in value if isinstance(item, dict) and item.get("url") == source_url),
-                        None,
-                    )
-                    if previous and isinstance(record, dict):
-                        record = {
-                            **previous,
-                            **{key: item for key, item in record.items() if item is not None},
-                        }
-                    value = [item for item in value if not isinstance(item, dict) or item.get("url") != source_url]
-                value.append(record)
-            temporary = destination.with_suffix(".json.tmp")
-            temporary.write_text(
-                json.dumps(value, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            temporary.replace(destination)
+            with save_lock:
+                destination = args.output_dir / f"{dataset}.json"
+                if isinstance(record, dict) and "__replace__" in record:
+                    value = record["__replace__"]
+                elif dataset == "manifest":
+                    value = record
+                else:
+                    value = []
+                    if destination.exists():
+                        loaded = json.loads(destination.read_text(encoding="utf-8"))
+                        if isinstance(loaded, list):
+                            value = loaded
+                    assert isinstance(value, list)
+                    source_url = record.get("url") if isinstance(record, dict) else None
+                    if source_url:
+                        previous = next(
+                            (item for item in value if isinstance(item, dict) and item.get("url") == source_url),
+                            None,
+                        )
+                        if previous and isinstance(record, dict):
+                            record = {
+                                **previous,
+                                **{key: item for key, item in record.items() if item is not None},
+                            }
+                        value = [item for item in value if not isinstance(item, dict) or item.get("url") != source_url]
+                    value.append(record)
+                temporary = destination.with_name(
+                    f"{destination.name}.{threading.get_ident()}.tmp"
+                )
+                temporary.write_text(
+                    json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                temporary.replace(destination)
 
         def log_message(self, format: str, *values: object) -> None:
             message = format % values
