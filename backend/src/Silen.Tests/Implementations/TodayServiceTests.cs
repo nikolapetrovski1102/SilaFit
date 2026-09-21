@@ -1,7 +1,10 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Silen.Common.Contracts;
 using Silen.Common.Dtos;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -15,6 +18,8 @@ public class TodayServiceTests
     private readonly Mock<IStreakProvider> streakProvider = new(MockBehavior.Strict);
     private readonly Mock<IUserSettingsProvider> userSettingsProvider = new(MockBehavior.Strict);
     private readonly Mock<ISplitsProvider> splitsProvider = new(MockBehavior.Strict);
+    private readonly Mock<IUserProfileProvider> userProfileProvider = new(MockBehavior.Strict);
+    private readonly Mock<IMealPlanningService> mealPlanningService = new(MockBehavior.Strict);
     private readonly TodayService sut;
 
     public TodayServiceTests()
@@ -25,7 +30,10 @@ public class TodayServiceTests
             bodyweightProvider.Object,
             streakProvider.Object,
             userSettingsProvider.Object,
-            splitsProvider.Object);
+            splitsProvider.Object,
+            userProfileProvider.Object,
+            mealPlanningService.Object,
+            NullLogger<TodayService>.Instance);
     }
 
     [Fact]
@@ -195,12 +203,25 @@ public class TodayServiceTests
                 new() { WeightKg = 79m, LoggedAtUtc = DateTime.UtcNow },
                 new() { WeightKg = 80m, LoggedAtUtc = DateTime.UtcNow.AddDays(-3) }
             });
+        var profile = new UserProfileModel { UserId = userId, WeightKg = 79m };
+        userProfileProvider
+            .Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(profile);
+        mealPlanningService
+            .Setup(s => s.RecomputeTargetsAsync(userId, profile, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ServiceResult<UserNutritionTargetsModel>.Success(
+                new UserNutritionTargetsModel { UserId = userId }));
 
         var result = await sut.LogBodyweightAsync(userId, request);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(79m, result.Data!.LatestWeightKg);
         Assert.Equal(-1m, result.Data!.DeltaKg);
+        mealPlanningService.Verify(
+            s => s.RecomputeTargetsAsync(userId,
+                It.Is<UserProfileModel>(p => p.WeightKg == 79m),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -211,6 +232,9 @@ public class TodayServiceTests
         bodyweightProvider
             .Setup(p => p.LogAsync(userId, 79m, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<BodyweightEntryModel> { new() { WeightKg = 79m, LoggedAtUtc = DateTime.UtcNow } });
+        userProfileProvider
+            .Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserProfileModel?)null);
 
         var result = await sut.LogBodyweightAsync(userId, request);
 

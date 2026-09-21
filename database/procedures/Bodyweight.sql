@@ -22,10 +22,19 @@ BEGIN
     INSERT INTO dbo.BodyweightLogs (UserId, WeightKg)
     VALUES (@UserId, @WeightKg);
 
+    -- BodyweightLogs is the chronological source of truth. Keep the profile's
+    -- denormalized weight aligned with the value the user just entered so BMI,
+    -- recommendations and automatically derived nutrition targets do not keep
+    -- using the older onboarding weight.
+    UPDATE dbo.UserProfiles
+    SET WeightKg = @WeightKg,
+        UpdatedAtUtc = SYSUTCDATETIME()
+    WHERE UserId = @UserId;
+
     SELECT TOP (2) BodyweightLogId, WeightKg, LoggedAtUtc
     FROM dbo.BodyweightLogs
     WHERE UserId = @UserId
-    ORDER BY LoggedAtUtc DESC;
+    ORDER BY LoggedAtUtc DESC, BodyweightLogId DESC;
 END
 GO
 
@@ -38,7 +47,7 @@ BEGIN
     SELECT TOP (2) BodyweightLogId, WeightKg, LoggedAtUtc
     FROM dbo.BodyweightLogs
     WHERE UserId = @UserId
-    ORDER BY LoggedAtUtc DESC;
+    ORDER BY LoggedAtUtc DESC, BodyweightLogId DESC;
 END
 GO
 

@@ -15,7 +15,7 @@ import 'package:silafit/features/splits/split_detail_screen.dart';
 
 import 'support/analytics_fixtures.dart';
 
-Future<_OverviewApi> openRecap(WidgetTester tester,
+Future<_OverviewApi> _openRecap(WidgetTester tester,
     {AnalyticsRecap? analytics,
     bool reducedMotion = false,
     VoidCallback? onDone}) async {
@@ -56,7 +56,7 @@ void main() {
   testWidgets(
       'effects stay compact and centered without changing the icon layout slot',
       (tester) async {
-    await openRecap(tester, reducedMotion: true);
+    await _openRecap(tester, reducedMotion: true);
     Finder asset(String name) => find.byWidgetPredicate(
         (widget) => widget is RecapAnimation && widget.asset == name);
     final screen = tester.getRect(find.byType(Scaffold));
@@ -89,7 +89,7 @@ void main() {
 
   testWidgets('recap settles quickly and rapid taps advance only one page',
       (tester) async {
-    await openRecap(tester);
+    await _openRecap(tester);
     expect(find.text('You showed up.\nThat matters.'), findsOneWidget);
     final pages = tester.widget<PageView>(find.byType(PageView));
     await tester.tap(find.text('Next'));
@@ -110,7 +110,8 @@ void main() {
   testWidgets('six screens allow skipping weight without saving',
       (tester) async {
     var finished = false;
-    await openRecap(tester, reducedMotion: true, onDone: () => finished = true);
+    await _openRecap(tester,
+        reducedMotion: true, onDone: () => finished = true);
     await next(tester);
     await next(tester);
     expect(find.byType(MonthlyTrainingChart), findsOneWidget);
@@ -128,16 +129,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wheel starts at latest weight and save advances',
+  testWidgets('wheel starts at latest entered weight, not recap end weight',
       (tester) async {
     final analytics = monthlyAnalyticsFixture();
-    await openRecap(tester, analytics: analytics, reducedMotion: true);
+    await _openRecap(tester, analytics: analytics, reducedMotion: true);
     for (var i = 0; i < 4; i++) {
       await next(tester);
     }
     final picker =
         tester.widget<NumericWheelPicker>(find.byType(NumericWheelPicker));
-    expect(picker.value, (analytics.summary.endWeightKg! * 10).round());
+    expect(analytics.summary.endWeightKg, 82.9);
+    expect(picker.value, 834);
     expect(picker.displayFormatter!(855), '85.5');
     picker.onChanged(855);
     await tester.pump();
@@ -179,7 +181,7 @@ void main() {
       'summary': {'completedSessions': 4},
       'generatedAtUtc': '2026-09-01T00:00:00Z',
     });
-    await openRecap(tester, analytics: analytics, reducedMotion: true);
+    await _openRecap(tester, analytics: analytics, reducedMotion: true);
     await next(tester);
     expect(find.textContaining('isn’t a comparable exercise gain'),
         findsOneWidget);
@@ -241,7 +243,7 @@ void main() {
 
   testWidgets('weekly recap appends meal plan and next-week training slides',
       (tester) async {
-    final api = await openRecap(tester,
+    final api = await _openRecap(tester,
         analytics: weeklyAnalyticsFixture(), reducedMotion: true);
     expect(find.text('You showed up.\nThat matters.'), findsOneWidget);
     // Six shared slides, then the two Advanced-only recommendation slides.
@@ -344,7 +346,9 @@ class _OverviewApi implements ApiClient {
     if (path == '/splits/split-ppl') splitDetailRequests++;
     final Object payload = switch (path) {
       '/today' => <String, dynamic>{
-          'latestWeightKg': 82.9,
+          // Deliberately differs from the recap's 82.9 kg month-end value: the
+          // check-in must start from the user's most recently entered weight.
+          'latestWeightKg': 83.4,
           'session': <String, dynamic>{},
           'activeSplit': <String, dynamic>{
             'splitId': 'split-ppl',

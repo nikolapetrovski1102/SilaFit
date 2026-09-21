@@ -71,18 +71,30 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
   }
 
   Future<void> _loadWeight() async {
+    final client = context.read<ApiClient>();
+    final cachedWeight =
+        context.read<TodayController>().state.data?.latestWeightKg;
+    double? value;
     try {
-      final client = context.read<ApiClient>();
       final dashboard = await TodayRepository(client).getDashboard();
-      double? value = dashboard.latestWeightKg;
-      value ??= (await OnboardingRepository(client).getProfile()).weightKg;
-      _setInitialWeight(value);
+      value = dashboard.latestWeightKg;
     } catch (_) {
-      if (!mounted) return;
       // A cached dashboard weight is a better fallback than the recap's old month.
-      _setInitialWeight(
-          context.read<TodayController>().state.data?.latestWeightKg);
+      value = cachedWeight;
     }
+
+    // With no bodyweight log yet, onboarding weight is the user's only entered
+    // value. Fetch it independently so a temporary dashboard failure does not
+    // make the wheel jump to the generic 70 kg fallback.
+    if (value == null) {
+      try {
+        value = (await OnboardingRepository(client).getProfile()).weightKg;
+      } catch (_) {
+        // _setInitialWeight supplies the neutral fallback only when neither
+        // source has a user-entered value.
+      }
+    }
+    _setInitialWeight(value);
   }
 
   Future<void> _saveWeight() async {

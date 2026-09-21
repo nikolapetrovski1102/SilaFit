@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Silen.Common.Contracts;
 using Silen.Common.Dtos;
 using Silen.Common.Exceptions;
@@ -16,7 +17,10 @@ public sealed class TodayService(
     IBodyweightProvider bodyweightProvider,
     IStreakProvider streakProvider,
     IUserSettingsProvider userSettingsProvider,
-    ISplitsProvider splitsProvider) : ITodayService
+    ISplitsProvider splitsProvider,
+    IUserProfileProvider userProfileProvider,
+    IMealPlanningService mealPlanningService,
+    ILogger<TodayService> logger) : ITodayService
 {
     public Task<ServiceResult<TodayDashboardDto>> GetDashboardAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -106,6 +110,38 @@ public sealed class TodayService(
             }
 
             var entries = await bodyweightProvider.LogAsync(userId, request.WeightKg, cancellationToken);
+
+            // usp_Bodyweight_Log updates UserProfiles.WeightKg in the same
+            // database call. Refresh non-manual nutrition targets from that
+            // updated profile so calorie and macro recommendations follow the
+            // user's actual latest entry rather than their onboarding weight.
+            try
+            {
+                var profile = await userProfileProvider.GetAsync(userId, cancellationToken);
+                if (profile is not null)
+                {
+                    var targetResult = await mealPlanningService
+                        .RecomputeTargetsAsync(userId, profile, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!targetResult.IsSuccess)
+                    {
+                        logger.LogWarning(
+                            "Bodyweight was saved for user {UserId}, but automatic nutrition targets could not be refreshed: {Reason}",
+                            userId,
+                            targetResult.LogMessage);
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                // The bodyweight write has already succeeded. Do not encourage
+                // a retry that would create a duplicate log just because the
+                // dependent target refresh had a transient failure.
+                logger.LogWarning(
+                    exception,
+                    "Bodyweight was saved for user {UserId}, but automatic nutrition targets could not be refreshed.",
+                    userId);
+            }
 
             return new LogBodyweightResultDto
             {
