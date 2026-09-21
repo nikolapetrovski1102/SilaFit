@@ -102,8 +102,8 @@ GO
 
 -- The weekly batch's audience: every active ADVANCED subscriber. Building a
 -- fresh weekly split/diet plan is part of what the ADVANCED plan buys, so
--- there is no opt-in flag - the generated plans are simply left inactive for
--- the user to activate themselves.
+-- there is no opt-in flag. Generated diet plans become active automatically;
+-- generated training splits remain recommendations until the user activates one.
 CREATE OR ALTER PROCEDURE dbo.usp_WeeklyAiPlan_GetCandidateUsers
 AS
 BEGIN

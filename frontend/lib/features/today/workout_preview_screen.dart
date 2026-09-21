@@ -5,7 +5,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/duration_format.dart';
-import '../../core/widgets/silen_ambient_backdrop.dart';
+import '../../core/widgets/section_card.dart';
+import '../../core/widgets/section_eyebrow.dart';
 import '../splits/splits_models.dart';
 import 'widgets/day_preview.dart';
 
@@ -31,145 +32,65 @@ class WorkoutPreviewScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: SilenAmbientBackdrop()),
-          SafeArea(
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.marginMobile,
-                      AppSpacing.xs,
-                      AppSpacing.marginMobile,
-                      AppSpacing.xxl,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _BackButton(onPressed: () => Navigator.pop(context)),
-                        const SizedBox(height: AppSpacing.xl),
-                        Text(
-                          DateFormat('EEEE, MMMM d')
-                              .format(preview.date)
-                              .toUpperCase(),
-                          style: AppTypography.labelCaps.copyWith(
-                            color: AppColors.accent,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          preview.title ?? 'Training Session',
-                          style:
-                              AppTypography.headlineLg.copyWith(fontSize: 32),
-                        ),
-                        if (preview.focusLabel?.trim().isNotEmpty == true) ...[
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            preview.focusLabel!,
-                            style: AppTypography.bodyLg.copyWith(
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                        if (splitName?.trim().isNotEmpty == true) ...[
-                          const SizedBox(height: AppSpacing.xxs),
-                          Text(
-                            'From $splitName',
-                            style: AppTypography.bodyMd.copyWith(
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: AppSpacing.xl),
-                        Wrap(
-                          spacing: AppSpacing.xs,
-                          runSpacing: AppSpacing.xs,
-                          children: [
-                            _SummaryPill(
-                              icon: Icons.schedule_rounded,
-                              label: preview.estimatedMinutes == null
-                                  ? 'Duration not set'
-                                  : formatMinutesLabel(
-                                      preview.estimatedMinutes!),
-                            ),
-                            _SummaryPill(
-                              icon: Icons.fitness_center_rounded,
-                              label:
-                                  '${exercises.length} ${exercises.length == 1 ? 'exercise' : 'exercises'}',
-                            ),
-                            if (totalSets > 0)
-                              _SummaryPill(
-                                icon: Icons.repeat_rounded,
-                                label: '$totalSets total sets',
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.xxxl),
-                        Text(
-                          'FULL WORKOUT',
-                          style: AppTypography.labelCaps.copyWith(
-                            color: AppColors.accent,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'Exercise details',
-                          style: AppTypography.headlineMd,
-                        ),
-                      ],
-                    ),
-                  ),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text('Workout Preview', style: AppTypography.headlineSm),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.gutterMobile, vertical: AppSpacing.lg),
+          children: [
+            Text(preview.title ?? 'Training Session',
+                style: AppTypography.headlineLg),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(DateFormat('EEEE, MMM d').format(preview.date),
+                style: AppTypography.bodyMd
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+            if (preview.focusLabel?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(preview.focusLabel!, style: AppTypography.bodyMd),
+            ],
+            if (splitName?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: AppSpacing.xxs),
+              Text('From $splitName',
+                  style: AppTypography.bodySm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                _SummaryPill(
+                  icon: Icons.schedule_rounded,
+                  label: preview.estimatedMinutes == null
+                      ? 'Duration not set'
+                      : formatMinutesLabel(preview.estimatedMinutes!),
                 ),
-                if (exercises.isEmpty)
-                  const SliverToBoxAdapter(child: _EmptyWorkout())
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.marginMobile,
-                      0,
-                      AppSpacing.marginMobile,
-                      AppSpacing.xxl,
-                    ),
-                    sliver: SliverList.separated(
-                      itemCount: exercises.length,
-                      itemBuilder: (context, index) => _ExerciseDetail(
-                        index: index + 1,
-                        exercise: exercises[index],
-                      ),
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: AppSpacing.sm),
-                    ),
-                  ),
+                _SummaryPill(
+                  icon: Icons.fitness_center_rounded,
+                  label:
+                      '${exercises.length} ${exercises.length == 1 ? 'exercise' : 'exercises'}',
+                ),
+                if (totalSets > 0)
+                  _SummaryPill(
+                      icon: Icons.repeat_rounded,
+                      label: '$totalSets total sets'),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  final VoidCallback onPressed;
-
-  const _BackButton({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Back',
-      button: true,
-      child: Material(
-        color: AppColors.surfaceContainer.withValues(alpha: 0.72),
-        shape: const CircleBorder(),
-        child: IconButton(
-          tooltip: 'Back',
-          onPressed: onPressed,
-          icon: const Icon(Icons.arrow_back_rounded),
-          color: AppColors.onSurface,
+            const SizedBox(height: AppSpacing.xl),
+            const SectionEyebrow('Exercise details'),
+            const SizedBox(height: AppSpacing.sm),
+            if (exercises.isEmpty)
+              const _EmptyWorkout()
+            else
+              for (var i = 0; i < exercises.length; i++) ...[
+                _ExerciseDetail(index: i + 1, exercise: exercises[i]),
+                const SizedBox(height: AppSpacing.md),
+              ],
+          ],
         ),
       ),
     );
@@ -215,13 +136,8 @@ class _ExerciseDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muscleGroup = exercise.muscleGroup.trim();
-    return Container(
+    return SectionCard(
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow.withValues(alpha: 0.86),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -310,19 +226,11 @@ class _EmptyWorkout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.cardPadding),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow.withValues(alpha: 0.86),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
-        child: Text(
-          'No exercises are assigned to this day yet.',
-          style: AppTypography.bodyLg.copyWith(
-            color: AppColors.onSurfaceVariant,
-          ),
+    return SectionCard(
+      child: Text(
+        'No exercises are assigned to this day yet.',
+        style: AppTypography.bodyLg.copyWith(
+          color: AppColors.onSurfaceVariant,
         ),
       ),
     );

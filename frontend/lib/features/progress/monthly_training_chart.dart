@@ -6,6 +6,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/silen_dropdown.dart';
 import 'analytics_models.dart';
 
 /// Plots logged load, not an inferred quality/effort score. The drawing starts
@@ -83,10 +84,9 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
               child: Text(
                   'No exercise sets logged for this month yet. Log weights and reps during workouts to build your graph.'))
         else ...[
-          DropdownButtonFormField<int>(
-            initialValue: _selected.clamp(0, exercises.length - 1),
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Exercise'),
+          SilenDropdown<int>(
+            label: 'Exercise',
+            value: _selected.clamp(0, exercises.length - 1),
             items: [
               for (var i = 0; i < exercises.length; i++)
                 DropdownMenuItem(

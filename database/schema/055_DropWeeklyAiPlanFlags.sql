@@ -8,8 +8,8 @@ GO
 
 -- Building a fresh weekly split/diet plan is now part of what an active
 -- ADVANCED subscription buys, rather than something the user opts into, and
--- generated plans are never auto-activated - they land in "My Splits"/"My
--- Diet Plans" for the user to activate or ignore. Both UserSettings flags
+-- generated diet plans are activated as part of the ADVANCED benefit while
+-- generated splits remain recommendations. Both UserSettings flags
 -- added by 051_WeeklyAiPlans.sql are therefore obsolete; drop their default
 -- constraints and then the columns.
 IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = 'DF_UserSettings_ReceiveWeeklyAiPlans')

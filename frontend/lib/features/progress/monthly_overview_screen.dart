@@ -930,10 +930,10 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
             separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.xs),
             itemBuilder: (context, index) {
               final item = _days[index];
-              return ChoiceChip(
+              return PillChip(
                 selected: index == _selectedDay,
-                label: Text('Day ${item.dayNumber}'),
-                onSelected: (_) => setState(() => _selectedDay = index),
+                label: 'Day ${item.dayNumber}',
+                onTap: () => setState(() => _selectedDay = index),
               );
             },
           ),
@@ -1164,7 +1164,10 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
     return ContainerTransform(
       openBuilder: (_) => SplitDetailScreen(
         controller: SplitDetailController(
-            context.read<SplitsRepository>(), activeSplit.splitId),
+          SplitsRepository(context.read<ApiClient>()),
+          activeSplit.splitId,
+          initialDetail: detail,
+        ),
         splitName: activeSplit.name ?? detail.split.name,
       ),
       closedBuilder: (context, openContainer) => Column(

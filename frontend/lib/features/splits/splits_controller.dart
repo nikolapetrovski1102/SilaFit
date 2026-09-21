@@ -42,13 +42,17 @@ class SplitDetailController extends ChangeNotifier {
   final SplitsRepository _repository;
   final String splitId;
 
-  ResourceState<SplitDetail> state = const ResourceState.loading();
+  ResourceState<SplitDetail> state;
   bool isActivating = false;
   bool isKeeping = false;
   String? actionError;
   bool activated = false;
 
-  SplitDetailController(this._repository, this.splitId);
+  SplitDetailController(this._repository, this.splitId,
+      {SplitDetail? initialDetail})
+      : state = initialDetail == null
+            ? const ResourceState.loading()
+            : ResourceState.data(initialDetail);
 
   bool _isLoading = false;
 

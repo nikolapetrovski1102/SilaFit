@@ -39,8 +39,8 @@ public sealed class WeeklyPlanGenerationService(
     private const int MinExercisesPerTrainingDay = 5;
     private const int MaxExercisesPerTrainingDay = 8;
 
-    // A weekly diet plan always covers the full week, one meal per slot, so the
-    // user gets breakfast/lunch/dinner/snack for Monday through Sunday.
+    // A weekly diet plan always covers the full week. Breakfast, lunch and
+    // dinner are fixed slots; snacks may repeat to close the user's calorie gap.
     private static readonly string[] MealSlots = ["Breakfast", "Lunch", "Dinner", "Snack"];
     private static readonly string[] WeekdayNames =
         ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -223,20 +223,22 @@ public sealed class WeeklyPlanGenerationService(
             return ProcessOutcome.Skipped;
         }
 
-        // Batch-built plans are never auto-activated: they land in "My
-        // Splits"/"My Diet Plans" so the user chooses whether to activate the
-        // new plan or keep running their current one.
-        const bool autoActivate = false;
+        // A generated training split remains a recommendation because changing
+        // a user's active rotation affects today's workout immediately. The
+        // ADVANCED subscription already includes and authorizes the weekly AI
+        // diet plan, so that plan becomes the active meal plan automatically.
+        const bool autoActivateSplit = false;
+        const bool autoActivateDiet = true;
 
         var profile = await userProfileProvider.GetAsync(candidate.UserId, cancellationToken).ConfigureAwait(false);
         var fit = PersonFit.From(profile);
 
         var (splitId, splitName, splitKept) = await GenerateSplitAsync(
-                candidate.UserId, profile, fit, snapshot, weekStart, opts, autoActivate, dryRun, cancellationToken)
+                candidate.UserId, profile, fit, snapshot, weekStart, opts, autoActivateSplit, dryRun, cancellationToken)
             .ConfigureAwait(false);
 
         var (dietPlanId, dietPlanName) = await GenerateDietAsync(
-                candidate.UserId, profile, snapshot, weekStart, opts, autoActivate, dryRun, cancellationToken)
+                candidate.UserId, profile, snapshot, weekStart, opts, autoActivateDiet, dryRun, cancellationToken)
             .ConfigureAwait(false);
 
         if (dryRun)
@@ -622,10 +624,12 @@ public sealed class WeeklyPlanGenerationService(
             .Replace("{{EvidenceJson}}", evidenceJson)
             .Replace("{{MealCatalogJson}}", mealCatalogJson)
             + "\nReturn exactly 7 days, Monday through Sunday, in order. Every day must include "
-            + "one breakfastId, one lunchId, one dinnerId and one snackId, each chosen from the "
-            + "matching allowed list - never leave a slot empty and never use an id from another "
-            + "slot's list. Prefer varied, minimally processed, healthy whole foods while keeping "
-            + "each day close to the targets. Review the compact ingredient preview as well as the macros: "
+            + "one breakfastId, one lunchId, one dinnerId and zero or more snackIds, each chosen from the "
+            + "matching allowed list - never leave a main-meal slot empty and never use an id from another "
+            + "slot's list. The total calories of every day must meet the supplied targetCalories. Add "
+            + "additional snackIds when breakfast, lunch, dinner and one snack are not enough; do not return "
+            + "a generic fixed meal count that leaves the user below target. Prefer varied, minimally processed, "
+            + "healthy whole foods while keeping each day close to the targets. Review the compact ingredient preview as well as the macros: "
             + "prefer meals with a clear whole-food protein, useful produce or fiber, and avoid building a "
             + "week dominated by highly processed or nutritionally repetitive choices. The preview is capped "
             + "at four ingredients; ingredientCount tells you when the recipe contains more."
@@ -653,6 +657,18 @@ public sealed class WeeklyPlanGenerationService(
             throw new ConflictException(
                 $"AI returned {days.Count} diet plan days; 7 (Monday-Sunday) are required.",
                 "AI plan generation is temporarily unavailable.");
+        }
+
+        var completedSnackIds = new List<List<Guid>>(days.Count);
+        foreach (var day in days)
+        {
+            ValidateDietDay(day, mealById);
+            completedSnackIds.Add(CalorieTargetMealPlanner.CompleteSnacks(
+                targets.TargetCalories,
+                [day.BreakfastId, day.LunchId, day.DinnerId],
+                day.SnackIds,
+                mealById,
+                candidatesBySlot["Snack"]));
         }
 
         var dietPlanName = CleanGeneratedText(
@@ -715,13 +731,13 @@ public sealed class WeeklyPlanGenerationService(
                 "Save diet plan day");
 
             var dietPlanDayId = dayResult.Id!.Value;
-            var slotIds = new (string Slot, Guid MealId)[]
+            var slotIds = new List<(string Slot, Guid MealId)>
             {
                 ("Breakfast", day.BreakfastId),
                 ("Lunch", day.LunchId),
-                ("Dinner", day.DinnerId),
-                ("Snack", day.SnackId)
+                ("Dinner", day.DinnerId)
             };
+            slotIds.AddRange(completedSnackIds[i].Select(id => ("Snack", id)));
 
             var sortOrder = 0;
             foreach (var (slot, mealId) in slotIds)
@@ -985,6 +1001,33 @@ public sealed class WeeklyPlanGenerationService(
         }
     }
 
+    private static void ValidateDietDay(
+        AiDietDayDto day,
+        IReadOnlyDictionary<Guid, MealSuggestionModel> mealById)
+    {
+        ValidateMealSlot(day.BreakfastId, "Breakfast", mealById);
+        ValidateMealSlot(day.LunchId, "Lunch", mealById);
+        ValidateMealSlot(day.DinnerId, "Dinner", mealById);
+        foreach (var snackId in day.SnackIds)
+        {
+            ValidateMealSlot(snackId, "Snack", mealById);
+        }
+    }
+
+    private static void ValidateMealSlot(
+        Guid mealId,
+        string expectedSlot,
+        IReadOnlyDictionary<Guid, MealSuggestionModel> mealById)
+    {
+        if (!mealById.TryGetValue(mealId, out var meal)
+            || !string.Equals(meal.MealType, expectedSlot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ConflictException(
+                $"AI returned meal '{mealId}' outside the allowed {expectedSlot} catalog.",
+                "AI plan generation is temporarily unavailable.");
+        }
+    }
+
     /// <summary>Keeps model-authored preview copy inside the persistence limits
     /// while preserving a useful deterministic fallback for defensive parsing.</summary>
     private static string CleanGeneratedText(string? value, string fallback, int maxLength)
@@ -1067,9 +1110,14 @@ public sealed class WeeklyPlanGenerationService(
                   "breakfastId": { "type": "string", "enum": [{{breakfastEnum}}] },
                   "lunchId": { "type": "string", "enum": [{{lunchEnum}}] },
                   "dinnerId": { "type": "string", "enum": [{{dinnerEnum}}] },
-                  "snackId": { "type": "string", "enum": [{{snackEnum}}] }
+                  "snackIds": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 12,
+                    "items": { "type": "string", "enum": [{{snackEnum}}] }
+                  }
                 },
-                "required": ["breakfastId", "lunchId", "dinnerId", "snackId"],
+                "required": ["breakfastId", "lunchId", "dinnerId", "snackIds"],
                 "additionalProperties": false
               }
             }
@@ -1120,6 +1168,6 @@ public sealed class WeeklyPlanGenerationService(
         public Guid BreakfastId { get; set; }
         public Guid LunchId { get; set; }
         public Guid DinnerId { get; set; }
-        public Guid SnackId { get; set; }
+        public List<Guid> SnackIds { get; set; } = new();
     }
 }

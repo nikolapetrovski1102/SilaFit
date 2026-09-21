@@ -9,9 +9,9 @@ namespace Silen.Services.Abstractions;
 /// diet plan for the upcoming week - the weekly, content-generating counterpart
 /// of <see cref="IMonthlyReviewService"/>. The model may decide the current
 /// split already fits and recommend keeping it; the diet plan always covers the
-/// full week (Monday-Sunday, breakfast/lunch/dinner/snack) and carries a
+/// full week (Monday-Sunday, breakfast/lunch/dinner plus target-filling snacks) and carries a
 /// week-long shopping list aggregated from the meals' ingredients. Generated
-/// plans are left inactive for the user to activate themselves.
+/// diet plans become active automatically for Advanced subscribers.
 /// Designed to run every Sunday and be safely re-runnable: a user already settled for
 /// a given week (see <c>IWeeklyPlanGenerationProvider.GetProcessedUserIdsAsync</c>) is
 /// skipped on a later run for that same week.

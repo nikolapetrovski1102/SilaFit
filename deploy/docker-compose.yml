@@ -246,10 +246,11 @@ services:
 
   # Weekly AI plan generation batch: for every active ADVANCED subscriber, looks
   # at what they actually trained/ate last week and generates a custom split +
-  # full-week diet plan (Mon-Sun, breakfast/lunch/dinner/snack) with a week-long
+  # full-week diet plan (Mon-Sun, breakfast/lunch/dinner plus target-filling snacks) with a week-long
   # shopping list, then pushes/emails them that it's ready. The model may keep
-  # the user's current split when it already fits. Plans are left inactive for
-  # the user to activate themselves. Profile-gated like the other tools;
+  # the user's current split when it already fits. The split remains a
+  # recommendation; the ADVANCED subscriber's new diet plan is activated
+  # automatically. Profile-gated like the other tools;
   # deploy.sh installs a cron entry that runs it every Sunday.
   #
   # Run it by hand with:

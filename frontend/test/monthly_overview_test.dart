@@ -9,10 +9,13 @@ import 'package:silafit/features/onboarding/widgets/numeric_wheel_picker.dart';
 import 'package:silafit/features/progress/analytics_models.dart';
 import 'package:silafit/features/progress/monthly_overview_screen.dart';
 import 'package:silafit/features/progress/monthly_training_chart.dart';
+import 'package:silafit/core/widgets/section_eyebrow.dart';
+import 'package:silafit/core/widgets/silen_dropdown.dart';
+import 'package:silafit/features/splits/split_detail_screen.dart';
 
 import 'support/analytics_fixtures.dart';
 
-Future<void> openRecap(WidgetTester tester,
+Future<_OverviewApi> openRecap(WidgetTester tester,
     {AnalyticsRecap? analytics,
     bool reducedMotion = false,
     VoidCallback? onDone}) async {
@@ -30,6 +33,7 @@ Future<void> openRecap(WidgetTester tester,
                   analytics: analytics ?? monthlyAnalyticsFixture(),
                   onDone: onDone ?? () {})))));
   await tester.pumpAndSettle();
+  return api;
 }
 
 Future<void> next(WidgetTester tester) async {
@@ -162,6 +166,7 @@ void main() {
     expect(find.textContaining('stayed at 25 kg across 4 sessions'),
         findsOneWidget);
     expect(find.textContaining('40 kg'), findsOneWidget);
+    expect(find.byType(SilenDropdown<int>), findsOneWidget);
     expect(tester.binding.hasScheduledFrame, isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -236,7 +241,7 @@ void main() {
 
   testWidgets('weekly recap appends meal plan and next-week training slides',
       (tester) async {
-    await openRecap(tester,
+    final api = await openRecap(tester,
         analytics: weeklyAnalyticsFixture(), reducedMotion: true);
     expect(find.text('You showed up.\nThat matters.'), findsOneWidget);
     // Six shared slides, then the two Advanced-only recommendation slides.
@@ -244,8 +249,9 @@ void main() {
       await advance(tester);
     }
     expect(find.text('AI recommended meals for 7 days'), findsOneWidget);
-    expect(find.text('Day 1'), findsWidgets);
-    expect(find.text('Day 7'), findsOneWidget);
+    expect(find.text('DAY 1'), findsOneWidget);
+    expect(find.text('DAY 7'), findsOneWidget);
+    expect(find.byType(PillChip), findsWidgets);
     expect(find.text('Grilled chicken & rice bowl'), findsOneWidget);
     expect(find.text('Macros · P 48g · C 62g · F 18g'), findsOneWidget);
     expect(
@@ -255,7 +261,7 @@ void main() {
     expect(find.text('Add to Day 1'), findsWidgets);
     await tester.drag(find.byType(ListView), const Offset(-300, 0));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Day 7'));
+    await tester.tap(find.text('DAY 7'));
     await tester.pumpAndSettle();
     expect(find.text('Add to Day 7'), findsWidgets);
     await advance(tester);
@@ -265,6 +271,17 @@ void main() {
     expect(find.text('Review my split'), findsOneWidget);
     expect(find.text('Switch to this split'), findsNothing);
     expect(find.text('Continue to dashboard'), findsOneWidget);
+    final requestsBeforeOpen = api.splitDetailRequests;
+    expect(requestsBeforeOpen, greaterThanOrEqualTo(1));
+    await tester.ensureVisible(find.text('Review my split'));
+    await tester.tap(find.text('Review my split'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SplitDetailScreen), findsOneWidget);
+    expect(find.text('WEEKLY BREAKDOWN'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    // Opening the detail reuses the already loaded preview payload instead of
+    // starting a second request that can leave this screen spinning.
+    expect(api.splitDetailRequests, requestsBeforeOpen);
     expect(tester.takeException(), isNull);
   });
 
@@ -319,9 +336,12 @@ class _WeightApi implements ApiClient {
 }
 
 class _OverviewApi implements ApiClient {
+  int splitDetailRequests = 0;
+
   @override
   Future<T> get<T>(String path, T Function(dynamic) parse,
       {Map<String, String>? query}) async {
+    if (path == '/splits/split-ppl') splitDetailRequests++;
     final Object payload = switch (path) {
       '/today' => <String, dynamic>{
           'latestWeightKg': 82.9,

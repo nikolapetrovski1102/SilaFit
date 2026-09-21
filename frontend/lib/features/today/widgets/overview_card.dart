@@ -162,7 +162,9 @@ class _SessionSection extends StatelessWidget {
     if (preview.isRestDay) return _buildRestDay();
     if (preview.status == 'Completed') return _buildCompleted(context);
     if (preview.status == 'Missed') return _buildMissed();
-    return preview.isToday ? _buildScheduledToday() : _buildUpcomingPreview();
+    return preview.isToday
+        ? _buildScheduledToday()
+        : _buildUpcomingPreview(context);
   }
 
   String get _dateLabel => DateFormat('EEE, MMM d').format(preview.date);
@@ -241,7 +243,7 @@ class _SessionSection extends StatelessWidget {
 
   /// A day - future or already gone - that the active split has scheduled
   /// but isn't today. Home stays concise and opens the full plan separately.
-  Widget _buildUpcomingPreview() {
+  Widget _buildUpcomingPreview(BuildContext context) {
     final minutesLabel = preview.estimatedMinutes != null
         ? formatMinutesLabel(preview.estimatedMinutes!)
         : null;
@@ -289,19 +291,15 @@ class _SessionSection extends StatelessWidget {
         ),
         if (minutesLabel != null) ...[
           SizedBox(height: AppSpacing.lg * scale),
-          ContainerTransform(
-            openBuilder: (_) => WorkoutPreviewScreen(
-              preview: preview,
-              splitName: splitName,
-            ),
-            closedColor: AppColors.accent,
-            radius: AppRadius.full,
-            closedBuilder: (context, openContainer) => PrimaryPillButton(
-              label: 'View full workout',
-              icon: Icons.visibility_outlined,
-              height: (48 * scale).clamp(48, 72),
-              onPressed: openContainer,
-            ),
+          _WorkoutDetailLink(
+            label: 'View full workout',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => WorkoutPreviewScreen(
+                preview: preview,
+                splitName: splitName,
+              ),
+            )),
+            scale: scale,
           ),
           SizedBox(height: AppSpacing.md * scale),
           Row(
@@ -392,24 +390,15 @@ class _SessionSection extends StatelessWidget {
         // in the active tracker it was just logged from.
         if (!preview.isToday) ...[
           SizedBox(height: AppSpacing.lg * scale),
-          GestureDetector(
+          _WorkoutDetailLink(
+            label: 'View set history',
+            scale: scale,
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => SetHistoryScreen(
                 date: preview.date,
                 sessionTitle: preview.title,
               ),
             )),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('View set history',
-                    style: AppTypography.labelSm.copyWith(
-                        color: AppColors.accent, fontWeight: FontWeight.w600)),
-                SizedBox(width: 4 * scale),
-                Icon(Icons.arrow_forward_rounded,
-                    size: 14 * scale, color: AppColors.accent),
-              ],
-            ),
           ),
         ],
       ],
@@ -448,6 +437,45 @@ class _SessionSection extends StatelessWidget {
       child: Text(_dateLabel.toUpperCase(),
           style: AppTypography.labelCaps.copyWith(
               color: AppColors.onSurfaceVariant, fontSize: 12 * scale)),
+    );
+  }
+}
+
+/// The same quiet text action is used for past set history and future workout
+/// details so moving across the day strip does not change the control language.
+class _WorkoutDetailLink extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final double scale;
+
+  const _WorkoutDetailLink({
+    required this.label,
+    required this.onTap,
+    required this.scale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.inset),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8 * scale),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: AppTypography.labelSm.copyWith(
+                      color: AppColors.accent, fontWeight: FontWeight.w600)),
+              SizedBox(width: 4 * scale),
+              Icon(Icons.arrow_forward_rounded,
+                  size: 14 * scale, color: AppColors.accent),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

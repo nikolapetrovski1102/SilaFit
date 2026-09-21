@@ -5,9 +5,9 @@
 // split and diet plan for the upcoming week, written into the same user-owned tables the
 // manual "My Splits"/"My Diet Plans" builder uses. The model may recommend keeping the
 // user's current split (no training change); the diet plan always covers Monday-Sunday
-// with breakfast/lunch/dinner/snack and carries a week-long shopping list built from the
-// meals' stored ingredients. The plans are left inactive so the user chooses whether to
-// activate the new one or keep their current plan.
+// with breakfast/lunch/dinner plus enough snacks to meet the user's calorie target and
+// carries a week-long shopping list built from the meals' stored ingredients. The diet
+// plan becomes active automatically; a new training split remains a recommendation.
 //
 // Idempotent: a user already recorded in WeeklyAiPlanDeliveries for the target week is
 // skipped, so re-running (or an overlapping run) is harmless.

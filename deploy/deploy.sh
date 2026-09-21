@@ -453,8 +453,8 @@ ok "cron installed: /etc/cron.d/silen-notification-publish -> $SCRIPT_DIR/run-no
 # ---- 13. weekly AI plan generation cron -------------------------------------
 # Generates + delivers a fresh custom split + diet plan for every active
 # ADVANCED subscriber (see the silen-weekly-plan-generation compose service).
-# Plans are left inactive so the user chooses whether to activate them. Runs
-# Sunday morning so the
+# The generated diet plan becomes active automatically; a new split remains a
+# recommendation. Runs Sunday morning so the
 # week it summarizes (Mon-Sun) has just closed. Re-running deploy.sh just
 # rewrites the same two files; WeeklyAiPlanDeliveries dedupes any overlap.
 log "Installing weekly AI plan generation cron (06:00 on Sundays)"

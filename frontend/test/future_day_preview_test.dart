@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:silafit/features/splits/splits_models.dart';
+import 'package:silafit/core/widgets/container_transform.dart';
 import 'package:silafit/features/today/today_models.dart';
 import 'package:silafit/features/today/widgets/overview_card.dart';
 import 'package:silafit/features/today/workout_preview_screen.dart';
@@ -141,11 +142,14 @@ void main() {
 
       expect(find.text('View full workout'), findsOneWidget);
       expect(find.text('Barbell row'), findsNothing);
+      expect(find.byType(ElevatedButton), findsNothing);
+      expect(find.byType(ContainerTransform), findsNothing);
 
       await tester.tap(find.text('View full workout'));
       await tester.pumpAndSettle();
 
       expect(find.byType(WorkoutPreviewScreen), findsOneWidget);
+      expect(find.text('Workout Preview'), findsOneWidget);
       expect(find.text('Pull strength'), findsOneWidget);
       expect(find.text('From Strength rotation'), findsOneWidget);
       expect(find.text('Barbell row'), findsOneWidget);
