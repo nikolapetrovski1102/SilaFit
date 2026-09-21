@@ -8,8 +8,7 @@ import 'package:silafit/features/plans/plans_controller.dart';
 import 'package:silafit/features/plans/plans_repository.dart';
 import 'package:silafit/features/progress/analytics_models.dart';
 import 'package:silafit/features/progress/analytics_repository.dart';
-import 'package:silafit/features/progress/monthly_overview_mock.dart';
-import 'package:silafit/features/progress/weekly_overview_mock.dart';
+import 'support/analytics_fixtures.dart';
 import 'package:silafit/features/today/today_controller.dart';
 import 'package:silafit/features/today/today_repository.dart';
 import 'package:silafit/features/today/widgets/ai_insights_teaser_card.dart';
@@ -41,14 +40,14 @@ class FakeAnalytics extends AnalyticsRepository {
   Future<MonthlyAnalytics> getMonthly(
       {int? year, int? month, bool refresh = false}) async {
     monthly++;
-    return buildSimulatedMonthlyAnalytics();
+    return monthlyAnalyticsFixture();
   }
 
   @override
   Future<WeeklyAnalytics> getWeekly(
       {int? year, int? week, bool refresh = false}) async {
     weekly++;
-    return buildSimulatedWeeklyAnalytics();
+    return weeklyAnalyticsFixture();
   }
 }
 
@@ -74,7 +73,7 @@ void main() {
               const MaterialApp(home: Scaffold(body: AiInsightsTeaserCard()))));
       await tester.pumpAndSettle();
       // Home resolves the subscription only; report details stay unloaded
-      // until the user explicitly opens the monthly/weekly preview.
+      // until the user explicitly opens the monthly/weekly overview.
       expect(analytics.monthly, 0);
       expect(analytics.weekly, 0);
       expect(

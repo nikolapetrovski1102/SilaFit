@@ -7,22 +7,28 @@ import 'package:silafit/features/today/today_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:silafit/features/onboarding/widgets/numeric_wheel_picker.dart';
 import 'package:silafit/features/progress/analytics_models.dart';
-import 'package:silafit/features/progress/monthly_overview_mock.dart';
 import 'package:silafit/features/progress/monthly_overview_screen.dart';
 import 'package:silafit/features/progress/monthly_training_chart.dart';
-import 'package:silafit/features/progress/weekly_overview_mock.dart';
+
+import 'support/analytics_fixtures.dart';
 
 Future<void> openRecap(WidgetTester tester,
     {AnalyticsRecap? analytics,
     bool reducedMotion = false,
     VoidCallback? onDone}) async {
-  await tester.pumpWidget(MaterialApp(
-      home: MediaQuery(
-          data: MediaQueryData(disableAnimations: reducedMotion),
-          child: MonthlyOverviewScreen(
-              analytics: analytics ?? buildSimulatedMonthlyAnalytics(),
-              preview: true,
-              onDone: onDone ?? () {}))));
+  final api = _OverviewApi();
+  await tester.pumpWidget(MultiProvider(
+      providers: [
+        Provider<ApiClient>.value(value: api),
+        ChangeNotifierProvider<TodayController>.value(
+            value: _SuccessfulWeightController(api)),
+      ],
+      child: MaterialApp(
+          home: MediaQuery(
+              data: MediaQueryData(disableAnimations: reducedMotion),
+              child: MonthlyOverviewScreen(
+                  analytics: analytics ?? monthlyAnalyticsFixture(),
+                  onDone: onDone ?? () {})))));
   await tester.pumpAndSettle();
 }
 
@@ -118,9 +124,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wheel starts at latest weight and preview save advances',
+  testWidgets('wheel starts at latest weight and save advances',
       (tester) async {
-    final analytics = buildSimulatedMonthlyAnalytics();
+    final analytics = monthlyAnalyticsFixture();
     await openRecap(tester, analytics: analytics, reducedMotion: true);
     for (var i = 0; i < 4; i++) {
       await next(tester);
@@ -140,13 +146,13 @@ void main() {
     await tester.tap(find.text('Save weight & continue'));
     await tester.pumpAndSettle();
     expect(find.text('Your next chapter'), findsOneWidget);
-    expect(find.text('Preview weight updated. No data saved.'), findsOneWidget);
+    expect(find.text('Weight saved.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('chart animation completes and flat load is described accurately',
       (tester) async {
-    final exercise = buildSimulatedMonthlyAnalytics().exercises.last;
+    final exercise = monthlyAnalyticsFixture().exercises.last;
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: MonthlyTrainingChart(exercises: [exercise], active: true))));
@@ -196,7 +202,7 @@ void main() {
         ],
         child: MaterialApp(
             home: MonthlyOverviewScreen(
-                analytics: buildSimulatedMonthlyAnalytics(), onDone: () {}))));
+                analytics: monthlyAnalyticsFixture(), onDone: () {}))));
     await tester.pumpAndSettle();
     for (var i = 0; i < 4; i++) {
       await next(tester);
@@ -228,25 +234,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('weekly recap appends meal and split recommendation slides',
+  testWidgets('weekly recap appends meal plan and next-week training slides',
       (tester) async {
     await openRecap(tester,
-        analytics: buildSimulatedWeeklyAnalytics(), reducedMotion: true);
+        analytics: weeklyAnalyticsFixture(), reducedMotion: true);
     expect(find.text('You showed up.\nThat matters.'), findsOneWidget);
     // Six shared slides, then the two Advanced-only recommendation slides.
     for (var i = 0; i < 6; i++) {
       await advance(tester);
     }
-    expect(find.text('Fuel the week ahead'), findsOneWidget);
+    expect(find.text('AI recommended meals for 7 days'), findsOneWidget);
+    expect(find.text('Day 1'), findsWidgets);
+    expect(find.text('Day 7'), findsOneWidget);
     expect(find.text('Grilled chicken & rice bowl'), findsOneWidget);
+    expect(find.text('Macros · P 48g · C 62g · F 18g'), findsOneWidget);
     expect(
         find.text(
             'Ingredients · Chicken breast · brown rice · broccoli · olive oil · +2 more'),
         findsOneWidget);
-    expect(find.text('Add to today’s plan'), findsWidgets);
+    expect(find.text('Add to Day 1'), findsWidgets);
+    await tester.drag(find.byType(ListView), const Offset(-300, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Day 7'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add to Day 7'), findsWidgets);
     await advance(tester);
-    expect(find.text('Ready for a change?'), findsOneWidget);
-    expect(find.text('Switch to this split'), findsOneWidget);
+    expect(find.text('Stay with your current split'), findsOneWidget);
+    expect(find.text('Push · Pull · Legs'), findsOneWidget);
+    expect(find.text('Recovery day'), findsWidgets);
+    expect(find.text('Review my split'), findsOneWidget);
+    expect(find.text('Switch to this split'), findsNothing);
     expect(find.text('Continue to dashboard'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -299,6 +316,108 @@ class _WeightApi implements ApiClient {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _OverviewApi implements ApiClient {
+  @override
+  Future<T> get<T>(String path, T Function(dynamic) parse,
+      {Map<String, String>? query}) async {
+    final Object payload = switch (path) {
+      '/today' => <String, dynamic>{
+          'latestWeightKg': 82.9,
+          'session': <String, dynamic>{},
+          'activeSplit': <String, dynamic>{
+            'splitId': 'split-ppl',
+            'name': 'Push · Pull · Legs',
+            'durationDays': 7,
+            'activatedAtUtc': '2026-09-21T00:00:00Z',
+          },
+        },
+      '/meals/suggestions' => <Map<String, dynamic>>[
+          {
+            'mealSuggestionId': 'meal-oats',
+            'title': 'Protein berry oats',
+            'mealType': 'Breakfast',
+            'caloriesKcal': 510,
+            'proteinG': 34,
+            'carbsG': 67,
+            'fatsG': 12,
+            'ingredientPreview':
+                'Rolled oats · whey protein · blueberries · almond milk',
+            'ingredientCount': 5,
+            'matchScore': 96,
+            'matchReason': 'Balanced start to the day',
+          },
+          {
+            'mealSuggestionId': 'meal-chicken',
+            'title': 'Grilled chicken & rice bowl',
+            'mealType': 'Lunch',
+            'caloriesKcal': 620,
+            'proteinG': 48,
+            'carbsG': 62,
+            'fatsG': 18,
+            'ingredientPreview':
+                'Chicken breast · brown rice · broccoli · olive oil',
+            'ingredientCount': 6,
+            'matchScore': 94,
+            'matchReason': 'High protein · fits your lunch calorie target',
+          },
+          {
+            'mealSuggestionId': 'meal-salmon',
+            'title': 'Salmon & roasted vegetables',
+            'mealType': 'Dinner',
+            'caloriesKcal': 680,
+            'proteinG': 46,
+            'carbsG': 48,
+            'fatsG': 30,
+            'ingredientPreview': 'Salmon · sweet potato · zucchini · olive oil',
+            'ingredientCount': 4,
+            'matchScore': 92,
+            'matchReason': 'Protein and healthy fats for dinner',
+          },
+        ],
+      '/splits/split-ppl' => <String, dynamic>{
+          'split': <String, dynamic>{
+            'splitId': 'split-ppl',
+            'name': 'Push · Pull · Legs',
+            'category': 'PushPullLegs',
+            'level': 'Intermediate',
+            'durationDays': 6,
+            'isSystemDefault': true,
+            'recommendedGoal': 'BuildMuscle',
+            'matchesGoal': true,
+            'matchScore': 92,
+            'matchReason':
+                'Matched to your Build Muscle goal · Intermediate · 6 days',
+          },
+          'days': <Map<String, dynamic>>[
+            for (var i = 0; i < 7; i++)
+              {
+                'day': <String, dynamic>{
+                  'splitDayId': 'day-$i',
+                  'dayIndex': i,
+                  'title': i == 3 ? 'Recovery' : 'Training day ${i + 1}',
+                  'estimatedMinutes': i == 3 ? 0 : 60,
+                  'isRestDay': i == 3,
+                },
+                'exercises': <Map<String, dynamic>>[],
+              },
+          ],
+        },
+      _ => throw StateError('Unexpected GET $path'),
+    };
+    return parse(payload);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _SuccessfulWeightController extends TodayController {
+  _SuccessfulWeightController(ApiClient api) : super(TodayRepository(api));
+
+  @override
+  Future<bool> logBodyweight(double weightKg) async => true;
 }
 
 class _WeightController extends TodayController {

@@ -160,9 +160,9 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
           ? 'Checking your subscription…'
           : _message ??
               (weekly
-                  ? 'Open your weekly preview'
+                  ? 'Open your weekly overview'
                   : paid
-                      ? 'Open your monthly preview'
+                      ? 'Open your monthly overview'
                       : 'Pro: monthly · Advanced: weekly'),
       scale: widget.scale,
       borderColor: AppColors.secondary.withValues(alpha: 0.3),

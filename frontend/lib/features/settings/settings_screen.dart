@@ -17,9 +17,6 @@ import '../auth/auth_controller.dart';
 import '../notifications/push_messaging_service.dart';
 import '../onboarding/onboarding_flow_screen.dart';
 import '../plans/plans_screen.dart';
-import '../progress/monthly_overview_mock.dart';
-import '../progress/monthly_overview_screen.dart';
-import '../progress/weekly_overview_mock.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
 
@@ -171,29 +168,15 @@ class _SettingsContent extends StatelessWidget {
             ],
           ),
         ),
-        // Preview data is a developer aid only. `kDebugMode` is a compile-time
-        // constant, so this entire section and its mock-data builders are tree
-        // shaken out of profile/release builds.
+        // Keep development-only controls isolated from profile/release builds.
+        // Analytics previews deliberately live on the Progress screen so even
+        // debug builds exercise the authenticated production-data path.
         if (kDebugMode) ...[
           const SizedBox(height: AppSpacing.lg),
           const SectionEyebrow('Developer'),
           const SizedBox(height: AppSpacing.sm),
-          SectionCard(
-            child: Column(
-              children: [
-                const _OnboardingDebugToggle(),
-                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-                _LinkRow(
-                  label: 'Simulate monthly overview',
-                  onTap: () => _simulateMonthlyOverview(context),
-                ),
-                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-                _LinkRow(
-                  label: 'Simulate weekly overview (Advanced)',
-                  onTap: () => _simulateWeeklyOverview(context),
-                ),
-              ],
-            ),
+          const SectionCard(
+            child: Column(children: [_OnboardingDebugToggle()]),
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
@@ -314,39 +297,6 @@ class _SettingsContent extends StatelessWidget {
       messenger.showSnackBar(const SnackBar(
           content: Text('Could not delete your account. Please try again.')));
     }
-  }
-
-  /// Dev-only preview: builds a fresh on-device mock report (see
-  /// `monthly_overview_mock.dart`) and pushes the full recap flow exactly as
-  /// a real user would see it, without touching the backend or requiring a
-  /// month of seeded history first. Debug builds only - gated by the
-  /// `kDebugMode` check around this whole Developer section.
-  void _simulateMonthlyOverview(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (routeContext) => MonthlyOverviewScreen(
-          analytics: buildSimulatedMonthlyAnalytics(),
-          preview: true,
-          onDone: () => Navigator.of(routeContext).pop(),
-        ),
-      ),
-    );
-  }
-
-  /// Same dev-only preview as [_simulateMonthlyOverview], but for the
-  /// ADVANCED weekly recap - including the meal/split recommendation slides.
-  void _simulateWeeklyOverview(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (routeContext) => MonthlyOverviewScreen(
-          analytics: buildSimulatedWeeklyAnalytics(),
-          preview: true,
-          onDone: () => Navigator.of(routeContext).pop(),
-        ),
-      ),
-    );
   }
 }
 

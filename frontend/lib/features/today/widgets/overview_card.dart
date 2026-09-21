@@ -12,6 +12,7 @@ import '../../../core/widgets/progress_ring.dart';
 import '../../../core/widgets/silen_button.dart';
 import '../../splits/splits_models.dart';
 import '../today_models.dart';
+import '../workout_preview_screen.dart';
 import 'day_preview.dart';
 import 'day_scroll_strip.dart';
 import 'set_history_screen.dart';
@@ -123,6 +124,7 @@ class TodayOverviewCard extends StatelessWidget {
               scale: scale,
               isResumingWorkout: isResumingWorkout,
               workoutProgress: workoutProgress,
+              splitName: dashboard.activeSplit?.name,
             ),
           ),
         ),
@@ -143,6 +145,7 @@ class _SessionSection extends StatelessWidget {
   final double scale;
   final bool isResumingWorkout;
   final double workoutProgress;
+  final String? splitName;
 
   const _SessionSection({
     required this.preview,
@@ -151,6 +154,7 @@ class _SessionSection extends StatelessWidget {
     required this.scale,
     this.isResumingWorkout = false,
     this.workoutProgress = 0,
+    this.splitName,
   });
 
   @override
@@ -236,13 +240,11 @@ class _SessionSection extends StatelessWidget {
   }
 
   /// A day - future or already gone - that the active split has scheduled
-  /// but isn't today, so there's nothing to start: just what's coming up.
+  /// but isn't today. Home stays concise and opens the full plan separately.
   Widget _buildUpcomingPreview() {
     final minutesLabel = preview.estimatedMinutes != null
         ? formatMinutesLabel(preview.estimatedMinutes!)
         : null;
-    final exercises = [...preview.scheduledExercises]
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -287,45 +289,21 @@ class _SessionSection extends StatelessWidget {
         ),
         if (minutesLabel != null) ...[
           SizedBox(height: AppSpacing.lg * scale),
-          if (exercises.isNotEmpty) ...[
-            Text('WORKOUT PREVIEW',
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.accent, fontSize: 11 * scale)),
-            SizedBox(height: AppSpacing.sm * scale),
-            ...exercises.take(3).map((exercise) => Padding(
-                  padding: EdgeInsets.only(bottom: AppSpacing.xs * scale),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 5 * scale,
-                        height: 5 * scale,
-                        decoration: BoxDecoration(
-                          color: AppColors.accent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      SizedBox(width: AppSpacing.sm * scale),
-                      Expanded(
-                        child: Text(exercise.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodyMd),
-                      ),
-                      SizedBox(width: AppSpacing.sm * scale),
-                      Text(
-                        '${exercise.targetSets} × ${exercise.targetRepsLow}-${exercise.targetRepsHigh}',
-                        style: AppTypography.bodySm
-                            .copyWith(color: AppColors.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                )),
-            if (exercises.length > 3)
-              Text('+${exercises.length - 3} more exercises',
-                  style: AppTypography.bodySm
-                      .copyWith(color: AppColors.onSurfaceVariant)),
-            SizedBox(height: AppSpacing.md * scale),
-          ],
+          ContainerTransform(
+            openBuilder: (_) => WorkoutPreviewScreen(
+              preview: preview,
+              splitName: splitName,
+            ),
+            closedColor: AppColors.accent,
+            radius: AppRadius.full,
+            closedBuilder: (context, openContainer) => PrimaryPillButton(
+              label: 'View full workout',
+              icon: Icons.visibility_outlined,
+              height: (48 * scale).clamp(48, 72),
+              onPressed: openContainer,
+            ),
+          ),
+          SizedBox(height: AppSpacing.md * scale),
           Row(
             children: [
               Icon(Icons.event_repeat_rounded,

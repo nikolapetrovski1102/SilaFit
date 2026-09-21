@@ -17,9 +17,9 @@ forgotten flag is obvious immediately instead of quietly hitting the wrong host.
 
 ## `dev.json`
 
-Defaults to `http://localhost:5080/api`, for the macOS desktop / iOS simulator
-inner loop against the locally-running stack from `docs/starting-the-stack.md`.
-Swap the value for whichever local target you're actually running against:
+Defaults to the production API, `https://api.sila.fitness/api`, so debug builds
+exercise the same authenticated data as release builds. To work against a
+locally-running backend instead, change the value for the target you use:
 
 | Target | `API_BASE_URL` |
 |---|---|
@@ -28,9 +28,8 @@ Swap the value for whichever local target you're actually running against:
 | Physical device over LAN | `http://<mac's LAN IP>:5080/api` (`ipconfig getifaddr en0`) |
 | Android emulator | `http://10.0.2.2:5080/api` |
 
-The LAN IP changes when Wi-Fi reconnects or you switch networks - re-check it
-and edit this file rather than passing an ad-hoc `--dart-define` override, so
-the committed default stays what the team actually runs against.
+The LAN IP changes when Wi-Fi reconnects or you switch networks, so re-check it
+before temporarily pointing the file at a physical-device development server.
 
 ## `prod.json`
 

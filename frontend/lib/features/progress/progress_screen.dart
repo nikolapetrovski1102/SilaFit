@@ -453,21 +453,21 @@ class _AiMonthlyReviewSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const _AiReviewEntry(
         title: 'AI Monthly Review',
-        description: 'Open your monthly preview',
+        description: 'Open your monthly overview',
         tier: 'PRO',
         weekly: false,
       );
 }
 
 /// Advanced-only weekly review entry point. As with the monthly entry, no
-/// generated content is displayed or requested until the preview is opened.
+/// generated content is displayed or requested until the overview is opened.
 class _AiWeeklyReviewSection extends StatelessWidget {
   const _AiWeeklyReviewSection();
 
   @override
   Widget build(BuildContext context) => const _AiReviewEntry(
         title: 'AI Weekly Review',
-        description: 'Open your weekly preview',
+        description: 'Open your weekly overview',
         tier: 'ADVANCED',
         weekly: true,
       );

@@ -1,13 +1,15 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+export 'core/widgets/silen_ambient_backdrop.dart';
+
 import 'core/platform/device_timezone.dart';
 import 'core/theme/app_colors.dart';
 import 'core/widgets/bottom_nav_bar.dart';
+import 'core/widgets/silen_ambient_backdrop.dart';
 import 'features/auth/account_gate.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/meals/meal_planning_screen.dart';
@@ -233,78 +235,6 @@ class _AnimatedTabState extends State<_AnimatedTab>
     return FadeTransition(
       opacity: _fade,
       child: SlideTransition(position: _rise, child: widget.child),
-    );
-  }
-}
-
-/// Soft ambient glow behind every tab - two blurred accent-color blobs
-/// pinned off-screen at opposite corners, so the flat page background reads
-/// as atmosphere rather than a single flat fill. Resolves the accent from the
-/// inherited [Theme], rather than [AppColors]'s ambient static value, so this
-/// layer is explicitly rebuilt when the app's brightness changes.
-///
-/// Static (nothing here ever animates), so [RepaintBoundary] lets Flutter
-/// rasterize it once and reuse that layer rather than reprocessing the blur
-/// every frame - cheap even though the blur radius itself is large.
-/// [IgnorePointer] keeps it from stealing any taps meant for the real
-/// content stacked on top of it.
-class SilenAmbientBackdrop extends StatelessWidget {
-  const SilenAmbientBackdrop({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final accent = AppColors.paletteFor(brightness).accent;
-
-    return IgnorePointer(
-      child: RepaintBoundary(
-        // A theme switch must discard the cached blurred layer. Without a
-        // color-dependent key, the boundary can retain pixels rasterized for
-        // the previous palette even after the surrounding UI has changed.
-        key: ValueKey(accent),
-        child: ClipRect(
-          child: Stack(
-            children: [
-              Positioned(
-                top: -140,
-                right: -120,
-                child: _GlowBlob(diameter: 340, color: accent),
-              ),
-              Positioned(
-                bottom: -160,
-                left: -130,
-                child: _GlowBlob(diameter: 380, color: accent),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlowBlob extends StatelessWidget {
-  final double diameter;
-  final Color color;
-
-  const _GlowBlob({required this.diameter, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    // ImageFiltered blurs this one static shape into a soft glow - unlike
-    // BackdropFilter (used for the nav pill's frosted glass) it never needs
-    // to keep sampling whatever's moving underneath, so it stays cheap on
-    // every platform.
-    return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 90, sigmaY: 90),
-      child: Container(
-        width: diameter,
-        height: diameter,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withOpacity(0.28),
-        ),
-      ),
     );
   }
 }

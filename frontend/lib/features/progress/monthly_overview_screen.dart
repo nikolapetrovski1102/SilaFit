@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import '../onboarding/onboarding_repository.dart';
@@ -17,15 +16,15 @@ import '../meals/meal_controller.dart';
 import '../meals/meal_models.dart';
 import '../meals/meal_repository.dart';
 import '../meals/meal_suggestion_detail_screen.dart';
-import '../splits/split_recommendation.dart';
 import '../splits/splits_controller.dart';
 import '../splits/split_detail_screen.dart';
 import '../splits/splits_models.dart';
 import '../splits/splits_repository.dart';
+import '../today/today_models.dart';
+import '../today/widgets/day_preview.dart';
 import 'analytics_models.dart';
 import 'monthly_training_chart.dart';
 import 'recap_animation.dart';
-import 'weekly_overview_mock.dart';
 
 /// The Stories-style recap slideshow. Renders the Pro monthly report and, for
 /// ADVANCED subscribers, the weekly report - the six shared slides plus two
@@ -33,13 +32,9 @@ import 'weekly_overview_mock.dart';
 /// weekly recap carries.
 class MonthlyOverviewScreen extends StatefulWidget {
   final AnalyticsRecap analytics;
-  final bool preview;
   final VoidCallback onDone;
   const MonthlyOverviewScreen(
-      {super.key,
-      required this.analytics,
-      this.preview = false,
-      required this.onDone});
+      {super.key, required this.analytics, required this.onDone});
   @override
   State<MonthlyOverviewScreen> createState() => _MonthlyOverviewScreenState();
 }
@@ -58,19 +53,10 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
   double? _latestWeight;
   int _weightTenths = 700;
   String? _weightError;
-  // Never honor preview mode in profile/release builds. This keeps every
-  // production recap on the authenticated API/data path even if a caller is
-  // accidentally constructed with preview=true.
-  bool get _preview => kDebugMode && widget.preview;
-
   @override
   void initState() {
     super.initState();
-    if (_preview) {
-      _setInitialWeight(widget.analytics.summary.endWeightKg);
-    } else {
-      _loadWeight();
-    }
+    _loadWeight();
   }
 
   void _setInitialWeight(double? value) {
@@ -107,23 +93,18 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
     });
     try {
       final value = _weightTenths / 10;
-      if (!_preview) {
-        final saved =
-            await context.read<TodayController>().logBodyweight(value);
-        if (!saved) {
-          if (mounted) {
-            setState(() =>
-                _weightError = 'Could not save your weight. Please try again.');
-          }
-          return;
+      final saved = await context.read<TodayController>().logBodyweight(value);
+      if (!saved) {
+        if (mounted) {
+          setState(() =>
+              _weightError = 'Could not save your weight. Please try again.');
         }
+        return;
       }
       if (!mounted) return;
       setState(() => _latestWeight = value);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_preview
-              ? 'Preview weight updated. No data saved.'
-              : 'Weight saved.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Weight saved.')));
       await _next();
     } catch (_) {
       if (mounted) {
@@ -192,8 +173,6 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                     icon: const Icon(Icons.close_rounded)),
               ]),
             ),
-            if (_preview)
-              Text('Preview · Sample data', style: AppTypography.labelSm),
             Expanded(
                 child: PageView(
               controller: _pageController,
@@ -291,8 +270,8 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                 // Advanced-only: the weekly recap closes with concrete things to
                 // add rather than just advice.
                 if (analytics.isWeekly) ...[
-                  _MealSuggestionsSlide(preview: _preview),
-                  _SplitSuggestionSlide(preview: _preview),
+                  const _WeeklyMealPlanSlide(),
+                  _NextWeekTrainingSlide(analytics: analytics),
                 ],
               ]
                   .asMap()
@@ -779,23 +758,24 @@ class _RecapIcon extends StatelessWidget {
   }
 }
 
-/// Advanced-only recap slide: the top meal ideas from the existing
-/// recommendation engine, each addable to today's plan as a Planned meal - the
-/// same write path the Nutrition screen uses when activating a suggestion.
-class _MealSuggestionsSlide extends StatefulWidget {
-  final bool preview;
-  const _MealSuggestionsSlide({required this.preview});
+/// Advanced-only recap slide: a seven-day plan assembled from the existing
+/// person-fit recommendation feed. Each day gets breakfast, lunch and dinner,
+/// and adding a meal writes it to that specific day as a Planned meal.
+class _WeeklyMealPlanSlide extends StatefulWidget {
+  const _WeeklyMealPlanSlide();
 
   @override
-  State<_MealSuggestionsSlide> createState() => _MealSuggestionsSlideState();
+  State<_WeeklyMealPlanSlide> createState() => _WeeklyMealPlanSlideState();
 }
 
-class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
-  static const _maxRecommendations = 3;
+class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
+  static const _dayCount = 7;
+  static const _mealTypes = ['Breakfast', 'Lunch', 'Dinner'];
 
-  List<MealSuggestion> _suggestions = const [];
-  final Set<String> _addedIds = {};
-  final Set<String> _busyIds = {};
+  List<_RecommendedMealDay> _days = const [];
+  final Set<String> _addedSlots = {};
+  final Set<String> _busySlots = {};
+  int _selectedDay = 0;
   bool _loading = true;
   bool _failed = false;
 
@@ -806,23 +786,23 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
   }
 
   Future<void> _load() async {
-    if (widget.preview) {
-      setState(() {
-        _suggestions = simulatedMealSuggestions();
-        _loading = false;
-      });
-      return;
-    }
     try {
       final api = context.read<ApiClient>();
       final all = await MealRepository(api).getSuggestions();
       // The server already ranks best-first, but sort defensively so the top
-      // three are the strongest person-fit matches regardless of payload order.
-      final ranked = [...all]
-        ..sort((a, b) => (b.matchScore ?? 0).compareTo(a.matchScore ?? 0));
+      // matches remain strongest regardless of payload order. Meals with an
+      // ingredient preview come first because a usable weekly plan must tell
+      // the user what each meal contains.
+      final ranked = [...all]..sort((a, b) {
+          final ingredientOrder = (b.compactIngredientSummary != null ? 1 : 0)
+              .compareTo(a.compactIngredientSummary != null ? 1 : 0);
+          return ingredientOrder != 0
+              ? ingredientOrder
+              : (b.matchScore ?? 0).compareTo(a.matchScore ?? 0);
+        });
       if (!mounted) return;
       setState(() {
-        _suggestions = ranked.take(_maxRecommendations).toList();
+        _days = _buildWeek(ranked, DateUtils.dateOnly(DateTime.now()));
         _loading = false;
       });
     } catch (_) {
@@ -834,24 +814,45 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
     }
   }
 
-  Future<void> _add(MealSuggestion suggestion) async {
-    final id = suggestion.mealSuggestionId;
-    if (_busyIds.contains(id) || _addedIds.contains(id)) return;
-    setState(() => _busyIds.add(id));
+  List<_RecommendedMealDay> _buildWeek(
+      List<MealSuggestion> ranked, DateTime startDate) {
+    if (ranked.isEmpty) return const [];
+    final byType = <String, List<MealSuggestion>>{
+      for (final type in _mealTypes)
+        type: ranked.where((meal) => meal.mealType == type).toList(),
+    };
 
-    if (widget.preview) {
-      setState(() {
-        _busyIds.remove(id);
-        _addedIds.add(id);
-      });
-      _showMessage('Preview only - no meal was added.');
-      return;
-    }
+    return List.generate(_dayCount, (dayIndex) {
+      final meals = <MealSuggestion>[];
+      for (var slotIndex = 0; slotIndex < _mealTypes.length; slotIndex++) {
+        final matching = byType[_mealTypes[slotIndex]]!;
+        final source = matching.isEmpty ? ranked : matching;
+        final index = matching.isEmpty
+            ? dayIndex * _mealTypes.length + slotIndex
+            : dayIndex;
+        meals.add(source[index % source.length]);
+      }
+      return _RecommendedMealDay(
+        dayNumber: dayIndex + 1,
+        date: startDate.add(Duration(days: dayIndex)),
+        meals: meals,
+      );
+    });
+  }
+
+  String _slotId(_RecommendedMealDay day, int mealIndex) =>
+      '${day.dayNumber}:$mealIndex';
+
+  Future<void> _add(
+      _RecommendedMealDay day, int mealIndex, MealSuggestion suggestion) async {
+    final slotId = _slotId(day, mealIndex);
+    if (_busySlots.contains(slotId) || _addedSlots.contains(slotId)) return;
+    setState(() => _busySlots.add(slotId));
 
     try {
       final api = context.read<ApiClient>();
       await MealRepository(api).createLog(
-        logDate: DateTime.now(),
+        logDate: day.date,
         mealType: suggestion.mealType,
         title: suggestion.title,
         caloriesKcal: suggestion.caloriesKcal,
@@ -871,13 +872,14 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
       }
       if (!mounted) return;
       setState(() {
-        _busyIds.remove(id);
-        _addedIds.add(id);
+        _busySlots.remove(slotId);
+        _addedSlots.add(slotId);
       });
-      _showMessage('${suggestion.title} added to today’s plan.');
+      _showMessage(
+          '${suggestion.title} added to Day ${day.dayNumber} (${_shortWeekday(day.date)}).');
     } catch (_) {
       if (!mounted) return;
-      setState(() => _busyIds.remove(id));
+      setState(() => _busySlots.remove(slotId));
       _showMessage('Could not add that meal. Please try again.');
     }
   }
@@ -891,11 +893,11 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
   @override
   Widget build(BuildContext context) {
     return _SlideScaffold(
-      eyebrow: 'Meals to try',
+      eyebrow: '7-day meal plan',
       icon: Icons.restaurant_rounded,
-      headline: 'Fuel the week ahead',
+      headline: 'AI recommended meals for 7 days',
       subhead:
-          'Picked for your goal and current targets. Add one to today’s plan and confirm it when you eat it.',
+          'Three meals per day, picked for your goal and current targets. Review the ingredients and macros, then add the meals you want.',
       stats: const [],
       footer: _buildList(),
     );
@@ -911,79 +913,109 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
       return Text('Could not load meal ideas right now.',
           style: AppTypography.bodySm);
     }
-    if (_suggestions.isEmpty) {
+    if (_days.isEmpty) {
       return Text(
           'No meal ideas yet - check back once more meals are recommended.',
           style: AppTypography.bodySm);
     }
+    final day = _days[_selectedDay];
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final suggestion in _suggestions)
+        SizedBox(
+          height: 42,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _days.length,
+            separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.xs),
+            itemBuilder: (context, index) {
+              final item = _days[index];
+              return ChoiceChip(
+                selected: index == _selectedDay,
+                label: Text('Day ${item.dayNumber}'),
+                onSelected: (_) => setState(() => _selectedDay = index),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+            'Day ${day.dayNumber} · ${_shortWeekday(day.date)}, ${_shortMonthDay(day.date)}',
+            style: AppTypography.headlineSm),
+        const SizedBox(height: AppSpacing.sm),
+        for (var mealIndex = 0; mealIndex < day.meals.length; mealIndex++)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
             child: ContainerTransform(
               openBuilder: (_) => MealSuggestionDetailScreen(
                 controller: MealSuggestionActivationController(
-                    context.read<MealController>(), suggestion),
-                readOnly: widget.preview,
+                    context.read<MealController>(), day.meals[mealIndex]),
               ),
-              closedBuilder: (context, openContainer) => GestureDetector(
-                onTap: openContainer,
-                child: SectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(suggestion.title,
-                                style: AppTypography.headlineSm),
-                          ),
-                          Icon(Icons.open_in_full_rounded,
-                              size: 18, color: AppColors.accent),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                          '${suggestion.mealType} · ${suggestion.caloriesKcal} kcal · ${suggestion.proteinG}g protein',
-                          style: AppTypography.bodySm
-                              .copyWith(color: AppColors.onSurfaceVariant)),
-                      if (suggestion.matchReason != null) ...[
-                        const SizedBox(height: 4),
-                        Text(suggestion.matchReason!,
+              closedBuilder: (context, openContainer) {
+                final suggestion = day.meals[mealIndex];
+                final slotId = _slotId(day, mealIndex);
+                return GestureDetector(
+                  onTap: openContainer,
+                  child: SectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(suggestion.title,
+                                  style: AppTypography.headlineSm),
+                            ),
+                            Icon(Icons.open_in_full_rounded,
+                                size: 18, color: AppColors.accent),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                            '${suggestion.mealType} · ${suggestion.caloriesKcal} kcal',
                             style: AppTypography.bodySm
                                 .copyWith(color: AppColors.onSurfaceVariant)),
+                        const SizedBox(height: 4),
+                        Text(
+                            'Macros · P ${suggestion.proteinG}g · C ${suggestion.carbsG}g · F ${suggestion.fatsG}g',
+                            style: AppTypography.labelSm
+                                .copyWith(color: AppColors.accent)),
+                        if (suggestion.compactIngredientSummary
+                            case final ingredients?) ...[
+                          const SizedBox(height: 6),
+                          Text('Ingredients · $ingredients',
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodySm
+                                  .copyWith(color: AppColors.onSurface)),
+                        ] else ...[
+                          const SizedBox(height: 6),
+                          Text('Ingredients are not available for this meal.',
+                              style: AppTypography.bodySm.copyWith(
+                                  color: AppColors.onSurfaceVariant,
+                                  fontStyle: FontStyle.italic)),
+                        ],
+                        const SizedBox(height: AppSpacing.sm),
+                        SecondaryPillButton(
+                          icon: _addedSlots.contains(slotId)
+                              ? Icons.check_rounded
+                              : Icons.add_rounded,
+                          label: _addedSlots.contains(slotId)
+                              ? 'Added'
+                              : _busySlots.contains(slotId)
+                                  ? 'Adding…'
+                                  : 'Add to Day ${day.dayNumber}',
+                          onPressed: _busySlots.contains(slotId) ||
+                                  _addedSlots.contains(slotId)
+                              ? null
+                              : () => _add(day, mealIndex, suggestion),
+                        ),
                       ],
-                      if (suggestion.compactIngredientSummary
-                          case final ingredients?) ...[
-                        const SizedBox(height: 6),
-                        Text('Ingredients · $ingredients',
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodySm
-                                .copyWith(color: AppColors.onSurface)),
-                      ],
-                      const SizedBox(height: AppSpacing.sm),
-                      SecondaryPillButton(
-                        icon: _addedIds.contains(suggestion.mealSuggestionId)
-                            ? Icons.check_rounded
-                            : Icons.add_rounded,
-                        label: _addedIds.contains(suggestion.mealSuggestionId)
-                            ? 'Added'
-                            : _busyIds.contains(suggestion.mealSuggestionId)
-                                ? 'Adding…'
-                                : 'Add to today’s plan',
-                        onPressed: _busyIds
-                                    .contains(suggestion.mealSuggestionId) ||
-                                _addedIds.contains(suggestion.mealSuggestionId)
-                            ? null
-                            : () => _add(suggestion),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
       ],
@@ -991,23 +1023,63 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
   }
 }
 
-/// Advanced-only recap slide: the single best-ranked split from the existing
-/// split recommendation engine, switchable in one tap via the same activate
-/// endpoint the Splits screen calls.
-class _SplitSuggestionSlide extends StatefulWidget {
-  final bool preview;
-  const _SplitSuggestionSlide({required this.preview});
+class _RecommendedMealDay {
+  final int dayNumber;
+  final DateTime date;
+  final List<MealSuggestion> meals;
 
-  @override
-  State<_SplitSuggestionSlide> createState() => _SplitSuggestionSlideState();
+  const _RecommendedMealDay({
+    required this.dayNumber,
+    required this.date,
+    required this.meals,
+  });
 }
 
-class _SplitSuggestionSlideState extends State<_SplitSuggestionSlide> {
-  SplitMatch? _match;
+String _shortWeekday(DateTime date) => const [
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
+    ][date.weekday - 1];
+
+String _shortMonthDay(DateTime date) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.day}';
+}
+
+/// Advanced-only recap slide: preserves the user's current split and turns it
+/// into a concrete seven-day schedule. The split can be reviewed, but this
+/// weekly surface never encourages program hopping with a one-tap switch.
+class _NextWeekTrainingSlide extends StatefulWidget {
+  final AnalyticsRecap analytics;
+
+  const _NextWeekTrainingSlide({required this.analytics});
+
+  @override
+  State<_NextWeekTrainingSlide> createState() => _NextWeekTrainingSlideState();
+}
+
+class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
+  ActiveSplit? _activeSplit;
+  SplitDetail? _detail;
   bool _loading = true;
   bool _failed = false;
-  bool _activating = false;
-  bool _activated = false;
 
   @override
   void initState() {
@@ -1016,23 +1088,18 @@ class _SplitSuggestionSlideState extends State<_SplitSuggestionSlide> {
   }
 
   Future<void> _load() async {
-    if (widget.preview) {
-      final split = simulatedRecommendedSplit();
-      setState(() {
-        _match = SplitMatch(
-            split: split,
-            score: split.matchScore ?? 0,
-            reason: split.matchReason ?? '');
-        _loading = false;
-      });
-      return;
-    }
     try {
       final api = context.read<ApiClient>();
-      final matches = rankSplitMatches(await SplitsRepository(api).getAll());
+      final dashboard = context.read<TodayController>().state.data ??
+          await TodayRepository(api).getDashboard();
+      final activeSplit = dashboard.activeSplit;
+      final detail = activeSplit == null
+          ? null
+          : await SplitsRepository(api).getDetail(activeSplit.splitId);
       if (!mounted) return;
       setState(() {
-        _match = matches.isEmpty ? null : matches.first;
+        _activeSplit = activeSplit;
+        _detail = detail;
         _loading = false;
       });
     } catch (_) {
@@ -1044,130 +1111,137 @@ class _SplitSuggestionSlideState extends State<_SplitSuggestionSlide> {
     }
   }
 
-  Future<void> _activate() async {
-    final match = _match;
-    if (match == null || _activating || _activated) return;
-    setState(() => _activating = true);
-
-    if (widget.preview) {
-      setState(() {
-        _activating = false;
-        _activated = true;
-      });
-      _showMessage('Preview only - split not activated.');
-      return;
-    }
-
-    try {
-      final api = context.read<ApiClient>();
-      await SplitsRepository(api).activate(match.split.splitId);
-      if (!mounted) return;
-      // Keep the app-wide split/today state in sync so the switch is reflected
-      // on the Splits and Today screens without a manual refresh.
-      try {
-        await context.read<SplitsController>().load(force: true);
-        if (!mounted) return;
-        await context.read<TodayController>().load(force: true);
-      } catch (_) {
-        // No shared controllers in this scope (e.g. tests) - harmless.
-      }
-      if (!mounted) return;
-      setState(() {
-        _activating = false;
-        _activated = true;
-      });
-      _showMessage('${match.split.name} is now your active split.');
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _activating = false);
-      _showMessage('Could not switch splits. Please try again.');
-    }
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
-  }
-
   @override
   Widget build(BuildContext context) {
     return _SlideScaffold(
-      eyebrow: 'A split to try',
+      eyebrow: 'Plan for next week',
       icon: Icons.calendar_view_week_rounded,
-      headline: 'Ready for a change?',
+      headline: 'Stay with your current split',
       subhead:
-          'The protocol that fits your goal and experience best right now. Switch whenever you’re ready.',
+          'Consistency makes your progress measurable. Here is your active rotation for the next seven days, with one focused adjustment from this week.',
       stats: const [],
-      footer: _buildCard(),
+      footer: _buildPlan(),
     );
   }
 
-  Widget _buildCard() {
+  Widget _buildPlan() {
     if (_loading) {
       return const Padding(
           padding: EdgeInsets.all(24),
           child: Center(child: CircularProgressIndicator()));
     }
     if (_failed) {
-      return Text('Could not load a split recommendation right now.',
+      return Text('Could not load your training plan right now.',
           style: AppTypography.bodySm);
     }
-    final match = _match;
-    if (match == null) {
-      return Text('No split recommendation yet.', style: AppTypography.bodySm);
+    final activeSplit = _activeSplit;
+    final detail = _detail;
+    if (activeSplit == null || detail == null) {
+      return SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('No active split yet', style: AppTypography.headlineSm),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+                'Choose a split from Plans first. Your next weekly overview will turn it into a seven-day schedule.',
+                style: AppTypography.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+          ],
+        ),
+      );
     }
+
+    final start = DateUtils.dateOnly(DateTime.now());
+    final schedule = List.generate(7, (index) {
+      final date = start.add(Duration(days: index));
+      return (date: date, day: resolveSplitDay(date, activeSplit, detail));
+    });
+    final improvement = widget.analytics.improvements.isEmpty
+        ? null
+        : widget.analytics.improvements.first;
+
     return ContainerTransform(
-      openBuilder: (_) => widget.preview
-          ? _SplitRecommendationPreviewScreen(split: match.split)
-          : SplitDetailScreen(
-              controller: SplitDetailController(
-                  context.read<SplitsRepository>(), match.split.splitId),
-              splitName: match.split.name,
-            ),
-      closedBuilder: (context, openContainer) => GestureDetector(
-        onTap: openContainer,
-        child: SectionCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child:
-                        Text(match.split.name, style: AppTypography.headlineSm),
-                  ),
-                  Icon(Icons.open_in_full_rounded,
-                      size: 18, color: AppColors.accent),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                  '${splitCategoryLabel(match.split.category)} · ${match.split.level} · ${match.split.durationDays} days',
-                  style: AppTypography.bodySm
-                      .copyWith(color: AppColors.onSurfaceVariant)),
-              if (match.reason.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(match.reason,
-                    style: AppTypography.bodySm
-                        .copyWith(color: AppColors.onSurfaceVariant)),
+      openBuilder: (_) => SplitDetailScreen(
+        controller: SplitDetailController(
+            context.read<SplitsRepository>(), activeSplit.splitId),
+        splitName: activeSplit.name ?? detail.split.name,
+      ),
+      closedBuilder: (context, openContainer) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(activeSplit.name ?? detail.split.name,
+                          style: AppTypography.headlineSm),
+                    )
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                for (final item in schedule) ...[
+                  _TrainingDayRow(date: item.date, day: item.day),
+                  if (item != schedule.last)
+                    const Divider(height: AppSpacing.md),
+                ]
               ],
-              const SizedBox(height: AppSpacing.md),
-              SecondaryPillButton(
-                icon:
-                    _activated ? Icons.check_rounded : Icons.swap_horiz_rounded,
-                label: _activated
-                    ? 'Active split'
-                    : _activating
-                        ? 'Switching…'
-                        : 'Switch to this split',
-                onPressed: _activating || _activated ? null : _activate,
-              ),
-            ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _RecapDetailCard(
+            icon: Icons.tune_rounded,
+            title: improvement?.area ?? 'Progressive consistency',
+            body: improvement?.recommendation ??
+                'Keep the same exercises and aim for one more quality rep before increasing the load.',
+            color: AppColors.secondary,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SecondaryPillButton(
+            icon: Icons.visibility_outlined,
+            label: 'Review my split',
+            onPressed: openContainer,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrainingDayRow extends StatelessWidget {
+  final DateTime date;
+  final SplitDay? day;
+
+  const _TrainingDayRow({required this.date, required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    final isRest = day?.isRestDay ?? true;
+    return Row(
+      children: [
+        SizedBox(
+          width: 42,
+          child: Text(_shortWeekday(date), style: AppTypography.labelSm),
+        ),
+        Icon(
+          isRest ? Icons.bedtime_outlined : Icons.fitness_center_rounded,
+          size: 18,
+          color: isRest ? AppColors.onSurfaceVariant : AppColors.accent,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            isRest ? 'Recovery day' : (day?.title ?? 'Training day'),
+            style: AppTypography.bodySm.copyWith(
+                color:
+                    isRest ? AppColors.onSurfaceVariant : AppColors.onSurface),
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -1223,72 +1297,6 @@ class _RecapDetailCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SplitRecommendationPreviewScreen extends StatelessWidget {
-  final WorkoutSplit split;
-
-  const _SplitRecommendationPreviewScreen({required this.split});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(split.name, style: AppTypography.headlineSm),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.gutterMobile),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: split.heroImageUrl == null
-                      ? Image.asset('assets/branding/split_hero.png',
-                          fit: BoxFit.cover)
-                      : Image.network(split.heroImageUrl!, fit: BoxFit.cover),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              SectionEyebrow(splitCategoryLabel(split.category),
-                  color: AppColors.accent),
-              const SizedBox(height: AppSpacing.sm),
-              Text(split.name, style: AppTypography.headlineLg),
-              const SizedBox(height: AppSpacing.sm),
-              Text('${split.level} · ${split.durationDays} training days',
-                  style: AppTypography.bodyMd
-                      .copyWith(color: AppColors.onSurfaceVariant)),
-              if (split.description?.isNotEmpty == true) ...[
-                const SizedBox(height: AppSpacing.md),
-                Text(split.description!, style: AppTypography.bodyMd),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              SectionCard(
-                child: Row(
-                  children: [
-                    Icon(Icons.visibility_outlined, color: AppColors.accent),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Sample preview only. Your live recommendation opens with its complete day-by-day exercise plan.',
-                        style: AppTypography.bodySm,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

@@ -22,7 +22,7 @@ void main() {
     );
 
     expect(_glowColors(tester),
-        everyElement(AppPalette.dark.accent.withOpacity(0.28)));
+        everyElement(AppPalette.dark.accent.withValues(alpha: 0.28)));
     expect(find.byKey(ValueKey(AppPalette.dark.accent)), findsOneWidget);
 
     mode.value = ThemeMode.light;
@@ -31,7 +31,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_glowColors(tester),
-        everyElement(AppPalette.light.accent.withOpacity(0.28)));
+        everyElement(AppPalette.light.accent.withValues(alpha: 0.28)));
     expect(find.byKey(ValueKey(AppPalette.light.accent)), findsOneWidget);
   });
 }
