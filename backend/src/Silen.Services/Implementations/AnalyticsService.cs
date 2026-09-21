@@ -44,21 +44,28 @@ public sealed class AnalyticsService(
         {
           "type": "object",
           "properties": {
-            "strengths": { "type": "array", "items": { "type": "string" } },
+            "strengths": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 4,
+              "items": { "type": "string", "minLength": 12, "maxLength": 220 }
+            },
             "improvements": {
               "type": "array",
+              "minItems": 2,
+              "maxItems": 4,
               "items": {
                 "type": "object",
                 "properties": {
-                  "area": { "type": "string" },
-                  "recommendation": { "type": "string" },
+                  "area": { "type": "string", "minLength": 3, "maxLength": 80 },
+                  "recommendation": { "type": "string", "minLength": 20, "maxLength": 260 },
                   "priority": { "type": "string", "enum": ["Low", "Medium", "High"] }
                 },
                 "required": ["area", "recommendation", "priority"],
                 "additionalProperties": false
               }
             },
-            "focusForNextMonth": { "type": "string" }
+            "focusForNextMonth": { "type": "string", "minLength": 20, "maxLength": 280 }
           },
           "required": ["strengths", "improvements", "focusForNextMonth"],
           "additionalProperties": false
@@ -70,21 +77,28 @@ public sealed class AnalyticsService(
         {
           "type": "object",
           "properties": {
-            "strengths": { "type": "array", "items": { "type": "string" } },
+            "strengths": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
+              "items": { "type": "string", "minLength": 12, "maxLength": 220 }
+            },
             "improvements": {
               "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
               "items": {
                 "type": "object",
                 "properties": {
-                  "area": { "type": "string" },
-                  "recommendation": { "type": "string" },
+                  "area": { "type": "string", "minLength": 3, "maxLength": 80 },
+                  "recommendation": { "type": "string", "minLength": 20, "maxLength": 260 },
                   "priority": { "type": "string", "enum": ["Low", "Medium", "High"] }
                 },
                 "required": ["area", "recommendation", "priority"],
                 "additionalProperties": false
               }
             },
-            "focusForNextWeek": { "type": "string" }
+            "focusForNextWeek": { "type": "string", "minLength": 20, "maxLength": 280 }
           },
           "required": ["strengths", "improvements", "focusForNextWeek"],
           "additionalProperties": false
@@ -298,6 +312,8 @@ public sealed class AnalyticsService(
             + "The calorie target is current, not historical; missing food logs cannot establish adherence. "
             + $"Write a warm, specific {scope.ToLowerInvariant()} recap: celebrate evidenced wins, explain what to improve, "
             + $"and give a concrete habit to keep going for {forward}. Do not invent improvements. "
+            + "Each strength must name the supporting metric or logged behavior. Each improvement must identify one "
+            + "specific area and a realistic next action; do not restate the same observation in multiple fields. "
             + "Compare weights alongside reps; lighter sets than a historical PR do not prove low effort or poor training. "
             + "A flat load trend is only a load plateau, not proof that fitness did not improve. "
             + "Do not use current-week compliance or current streak as a period rating. "

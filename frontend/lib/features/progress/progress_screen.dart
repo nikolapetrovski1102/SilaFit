@@ -29,20 +29,14 @@ class ProgressScreen extends StatefulWidget {
 
 class _ProgressScreenState extends State<ProgressScreen> {
   late final ProgressController _controller;
-  late final AnalyticsController _analyticsController;
-  late final WeeklyAnalyticsController _weeklyAnalyticsController;
 
   @override
   void initState() {
     super.initState();
     _controller = context.read<ProgressController>();
-    _analyticsController = context.read<AnalyticsController>();
-    _weeklyAnalyticsController = context.read<WeeklyAnalyticsController>();
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
-    Future.microtask(_analyticsController.load);
-    Future.microtask(_weeklyAnalyticsController.load);
   }
 
   @override
@@ -67,8 +61,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
                     AppSpacing.lg,
                     AppSpacing.marginMobile,
                     AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
-                // Header, timeframe pills, and the independently-loaded PR /
-                // AI review sections don't need `overview` - only
+                // Header, timeframe pills, and the PR / AI review entry
+                // points don't need `overview` - only
                 // `_StrengthProgressCard` and `_YourInsightCard` do. Gating
                 // all of that behind one ResourceBuilder used to blank the
                 // whole screen (title included) whenever the overview call
@@ -120,7 +114,7 @@ class _ProgressContent extends StatelessWidget {
         // Only these two cards depend on `controller.state` (the overview
         // call) - scoping the ResourceBuilder to just them means a slow or
         // failed overview fetch no longer blanks the header/pills above or
-        // the independently-loaded PR / AI review sections below.
+        // the PR / AI review entry points below.
         ResourceBuilder<ProgressOverview>(
           state: controller.state,
           onRetry: controller.load,
@@ -262,7 +256,8 @@ class _TrendChart extends StatelessWidget {
           drawVerticalLine: false,
           horizontalInterval: maxY / 3,
           getDrawingHorizontalLine: (_) => FlLine(
-              color: AppColors.onSurface.withOpacity(0.06), strokeWidth: 1),
+              color: AppColors.onSurface.withValues(alpha: 0.06),
+              strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -337,8 +332,8 @@ class _TrendChart extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppColors.accent.withOpacity(0.16),
-                  AppColors.accent.withOpacity(0.0),
+                  AppColors.accent.withValues(alpha: 0.16),
+                  AppColors.accent.withValues(alpha: 0),
                 ],
               ),
             ),
@@ -449,422 +444,159 @@ class _YourInsightCard extends StatelessWidget {
   }
 }
 
-/// AI Monthly Review entry point - a locked upsell button for Free tier
-/// (matching the design's "AI MONTHLY REVIEW · PRO" bracket button), or the
-/// real generated report inline for Pro once it has data.
+/// Keeps the generated report out of the analytics dashboard. The report is
+/// fetched only after this entry point is tapped, then rendered exclusively by
+/// [MonthlyOverviewScreen].
 class _AiMonthlyReviewSection extends StatelessWidget {
   const _AiMonthlyReviewSection();
 
   @override
-  Widget build(BuildContext context) {
-    final controller = context.watch<AnalyticsController>();
-
-    if (controller.requiresUpgrade) {
-      return const _AiReviewUpsellButton(
-          label: 'AI MONTHLY REVIEW', tier: 'PRO');
-    }
-
-    final state = controller.state;
-
-    if (controller.notEnoughData) {
-      return _AiRecapNotice(
+  Widget build(BuildContext context) => const _AiReviewEntry(
         title: 'AI Monthly Review',
-        icon: Icons.insights_outlined,
-        message: state.error != null && state.error!.isNotEmpty
-            ? state.error!
-            : "Log a bit more this month and your AI review will unlock once there's enough to analyze.",
-        isRefreshing: controller.isRefreshing,
-        onRefresh: controller.refresh,
+        description: 'Open your monthly preview',
+        tier: 'PRO',
+        weekly: false,
       );
-    }
-
-    if (state.error != null && state.error!.isNotEmpty) {
-      return _AiRecapNotice(
-        title: 'AI Monthly Review',
-        message: state.error!,
-        isRefreshing: controller.isRefreshing,
-        onRefresh: controller.refresh,
-      );
-    }
-
-    if (!state.hasData) {
-      return _AiRecapLoading(
-        title: 'AI Monthly Review',
-        isRefreshing: controller.isRefreshing,
-        onRefresh: controller.refresh,
-      );
-    }
-
-    return _AiRecapCard(
-      title: 'AI Monthly Review',
-      analytics: state.data!,
-      isRefreshing: controller.isRefreshing,
-      onRefresh: controller.refresh,
-    );
-  }
 }
 
-class _AiInsightsHeader extends StatelessWidget {
-  final String title;
-  final bool isRefreshing;
-  final VoidCallback onRefresh;
-
-  const _AiInsightsHeader({
-    required this.title,
-    required this.isRefreshing,
-    required this.onRefresh,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        SectionEyebrow(title, color: AppColors.accent),
-        IconButton(
-          onPressed: isRefreshing ? null : onRefresh,
-          icon: isRefreshing
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.onSurfaceVariant))
-              : Icon(Icons.refresh_rounded,
-                  size: 18, color: AppColors.onSurfaceVariant),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          splashRadius: 18,
-        ),
-      ],
-    );
-  }
-}
-
-/// The inline AI recap card, shared by the monthly (Pro) and weekly (Advanced)
-/// sections - both report shapes satisfy [AnalyticsRecap], so the same body
-/// works and only the title/link copy differ.
-class _AiRecapCard extends StatelessWidget {
-  final String title;
-  final AnalyticsRecap analytics;
-  final bool isRefreshing;
-  final VoidCallback onRefresh;
-
-  const _AiRecapCard({
-    required this.title,
-    required this.analytics,
-    required this.isRefreshing,
-    required this.onRefresh,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final periodWord = analytics.isWeekly ? 'week' : 'month';
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _AiInsightsHeader(
-              title: title, isRefreshing: isRefreshing, onRefresh: onRefresh),
-          const SizedBox(height: 2),
-          Text(analytics.periodLabel,
-              style: AppTypography.labelCaps
-                  .copyWith(color: AppColors.onSurfaceVariant)),
-          const SizedBox(height: AppSpacing.sm),
-          if (analytics.strengths.isNotEmpty) ...[
-            Text('STRENGTHS',
-                style:
-                    AppTypography.labelCaps.copyWith(color: AppColors.accent)),
-            const SizedBox(height: 6),
-            for (final strength in analytics.strengths)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(strength,
-                    style: AppTypography.bodySm
-                        .copyWith(color: AppColors.onSurface)),
-              ),
-            const SizedBox(height: AppSpacing.xs),
-          ],
-          if (analytics.improvements.isNotEmpty) ...[
-            Text('IMPROVEMENTS',
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.onSurfaceVariant)),
-            const SizedBox(height: 6),
-            for (final improvement in analytics.improvements)
-              _ImprovementTile(improvement: improvement),
-            const SizedBox(height: AppSpacing.xs),
-          ],
-          if (analytics.focusText.isNotEmpty) ...[
-            Text('FOCUS FOR NEXT ${periodWord.toUpperCase()}',
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.onSurfaceVariant)),
-            const SizedBox(height: 6),
-            Text(analytics.focusText,
-                style:
-                    AppTypography.bodySm.copyWith(color: AppColors.onSurface)),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                fullscreenDialog: true,
-                builder: (routeContext) => MonthlyOverviewScreen(
-                  analytics: analytics,
-                  onDone: () => Navigator.of(routeContext).pop(),
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                    'View full ${analytics.isWeekly ? 'weekly' : 'monthly'} recap',
-                    style: AppTypography.labelSm.copyWith(
-                        color: AppColors.accent, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 4),
-                Icon(Icons.arrow_forward_rounded,
-                    size: 14, color: AppColors.accent),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shared non-report state for both AI recap sections - the "not enough data"
-/// encouraging card and the generic error card.
-class _AiRecapNotice extends StatelessWidget {
-  final String title;
-  final String message;
-  final bool isRefreshing;
-  final VoidCallback onRefresh;
-  final IconData? icon;
-
-  const _AiRecapNotice({
-    required this.title,
-    required this.message,
-    required this.isRefreshing,
-    required this.onRefresh,
-    this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _AiInsightsHeader(
-              title: title, isRefreshing: isRefreshing, onRefresh: onRefresh),
-          const SizedBox(height: AppSpacing.sm),
-          if (icon == null)
-            Text(message, style: AppTypography.bodySm)
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 18, color: AppColors.onSurfaceVariant),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(message,
-                      style: AppTypography.bodySm
-                          .copyWith(color: AppColors.onSurfaceVariant)),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shared loading state for both AI recap sections.
-class _AiRecapLoading extends StatelessWidget {
-  final String title;
-  final bool isRefreshing;
-  final VoidCallback onRefresh;
-
-  const _AiRecapLoading({
-    required this.title,
-    required this.isRefreshing,
-    required this.onRefresh,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _AiInsightsHeader(
-              title: title, isRefreshing: isRefreshing, onRefresh: onRefresh),
-          const SizedBox(height: AppSpacing.lg),
-          Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2.5, color: AppColors.accent),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-        ],
-      ),
-    );
-  }
-}
-
-class _ImprovementTile extends StatelessWidget {
-  final AnalyticsImprovement improvement;
-
-  const _ImprovementTile({required this.improvement});
-
-  Color get _priorityColor => switch (improvement.priority) {
-        'High' => AppColors.error,
-        'Low' => AppColors.onSurfaceVariant,
-        _ => AppColors.secondary,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(AppRadius.sm)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(improvement.area,
-                    style: AppTypography.labelSm
-                        .copyWith(fontWeight: FontWeight.w600)),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                    color: _priorityColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(AppRadius.full)),
-                child: Text(improvement.priority.toUpperCase(),
-                    style: AppTypography.labelCaps
-                        .copyWith(color: _priorityColor, fontSize: 9)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(improvement.recommendation,
-              style: AppTypography.bodySm.copyWith(color: AppColors.onSurface)),
-        ],
-      ),
-    );
-  }
-}
-
-/// Locked upsell button for a user below the required tier - the bracketed
-/// "AI MONTHLY REVIEW · PRO" / "WEEKLY AI REVIEW · ADVANCED" pill, routing
-/// into Plans.
-class _AiReviewUpsellButton extends StatelessWidget {
-  final String label;
-  final String tier;
-
-  const _AiReviewUpsellButton({required this.label, required this.tier});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PlansScreen()),
-      ),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(color: AppColors.secondary.withOpacity(0.4)),
-        ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.auto_awesome_rounded,
-                size: 16, color: AppColors.secondary),
-            const SizedBox(width: AppSpacing.xs),
-            Text(label,
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.secondary)),
-            const SizedBox(width: AppSpacing.xs),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                  color: AppColors.secondary,
-                  borderRadius: BorderRadius.circular(AppRadius.full)),
-              child: Text(tier,
-                  style: AppTypography.labelCaps
-                      .copyWith(color: AppColors.onAccent, fontSize: 9)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Advanced-only weekly AI review entry point. A Pro user sees the locked
-/// "WEEKLY AI REVIEW · ADVANCED" upsell; an Advanced user gets the inline
-/// weekly report, whose full recap appends the meal/split suggestion slides.
+/// Advanced-only weekly review entry point. As with the monthly entry, no
+/// generated content is displayed or requested until the preview is opened.
 class _AiWeeklyReviewSection extends StatelessWidget {
   const _AiWeeklyReviewSection();
 
   @override
+  Widget build(BuildContext context) => const _AiReviewEntry(
+        title: 'AI Weekly Review',
+        description: 'Open your weekly preview',
+        tier: 'ADVANCED',
+        weekly: true,
+      );
+}
+
+class _AiReviewEntry extends StatefulWidget {
+  final String title;
+  final String description;
+  final String tier;
+  final bool weekly;
+
+  const _AiReviewEntry({
+    required this.title,
+    required this.description,
+    required this.tier,
+    required this.weekly,
+  });
+
+  @override
+  State<_AiReviewEntry> createState() => _AiReviewEntryState();
+}
+
+class _AiReviewEntryState extends State<_AiReviewEntry> {
+  bool _loading = false;
+
+  Future<void> _open() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+
+    AnalyticsRecap? report;
+    bool requiresUpgrade;
+    String? error;
+    if (widget.weekly) {
+      final controller = context.read<WeeklyAnalyticsController>();
+      await controller.load(force: true);
+      report = controller.state.data;
+      requiresUpgrade = controller.requiresUpgrade;
+      error = controller.state.error;
+    } else {
+      final controller = context.read<AnalyticsController>();
+      await controller.load(force: true);
+      report = controller.state.data;
+      requiresUpgrade = controller.requiresUpgrade;
+      error = controller.state.error;
+    }
+
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    if (requiresUpgrade) {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+      return;
+    }
+
+    if (report != null) {
+      await Navigator.of(context).push(MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (routeContext) => MonthlyOverviewScreen(
+          analytics: report!,
+          onDone: () => Navigator.of(routeContext).pop(),
+        ),
+      ));
+      return;
+    }
+
+    final message = error?.trim().isNotEmpty == true
+        ? error!
+        : 'Your review is not available yet.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final controller = context.watch<WeeklyAnalyticsController>();
-
-    if (controller.requiresUpgrade) {
-      return const _AiReviewUpsellButton(
-          label: 'WEEKLY AI REVIEW', tier: 'ADVANCED');
-    }
-
-    final state = controller.state;
-
-    if (controller.notEnoughData) {
-      return _AiRecapNotice(
-        title: 'AI Weekly Review',
-        icon: Icons.insights_outlined,
-        message: state.error != null && state.error!.isNotEmpty
-            ? state.error!
-            : "Log a bit more this week and your weekly review will unlock once there's enough to analyze.",
-        isRefreshing: controller.isRefreshing,
-        onRefresh: controller.refresh,
-      );
-    }
-
-    if (state.error != null && state.error!.isNotEmpty) {
-      return _AiRecapNotice(
-        title: 'AI Weekly Review',
-        message: state.error!,
-        isRefreshing: controller.isRefreshing,
-        onRefresh: controller.refresh,
-      );
-    }
-
-    if (!state.hasData) {
-      return _AiRecapLoading(
-        title: 'AI Weekly Review',
-        isRefreshing: controller.isRefreshing,
-        onRefresh: controller.refresh,
-      );
-    }
-
-    return _AiRecapCard(
-      title: 'AI Weekly Review',
-      analytics: state.data!,
-      isRefreshing: controller.isRefreshing,
-      onRefresh: controller.refresh,
+    return GestureDetector(
+      onTap: _loading ? null : _open,
+      child: SectionCard(
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(Icons.auto_awesome_rounded,
+                  color: AppColors.secondary, size: 20),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.title,
+                      style: AppTypography.labelSm
+                          .copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(widget.description,
+                      style: AppTypography.bodySm
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.secondary,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(widget.tier,
+                  style: AppTypography.labelCaps
+                      .copyWith(color: AppColors.onAccent, fontSize: 9)),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            if (_loading)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.secondary),
+              )
+            else
+              Icon(Icons.arrow_forward_rounded,
+                  size: 18, color: AppColors.secondary),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session/session_store.dart';
-import '../../core/dev_flags.dart';
 import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -111,8 +110,8 @@ class _SettingsContent extends StatelessWidget {
         ResourceBuilder<UserSettings>(
           state: controller.state,
           onRetry: controller.load,
-          builder: (context, settings) => _PreferencesSections(
-              controller: controller, settings: settings),
+          builder: (context, settings) =>
+              _PreferencesSections(controller: controller, settings: settings),
         ),
         const SizedBox(height: AppSpacing.lg),
         const SectionEyebrow('Subscription & Data'),
@@ -154,8 +153,7 @@ class _SettingsContent extends StatelessWidget {
           child: Column(
             children: [
               _LinkRow(
-                  label: 'Export my data',
-                  onTap: () => _exportData(context)),
+                  label: 'Export my data', onTap: () => _exportData(context)),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Privacy policy',
@@ -173,9 +171,10 @@ class _SettingsContent extends StatelessWidget {
             ],
           ),
         ),
-        // TEMPORARY: `kDevToolsInRelease` (core/dev_flags.dart) keeps this
-        // section visible in release builds too. Normally debug builds only.
-        if (kDebugMode || kDevToolsInRelease) ...[
+        // Preview data is a developer aid only. `kDebugMode` is a compile-time
+        // constant, so this entire section and its mock-data builders are tree
+        // shaken out of profile/release builds.
+        if (kDebugMode) ...[
           const SizedBox(height: AppSpacing.lg),
           const SectionEyebrow('Developer'),
           const SizedBox(height: AppSpacing.sm),
@@ -268,8 +267,8 @@ class _SettingsContent extends StatelessWidget {
           SnackBar(content: Text('Your data export is on its way to $email.')));
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
-          content: Text(
-              'Could not prepare your data export. Please try again.')));
+          content:
+              Text('Could not prepare your data export. Please try again.')));
     }
   }
 
@@ -313,8 +312,7 @@ class _SettingsContent extends StatelessWidget {
       await authController.logout();
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
-          content:
-              Text('Could not delete your account. Please try again.')));
+          content: Text('Could not delete your account. Please try again.')));
     }
   }
 

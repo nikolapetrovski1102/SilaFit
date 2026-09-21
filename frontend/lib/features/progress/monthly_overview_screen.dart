@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
-import '../../core/dev_flags.dart';
 import '../onboarding/onboarding_repository.dart';
 import '../onboarding/widgets/numeric_wheel_picker.dart';
 import '../today/today_controller.dart';
@@ -13,11 +12,15 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/container_transform.dart';
 import '../meals/meal_controller.dart';
 import '../meals/meal_models.dart';
 import '../meals/meal_repository.dart';
+import '../meals/meal_suggestion_detail_screen.dart';
 import '../splits/split_recommendation.dart';
 import '../splits/splits_controller.dart';
+import '../splits/split_detail_screen.dart';
+import '../splits/splits_models.dart';
 import '../splits/splits_repository.dart';
 import 'analytics_models.dart';
 import 'monthly_training_chart.dart';
@@ -55,7 +58,10 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
   double? _latestWeight;
   int _weightTenths = 700;
   String? _weightError;
-  bool get _preview => (kDebugMode || kDevToolsInRelease) && widget.preview;
+  // Never honor preview mode in profile/release builds. This keeps every
+  // production recap on the authenticated API/data path even if a caller is
+  // accidentally constructed with preview=true.
+  bool get _preview => kDebugMode && widget.preview;
 
   @override
   void initState() {
@@ -362,6 +368,23 @@ class _ImprovementsSlide extends StatelessWidget {
           : 'Your first and latest heaviest sets this ${_periodWord(analytics)}, with reps held steady or increased.',
       stats: const [],
       footer: Column(children: [
+        if (analytics.strengths.isNotEmpty) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('WHAT WENT WELL', style: AppTypography.labelCaps),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final strength in analytics.strengths.take(3))
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _RecapDetailCard(
+                icon: Icons.check_circle_outline_rounded,
+                title: strength,
+                color: AppColors.accent,
+              ),
+            ),
+          if (improved.isNotEmpty) const SizedBox(height: AppSpacing.sm),
+        ],
         for (final exercise in improved)
           Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -403,6 +426,23 @@ class _DownsidesSlide extends StatelessWidget {
           : 'No setbacks flagged in the available logs. Unlogged activity and meals are still unknown.',
       stats: const [],
       footer: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (analytics.improvements.isNotEmpty) ...[
+          Text('WHAT TO IMPROVE', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.sm),
+          for (final improvement in analytics.improvements.take(3)) ...[
+            _RecapDetailCard(
+              icon: Icons.arrow_upward_rounded,
+              title: improvement.area,
+              body: improvement.recommendation,
+              badge: improvement.priority,
+              color: improvement.priority == 'High'
+                  ? AppColors.error
+                  : AppColors.secondary,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          const SizedBox(height: AppSpacing.xs),
+        ],
         if ((missed ?? 0) > 0)
           SectionCard(
               child: Text(
@@ -514,8 +554,8 @@ class _SlideScaffold extends StatelessWidget {
                 const SizedBox(height: AppSpacing.sm),
                 Text(headline,
                     textAlign: TextAlign.center,
-                    style: AppTypography.displayStatMobile
-                        .copyWith(fontSize: 34)),
+                    style:
+                        AppTypography.displayStatMobile.copyWith(fontSize: 34)),
                 const SizedBox(height: AppSpacing.sm),
                 Text(subhead,
                     textAlign: TextAlign.center,
@@ -881,47 +921,68 @@ class _MealSuggestionsSlideState extends State<_MealSuggestionsSlide> {
         for (final suggestion in _suggestions)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
-            child: SectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(suggestion.title, style: AppTypography.headlineSm),
-                  const SizedBox(height: 2),
-                  Text(
-                      '${suggestion.mealType} · ${suggestion.caloriesKcal} kcal · ${suggestion.proteinG}g protein',
-                      style: AppTypography.bodySm
-                          .copyWith(color: AppColors.onSurfaceVariant)),
-                  if (suggestion.matchReason != null) ...[
-                    const SizedBox(height: 4),
-                    Text(suggestion.matchReason!,
-                        style: AppTypography.bodySm
-                            .copyWith(color: AppColors.onSurfaceVariant)),
-                  ],
-                  if (suggestion.compactIngredientSummary
-                      case final ingredients?) ...[
-                    const SizedBox(height: 6),
-                    Text('Ingredients · $ingredients',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.bodySm
-                            .copyWith(color: AppColors.onSurfaceVariant)),
-                  ],
-                  const SizedBox(height: AppSpacing.sm),
-                  SecondaryPillButton(
-                    icon: _addedIds.contains(suggestion.mealSuggestionId)
-                        ? Icons.check_rounded
-                        : Icons.add_rounded,
-                    label: _addedIds.contains(suggestion.mealSuggestionId)
-                        ? 'Added'
-                        : _busyIds.contains(suggestion.mealSuggestionId)
-                            ? 'Adding…'
-                            : 'Add to today’s plan',
-                    onPressed: _busyIds.contains(suggestion.mealSuggestionId) ||
-                            _addedIds.contains(suggestion.mealSuggestionId)
-                        ? null
-                        : () => _add(suggestion),
+            child: ContainerTransform(
+              openBuilder: (_) => MealSuggestionDetailScreen(
+                controller: MealSuggestionActivationController(
+                    context.read<MealController>(), suggestion),
+                readOnly: widget.preview,
+              ),
+              closedBuilder: (context, openContainer) => GestureDetector(
+                onTap: openContainer,
+                child: SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(suggestion.title,
+                                style: AppTypography.headlineSm),
+                          ),
+                          Icon(Icons.open_in_full_rounded,
+                              size: 18, color: AppColors.accent),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                          '${suggestion.mealType} · ${suggestion.caloriesKcal} kcal · ${suggestion.proteinG}g protein',
+                          style: AppTypography.bodySm
+                              .copyWith(color: AppColors.onSurfaceVariant)),
+                      if (suggestion.matchReason != null) ...[
+                        const SizedBox(height: 4),
+                        Text(suggestion.matchReason!,
+                            style: AppTypography.bodySm
+                                .copyWith(color: AppColors.onSurfaceVariant)),
+                      ],
+                      if (suggestion.compactIngredientSummary
+                          case final ingredients?) ...[
+                        const SizedBox(height: 6),
+                        Text('Ingredients · $ingredients',
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodySm
+                                .copyWith(color: AppColors.onSurface)),
+                      ],
+                      const SizedBox(height: AppSpacing.sm),
+                      SecondaryPillButton(
+                        icon: _addedIds.contains(suggestion.mealSuggestionId)
+                            ? Icons.check_rounded
+                            : Icons.add_rounded,
+                        label: _addedIds.contains(suggestion.mealSuggestionId)
+                            ? 'Added'
+                            : _busyIds.contains(suggestion.mealSuggestionId)
+                                ? 'Adding…'
+                                : 'Add to today’s plan',
+                        onPressed: _busyIds
+                                    .contains(suggestion.mealSuggestionId) ||
+                                _addedIds.contains(suggestion.mealSuggestionId)
+                            ? null
+                            : () => _add(suggestion),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1056,33 +1117,178 @@ class _SplitSuggestionSlideState extends State<_SplitSuggestionSlide> {
     if (match == null) {
       return Text('No split recommendation yet.', style: AppTypography.bodySm);
     }
+    return ContainerTransform(
+      openBuilder: (_) => widget.preview
+          ? _SplitRecommendationPreviewScreen(split: match.split)
+          : SplitDetailScreen(
+              controller: SplitDetailController(
+                  context.read<SplitsRepository>(), match.split.splitId),
+              splitName: match.split.name,
+            ),
+      closedBuilder: (context, openContainer) => GestureDetector(
+        onTap: openContainer,
+        child: SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child:
+                        Text(match.split.name, style: AppTypography.headlineSm),
+                  ),
+                  Icon(Icons.open_in_full_rounded,
+                      size: 18, color: AppColors.accent),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                  '${splitCategoryLabel(match.split.category)} · ${match.split.level} · ${match.split.durationDays} days',
+                  style: AppTypography.bodySm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+              if (match.reason.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(match.reason,
+                    style: AppTypography.bodySm
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              SecondaryPillButton(
+                icon:
+                    _activated ? Icons.check_rounded : Icons.swap_horiz_rounded,
+                label: _activated
+                    ? 'Active split'
+                    : _activating
+                        ? 'Switching…'
+                        : 'Switch to this split',
+                onPressed: _activating || _activated ? null : _activate,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecapDetailCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? body;
+  final String? badge;
+  final Color color;
+
+  const _RecapDetailCard({
+    required this.icon,
+    required this.title,
+    required this.color,
+    this.body,
+    this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return SectionCard(
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(match.split.name, style: AppTypography.headlineSm),
-          const SizedBox(height: 2),
-          Text(
-              '${splitCategoryLabel(match.split.category)} · ${match.split.level} · ${match.split.durationDays} days',
-              style: AppTypography.bodySm
-                  .copyWith(color: AppColors.onSurfaceVariant)),
-          if (match.reason.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(match.reason,
-                style: AppTypography.bodySm
-                    .copyWith(color: AppColors.onSurfaceVariant)),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          SecondaryPillButton(
-            icon: _activated ? Icons.check_rounded : Icons.swap_horiz_rounded,
-            label: _activated
-                ? 'Active split'
-                : _activating
-                    ? 'Switching…'
-                    : 'Switch to this split',
-            onPressed: _activating || _activated ? null : _activate,
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(title,
+                          style: AppTypography.labelSm
+                              .copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                    if (badge != null)
+                      Text(badge!.toUpperCase(),
+                          style: AppTypography.labelCaps
+                              .copyWith(color: color, fontSize: 9)),
+                  ],
+                ),
+                if (body != null) ...[
+                  const SizedBox(height: 4),
+                  Text(body!,
+                      style: AppTypography.bodySm
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ],
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SplitRecommendationPreviewScreen extends StatelessWidget {
+  final WorkoutSplit split;
+
+  const _SplitRecommendationPreviewScreen({required this.split});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(split.name, style: AppTypography.headlineSm),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.gutterMobile),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: split.heroImageUrl == null
+                      ? Image.asset('assets/branding/split_hero.png',
+                          fit: BoxFit.cover)
+                      : Image.network(split.heroImageUrl!, fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              SectionEyebrow(splitCategoryLabel(split.category),
+                  color: AppColors.accent),
+              const SizedBox(height: AppSpacing.sm),
+              Text(split.name, style: AppTypography.headlineLg),
+              const SizedBox(height: AppSpacing.sm),
+              Text('${split.level} · ${split.durationDays} training days',
+                  style: AppTypography.bodyMd
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+              if (split.description?.isNotEmpty == true) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(split.description!, style: AppTypography.bodyMd),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              SectionCard(
+                child: Row(
+                  children: [
+                    Icon(Icons.visibility_outlined, color: AppColors.accent),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Sample preview only. Your live recommendation opens with its complete day-by-day exercise plan.',
+                        style: AppTypography.bodySm,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

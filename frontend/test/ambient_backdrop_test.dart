@@ -23,20 +23,16 @@ void main() {
 
     expect(_glowColors(tester),
         everyElement(AppPalette.dark.accent.withOpacity(0.28)));
-    expect(
-      tester.widget<RepaintBoundary>(find.byType(RepaintBoundary)).key,
-      ValueKey(AppPalette.dark.accent),
-    );
+    expect(find.byKey(ValueKey(AppPalette.dark.accent)), findsOneWidget);
 
     mode.value = ThemeMode.light;
-    await tester.pump();
+    // MaterialApp animates theme changes; wait for the inherited brightness
+    // and the keyed repaint boundary to settle on the light palette.
+    await tester.pumpAndSettle();
 
     expect(_glowColors(tester),
         everyElement(AppPalette.light.accent.withOpacity(0.28)));
-    expect(
-      tester.widget<RepaintBoundary>(find.byType(RepaintBoundary)).key,
-      ValueKey(AppPalette.light.accent),
-    );
+    expect(find.byKey(ValueKey(AppPalette.light.accent)), findsOneWidget);
   });
 }
 

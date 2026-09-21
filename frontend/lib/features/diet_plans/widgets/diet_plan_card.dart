@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/container_transform.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/section_eyebrow.dart';
 import '../diet_plan_controller.dart';
@@ -31,91 +32,91 @@ class DietPlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repository = context.read<DietPlanRepository>();
-    final card = GestureDetector(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DietPlanDetailScreen(
-          controller: DietPlanDetailController(repository, plan.dietPlanId),
-          planName: plan.name,
-        ),
-      )),
-      child: SectionCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(AppRadius.inset)),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: plan.heroImageUrl != null
-                        ? Image.network(plan.heroImageUrl!,
-                            fit: BoxFit.cover)
-                        : Image.asset('assets/branding/split_hero.png',
-                            fit: BoxFit.cover),
-                  ),
-                ),
-                if (plan.isSystemDefault)
-                  Positioned(
-                    top: AppSpacing.sm,
-                    right: AppSpacing.sm,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm, vertical: 4),
-                      decoration: BoxDecoration(
-                          color: AppColors.accent,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.full)),
-                      child: Text('FEATURED',
-                          style: AppTypography.labelCaps
-                              .copyWith(color: AppColors.onAccent)),
+    final card = ContainerTransform(
+      openBuilder: (_) => DietPlanDetailScreen(
+        controller: DietPlanDetailController(repository, plan.dietPlanId),
+        planName: plan.name,
+      ),
+      closedBuilder: (context, openContainer) => GestureDetector(
+        onTap: openContainer,
+        child: SectionCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(AppRadius.inset)),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: plan.heroImageUrl != null
+                          ? Image.network(plan.heroImageUrl!, fit: BoxFit.cover)
+                          : Image.asset('assets/branding/split_hero.png',
+                              fit: BoxFit.cover),
                     ),
                   ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SectionEyebrow(plan.periodType),
-                  const SizedBox(height: 6),
-                  Text(plan.name,
-                      style: AppTypography.headlineSm,
-                      maxLines: compact ? 1 : 2,
-                      overflow: TextOverflow.ellipsis),
-                  if (!compact && plan.description != null) ...[
-                    const SizedBox(height: 4),
-                    Text(plan.description!,
-                        style: AppTypography.bodyMd
-                            .copyWith(color: AppColors.onSurfaceVariant),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
-                  ],
-                  const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xs,
-                    children: [
-                      _MetaPill(
-                          icon: Icons.calendar_view_week_rounded,
-                          label: '${plan.durationDays} days'),
-                      if (plan.isEditableByMe)
-                        const _MetaPill(
-                            icon: Icons.edit_rounded, label: 'Your plan')
-                      else if (!plan.isSystemDefault)
-                        const _MetaPill(
-                            icon: Icons.restaurant_menu_rounded,
-                            label: 'From your coach'),
-                    ],
-                  ),
+                  if (plan.isSystemDefault)
+                    Positioned(
+                      top: AppSpacing.sm,
+                      right: AppSpacing.sm,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: AppColors.accent,
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.full)),
+                        child: Text('FEATURED',
+                            style: AppTypography.labelCaps
+                                .copyWith(color: AppColors.onAccent)),
+                      ),
+                    ),
                 ],
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SectionEyebrow(plan.periodType),
+                    const SizedBox(height: 6),
+                    Text(plan.name,
+                        style: AppTypography.headlineSm,
+                        maxLines: compact ? 1 : 2,
+                        overflow: TextOverflow.ellipsis),
+                    if (!compact && plan.description != null) ...[
+                      const SizedBox(height: 4),
+                      Text(plan.description!,
+                          style: AppTypography.bodyMd
+                              .copyWith(color: AppColors.onSurfaceVariant),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        _MetaPill(
+                            icon: Icons.calendar_view_week_rounded,
+                            label: '${plan.durationDays} days'),
+                        if (plan.isEditableByMe)
+                          const _MetaPill(
+                              icon: Icons.edit_rounded, label: 'Your plan')
+                        else if (!plan.isSystemDefault)
+                          const _MetaPill(
+                              icon: Icons.restaurant_menu_rounded,
+                              label: 'From your coach'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -133,8 +134,8 @@ class _MetaPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: 4),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
       decoration: BoxDecoration(
           color: AppColors.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(AppRadius.full)),

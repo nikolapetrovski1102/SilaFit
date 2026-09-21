@@ -64,7 +64,8 @@ void main() {
           providers: [
             ChangeNotifierProvider<AuthController>(create: (_) => FakeAuth()),
             ChangeNotifierProvider(
-                create: (_) => TodayController(TodayRepository(ApiClient(sessionStore: SessionStore())))),
+                create: (_) => TodayController(
+                    TodayRepository(ApiClient(sessionStore: SessionStore())))),
             ChangeNotifierProvider.value(value: controller),
             Provider<PlansRepository>.value(value: plans),
             Provider<AnalyticsRepository>.value(value: analytics),
@@ -72,8 +73,10 @@ void main() {
           child:
               const MaterialApp(home: Scaffold(body: AiInsightsTeaserCard()))));
       await tester.pumpAndSettle();
-      expect(analytics.monthly, tier == 'PRO' ? 1 : 0);
-      expect(analytics.weekly, tier == 'ADVANCED' ? 1 : 0);
+      // Home resolves the subscription only; report details stay unloaded
+      // until the user explicitly opens the monthly/weekly preview.
+      expect(analytics.monthly, 0);
+      expect(analytics.weekly, 0);
       expect(
           find.text(tier == 'FREE'
               ? 'AI TRAINING REVIEWS'

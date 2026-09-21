@@ -397,6 +397,11 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
     private static async Task WipeExistingMockDataAsync(SqlConnection connection, Guid userId, CancellationToken cancellationToken)
     {
         const string sql = """
+            -- Cached recaps contain snapshots of the logs below. They must be
+            -- invalidated in the same seed operation or a test account can keep
+            -- showing a pre-seed weekly/monthly report until its cache expires.
+            DELETE FROM dbo.WeeklyAnalyticsReports WHERE UserId = @UserId;
+            DELETE FROM dbo.MonthlyAnalyticsReports WHERE UserId = @UserId;
             DELETE FROM dbo.WorkoutSetLogs WHERE UserId = @UserId;
             DELETE FROM dbo.WorkoutSessions WHERE UserId = @UserId;
             DELETE FROM dbo.MealLogs WHERE UserId = @UserId;

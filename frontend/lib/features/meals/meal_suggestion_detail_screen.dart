@@ -16,8 +16,10 @@ import 'meal_models.dart';
 /// "Activate This Meal" to a disabled "Added to Plan" once it fires.
 class MealSuggestionDetailScreen extends StatefulWidget {
   final MealSuggestionActivationController controller;
+  final bool readOnly;
 
-  const MealSuggestionDetailScreen({super.key, required this.controller});
+  const MealSuggestionDetailScreen(
+      {super.key, required this.controller, this.readOnly = false});
 
   @override
   State<MealSuggestionDetailScreen> createState() =>
@@ -62,6 +64,7 @@ class _MealSuggestionDetailScreenState
             child: _DetailBody(
                 suggestion: suggestion,
                 controller: widget.controller,
+                readOnly: widget.readOnly,
                 onActivate: _activate),
           ),
         ),
@@ -73,11 +76,13 @@ class _MealSuggestionDetailScreenState
 class _DetailBody extends StatelessWidget {
   final MealSuggestion suggestion;
   final MealSuggestionActivationController controller;
+  final bool readOnly;
   final VoidCallback onActivate;
 
   const _DetailBody(
       {required this.suggestion,
       required this.controller,
+      required this.readOnly,
       required this.onActivate});
 
   @override
@@ -118,32 +123,87 @@ class _DetailBody extends StatelessWidget {
                       child:
                           _MacroStat(label: 'Carbs', grams: suggestion.carbsG)),
                   Expanded(
-                      child: _MacroStat(label: 'Fats', grams: suggestion.fatsG)),
+                      child:
+                          _MacroStat(label: 'Fats', grams: suggestion.fatsG)),
                 ],
               ),
             ],
           ),
         ),
+        if (suggestion.ingredientPreview?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: AppSpacing.lg),
+          Text('INGREDIENTS', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.sm),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final ingredient in suggestion.ingredientPreview!
+                    .split(RegExp(r'\s*[\u00b7,]\s*'))
+                    .where((value) => value.trim().isNotEmpty))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded,
+                            size: 17, color: AppColors.accent),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: Text(ingredient.trim(),
+                              style: AppTypography.bodySm
+                                  .copyWith(color: AppColors.onSurface)),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (suggestion.ingredientCount > 4)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: Text(
+                      '+${suggestion.ingredientCount - 4} more ingredients in the full recipe',
+                      style: AppTypography.labelSm
+                          .copyWith(color: AppColors.onSurfaceVariant),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.lg),
-        PrimaryPillButton(
-          label: controller.activated
-              ? 'Added to Plan'
-              : 'Activate This Meal',
-          icon: controller.activated
-              ? Icons.check_rounded
-              : Icons.add_circle_outline_rounded,
-          isLoading: controller.isActivating,
-          onPressed: controller.activated ? null : onActivate,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          controller.activated
-              ? 'Mark it logged from the Nutrition tab once you\'ve eaten it.'
-              : 'Adds this to ${DateFormat('EEEE, MMM d').format(today)} as a planned meal.',
-          textAlign: TextAlign.center,
-          style: AppTypography.labelSm
-              .copyWith(color: AppColors.onSurfaceVariant),
-        ),
+        if (readOnly)
+          SectionCard(
+            child: Row(
+              children: [
+                Icon(Icons.visibility_outlined, color: AppColors.accent),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text('Sample preview only — no meal will be added.',
+                      style: AppTypography.bodySm),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          PrimaryPillButton(
+            label:
+                controller.activated ? 'Added to Plan' : 'Activate This Meal',
+            icon: controller.activated
+                ? Icons.check_rounded
+                : Icons.add_circle_outline_rounded,
+            isLoading: controller.isActivating,
+            onPressed: controller.activated ? null : onActivate,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            controller.activated
+                ? 'Mark it logged from the Nutrition tab once you\'ve eaten it.'
+                : 'Adds this to ${DateFormat('EEEE, MMM d').format(today)} as a planned meal.',
+            textAlign: TextAlign.center,
+            style: AppTypography.labelSm
+                .copyWith(color: AppColors.onSurfaceVariant),
+          ),
+        ],
       ],
     );
   }

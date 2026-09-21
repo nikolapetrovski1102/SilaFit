@@ -18,7 +18,8 @@ String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 /// stored `dayIndex`, mirroring `usp_WorkoutSession_GetTodayScheduled`: system
 /// splits are seeded 0-based while custom/AI splits are written 1-based, and
 /// position-based matching keeps both on the same rotation.
-SplitDay? resolveSplitDay(DateTime date, ActiveSplit split, SplitDetail detail) {
+SplitDayWithExercises? resolveSplitDayWithExercises(
+    DateTime date, ActiveSplit split, SplitDetail detail) {
   final duration = split.durationDays;
   if (duration == null || duration <= 0) return null;
   final activated = dateOnly(split.activatedAtUtc);
@@ -29,8 +30,12 @@ SplitDay? resolveSplitDay(DateTime date, ActiveSplit split, SplitDetail detail) 
   final ordered = [...detail.days]
     ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
   if (cycleIndex >= ordered.length) return null;
-  return ordered[cycleIndex].day;
+  return ordered[cycleIndex];
 }
+
+SplitDay? resolveSplitDay(
+        DateTime date, ActiveSplit split, SplitDetail detail) =>
+    resolveSplitDayWithExercises(date, split, detail)?.day;
 
 /// Everything Home's hero session card needs to render whichever day is
 /// currently centered in `DayScrollStrip` - today's real, completable
@@ -44,6 +49,7 @@ class DayPreview {
   final String? focusLabel;
   final int? estimatedMinutes;
   final bool isRestDay;
+  final List<SplitDayExercise> scheduledExercises;
 
   /// Only set when [isToday] - the one day with a real, completable session.
   final String? workoutSessionId;
@@ -57,6 +63,7 @@ class DayPreview {
     this.focusLabel,
     this.estimatedMinutes,
     required this.isRestDay,
+    this.scheduledExercises = const [],
     this.workoutSessionId,
     this.targetExercises = const [],
   });
@@ -91,12 +98,15 @@ class DayPreview {
     WeekDayStatus? knownStatus,
     SplitDetail? splitDetail,
   }) {
-    if (isSameCalendarDay(date, DateTime.now())) return DayPreview.today(dashboard);
+    if (isSameCalendarDay(date, DateTime.now())) {
+      return DayPreview.today(dashboard);
+    }
 
     final activeSplit = dashboard.activeSplit;
-    final splitDay = activeSplit != null && splitDetail != null
-        ? resolveSplitDay(date, activeSplit, splitDetail)
+    final splitDayWithExercises = activeSplit != null && splitDetail != null
+        ? resolveSplitDayWithExercises(date, activeSplit, splitDetail)
         : null;
+    final splitDay = splitDayWithExercises?.day;
 
     final isRest = knownStatus?.status == 'ActiveRest' ||
         (knownStatus == null && (splitDay?.isRestDay ?? false));
@@ -109,6 +119,7 @@ class DayPreview {
       focusLabel: splitDay?.focusLabel,
       estimatedMinutes: splitDay?.estimatedMinutes,
       isRestDay: isRest,
+      scheduledExercises: splitDayWithExercises?.exercises ?? const [],
     );
   }
 }

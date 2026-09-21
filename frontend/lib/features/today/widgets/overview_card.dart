@@ -241,6 +241,8 @@ class _SessionSection extends StatelessWidget {
     final minutesLabel = preview.estimatedMinutes != null
         ? formatMinutesLabel(preview.estimatedMinutes!)
         : null;
+    final exercises = [...preview.scheduledExercises]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -285,6 +287,45 @@ class _SessionSection extends StatelessWidget {
         ),
         if (minutesLabel != null) ...[
           SizedBox(height: AppSpacing.lg * scale),
+          if (exercises.isNotEmpty) ...[
+            Text('WORKOUT PREVIEW',
+                style: AppTypography.labelCaps
+                    .copyWith(color: AppColors.accent, fontSize: 11 * scale)),
+            SizedBox(height: AppSpacing.sm * scale),
+            ...exercises.take(3).map((exercise) => Padding(
+                  padding: EdgeInsets.only(bottom: AppSpacing.xs * scale),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 5 * scale,
+                        height: 5 * scale,
+                        decoration: BoxDecoration(
+                          color: AppColors.accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      SizedBox(width: AppSpacing.sm * scale),
+                      Expanded(
+                        child: Text(exercise.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodyMd),
+                      ),
+                      SizedBox(width: AppSpacing.sm * scale),
+                      Text(
+                        '${exercise.targetSets} × ${exercise.targetRepsLow}-${exercise.targetRepsHigh}',
+                        style: AppTypography.bodySm
+                            .copyWith(color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                )),
+            if (exercises.length > 3)
+              Text('+${exercises.length - 3} more exercises',
+                  style: AppTypography.bodySm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+            SizedBox(height: AppSpacing.md * scale),
+          ],
           Row(
             children: [
               Icon(Icons.event_repeat_rounded,

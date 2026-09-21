@@ -43,7 +43,8 @@ Future<void> advance(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('effects stay compact and centered without changing the icon layout slot',
+  testWidgets(
+      'effects stay compact and centered without changing the icon layout slot',
       (tester) async {
     await openRecap(tester, reducedMotion: true);
     Finder asset(String name) => find.byWidgetPredicate(
@@ -57,8 +58,10 @@ void main() {
     expect(tester.widget<RecapAnimation>(asset('congratulations')).fit,
         BoxFit.cover);
     expect(tester.getSize(find.byType(RecapAnimationStage)).height, 152);
-    expect(tester.getCenter(asset('confetti')),
-        tester.getCenter(find.byType(RecapAnimationStage)) + const Offset(8, -8));
+    expect(
+        tester.getCenter(asset('confetti')),
+        tester.getCenter(find.byType(RecapAnimationStage)) +
+            const Offset(8, -8));
     expect(tester.getSize(asset('confetti')), const Size(152, 152));
     final initialKey = tester.widget(asset('congratulations')).key;
     await tester.tap(find.byType(RecapAnimationStage));
@@ -212,7 +215,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Could not save your weight. Please try again.'),
         findsOneWidget);
-    expect(find.text('Skip for now'), findsOneWidget);
+    // The edited value remains selected after a failed save, so the retry
+    // action stays explicit instead of silently changing back to "skip".
+    expect(find.text('Save weight & continue'), findsOneWidget);
     expect(today.savedWeights, [85.5]);
     today.succeeds = true;
     await tester.ensureVisible(find.text('Save weight & continue'));
