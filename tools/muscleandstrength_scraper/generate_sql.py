@@ -208,7 +208,8 @@ def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> l
         if replace_all
         else [
             "SELECT SplitId INTO #RemovedWorkoutSplits FROM dbo.WorkoutSplits",
-            "WHERE SourceUrl IS NULL OR SourceUrl NOT IN (",
+            "WHERE (SourceUrl LIKE N'https://www.muscleandstrength.com/workouts/%' OR SourceUrl LIKE N'https://www.muscleandstrength.com/content/%')",
+            "  AND SourceUrl NOT IN (",
             f"        {selected_urls}",
             "  );",
         ]
@@ -247,7 +248,10 @@ def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> l
         popularity_rank = int(item["popularity_rank"]) if item.get("popularity_rank") else None
         catalog_rank = int(item.get("catalog_rank") or 0)
         days = item.get("days") or []
-        days_per_week = bounded_number(item.get("days_per_week"), 1, 7, max(1, min(7, len(days) or 1)))
+        if not days:
+            raise ValueError(f"Workout {item.get('title')!r} has no exercise-bearing workout days")
+        duration_days = len(days)
+        days_per_week = bounded_number(item.get("days_per_week"), 1, 7, min(7, duration_days))
         duration_weeks = bounded_number(item.get("program_duration"), 1, 520)
         min_minutes, max_minutes = minute_range(item.get("time_per_workout"))
         typical_minutes = round(((min_minutes or 60) + (max_minutes or min_minutes or 60)) / 2)
@@ -264,12 +268,12 @@ def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> l
             "    SET @ImportedSplitId = NEWID();",
             "    INSERT INTO dbo.WorkoutSplits",
             "        (SplitId, Name, Category, Level, DurationDays, Description, HeroImageUrl, IsSystemDefault, SortOrder, RecommendedGoal, Visibility, SourceUrl, SourceAuthor, FullDescription, PopularityRank, PopularityWindow, DaysPerWeek, ProgramDurationWeeks, MinSessionMinutes, MaxSessionMinutes, EquipmentRequired, TargetGender, WorkoutTypeLabel, SourceCategoriesJson, CatalogRank)",
-            f"    VALUES (@ImportedSplitId, {sql_text(item['title'], 150)}, {sql_text(workout_category(item))}, {sql_text(item.get('experience_level') or 'Intermediate')}, {days_per_week}, {sql_text(item.get('summary') or item.get('catalog_summary'), 500)}, {sql_text(item.get('image_url'), 500)}, 1, {sort_order}, {sql_text(workout_goal(item))}, N'Public', {sql_text(item['url'])}, {sql_text(item.get('author'), 300)}, {sql_text(item.get('description_text'))}, {popularity_sql}, {sql_text(item.get('popularity_window'), 100)}, {days_per_week}, {duration_weeks if duration_weeks is not None else 'NULL'}, {min_minutes if min_minutes is not None else 'NULL'}, {max_minutes if max_minutes is not None else 'NULL'}, {sql_text(item.get('equipment_required'), 500)}, {sql_text(item.get('target_gender'), 50)}, {sql_text(item.get('workout_type'), 100)}, {sql_json(item.get('source_categories') or [])}, {catalog_rank});",
+            f"    VALUES (@ImportedSplitId, {sql_text(item['title'], 150)}, {sql_text(workout_category(item))}, {sql_text(item.get('experience_level') or 'Intermediate')}, {duration_days}, {sql_text(item.get('summary') or item.get('catalog_summary'), 500)}, {sql_text(item.get('image_url'), 500)}, 1, {sort_order}, {sql_text(workout_goal(item))}, N'Public', {sql_text(item['url'])}, {sql_text(item.get('author'), 300)}, {sql_text(item.get('description_text'))}, {popularity_sql}, {sql_text(item.get('popularity_window'), 100)}, {days_per_week}, {duration_weeks if duration_weeks is not None else 'NULL'}, {min_minutes if min_minutes is not None else 'NULL'}, {max_minutes if max_minutes is not None else 'NULL'}, {sql_text(item.get('equipment_required'), 500)}, {sql_text(item.get('target_gender'), 50)}, {sql_text(item.get('workout_type'), 100)}, {sql_json(item.get('source_categories') or [])}, {catalog_rank});",
             "END",
             "ELSE",
             "BEGIN",
             "    UPDATE dbo.WorkoutSplits SET",
-            f"        Name={sql_text(item['title'], 150)}, Category={sql_text(workout_category(item))}, Level={sql_text(item.get('experience_level') or 'Intermediate')}, DurationDays={days_per_week},",
+            f"        Name={sql_text(item['title'], 150)}, Category={sql_text(workout_category(item))}, Level={sql_text(item.get('experience_level') or 'Intermediate')}, DurationDays={duration_days},",
             f"        Description={sql_text(item.get('summary') or item.get('catalog_summary'), 500)}, HeroImageUrl={sql_text(item.get('image_url'), 500)}, IsSystemDefault=1, SortOrder={sort_order},",
             f"        RecommendedGoal={sql_text(workout_goal(item))}, Visibility=N'Public', SourceUrl={sql_text(item['url'])},",
             f"        SourceAuthor={sql_text(item.get('author'), 300)}, FullDescription={sql_text(item.get('description_text'))}, PopularityRank={popularity_sql}, PopularityWindow={sql_text(item.get('popularity_window'), 100)},",
@@ -277,7 +281,7 @@ def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> l
             "    WHERE SplitId=@ImportedSplitId;",
             "END",
         ])
-        for day_index, day in enumerate(days):
+        for day_index, day in enumerate(days, start=1):
             out.extend([
                 "SET @ImportedDayId=NULL;",
                 f"SELECT @ImportedDayId=SplitDayId FROM dbo.SplitDays WHERE SplitId=@ImportedSplitId AND DayIndex={day_index};",
@@ -285,11 +289,12 @@ def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> l
                 "BEGIN",
                 "    SET @ImportedDayId=NEWID();",
                 "    INSERT INTO dbo.SplitDays (SplitDayId, SplitId, DayIndex, Title, FocusLabel, EstimatedMinutes, IsRestDay, SourceNotes)",
-                f"    VALUES (@ImportedDayId, @ImportedSplitId, {day_index}, {sql_text(day.get('title') or f'Day {day_index + 1}', 150)}, {sql_text(item.get('workout_type'), 100)}, {0 if day.get('is_rest_day') else typical_minutes}, {1 if day.get('is_rest_day') else 0}, {sql_text(day.get('notes'))});",
+                f"    VALUES (@ImportedDayId, @ImportedSplitId, {day_index}, {sql_text(day.get('title') or f'Day {day_index}', 150)}, {sql_text(item.get('workout_type'), 100)}, {0 if day.get('is_rest_day') else typical_minutes}, {1 if day.get('is_rest_day') else 0}, {sql_text(day.get('notes'))});",
                 "END",
                 "ELSE UPDATE dbo.SplitDays SET",
-                f"    Title={sql_text(day.get('title') or f'Day {day_index + 1}', 150)}, FocusLabel={sql_text(item.get('workout_type'), 100)}, EstimatedMinutes={0 if day.get('is_rest_day') else typical_minutes}, IsRestDay={1 if day.get('is_rest_day') else 0}, SourceNotes={sql_text(day.get('notes'))}",
+                f"    Title={sql_text(day.get('title') or f'Day {day_index}', 150)}, FocusLabel={sql_text(item.get('workout_type'), 100)}, EstimatedMinutes={0 if day.get('is_rest_day') else typical_minutes}, IsRestDay={1 if day.get('is_rest_day') else 0}, SourceNotes={sql_text(day.get('notes'))}",
                 "    WHERE SplitDayId=@ImportedDayId;",
+                "DELETE FROM dbo.SplitDayExercises WHERE SplitDayId=@ImportedDayId;",
             ])
             rows: list[tuple[str, dict[str, Any]]] = []
             for table in day.get("exercise_tables", []) or []:
@@ -308,14 +313,16 @@ def render_workouts(items: list[dict[str, Any]], replace_all: bool = False) -> l
                 sets = max(1, min(20, first_number(source_sets, 1)))
                 out.extend([
                     "SET @ImportedExerciseId=(SELECT TOP (1) ExerciseId FROM dbo.Exercises WHERE Name=" + sql_text(exercise, 150) + ");",
-                    "IF EXISTS (SELECT 1 FROM dbo.SplitDayExercises WHERE SplitDayId=@ImportedDayId AND SortOrder=" + str(sort_order) + ")",
-                    "    UPDATE dbo.SplitDayExercises SET",
-                    f"        ExerciseId=@ImportedExerciseId, TargetSets={sets}, TargetRepsLow={low}, TargetRepsHigh={high}, SourceSets={sql_text(source_sets, 100)}, SourceReps={sql_text(source_reps, 300)}",
-                    f"    WHERE SplitDayId=@ImportedDayId AND SortOrder={sort_order};",
-                    "ELSE",
                     "    INSERT INTO dbo.SplitDayExercises (SplitDayId, ExerciseId, SortOrder, TargetSets, TargetRepsLow, TargetRepsHigh, SourceSets, SourceReps)",
                     f"    VALUES (@ImportedDayId, @ImportedExerciseId, {sort_order}, {sets}, {low}, {high}, {sql_text(source_sets, 100)}, {sql_text(source_reps, 300)});",
                 ])
+        out.extend([
+            "UPDATE dbo.WorkoutSessions SET SplitDayId=NULL",
+            f"WHERE SplitDayId IN (SELECT SplitDayId FROM dbo.SplitDays WHERE SplitId=@ImportedSplitId AND (DayIndex<1 OR DayIndex>{len(days)}));",
+            "DELETE FROM dbo.SplitDayExercises",
+            f"WHERE SplitDayId IN (SELECT SplitDayId FROM dbo.SplitDays WHERE SplitId=@ImportedSplitId AND (DayIndex<1 OR DayIndex>{len(days)}));",
+            f"DELETE FROM dbo.SplitDays WHERE SplitId=@ImportedSplitId AND (DayIndex<1 OR DayIndex>{len(days)});",
+        ])
         out.extend(["GO", ""])
     return out
 
@@ -388,8 +395,7 @@ def generate(
     diets = [] if workouts_only else json.loads((input_dir / "diets.json").read_text(encoding="utf-8"))
     recipes = [] if workouts_only else json.loads((input_dir / "recipes.json").read_text(encoding="utf-8"))
     lines = header()
-    if replace_all_workouts:
-        lines.extend(["BEGIN TRANSACTION;", "GO", ""])
+    lines.extend(["BEGIN TRANSACTION;", "GO", ""])
     lines.extend(render_workouts(workouts, replace_all_workouts))
     if not workouts_only:
         lines.extend(render_diets(diets))
@@ -407,10 +413,8 @@ def generate(
         lines.extend([
             f"IF (SELECT COUNT(*) FROM dbo.WorkoutSplits) <> {len(workouts)}",
             f"    THROW 51000, 'Expected exactly {len(workouts)} workout splits after replacement.', 1;",
-            "COMMIT TRANSACTION;",
-            "GO",
-            "",
         ])
+    lines.extend(["COMMIT TRANSACTION;", "GO", ""])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines), encoding="utf-8")
     print(f"Generated {output} from {len(workouts)} workouts, {len(diets)} diets, and {len(recipes)} recipes")

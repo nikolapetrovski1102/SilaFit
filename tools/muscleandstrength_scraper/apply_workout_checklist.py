@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scrape import checklist_workout_cards, parse_workout_detail
+from scrape import checklist_workout_cards, normalize_workout_days, parse_workout_detail
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,8 +38,8 @@ def exercise_row_count(record: dict[str, Any]) -> int:
 
 
 def repair_nested_workout_tables(record: dict[str, Any]) -> dict[str, Any]:
-    if exercise_row_count(record) or not record.get("description_html"):
-        return record
+    if not record.get("description_html"):
+        return {**record, "days": normalize_workout_days(record.get("days") or [])}
     wrapped_html = (
         "<html><body><div class='field-name-body'><div class='field-items'>"
         + str(record["description_html"])
@@ -48,7 +48,7 @@ def repair_nested_workout_tables(record: dict[str, Any]) -> dict[str, Any]:
     reparsed = parse_workout_detail(wrapped_html, str(record["url"]))
     if exercise_row_count(reparsed):
         return {**record, "sections": reparsed["sections"], "days": reparsed["days"]}
-    return record
+    return {**record, "days": normalize_workout_days(record.get("days") or [])}
 
 
 def main() -> None:

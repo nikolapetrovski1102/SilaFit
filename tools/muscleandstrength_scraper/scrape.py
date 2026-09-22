@@ -363,6 +363,49 @@ def parse_article_sections(body: Tag | None) -> list[dict[str, Any]]:
     return sections
 
 
+def exercise_rows(table: Any) -> list[dict[str, Any]]:
+    """Return only rows from a table that actually describes exercises."""
+    if not isinstance(table, list):
+        return []
+    return [
+        row
+        for row in table
+        if isinstance(row, dict)
+        and any(
+            "exercise" in str(key).casefold() and clean_text(str(value or ""))
+            for key, value in row.items()
+        )
+    ]
+
+
+def normalize_workout_days(days: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep workout definitions, not article/supporting tables or recovery prose.
+
+    Source pages mix exercise prescriptions with meal plans, progression tables,
+    FAQs, cardio prose, and recovery headings. Only exercise-bearing tables are
+    useful as app workout days. Explicit rest/recovery sections are omitted even
+    when they contain an optional add-on table; their exercises remain available
+    in the source description without displacing a scheduled training day.
+    """
+    normalized: list[dict[str, Any]] = []
+    for day in days:
+        title = clean_text(str(day.get("title") or ""))
+        if not title or re.search(r"\brest\b|active recovery", title, re.I):
+            continue
+        tables = [rows for table in day.get("exercise_tables") or [] if (rows := exercise_rows(table))]
+        if not tables:
+            continue
+        normalized.append(
+            {
+                **day,
+                "title": title,
+                "exercise_tables": tables,
+                "is_rest_day": False,
+            }
+        )
+    return normalized
+
+
 def main_body(soup: BeautifulSoup) -> Tag | None:
     return soup.select_one(".field-name-body > .field-items > .field-item") or soup.select_one(
         ".field-name-body"
@@ -373,12 +416,12 @@ def parse_workout_detail(html: str, source_url: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     body = main_body(soup)
     sections = parse_article_sections(body)
-    days: list[dict[str, Any]] = []
+    candidate_days: list[dict[str, Any]] = []
     for section in sections:
         heading = section.get("heading")
         tables = section.get("tables") or []
-        if heading and (tables or re.search(r"rest|cardio|day|monday|tuesday|wednesday|thursday|friday|weekend", heading, re.I)):
-            days.append(
+        if heading and tables:
+            candidate_days.append(
                 {
                     "title": heading,
                     "notes": section.get("text"),
@@ -386,6 +429,7 @@ def parse_workout_detail(html: str, source_url: str) -> dict[str, Any]:
                     "is_rest_day": bool(re.search(r"\brest\b", heading, re.I)),
                 }
             )
+    days = normalize_workout_days(candidate_days)
     # Some programs encode the day name in the first table header instead of
     # using headings (for example, "Day 1 | Warm-Up | Working Set | Rest").
     if not days and body:
@@ -402,7 +446,7 @@ def parse_workout_detail(html: str, source_url: str) -> dict[str, Any]:
                 values = [text_of(cell) for cell in row.find_all(["th", "td"], recursive=False)]
                 if len(values) == len(headers) and any(values):
                     rows.append(dict(zip(headers, values)))
-            days.append(
+            candidate_days.append(
                 {
                     "title": day_title,
                     "notes": None,
@@ -413,6 +457,7 @@ def parse_workout_detail(html: str, source_url: str) -> dict[str, Any]:
                     ),
                 }
             )
+        days = normalize_workout_days(candidate_days)
     return {
         "title": text_of(soup.select_one("h1")),
         "url": canonical_url(soup, source_url),

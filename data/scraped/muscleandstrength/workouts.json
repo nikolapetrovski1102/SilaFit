@@ -688,7 +688,46 @@
         "tables": [
           [
             {
-              "Legs Workout B": "Quads, Hamstrings & Calves"
+              "Exercise": "Barbell Front Squat",
+              "Sets": "5",
+              "Rep Goal Total": "15",
+              "Rest": "90-120 sec"
+            },
+            {
+              "Exercise": "Barbell Front Squat (Use 20% less weight than your previous working sets)",
+              "Sets": "1",
+              "Rep Goal Total": "AMQRAP",
+              "Rest": "N/A"
+            },
+            {
+              "Exercise": "Barbell Romanian Deadlifts",
+              "Sets": "3",
+              "Rep Goal Total": "25",
+              "Rest": "60 sec"
+            },
+            {
+              "Exercise": "Barbell Hip Thrusts",
+              "Sets": "3",
+              "Rep Goal Total": "30",
+              "Rest": "60 sec"
+            },
+            {
+              "Exercise": "Dumbbell Lunges",
+              "Sets": "5",
+              "Rep Goal Total": "50",
+              "Rest": "30 sec"
+            },
+            {
+              "Exercise": "Seated Leg Extensions",
+              "Sets": "5",
+              "Rep Goal Total": "50",
+              "Rest": "30 sec"
+            },
+            {
+              "Exercise": "Hanging Leg Raises",
+              "Sets": "5",
+              "Rep Goal Total": "50",
+              "Rest": "15 sec"
             }
           ]
         ],
@@ -1033,61 +1072,46 @@
         "exercise_tables": [
           [
             {
-              "Legs Workout B": "Quads, Hamstrings & Calves"
-            }
-          ]
-        ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Sample 3,500 Calorie Muscle Building Meal Plan",
-        "notes": "Nutrition Totals:",
-        "exercise_tables": [
-          [
-            {
-              "Time": "07:00 Wake Up",
-              "Meal": null,
-              "Nutrition": null
+              "Exercise": "Barbell Front Squat",
+              "Sets": "5",
+              "Rep Goal Total": "15",
+              "Rest": "90-120 sec"
             },
             {
-              "Time": "07:30",
-              "Meal": "1 to 2 cups of coffee; 1 serving multivitamin (general health), 2-3g EPA/DHA fish oil (general health & inflammation control).",
-              "Nutrition": "50 calories, 0g protein, 0g carbs, 5.5g fat, 0g fiber, 0mg calcium"
+              "Exercise": "Barbell Front Squat (Use 20% less weight than your previous working sets)",
+              "Sets": "1",
+              "Rep Goal Total": "AMQRAP",
+              "Rest": "N/A"
             },
             {
-              "Time": "8:00 Breakfast",
-              "Meal": "6 large eggs, 1.5 cups fresh blueberries, 4 slices of turkey bacon, 1.5 cups of sliced mushrooms, 1 cup of sliced green peppers, 1 ounce of Swiss cheese.",
-              "Nutrition": "845 calories, 60g protein, 43g carbs, 49g fat, 9g fiber, 420mg calcium"
+              "Exercise": "Barbell Romanian Deadlifts",
+              "Sets": "3",
+              "Rep Goal Total": "25",
+              "Rest": "60 sec"
             },
             {
-              "Time": "12:00 Lunch",
-              "Meal": "0.5 cup dry-measure jasmine rice, 6 ounces of roasted turkey breast, 1 cup steamed spinach, 1 tablespoon olive oil, 1 large red delicious apple.",
-              "Nutrition": "886 calories, 63g protein, 122g carbs, 18g fat, 9g fiber, 410mg calcium"
+              "Exercise": "Barbell Hip Thrusts",
+              "Sets": "3",
+              "Rep Goal Total": "30",
+              "Rest": "60 sec"
             },
             {
-              "Time": "16:00 Pre Workout Snack",
-              "Meal": "2 slices of whole wheat bread, 3 tablespoons of peanut butter, 1 cup of whole milk, 1 scoop of whey protein , 1.5 cups sliced strawberries.",
-              "Nutrition": "737 calories, 49g protein, 68g carbs, 32g fat, 12g fiber, 520mg calcium"
+              "Exercise": "Dumbbell Lunges",
+              "Sets": "5",
+              "Rep Goal Total": "50",
+              "Rest": "30 sec"
             },
             {
-              "Time": "17:30 Pre Workout",
-              "Meal": "0 to 300mg of caffeine (energy), 5g creatine (power output), 500mg agmatine sulfate (muscle pumps), 2000mg citrulline malate (muscle pumps), and 3000mg beta-alanine (muscular endurance)",
-              "Nutrition": null
+              "Exercise": "Seated Leg Extensions",
+              "Sets": "5",
+              "Rep Goal Total": "50",
+              "Rest": "30 sec"
             },
             {
-              "Time": "18:00-19:30 Workout",
-              "Meal": "10 to 15g of BCAAs intra-workout (recovery & fatigue management). Nutrition – 60 calories, 15g protein, 0g carbs, 0g fat, 0g fiber, 0mg calcium",
-              "Nutrition": null
-            },
-            {
-              "Time": "20:00 Dinner",
-              "Meal": "4 ounces dry-measure whole wheat pasta, 2 cups of tomato sauce, 2 cups steamed broccoli, 4 ounces raw-measure ground beef (80% lean/20% fat).",
-              "Nutrition": "931 calories, 48g protein, 134g carbs, 28g fat, 29g fiber, 200mg calcium"
-            },
-            {
-              "Time": "23:00 Bed",
-              "Meal": "1 serving of ZMA (relaxation & nervous system recovery)",
-              "Nutrition": null
+              "Exercise": "Hanging Leg Raises",
+              "Sets": "5",
+              "Rep Goal Total": "50",
+              "Rest": "15 sec"
             }
           ]
         ],
@@ -1112,12 +1136,6 @@
   {
     "author": "Written By: Max Riley May 17th, 2013 Updated: March 22nd, 2021",
     "days": [
-      {
-        "exercise_tables": [],
-        "is_rest_day": false,
-        "notes": "It doesn't matter which form of cardio you use for these 12 weeks. Pick something that gets your heart moving, be it treadmill, elliptical, or swimming. The first thing you will notice about this cardio plan is that it starts slow. That's ok. Right now you are out of shape. This program is designed to get you in shape over the course of 12 weeks. Be patient. Trust the plan and stick to the plan. After the end of 12 weeks your level of conditioning may surprise you. During the first 6 weeks take at least one day of rest between cardio workouts. After week 6 it is recommended that you perform cardio using a 2 days on, 1-2 days off pattern.",
-        "title": "The 12 Week Cardio Plan"
-      },
       {
         "exercise_tables": [
           [
@@ -2029,12 +2047,6 @@
             }
           ]
         ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Weekends:",
-        "notes": "Light activity – recovery walks and optional ab workout",
-        "exercise_tables": [],
         "is_rest_day": false
       },
       {
@@ -4736,12 +4748,6 @@
         "title": "Tuesday - Back and Biceps"
       },
       {
-        "exercise_tables": [],
-        "is_rest_day": true,
-        "notes": null,
-        "title": "Wednesday - Rest Day/Cardio"
-      },
-      {
         "exercise_tables": [
           [
             {
@@ -4823,12 +4829,6 @@
         "is_rest_day": false,
         "notes": null,
         "title": "Friday - Legs"
-      },
-      {
-        "exercise_tables": [],
-        "is_rest_day": true,
-        "notes": "Post your post-workout swolfies in M&S gear on IG and tag @muscleandstrength, #muscleandstrength, or DM them to us to get a shoutout on Muscle & Strength stories!",
-        "title": "Weekend - Rest"
       }
     ],
     "days_per_week": "4",
@@ -5303,12 +5303,6 @@
       }
     ],
     "days": [
-      {
-        "title": "5 Day Dumbbell Workout Split Overview",
-        "notes": "The workout can be performed for up to 12 weeks. After 12 weeks, you may want to consider increasing the volume within the workout, the weight of the dumbbells you are using, or look into facilities that offer more of a variety of weighted equipment. The program calls for you to work out 5 days per week. What days you decide to work out on are completely up to you. Just ensure that you incorporate 2 rest/active recovery days into your weekly schedule. The goal of the program is to help you build muscle . Of course, if you’d rather use it to help aid in fat loss, that is completely fine too. Just be sure to adjust your caloric intake accordingly. Keep rest periods right around the 45 second mark for this workout program. If you have any other questions about this 5 day dumbbell only workout program, please be sure to leave them in the comment section below.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
       {
         "title": "Day 1: Chest, Shoulders, & Triceps Dumbbell Workout",
         "notes": null,
@@ -6167,12 +6161,6 @@
     ],
     "days": [
       {
-        "title": "6 Day Dumbbell Workout Split Overview",
-        "notes": "This workout can be performed for up to 12 weeks. It follows a push/pull/legs workout scheme. As a result, you’ll train each muscle group at least twice per week. Some supporting muscle groups (especially the back and shoulders) are indirectly targeted even more than that. The program is void of any ab work and cardio work. However, both can be easily added at a frequency that aligns with your goals. The main goal of the program is to help you build lean muscle mass . It can also be used for those with fat loss goals as well. Both goals will heavily rely on whether or not you’re currently eating in a calorie surplus or deficit at the time of performing the workouts. Keep rest periods between 45-60 seconds when performing each workout. When selecting a weight, choose a weight that is challenging for each exercise. You should feel as though you have just 1 more rep left in the tank upon completing each set. After you’ve finished this workout program’s recommended duration, you’re more than welcome to continue on with it if you are enjoying it and still seeing results from it. Alternatively, you can cycle through the other workouts in the series, attempting to get stronger at the lifts each time you perform them.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
         "title": "Day 1: Push Dumbbell Workout A",
         "notes": null,
         "exercise_tables": [
@@ -6744,12 +6732,6 @@
           ]
         ],
         "is_rest_day": false
-      },
-      {
-        "title": "Specific Rest Times",
-        "notes": "Remember that we want you to be as prepared for the next set as possible, which is why we have two minutes of rest between each set and exercise. That means you change the weight if desired, then take two minutes to lock yourself in mentally to execute physically. You will also have one or two days off in between each workout. If you can perform this on a Monday/Wednesday/Friday or a Tuesday/Thursday/Saturday schedule, that would be ideal. If you have to train two days in a row because of work or school, do it. However, do not train for three days in a row on this program.",
-        "exercise_tables": [],
-        "is_rest_day": true
       }
     ],
     "popularity_rank": null,
@@ -7050,12 +7032,6 @@
       }
     ],
     "days": [
-      {
-        "title": "5 Day Power Muscle Burn Split",
-        "notes": "The 5 Day Power Muscle Burn Powerbuilding split: Note : This is a sample template. Feel free to \"swap\" in any appropriate (and favorite) exercises.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
       {
         "title": "Day 1 - Chest and Triceps",
         "notes": null,
@@ -7648,12 +7624,6 @@
           ]
         ],
         "is_rest_day": false
-      },
-      {
-        "title": "Cardio for Over 40 Fat Loss",
-        "notes": "Alongside eating fewer calories, burning more calories will help older adults lose fat and get leaner. Lower-intensity cardio, such as Zone 2 training for longer durations 2-3 times per week, has proven to be very effective and worth committing to. 4 If that style of cardio may not appeal to you, and you're looking for a greater challenge, rucking could be an option to try. Carrying weight while walking has been shown to positively impact fat loss and overall fitness positively. 5 If you need a starting point, begin with 30 minutes of rucking using an extra 10% of your bodyweight in a ruck or backpack. Adjust based on your current strength and conditioning levels. If you want to add daily walks on top of this, that can also work very well. Walking before eating in the morning may be ideal, but walking at any time of day can still support fat loss, recovery, and overall health.",
-        "exercise_tables": [],
-        "is_rest_day": false
       }
     ],
     "popularity_rank": null,
@@ -8157,18 +8127,6 @@
           ]
         ],
         "is_rest_day": false
-      },
-      {
-        "title": "Cardio for Adults Over 40: Keep It Short and Strategic",
-        "notes": "Including cardiovascular exercise in your weekly routine is essential for heart health and overall fitness, especially as you age. Aim for 3-4 cardio sessions per week, each lasting 20–30 minutes. There's no need to go long; extended sessions can burn too many calories and potentially interfere with your muscle-building goals. When it comes to choosing the best type of cardio, variety is key. Walking, treadmill workouts, or light jogging are all great options. Don’t overlook low-impact alternatives like hiking or Pilates, which not only improve cardiovascular health but also support flexibility and mobility , two things that become increasingly important with age. 5 Related: The Best 10 Minute Yoga & Mobility Routine for Weight Lifters",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
-        "title": "Is it okay to train four days in a row?",
-        "notes": "Occasionally training back-to-back days is fine, but doing so regularly isn't ideal. As you get older, recovery becomes more important for muscle growth and injury prevention. If you're choosing between two consecutive training days or two rest days, opt for the rest—it’s more beneficial long-term.",
-        "exercise_tables": [],
-        "is_rest_day": false
       }
     ],
     "popularity_rank": null,
@@ -8497,24 +8455,6 @@
       }
     ],
     "days": [
-      {
-        "title": "Introducing the 5 Day Program",
-        "notes": "The workout routine that follows is another dumbbell only program, but this one is for five days a week. The split breaks up the bodyparts into different groups, and extra emphasis will be placed on the lower body, which has been split up into two groups. One day focuses on the quadriceps and calves . The second day, which is three days later, emphasizes the hamstrings and glutes . The other muscle groups are paired up so that you can train each area with greater attention to detail than the four-day per week version. There are days for chest and shoulders , back and abs , and biceps and triceps .",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
-        "title": "5 Day Women’s Dumbbell Only Workout Split",
-        "notes": null,
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
-        "title": "Cardio and When to Do It",
-        "notes": "Aside from these workouts, cardio activity is also important. Fortunately, you don’t need to commit to hours of running. 20-30 minutes of activity a day would suffice nicely. You can do these sessions first thing in the morning so it is behind you, or you can opt to do your cardio after your workout when your glycogen levels are decreased. Moderate level intensity can be beneficial if it will help you stay consistent. You may also try a HIIT workout (alternating brief bursts of high effort with periods of lower effort) if endurance and serious fat burning is the goal.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
       {
         "title": "Day 1: Chest and Shoulders",
         "notes": null,
@@ -9676,12 +9616,6 @@
           ]
         ],
         "is_rest_day": false
-      },
-      {
-        "title": "Should I do even more cardio than what is here if I have a lot of weight to lose?",
-        "notes": "Not necessarily. More cardio is not always better, especially when following a strength-training and fat-loss program for women over 40. For fat loss, results are driven by consistency across training, nutrition, daily movement, and recovery - not just increasing cardio volume. Excessive cardio can sometimes interfere with recovery and muscle retention, which are both important for improving body composition. A balanced approach that combines resistance training, moderate cardio, and proper recovery is typically more effective for fat loss for women over 40 and easier to maintain long-term.",
-        "exercise_tables": [],
-        "is_rest_day": false
       }
     ],
     "popularity_rank": null,
@@ -10014,12 +9948,6 @@
     ],
     "days": [
       {
-        "title": "Rest Periods and Workout Duration",
-        "notes": "Because this is a high-volume hypertrophy program, rest periods should be long enough to maintain strength and performance across all sets. Two to three minutes of rest works best for most compound exercises such as squats, hip thrusts, presses, and rows. Secondary movements can use slightly shorter rest periods, while isolation exercises and core work generally require around one minute. Most sessions will last between 60 and 90 minutes, depending on gym flow, warm-up time, and rest intervals. Lower body days tend to run longer due to the volume and overall fatigue involved.",
-        "exercise_tables": [],
-        "is_rest_day": true
-      },
-      {
         "title": "Day 1: Lower Body and Core",
         "notes": "Start with a 10-15 minute warm-up that includes light cardio, dynamic mobility , and controlled lower-body activation. The focus of this session is quad development, overall lower body strength, and core stability. Perform each repetition with a slow tempo and controlled movement. Training to absolute failure is not necessary; finishing within one or two reps of the target range is ideal for hypertrophy .",
         "exercise_tables": [
@@ -10245,12 +10173,6 @@
             }
           ]
         ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Cardio Recommendations During a Muscle Building Phase",
-        "notes": "While the primary goal of this program is hypertrophy, cardiovascular training still plays an important role in maintaining heart health and controlling unwanted fat gain. Three to four weekly Zone 2 cardio sessions lasting around 30 minutes can support recovery and overall conditioning without interfering with strength progress. These sessions can be performed either after resistance training or at a separate time during the day, depending on personal schedule and energy levels.",
-        "exercise_tables": [],
         "is_rest_day": false
       }
     ],
@@ -10526,11 +10448,7 @@
         "heading": "Day 3: Active Recovery or Rest",
         "text": "Light walking, mobility work, stretching, yoga, or low-intensity recovery sessions are recommended to promote circulation and reduce soreness without interfering with muscle recovery.",
         "tables": [
-          [
-            {
-              "Exercise": "3 Active Recovery Workouts for Your Next Rest Day"
-            }
-          ]
+          []
         ],
         "lists": []
       },
@@ -10690,51 +10608,6 @@
     ],
     "days": [
       {
-        "title": "6-Week Progression Table",
-        "notes": null,
-        "exercise_tables": [
-          [
-            {
-              "Week": "Week 1",
-              "Focus": "Technique & Baseline",
-              "Intensity": "RPE 7-8",
-              "Progression Method": "Learn movements, establish starting weights"
-            },
-            {
-              "Week": "Week 2",
-              "Focus": "Volume Build",
-              "Intensity": "RPE 8",
-              "Progression Method": "Add reps within range"
-            },
-            {
-              "Week": "Week 3",
-              "Focus": "Load Increase",
-              "Intensity": "RPE 8-9",
-              "Progression Method": "Increase weight slightly"
-            },
-            {
-              "Week": "Week 4",
-              "Focus": "Progressive Load",
-              "Intensity": "RPE 9",
-              "Progression Method": "Push top rep ranges"
-            },
-            {
-              "Week": "Week 5",
-              "Focus": "Peak Intensity",
-              "Intensity": "RPE 9-10",
-              "Progression Method": "Increase load again where possible"
-            },
-            {
-              "Week": "Week 6",
-              "Focus": "Performance Week",
-              "Intensity": "RPE 9-10",
-              "Progression Method": "Aim for the strongest lifts and the highest quality reps"
-            }
-          ]
-        ],
-        "is_rest_day": false
-      },
-      {
         "title": "Day 1: Lower Body (Glutes & Quads Focus)",
         "notes": null,
         "exercise_tables": [
@@ -10823,18 +10696,6 @@
           ]
         ],
         "is_rest_day": false
-      },
-      {
-        "title": "Day 3: Active Recovery or Rest",
-        "notes": "Light walking, mobility work, stretching, yoga, or low-intensity recovery sessions are recommended to promote circulation and reduce soreness without interfering with muscle recovery.",
-        "exercise_tables": [
-          [
-            {
-              "Exercise": "3 Active Recovery Workouts for Your Next Rest Day"
-            }
-          ]
-        ],
-        "is_rest_day": true
       },
       {
         "title": "Day 4: Lower Body (Glutes & Hamstrings Focus)",
@@ -11912,12 +11773,6 @@
     ],
     "days": [
       {
-        "title": "Zone 2 Cardio",
-        "notes": "Cardiovascular exercise is going to be a big part of this program, specifically Zone 2 Cardio . This is where we’re going to get into the weeds a little bit, but it will be worth it. Many cardio programs used to be centered around five heart-rate “zones.” The higher the number, the more intense the exercise is and the higher your heart rate goes. For beginners , doing cardio that would be the equivalent of the second or third heart rate zone (70-80% of your max heart rate). To determine your max heart rate, take the number 220 and subtract your age. So, if you’re 40 years old, 220-40 would be 180 beats per minute. The 70-80% range would be 70 to 80 percent of that 180. Zone 2 cardio calls for you to keep your heart rate at the 70% range throughout the entire time you do cardio. So, if we go back to our previous example, 70% of 180 would be 126 beats per minute. You would track this on the machine you’re using for cardio if it has heart rate capability or with a monitor that you can wear. The key to Zone 2 is that you maintain that consistent pace from start to finish. You can use the elliptical, rower, treadmill, or do any other form of cardio that you like. As long as you’re either tracking the heart rate and it stays in that 70% range, or if you feel like you’re giving a seven out of ten effort, you’re good. Beginners on this program will do four cardio sessions a week for 20-30 minutes per session at the Zone 2 pace. 20 minutes is the minimum, but if you have time to do 30, then you should. You will perform these sessions after your weight training. So, you will train with weights first, then do cardio after. This approach will help you use your strength with the weights without affecting your cardio performance. Related: Transform Your Training by Understanding Heart Rate Variability",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
         "title": "Workout #1 - Upper Body",
         "notes": null,
         "exercise_tables": [
@@ -12393,18 +12248,6 @@
     ],
     "days": [
       {
-        "title": "Rest-Pause Sets",
-        "notes": "During one of these sets, you will push the set to failure within the recommended rep range, rest for 10-15 seconds, and then perform as many reps as you can. So a set of barbell curls may look like this: Barbell Curls – 70lbs for 8 reps, 15-second rest, 70 pounds for 4 reps. Even though you took that brief rest, you actually did four reps more than you normally would have. Those extra reps will help you take your training to the next level.",
-        "exercise_tables": [],
-        "is_rest_day": true
-      },
-      {
-        "title": "Cardio",
-        "notes": "Cardio is about more than burning calories and increasing metabolism. It’s good for heart health. So I don’t think you should ignore it completely. You can do three or four sessions of moderate level cardio a week at 20 minutes per session. You can do these in the morning or post-workout. Get them in when you’re able to get them in.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
         "title": "Workout 1: Chest and Side Delts",
         "notes": "* Rest-Pause Set + Drop Set ^ 3-5 Second Negatives",
         "exercise_tables": [
@@ -12819,12 +12662,6 @@
             }
           ]
         ],
-        "is_rest_day": false
-      },
-      {
-        "title": "What day of the week should I put this in?",
-        "notes": "Ultimately, that answer will be based on the program you are doing. I can suggest that you do not do this before a push or pull workout because you don’t want to impact your potential on those sessions. After all, the arms are still fatigued. A good placement for this would be as the last workout before an off day.",
-        "exercise_tables": [],
         "is_rest_day": false
       }
     ],
@@ -14451,40 +14288,6 @@
         "is_rest_day": false
       },
       {
-        "title": "Michael B. Jordan Workout Day 4: Rest Day & Optional Abs",
-        "notes": "Be active by performing something you enjoy. Some excellent options are to play basketball, perform yoga and meditation, or even going on a lengthy walk. You could also perform speed and agility drills if you choose.",
-        "exercise_tables": [
-          [
-            {
-              "Exercise": "1. Sit Up",
-              "Sets": "3",
-              "Reps": "15-20"
-            },
-            {
-              "Exercise": "2. Plank",
-              "Sets": "3",
-              "Reps": "20 Secs"
-            },
-            {
-              "Exercise": "3. Side Plank",
-              "Sets": "3",
-              "Reps": "20 Secs (Each)"
-            },
-            {
-              "Exercise": "4. Bicycle Crunch",
-              "Sets": "3",
-              "Reps": "10 (Each)"
-            },
-            {
-              "Exercise": "5. Flutter Kicks",
-              "Sets": "3",
-              "Reps": "15 (Each)"
-            }
-          ]
-        ],
-        "is_rest_day": true
-      },
-      {
         "title": "Michael B. Jordan Workout Day 5: Chest, Shoulder, Triceps",
         "notes": "Warm Up: Stretch, SMR, Perform 5-10 Mins of Jump Roping or Jog 1 Mile Cardio: Perform cardio intervals for 15-30 minutes. For instance, Michael B. Jordan would likely perform some heavy bag intervals, speed bag intervals, or sparring.",
         "exercise_tables": [
@@ -14566,40 +14369,6 @@
           ]
         ],
         "is_rest_day": false
-      },
-      {
-        "title": "Michael B. Jordan Workout Day 7: Rest Day and Optional Abs",
-        "notes": "Be active by performing something you enjoy. Some excellent options are to play basketball, perform yoga and meditation, or even going on a lengthy walk. You could also perform speed and agility drills if you choose.",
-        "exercise_tables": [
-          [
-            {
-              "Exercise": "1. Sit Up",
-              "Sets": "3",
-              "Reps": "15-20"
-            },
-            {
-              "Exercise": "2. Plank",
-              "Sets": "3",
-              "Reps": "20 Secs"
-            },
-            {
-              "Exercise": "3. Side Plank",
-              "Sets": "3",
-              "Reps": "20 Secs (Each)"
-            },
-            {
-              "Exercise": "4. Bicycle Crunch",
-              "Sets": "3",
-              "Reps": "10 (Each)"
-            },
-            {
-              "Exercise": "5. Flutter Kicks",
-              "Sets": "3",
-              "Reps": "15 (Each)"
-            }
-          ]
-        ],
-        "is_rest_day": true
       }
     ],
     "popularity_rank": null,
@@ -14980,12 +14749,6 @@
         "is_rest_day": false
       },
       {
-        "title": "Chris Evans Workout Day 3: Active Recovery",
-        "notes": "On your active recovery days feel free to work on mobility (yoga is an excellent option) or incorporate cardio if you feel it’s needed. Chris Evans didn’t perform much cardio during his preparation, but did admit to performing HIIT cardio when needed. If you enjoy performing cardio and want to add it, feel free to do so and simply adjust your calorie intake accordingly.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
         "title": "Chris Evans Workout Day 4: Lower Body Day",
         "notes": "Cardio: 10 Min Jog on Treadmill/6 MPH/ 2-4 Incline",
         "exercise_tables": [
@@ -15058,60 +14821,6 @@
               "Exercise": "6. Chin Ups",
               "Sets": "3",
               "Reps": "15"
-            }
-          ]
-        ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Chris Evans Workout Day 6 & 7: Active Recovery & Optional Abs/Arms",
-        "notes": "On your active recovery days feel free to work on mobility (yoga is an excellent option) or incorporate cardio if you feel it’s needed. Chris Evans didn’t perform much cardio during his preparation, but did admit to performing HIIT cardio when needed. If you enjoy performing cardio and want to add it, feel free to do so and simply adjust your calorie intake accordingly. You can also perform the following workout on Sunday if you wish to do some vanity (arms and abs) training.",
-        "exercise_tables": [
-          [
-            {
-              "Exercise": "1a. Plank",
-              "Sets": "3",
-              "Reps": "30 Secs"
-            },
-            {
-              "Exercise": "1b. Sit Up",
-              "Sets": "3",
-              "Reps": "15"
-            },
-            {
-              "Exercise": "1c. Bicycle Crunch",
-              "Sets": "3",
-              "Reps": "15"
-            },
-            {
-              "Exercise": "1d. Lying Floor Leg Raise",
-              "Sets": "3",
-              "Reps": "15"
-            },
-            {
-              "Exercise": "1e. Weighted Crunch",
-              "Sets": "3",
-              "Reps": "10"
-            },
-            {
-              "Exercise": "2a. Dumbbell Curls",
-              "Sets": "2",
-              "Reps": "10"
-            },
-            {
-              "Exercise": "2b. Overhead Dumbbell Extension",
-              "Sets": "2",
-              "Reps": "10"
-            },
-            {
-              "Exercise": "3a. Barbell Curl",
-              "Sets": "2",
-              "Reps": "10"
-            },
-            {
-              "Exercise": "3b. Skullcrusher",
-              "Sets": "2",
-              "Reps": "10"
             }
           ]
         ],
@@ -15558,12 +15267,6 @@
         "is_rest_day": false
       },
       {
-        "title": "Scarlett Johansson Workout Day 3: Active Recovery",
-        "notes": "On your active recovery days, take a break from hitting the weight room and find a way to remain active outside of the gym that is not too strenuous to promote recovery. This is the perfect time to work on your mobility by performing yoga, SMR, or other forms of dynamic, active, or static stretching. Additionally, you can incorporate any extra cardio and/or core isolation work if you feel it is necessary. For Scarlett’s active recovery days, she practiced MMA as understanding the combat sport was necessary for her to prepare for her role as Black Widow.",
-        "exercise_tables": [],
-        "is_rest_day": false
-      },
-      {
         "title": "Scarlett Johansson Workout Day 4: Full Body Strength Training",
         "notes": null,
         "exercise_tables": [
@@ -15595,12 +15298,6 @@
             }
           ]
         ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Scarlett Johansson Workout Day 5: Active Recovery",
-        "notes": "On your active recovery days, take a break from hitting the weight room and find a way to remain active outside of the gym that is not too strenuous to promote recovery. This is the perfect time to work on your mobility by performing yoga, SMR, or other forms of dynamic, active, or static stretching. Additionally, you can incorporate any extra cardio and/or core isolation work if you feel it is necessary. For Scarlett’s active recovery days, she practiced MMA as understanding the combat sport was necessary for her to prepare for her role as Black Widow.",
-        "exercise_tables": [],
         "is_rest_day": false
       },
       {
@@ -15685,12 +15382,6 @@
             }
           ]
         ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Scarlett Johansson Workout Day 7: Active Recovery",
-        "notes": "On your active recovery days, take a break from hitting the weight room and find a way to remain active outside of the gym that is not too strenuous to promote recovery. This is the perfect time to work on your mobility by performing yoga, SMR, or other forms of dynamic, active, or static stretching. Additionally, you can incorporate any extra cardio and/or core isolation work if you feel it is necessary. For Scarlett’s active recovery days, she practiced MMA as understanding the combat sport was necessary for her to prepare for her role as Black Widow.",
-        "exercise_tables": [],
         "is_rest_day": false
       }
     ],
@@ -16136,12 +15827,6 @@
             }
           ]
         ],
-        "is_rest_day": false
-      },
-      {
-        "title": "Brie Larson Workout: Days 3, 5, & 7",
-        "notes": "Get out of the gym and do something active that you enjoy. It doesn’t have to be the same thing each day or each week. Perform the hobbies you do like and experiment with other forms of activities to see if there are any other hobbies you’d potentially like to add or substitute into your active lifestyle in the future.",
-        "exercise_tables": [],
         "is_rest_day": false
       }
     ],
@@ -17455,43 +17140,6 @@
       }
     ],
     "days": [
-      {
-        "title": "The Program",
-        "notes": "The purpose here is to get functionally fit not necessarily lean and sexy. However, the residual effects of this program will get you there along the way. It will also get you stronger, balanced and in incredible shape for whatever your goals are. In short, you will be able to kick butt inside and outside of the gym! Again, this is an introductory training plan – not one officially used by the Navy SEALs. Try it for 6 weeks. It can be used to get you started on a fitter, more usable physique without the guessing game. Each session will be performed once per week with an optional weekend day thrown in for those who want to get an extra workout in. Your week will look something like this:",
-        "exercise_tables": [
-          [
-            {
-              "Day": "Monday",
-              "Workout": "Day 1 - Speed and Agility"
-            },
-            {
-              "Day": "Tuesday",
-              "Workout": "Day 2 - Power"
-            },
-            {
-              "Day": "Wednesday",
-              "Workout": "Off"
-            },
-            {
-              "Day": "Thursday",
-              "Workout": "Day 3 - Strength"
-            },
-            {
-              "Day": "Friday",
-              "Workout": "Day 4 - Hypertrophy & Muscular Endurance"
-            },
-            {
-              "Day": "Saturday",
-              "Workout": "Day 5 - Optional Full Body Conditioning"
-            },
-            {
-              "Day": "Sunday",
-              "Workout": "Off"
-            }
-          ]
-        ],
-        "is_rest_day": false
-      },
       {
         "title": "Dynamic Warm-Up",
         "notes": "Instead of the traditional slow cardio warm-up, you will perform what’s called a dynamic warm-up. Perform the following prior to each training session. Perform all moves with little rest for 1 or 2 rounds:",

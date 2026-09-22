@@ -5,7 +5,7 @@ and recipe catalogs.
 
 | File | Records | Contents |
 | --- | ---: | --- |
-| `workouts.json` | 6 | The landing page's ordered **Best Workouts** (most downloaded in the prior 24 hours), including descriptions, metadata, days, and exercise tables. |
+| `workouts.json` | 38 | The curated workout import catalog, including descriptions, metadata, exercise-bearing workout days, and exercise tables. |
 | `diets.json` | 10 | Every guide linked by the diet catalog, with full text and structured sections. |
 | `recipes.json` | 198 | Recipe pages deduplicated across 10 categories and 14 listing pages, with 1,566 ingredient lines, instructions/content, serving guidance, catalog read counts, and published macros. |
 | `manifest.json` | 1 | Source, collection time, pacing, discovery counts, and the workout popularity definition. |
@@ -21,4 +21,3 @@ Night Burritos. No values were inferred.
 
 The JSON preserves source URLs for provenance. Review the source site's terms
 and content-license requirements before redistributing its text or images.
-
