@@ -5,6 +5,7 @@ using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Services.Abstractions;
+using Silen.Services.Helpers;
 
 namespace Silen.Services.Implementations;
 
@@ -14,7 +15,17 @@ public sealed class SettingsService(IUserSettingsProvider userSettingsProvider) 
     private static readonly string[] WeightUnits = ["kg", "lb"];
     private static readonly string[] DistanceUnits = ["km", "mi"];
     private static readonly string[] AppearanceModes = ["Dark", "Light", "Device"];
-    private static readonly string[] AvatarChoices = ["Male", "Female"];
+    // The two plain silhouettes plus 9 illustrated character avatars per
+    // gender (see frontend/assets/avatars/male|female/) - the client's
+    // gender-gated picker only ever offers a profile's own gender's set, but
+    // this allow-list itself doesn't enforce that pairing, matching the
+    // existing gender-agnostic validation used elsewhere in this service.
+    private static readonly string[] AvatarChoices =
+    [
+        "Male", "Female",
+        "Male1", "Male2", "Male3", "Male4", "Male5", "Male6", "Male7", "Male8", "Male9",
+        "Female1", "Female2", "Female3", "Female4", "Female5", "Female6", "Female7", "Female8", "Female9",
+    ];
 
     public Task<ServiceResult<UserSettingsModel>> GetAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -51,6 +62,22 @@ public sealed class SettingsService(IUserSettingsProvider userSettingsProvider) 
         {
             throw new ValidationException($"Unsupported avatar choice '{request.AvatarChoice}'.", "Choose Male or Female.");
         }
+
+        if (request.NotificationLocalTime < TimeSpan.Zero || request.NotificationLocalTime >= TimeSpan.FromDays(1))
+        {
+            throw new ValidationException(
+                $"Invalid notification local time '{request.NotificationLocalTime}'.",
+                "Choose a reminder time between 00:00 and 23:59.");
+        }
+
+        if (!UserTimeZoneResolver.TryNormalize(request.TimeZoneId, out var normalizedTimeZoneId, out _))
+        {
+            throw new ValidationException(
+                $"Unsupported timezone '{request.TimeZoneId}'.",
+                "Choose a valid timezone for your workout reminder.");
+        }
+
+        request.TimeZoneId = normalizedTimeZoneId;
 
         if (request.BarbellStandardKg <= 0)
         {

@@ -495,17 +495,69 @@ class _PreferencesSections extends StatelessWidget {
   }
 }
 
-/// The default avatar's set picture - keyed off the onboarding-collected
-/// gender so 'Male'/'Female' get their own silhouette; unset or 'Other'
-/// falls back to the plain (unornamented) male one as the neutral default.
-String _avatarAssetFor(String? gender) {
-  switch (gender) {
-    case 'Female':
-      return 'assets/branding/profile_avatar_female.svg';
-    case 'Male':
-    default:
-      return 'assets/branding/profile_avatar_male.svg';
+/// Each gender's picker order: the plain silhouette first, then its 9
+/// illustrated character avatars (see frontend/assets/avatars/male|female/).
+/// A profile can only ever pick from its own gender's set - see
+/// [_avatarChoicesFor] - so nothing here mixes the two lists.
+const kMaleAvatarChoices = [
+  'Male',
+  'Male1',
+  'Male2',
+  'Male3',
+  'Male4',
+  'Male5',
+  'Male6',
+  'Male7',
+  'Male8',
+  'Male9',
+];
+const kFemaleAvatarChoices = [
+  'Female',
+  'Female1',
+  'Female2',
+  'Female3',
+  'Female4',
+  'Female5',
+  'Female6',
+  'Female7',
+  'Female8',
+  'Female9',
+];
+
+/// The avatar picker's gender gate: a 'Female' profile only ever sees the
+/// female set, everyone else (including 'Other' and guests who haven't set
+/// a gender) sees the male set, per product decision - there's no mixed or
+/// neutral illustrated set to fall back to.
+List<String> _avatarChoicesFor(String? gender) =>
+    gender == 'Female' ? kFemaleAvatarChoices : kMaleAvatarChoices;
+
+/// The avatar's set picture for a given choice (a value from
+/// [kMaleAvatarChoices]/[kFemaleAvatarChoices]) or an onboarding-collected
+/// gender used as the fallback before a settings-level choice has loaded;
+/// unset or 'Other' falls back to the plain (unornamented) male one as the
+/// neutral default.
+String _avatarAssetFor(String? choice) {
+  if (choice == 'Female') return 'assets/branding/profile_avatar_female.svg';
+  if (choice != null && choice.startsWith('Female') && choice.length > 6) {
+    return 'assets/avatars/female/female_${choice.substring(6)}.png';
   }
+  if (choice != null && choice.startsWith('Male') && choice.length > 4) {
+    return 'assets/avatars/male/male_${choice.substring(4)}.png';
+  }
+  return 'assets/branding/profile_avatar_male.svg';
+}
+
+/// Renders a choice's circular avatar image - the two plain silhouettes are
+/// vector (`SvgPicture`), the 18 illustrated characters are raster PNGs
+/// (`Image`), so this picks the right widget from the resolved asset path's
+/// extension rather than duplicating that branch at each call site.
+Widget _avatarImage(String? choice, {required double size}) {
+  final asset = _avatarAssetFor(choice);
+  return ClipOval(
+    child: asset.endsWith('.svg')
+        ? SvgPicture.asset(asset, width: size, height: size, fit: BoxFit.cover)
+        : Image.asset(asset, width: size, height: size, fit: BoxFit.cover),
+  );
 }
 
 class _ProfileRow extends StatelessWidget {
@@ -537,14 +589,7 @@ class _ProfileRow extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                ClipOval(
-                  child: SvgPicture.asset(
-                    _avatarAssetFor(avatarChoice),
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                _avatarImage(avatarChoice, size: 52),
                 if (canPickAvatar)
                   Positioned(
                     right: -2,
@@ -599,10 +644,13 @@ class _ProfileRow extends StatelessWidget {
     );
   }
 
-  /// Lets the user override which silhouette shows, independent of the
-  /// onboarding-collected gender it otherwise falls back to.
+  /// Lets the user override which avatar shows, independent of the
+  /// onboarding-collected gender it otherwise falls back to. The offered
+  /// choices are still gated by that same gender - see [_avatarChoicesFor] -
+  /// so a male profile can't end up on a female avatar or vice versa.
   void _openAvatarPicker(BuildContext context) {
     final current = controller.state.data?.avatarChoice;
+    final choices = _avatarChoicesFor(profile?.gender);
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surfaceContainer,
@@ -618,28 +666,45 @@ class _ProfileRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('Choose avatar', style: AppTypography.headlineSm),
-              const SizedBox(height: AppSpacing.sm),
-              for (final choice in const ['Male', 'Female'])
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: ClipOval(
-                    child: SvgPicture.asset(
-                      _avatarAssetFor(choice),
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final choice in choices)
+                    GestureDetector(
+                      onTap: () {
+                        controller.setAvatarChoice(choice);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _avatarImage(choice, size: 56),
+                          if (choice == current)
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: Container(
+                                width: 20,
+                                height: 20,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: AppColors.accent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppColors.surfaceContainer,
+                                      width: 1.5),
+                                ),
+                                child: Icon(Icons.check_rounded,
+                                    size: 12, color: AppColors.onAccent),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  title: Text(choice, style: AppTypography.bodyMd),
-                  trailing: choice == current
-                      ? Icon(Icons.check_circle_rounded,
-                          color: AppColors.accent)
-                      : null,
-                  onTap: () {
-                    controller.setAvatarChoice(choice);
-                    Navigator.of(sheetContext).pop();
-                  },
-                ),
+                ],
+              ),
             ],
           ),
         ),

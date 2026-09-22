@@ -97,6 +97,8 @@ flutter:
   assets:
     - assets/branding/
     - assets/branding/onboarding/
+    - assets/avatars/male/
+    - assets/avatars/female/
     - assets/mascot/
     - assets/lottie_animations/
 

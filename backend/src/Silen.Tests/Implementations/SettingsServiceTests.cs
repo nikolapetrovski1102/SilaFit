@@ -134,6 +134,76 @@ public class SettingsServiceTests
     }
 
     [Theory]
+    [InlineData("Female")]
+    [InlineData("Male1")]
+    [InlineData("Male9")]
+    [InlineData("Female1")]
+    [InlineData("Female9")]
+    public async Task UpdateAsync_IllustratedAvatarChoice_ReturnsUpdatedSettings(string avatarChoice)
+    {
+        var userId = Guid.NewGuid();
+        var request = ValidRequest();
+        request.AvatarChoice = avatarChoice;
+        var updated = new UserSettingsModel { UserId = userId, WeightUnit = "kg" };
+        userSettingsProvider.Setup(p => p.UpdateAsync(userId, request, It.IsAny<CancellationToken>())).ReturnsAsync(updated);
+
+        var result = await sut.UpdateAsync(userId, request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(updated, result.Data);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_InvalidNotificationTime_ReturnsValidationFailureWithoutCallingProvider()
+    {
+        var request = ValidRequest();
+        request.NotificationLocalTime = TimeSpan.FromHours(24);
+
+        var result = await sut.UpdateAsync(Guid.NewGuid(), request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+        userSettingsProvider.Verify(
+            p => p.UpdateAsync(It.IsAny<Guid>(), It.IsAny<UpdateUserSettingsRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_InvalidTimeZone_ReturnsValidationFailureWithoutCallingProvider()
+    {
+        var request = ValidRequest();
+        request.TimeZoneId = "Definitely/Not-A-TimeZone";
+
+        var result = await sut.UpdateAsync(Guid.NewGuid(), request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+        userSettingsProvider.Verify(
+            p => p.UpdateAsync(It.IsAny<Guid>(), It.IsAny<UpdateUserSettingsRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_FixedOffsetTimeZone_IsCanonicalizedBeforeSaving()
+    {
+        var userId = Guid.NewGuid();
+        var request = ValidRequest();
+        request.TimeZoneId = "+0545";
+        var updated = new UserSettingsModel { UserId = userId, TimeZoneId = "+05:45" };
+        userSettingsProvider
+            .Setup(p => p.UpdateAsync(
+                userId,
+                It.Is<UpdateUserSettingsRequest>(r => r.TimeZoneId == "+05:45"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(updated);
+
+        var result = await sut.UpdateAsync(userId, request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("+05:45", request.TimeZoneId);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-5)]
     public async Task UpdateAsync_NonPositiveBarbellStandard_ReturnsValidationFailureWithoutCallingProvider(decimal barbellKg)
