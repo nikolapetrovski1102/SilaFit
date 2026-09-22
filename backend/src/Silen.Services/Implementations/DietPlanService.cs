@@ -10,7 +10,8 @@ using Silen.Services.Helpers;
 namespace Silen.Services.Implementations;
 
 /// <inheritdoc cref="IDietPlanService"/>
-public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubscriptionGate subscriptionGate) : IDietPlanService
+public sealed class DietPlanService(
+    IDietPlansProvider dietPlansProvider, ISubscriptionGate subscriptionGate, IMealPlanningService mealPlanningService) : IDietPlanService
 {
     public Task<ServiceResult<List<DietPlanModel>>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -72,20 +73,105 @@ public sealed class DietPlanService(IDietPlansProvider dietPlansProvider, ISubsc
         ServiceExecutor.RunAsync(async () =>
         {
             // Reuse the detail read as the visibility check: a private/shared plan
-            // the caller can't see comes back null, so it can't be activated.
-            var (plan, _, _, _) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
+            // the caller can't see comes back null, so it can't be activated. The
+            // same read also gives us the days/meals needed to fill the week below,
+            // so activating never re-fetches them a second time.
+            var (plan, days, meals, _) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
             if (plan is null)
             {
                 throw new NotFoundException($"Diet plan '{dietPlanId}' was not found.", "That diet plan couldn't be found.");
             }
 
             await dietPlansProvider.SetActiveDietPlanAsync(userId, dietPlanId, cancellationToken);
+            await ApplyToUpcomingWeekCoreAsync(userId, plan, days, meals, cancellationToken);
+
             return new AdminWriteResultDto
             {
                 Id = dietPlanId,
                 Message = $"'{plan.Name}' is now your active plan."
             };
         });
+
+    public Task<ServiceResult<int>> ApplyToUpcomingWeekAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var (plan, days, meals, _) = await dietPlansProvider.GetDetailAsync(dietPlanId, userId, cancellationToken);
+            if (plan is null)
+            {
+                throw new NotFoundException($"Diet plan '{dietPlanId}' was not found.", "That diet plan couldn't be found.");
+            }
+
+            return await ApplyToUpcomingWeekCoreAsync(userId, plan, days, meals, cancellationToken);
+        });
+
+    /// <summary>Maps each of the next 7 calendar days (starting today, UTC) onto
+    /// <paramref name="plan"/>'s day cycle and bulk-applies that day's meals as
+    /// Planned meal logs. Mirrors `_PlanDayCard._dayIndexFor` in the Flutter app
+    /// exactly (Mon=1..Sun=7 for a 7-day plan; a day-of-year rotation for any other
+    /// length), so the meals applied here are the same ones the Active Diet Plan
+    /// card would already show for that day.</summary>
+    private async Task<int> ApplyToUpcomingWeekCoreAsync(
+        Guid userId, DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals, CancellationToken cancellationToken)
+    {
+        if (days.Count == 0)
+        {
+            return 0;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var requests = new List<UpsertMealLogRequest>();
+        for (var offset = 0; offset < 7; offset++)
+        {
+            var date = today.AddDays(offset);
+            var dayIndex = DayIndexFor(date, plan.DurationDays);
+            var planDay = days.FirstOrDefault(d => d.DayIndex == dayIndex) ?? days[0];
+
+            requests.AddRange(meals
+                .Where(m => m.DietPlanDayId == planDay.DietPlanDayId)
+                .Select(meal => new UpsertMealLogRequest
+                {
+                    LogDateUtc = date,
+                    MealType = meal.MealType,
+                    Title = meal.Title,
+                    CaloriesKcal = meal.CaloriesKcal,
+                    ProteinG = meal.ProteinG,
+                    CarbsG = meal.CarbsG,
+                    FatsG = meal.FatsG,
+                    Status = "Planned"
+                }));
+        }
+
+        if (requests.Count == 0)
+        {
+            return 0;
+        }
+
+        return RequireData(
+            await mealPlanningService.ApplyPlannedMealsAsync(userId, requests, cancellationToken),
+            "Apply diet plan to upcoming week");
+    }
+
+    private static int DayIndexFor(DateOnly date, int durationDays)
+    {
+        var days = durationDays <= 0 ? 1 : durationDays;
+        if (days == 7)
+        {
+            return date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek;
+        }
+
+        var dayOfYear = date.DayOfYear;
+        return ((dayOfYear - 1) % days) + 1;
+    }
+
+    private static T RequireData<T>(ServiceResult<T> result, string action)
+    {
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException($"{action} failed: {result.LogMessage ?? result.UserMessage ?? "unknown error"}.");
+        }
+
+        return result.Data!;
+    }
 
     private static DietPlanDetailDto BuildDetail(
         DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals, List<string> ingredients)

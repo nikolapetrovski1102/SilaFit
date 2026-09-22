@@ -25,4 +25,10 @@ public interface IMealPlanningService
     /// caller's current UTC month when null, scored against the caller's own
     /// nutrition targets and returned best-first.</summary>
     Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(Guid userId, int? month, CancellationToken cancellationToken = default);
+
+    /// <summary>Bulk-creates Planned meal logs from <paramref name="requests"/>, skipping
+    /// any request whose date already has a log of the same meal type + title - so
+    /// applying a diet plan repeatedly (or over meals the user already edited/logged)
+    /// never creates duplicates. Returns how many logs were actually created.</summary>
+    Task<ServiceResult<int>> ApplyPlannedMealsAsync(Guid userId, List<UpsertMealLogRequest> requests, CancellationToken cancellationToken = default);
 }

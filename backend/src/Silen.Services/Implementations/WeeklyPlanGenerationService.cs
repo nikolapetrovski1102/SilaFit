@@ -764,6 +764,12 @@ public sealed class WeeklyPlanGenerationService(
         if (autoActivate)
         {
             await dietPlansProvider.SetActiveDietPlanAsync(userId, dietPlanId, cancellationToken).ConfigureAwait(false);
+            // Fills the week with this freshly (re)generated plan's meals, same as
+            // a manual activate - so the delivered plan is ready to go rather than
+            // requiring every meal to be added by hand.
+            EnsureSuccess(
+                await dietPlanService.ApplyToUpcomingWeekAsync(userId, dietPlanId, cancellationToken).ConfigureAwait(false),
+                "Apply diet plan to upcoming week");
         }
 
         return (dietPlanId, dietPlanName);

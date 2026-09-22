@@ -1,4 +1,6 @@
 using Moq;
+using Silen.Common.Contracts;
+using Silen.Common.Dtos;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Services.Abstractions;
@@ -11,11 +13,12 @@ public class DietPlanServiceTests
 {
     private readonly Mock<IDietPlansProvider> provider = new(MockBehavior.Strict);
     private readonly Mock<ISubscriptionGate> subscriptionGate = new(MockBehavior.Strict);
+    private readonly Mock<IMealPlanningService> mealPlanningService = new(MockBehavior.Strict);
     private readonly DietPlanService sut;
 
     public DietPlanServiceTests()
     {
-        sut = new DietPlanService(provider.Object, subscriptionGate.Object);
+        sut = new DietPlanService(provider.Object, subscriptionGate.Object, mealPlanningService.Object);
     }
 
     private static DietPlanModel Plan(Guid planId, string name = "Weekly Plan") => new()
@@ -128,5 +131,56 @@ public class DietPlanServiceTests
         provider.Verify(
             p => p.SetActiveDietPlanAsync(userId, planId, It.IsAny<CancellationToken>()),
             Times.Once);
+        // Detail()'s plan has no meals, so there's nothing to apply -
+        // the strict mock would throw if this were called unexpectedly.
+        mealPlanningService.Verify(
+            m => m.ApplyPlannedMealsAsync(It.IsAny<Guid>(), It.IsAny<List<UpsertMealLogRequest>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_PlanWithMeals_AppliesThemToTheUpcomingWeek()
+    {
+        var userId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var days = Enumerable.Range(1, 7)
+            .Select(i => new DietPlanDayModel { DietPlanDayId = Guid.NewGuid(), DayIndex = (byte)i })
+            .ToList();
+        var meals = days
+            .Select(d => new DietPlanMealModel
+            {
+                DietPlanDayId = d.DietPlanDayId,
+                DietPlanMealId = Guid.NewGuid(),
+                MealType = "Breakfast",
+                Title = $"Meal for day {d.DayIndex}",
+                CaloriesKcal = 400
+            })
+            .ToList();
+
+        provider
+            .Setup(p => p.GetDetailAsync(planId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Plan(planId), days, meals, new List<string>()));
+        provider
+            .Setup(p => p.SetActiveDietPlanAsync(userId, planId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        List<UpsertMealLogRequest>? captured = null;
+        mealPlanningService
+            .Setup(m => m.ApplyPlannedMealsAsync(userId, It.IsAny<List<UpsertMealLogRequest>>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, List<UpsertMealLogRequest>, CancellationToken>((_, requests, _) => captured = requests)
+            .ReturnsAsync(ServiceResult<int>.Success(7));
+
+        var result = await sut.ActivateAsync(userId, planId);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(captured);
+        // One meal per upcoming day: a 7-day plan maps 1:1 onto each of the
+        // next 7 calendar dates regardless of which weekday "today" is.
+        Assert.Equal(7, captured!.Count);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        Assert.Equal(
+            Enumerable.Range(0, 7).Select(today.AddDays),
+            captured.Select(r => r.LogDateUtc));
+        Assert.All(captured, r => Assert.Equal("Planned", r.Status));
     }
 }

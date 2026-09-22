@@ -21,8 +21,17 @@ public interface IDietPlanService
     /// null when none is active. Backs the Nutrition screen's "active plan" section.</summary>
     Task<ServiceResult<DietPlanDetailDto?>> GetActiveAsync(Guid userId, CancellationToken cancellationToken = default);
 
-    /// <summary>Makes any plan visible to the caller their active plan.</summary>
+    /// <summary>Makes any plan visible to the caller their active plan. Also fills
+    /// the caller's next 7 days with that plan's meals (see <see cref="ApplyToUpcomingWeekAsync"/>),
+    /// so the week is ready to go without adding each meal by hand.</summary>
     Task<ServiceResult<AdminWriteResultDto>> ActivateAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default);
+
+    /// <summary>Fills the caller's next 7 calendar days with <paramref name="dietPlanId"/>'s
+    /// meals as Planned meal logs, mapping each date onto the plan's day cycle the same
+    /// way the Active Diet Plan card does. Skips any day/meal the caller already has a
+    /// log for, so calling it more than once (e.g. re-activating, or the weekly AI
+    /// regeneration) never duplicates entries. Returns how many logs were created.</summary>
+    Task<ServiceResult<int>> ApplyToUpcomingWeekAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default);
 
     /* ----------------------------- user-owned diet plans ----------------------------- */
 

@@ -208,15 +208,29 @@ class _PlanDayCard extends StatelessWidget {
                       meal: meal,
                       logged: dayLogs.any((log) =>
                           log.isLogged && log.title == meal.title),
-                      onLog: () => mealController.addMeal(
-                        mealType: meal.mealType,
-                        title: meal.title,
-                        caloriesKcal: meal.caloriesKcal,
-                        proteinG: meal.proteinG,
-                        carbsG: meal.carbsG,
-                        fatsG: meal.fatsG,
-                        logNow: true,
-                      ),
+                      onLog: () {
+                        // The backend now pre-fills the week with this plan's
+                        // meals as Planned logs on activation, so most taps
+                        // here just flip an existing row to Logged. Only fall
+                        // back to creating one when it's genuinely missing
+                        // (e.g. a plan applied before this day existed, or a
+                        // row the user deleted).
+                        for (final log in dayLogs) {
+                          if (!log.isLogged && log.title == meal.title) {
+                            mealController.logMeal(log);
+                            return;
+                          }
+                        }
+                        mealController.addMeal(
+                          mealType: meal.mealType,
+                          title: meal.title,
+                          caloriesKcal: meal.caloriesKcal,
+                          proteinG: meal.proteinG,
+                          carbsG: meal.carbsG,
+                          fatsG: meal.fatsG,
+                          logNow: true,
+                        );
+                      },
                       onDelete: () {
                         for (final log in dayLogs) {
                           if (log.isLogged && log.title == meal.title) {

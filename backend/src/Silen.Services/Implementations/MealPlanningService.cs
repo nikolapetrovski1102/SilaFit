@@ -106,6 +106,36 @@ public sealed class MealPlanningService(
             return await mealPlanningProvider.UpsertMealAsync(userId, request, cancellationToken);
         });
 
+    public Task<ServiceResult<int>> ApplyPlannedMealsAsync(Guid userId, List<UpsertMealLogRequest> requests, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var applied = 0;
+            var existingByDate = new Dictionary<DateOnly, List<MealLogModel>>();
+
+            foreach (var request in requests)
+            {
+                if (!existingByDate.TryGetValue(request.LogDateUtc, out var existing))
+                {
+                    existing = await mealPlanningProvider.GetForDateAsync(userId, request.LogDateUtc, cancellationToken);
+                    existingByDate[request.LogDateUtc] = existing;
+                }
+
+                // A meal the caller already has for this day - planned, edited, or
+                // logged - is left alone, matched by type+title the same way the
+                // Active Diet Plan card matches a "Log" tap back to its plan meal.
+                if (existing.Any(m => m.MealType == request.MealType && m.Title == request.Title))
+                {
+                    continue;
+                }
+
+                var created = await mealPlanningProvider.UpsertMealAsync(userId, request, cancellationToken);
+                existing.Add(created);
+                applied++;
+            }
+
+            return applied;
+        });
+
     public Task<ServiceResult<bool>> DeleteMealAsync(Guid userId, Guid mealLogId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(() => mealPlanningProvider.DeleteMealAsync(userId, mealLogId, cancellationToken));
 
