@@ -138,7 +138,13 @@ class _DetailBody extends StatelessWidget {
           child: AspectRatio(
             aspectRatio: 16 / 9,
             child: detail.plan.heroImageUrl != null
-                ? Image.network(detail.plan.heroImageUrl!, fit: BoxFit.cover)
+                ? Image.network(
+                    detail.plan.heroImageUrl!,
+                    fit: BoxFit.cover,
+                    cacheWidth: (MediaQuery.sizeOf(context).width *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round(),
+                  )
                 : Image.asset('assets/branding/split_hero.png', fit: BoxFit.cover),
           ),
         ),

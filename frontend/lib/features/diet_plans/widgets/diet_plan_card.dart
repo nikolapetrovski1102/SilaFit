@@ -32,13 +32,23 @@ class DietPlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repository = context.read<DietPlanRepository>();
+    // Created once here (not inside openBuilder) and captured by reference:
+    // OpenContainer invokes openBuilder on every transition animation frame,
+    // so building the controller inline there would spin up a fresh,
+    // never-loaded controller each frame and silently drop the one that
+    // actually fetched data. Starting the load on tap also lets the fetch
+    // run concurrently with the open animation instead of after it.
+    final controller = DietPlanDetailController(repository, plan.dietPlanId);
     final card = ContainerTransform(
       openBuilder: (_) => DietPlanDetailScreen(
-        controller: DietPlanDetailController(repository, plan.dietPlanId),
+        controller: controller,
         planName: plan.name,
       ),
       closedBuilder: (context, openContainer) => GestureDetector(
-        onTap: openContainer,
+        onTap: () {
+          controller.load();
+          openContainer();
+        },
         child: SectionCard(
           padding: EdgeInsets.zero,
           child: Column(
@@ -52,7 +62,17 @@ class DietPlanCard extends StatelessWidget {
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
                       child: plan.heroImageUrl != null
-                          ? Image.network(plan.heroImageUrl!, fit: BoxFit.cover)
+                          ? Image.network(
+                              plan.heroImageUrl!,
+                              fit: BoxFit.cover,
+                              // Cards render at a fraction of screen width; cap
+                              // the decode size instead of paying for a
+                              // full-resolution decode on every open.
+                              cacheWidth: ((width ??
+                                          MediaQuery.sizeOf(context).width) *
+                                      MediaQuery.devicePixelRatioOf(context))
+                                  .round(),
+                            )
                           : Image.asset('assets/branding/split_hero.png',
                               fit: BoxFit.cover),
                     ),

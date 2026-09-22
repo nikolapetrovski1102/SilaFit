@@ -38,7 +38,7 @@ class ContainerTransform extends StatelessWidget {
       });
     }
     return OpenContainer<void>(
-      transitionDuration: const Duration(milliseconds: 450),
+      transitionDuration: const Duration(milliseconds: 300),
       transitionType: ContainerTransitionType.fade,
       closedElevation: 0,
       openElevation: 0,

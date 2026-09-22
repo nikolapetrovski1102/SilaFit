@@ -48,37 +48,27 @@ class _ProgressScreenState extends State<ProgressScreen> {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        return LayoutBuilder(
-          builder: (context, viewport) {
-            return RefreshIndicator(
-              onRefresh: () => _controller.load(force: true),
-              color: AppColors.accent,
-              backgroundColor: AppColors.surfaceContainer,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                // Bottom padding clears the floating nav pill (now that
-                // RootShell's Scaffold extends its body under it) plus the
-                // usual breathing room, so the last card scrolls up past the
-                // pill instead of staying hidden beneath it.
-                padding: EdgeInsets.fromLTRB(
-                    AppSpacing.marginMobile,
-                    AppSpacing.lg,
-                    AppSpacing.marginMobile,
-                    AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
-                // Header, timeframe pills, and the PR / AI review entry
-                // points don't need `overview` - only
-                // `_StrengthProgressCard` and `_YourInsightCard` do. Gating
-                // all of that behind one ResourceBuilder used to blank the
-                // whole screen (title included) whenever the overview call
-                // alone was slow or failed; now a stalled/errored overview
-                // only empties its own two cards.
-                child: _ProgressContent(
-                  controller: _controller,
-                  spotlightKey: widget.spotlightKey,
-                ),
-              ),
-            );
-          },
+        return SingleChildScrollView(
+          // Bottom padding clears the floating nav pill (now that
+          // RootShell's Scaffold extends its body under it) plus the
+          // usual breathing room, so the last card scrolls up past the
+          // pill instead of staying hidden beneath it.
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.marginMobile,
+              AppSpacing.lg,
+              AppSpacing.marginMobile,
+              AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
+          // Header, timeframe pills, and the PR / AI review entry
+          // points don't need `overview` - only
+          // `_StrengthProgressCard` and `_YourInsightCard` do. Gating
+          // all of that behind one ResourceBuilder used to blank the
+          // whole screen (title included) whenever the overview call
+          // alone was slow or failed; now a stalled/errored overview
+          // only empties its own two cards.
+          child: _ProgressContent(
+            controller: _controller,
+            spotlightKey: widget.spotlightKey,
+          ),
         );
       },
     );

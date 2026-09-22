@@ -163,13 +163,19 @@ class _PlanDayCard extends StatelessWidget {
                 ),
               ),
               TextButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => DietPlanDetailScreen(
-                    controller: DietPlanDetailController(
-                        repository, plan.plan.dietPlanId),
-                    planName: plan.plan.name,
-                  ),
-                )),
+                onPressed: () {
+                  // Start the fetch immediately so it runs during the push
+                  // transition instead of only after the screen has mounted.
+                  final detailController = DietPlanDetailController(
+                      repository, plan.plan.dietPlanId)
+                    ..load();
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => DietPlanDetailScreen(
+                      controller: detailController,
+                      planName: plan.plan.name,
+                    ),
+                  ));
+                },
                 child: Text('Open',
                     style: AppTypography.labelSm
                         .copyWith(color: AppColors.accent)),
