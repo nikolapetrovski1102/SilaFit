@@ -33,7 +33,8 @@ public sealed class UserSettingsProvider(ISqlExecutor sqlExecutor) : IUserSettin
                 SqlParameterBuilder.Create("@DistanceUnit", request.DistanceUnit),
                 SqlParameterBuilder.Create("@RestTimerSoundEnabled", request.RestTimerSoundEnabled),
                 SqlParameterBuilder.Create("@BarbellStandardKg", request.BarbellStandardKg),
-                SqlParameterBuilder.Create("@AppearanceMode", request.AppearanceMode)
+                SqlParameterBuilder.Create("@AppearanceMode", request.AppearanceMode),
+                SqlParameterBuilder.Create("@AvatarChoice", request.AvatarChoice)
             ],
             async reader => await reader.ReadAsync(cancellationToken) ? SettingsRowMapper.MapSettings(reader) : null,
             cancellationToken);

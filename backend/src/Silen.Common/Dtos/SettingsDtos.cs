@@ -27,4 +27,7 @@ public sealed class UpdateUserSettingsRequest
 
     [StringLength(20)]
     public string AppearanceMode { get; set; } = "Device";
+
+    [StringLength(10)]
+    public string AvatarChoice { get; set; } = "Male";
 }

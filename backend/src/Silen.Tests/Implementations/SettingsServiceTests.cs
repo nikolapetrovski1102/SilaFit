@@ -27,7 +27,8 @@ public class SettingsServiceTests
         DistanceUnit = "km",
         RestTimerSoundEnabled = true,
         BarbellStandardKg = 20,
-        AppearanceMode = "Dark"
+        AppearanceMode = "Dark",
+        AvatarChoice = "Male"
     };
 
     [Fact]
@@ -113,6 +114,18 @@ public class SettingsServiceTests
     {
         var request = ValidRequest();
         request.AppearanceMode = "Rainbow";
+
+        var result = await sut.UpdateAsync(Guid.NewGuid(), request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_UnsupportedAvatarChoice_ReturnsValidationFailureWithoutCallingProvider()
+    {
+        var request = ValidRequest();
+        request.AvatarChoice = "Nonbinary";
 
         var result = await sut.UpdateAsync(Guid.NewGuid(), request);
 

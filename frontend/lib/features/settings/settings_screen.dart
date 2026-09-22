@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/session/session_store.dart';
 import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
@@ -17,6 +19,8 @@ import '../account/account_repository.dart';
 import '../auth/auth_controller.dart';
 import '../notifications/push_messaging_service.dart';
 import '../onboarding/onboarding_flow_screen.dart';
+import '../onboarding/onboarding_models.dart';
+import '../onboarding/onboarding_repository.dart';
 import '../plans/plans_controller.dart';
 import '../plans/plans_screen.dart';
 import 'settings_controller.dart';
@@ -47,6 +51,13 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late final SettingsController _controller;
 
+  // Onboarding-collected gender/age/height/etc. isn't part of `settings` (a
+  // separate `api/profile` row) - fetched once here rather than per-rebuild
+  // so it survives every settings toggle's notifyListeners() without
+  // re-hitting the network. Non-fatal on failure: the avatar just falls
+  // back to the neutral silhouette and the details sheet shows "Not set".
+  UserProfile? _profile;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +65,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!_controller.state.hasData) {
       Future.microtask(_controller.load);
     }
+    OnboardingRepository(context.read<ApiClient>())
+        .getProfile()
+        .then((profile) {
+      if (mounted) setState(() => _profile = profile);
+    }).catchError((_) {});
   }
 
   @override
@@ -74,6 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: _SettingsContent(
             controller: _controller,
             spotlightKey: widget.spotlightKey,
+            profile: _profile,
           ),
         );
       },
@@ -84,10 +101,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class _SettingsContent extends StatelessWidget {
   final SettingsController controller;
   final GlobalKey? spotlightKey;
+  final UserProfile? profile;
 
   const _SettingsContent({
     required this.controller,
     this.spotlightKey,
+    this.profile,
   });
 
   @override
@@ -113,6 +132,8 @@ class _SettingsContent extends StatelessWidget {
               ? (session?.email ?? 'Registered account')
               : 'Guest device - progress not linked',
           tierLabel: auth.isRegistered ? 'Member' : 'Guest',
+          profile: profile,
+          controller: controller,
         ),
         const SizedBox(height: AppSpacing.lg),
         ResourceBuilder<UserSettings>(
@@ -207,8 +228,7 @@ class _SettingsContent extends StatelessWidget {
                 _DevActionRow(
                   icon: Icons.tour_outlined,
                   label: 'Start App Feature Tour',
-                  subtitle:
-                      'Walk through pages & Choose Your Protocol screen',
+                  subtitle: 'Walk through pages & Choose Your Protocol screen',
                   onTap: () => _startFeatureTourOnly(context),
                 ),
                 Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
@@ -243,7 +263,6 @@ class _SettingsContent extends StatelessWidget {
   Future<void> _startFeatureTourOnly(BuildContext context) async {
     final sessionStore = context.read<SessionStore>();
     await sessionStore.setFeatureTourComplete(false);
-    await sessionStore.resetWelcomeOffer();
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -326,8 +345,8 @@ class _SettingsContent extends StatelessWidget {
   Future<void> _restorePurchases(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final plans = context.read<PlansController>();
-    messenger.showSnackBar(
-        const SnackBar(content: Text('Restoring purchases...')));
+    messenger
+        .showSnackBar(const SnackBar(content: Text('Restoring purchases...')));
     await plans.restorePurchases();
     if (!context.mounted) return;
     messenger.showSnackBar(SnackBar(
@@ -476,47 +495,102 @@ class _PreferencesSections extends StatelessWidget {
   }
 }
 
+/// The default avatar's set picture - keyed off the onboarding-collected
+/// gender so 'Male'/'Female' get their own silhouette; unset or 'Other'
+/// falls back to the plain (unornamented) male one as the neutral default.
+String _avatarAssetFor(String? gender) {
+  switch (gender) {
+    case 'Female':
+      return 'assets/branding/profile_avatar_female.svg';
+    case 'Male':
+    default:
+      return 'assets/branding/profile_avatar_male.svg';
+  }
+}
+
 class _ProfileRow extends StatelessWidget {
   final String name;
   final String subtitle;
   final String tierLabel;
+  final UserProfile? profile;
+  final SettingsController controller;
 
   const _ProfileRow(
-      {required this.name, required this.subtitle, required this.tierLabel});
+      {required this.name,
+      required this.subtitle,
+      required this.tierLabel,
+      required this.controller,
+      this.profile});
 
   @override
   Widget build(BuildContext context) {
+    // The user's manual override (once settings have loaded) wins over the
+    // onboarding-collected gender, which stays the fallback for guests and
+    // for the moment before settings finish loading.
+    final avatarChoice = controller.state.data?.avatarChoice ?? profile?.gender;
+    final canPickAvatar = controller.state.hasData;
     return SectionCard(
       child: Row(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              // Decoded at ~3x the 52x52 display box instead of the source
-              // PNG's full 1024x1024 (see app_header.dart's avatar for the
-              // same fix and why it matters).
-              image: DecorationImage(
-                image: ResizeImage(
-                  AssetImage('assets/branding/profile_avatar.png'),
-                  width: 156,
+          GestureDetector(
+            onTap: canPickAvatar ? () => _openAvatarPicker(context) : null,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ClipOval(
+                  child: SvgPicture.asset(
+                    _avatarAssetFor(avatarChoice),
+                    width: 52,
+                    height: 52,
+                    fit: BoxFit.cover,
+                  ),
                 ),
-                fit: BoxFit.cover,
-              ),
+                if (canPickAvatar)
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: AppColors.surfaceContainer, width: 1.5),
+                      ),
+                      child: Icon(Icons.edit_rounded,
+                          size: 10, color: AppColors.onAccent),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: AppTypography.headlineSm),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: AppTypography.bodySm
-                        .copyWith(color: AppColors.onSurfaceVariant)),
-              ],
+            child: GestureDetector(
+              onTap: () => _openUserDetailsSheet(context, name, profile),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(name,
+                            style: AppTypography.headlineSm,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.chevron_right_rounded,
+                          color: AppColors.onSurfaceVariant, size: 18),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: AppTypography.bodySm
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                ],
+              ),
             ),
           ),
           PillChip(label: tierLabel),
@@ -524,6 +598,169 @@ class _ProfileRow extends StatelessWidget {
       ),
     );
   }
+
+  /// Lets the user override which silhouette shows, independent of the
+  /// onboarding-collected gender it otherwise falls back to.
+  void _openAvatarPicker(BuildContext context) {
+    final current = controller.state.data?.avatarChoice;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+              AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.sm),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Choose avatar', style: AppTypography.headlineSm),
+              const SizedBox(height: AppSpacing.sm),
+              for (final choice in const ['Male', 'Female'])
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: ClipOval(
+                    child: SvgPicture.asset(
+                      _avatarAssetFor(choice),
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  title: Text(choice, style: AppTypography.bodyMd),
+                  trailing: choice == current
+                      ? Icon(Icons.check_circle_rounded,
+                          color: AppColors.accent)
+                      : null,
+                  onTap: () {
+                    controller.setAvatarChoice(choice);
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One labeled row in the user-details sheet - blank/null answers show as
+/// 'Not set' rather than being omitted, so the sheet's shape doesn't shift
+/// based on how much of onboarding was completed.
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: AppTypography.bodyMd
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+          ),
+          Text(value, style: AppTypography.bodyMd),
+        ],
+      ),
+    );
+  }
+}
+
+const _goalLabels = {
+  'BuildMuscle': 'Build muscle',
+  'LoseFat': 'Lose fat',
+  'MaintainActive': 'Maintain & stay active',
+};
+
+const _experienceLabels = {
+  'Beginner': 'Beginner',
+  'Intermediate': 'Intermediate',
+  'Advanced': 'Advanced',
+};
+
+const _equipmentLabels = {
+  'FullGym': 'Full gym',
+  'Dumbbells': 'Dumbbells',
+  'Bodyweight': 'Bodyweight only',
+};
+
+String _detailOr(String? value, [Map<String, String>? labels]) {
+  if (value == null) return 'Not set';
+  return labels?[value] ?? value;
+}
+
+/// Opens the onboarding-answers sheet from a tap on the profile row's
+/// username - the same details `CompleteProfileFlow` collects, shown
+/// read-only here since editing them happens through onboarding, not
+/// Settings.
+void _openUserDetailsSheet(
+    BuildContext context, String name, UserProfile? profile) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.surfaceContainer,
+    shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+            AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.sm),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(name, style: AppTypography.headlineSm),
+            const SizedBox(height: AppSpacing.sm),
+            _DetailRow(label: 'Gender', value: _detailOr(profile?.gender)),
+            _DetailRow(
+                label: 'Age',
+                value: profile?.ageYears != null
+                    ? '${profile!.ageYears} yrs'
+                    : 'Not set'),
+            _DetailRow(
+                label: 'Height',
+                value: profile?.heightCm != null
+                    ? '${profile!.heightCm!.round()} cm'
+                    : 'Not set'),
+            _DetailRow(
+                label: 'Weight',
+                value: profile?.weightKg != null
+                    ? '${profile!.weightKg!.round()} kg'
+                    : 'Not set'),
+            _DetailRow(
+                label: 'Goal', value: _detailOr(profile?.goal, _goalLabels)),
+            _DetailRow(
+                label: 'Training experience',
+                value:
+                    _detailOr(profile?.trainingExperience, _experienceLabels)),
+            _DetailRow(
+                label: 'Equipment access',
+                value: _detailOr(profile?.equipmentAccess, _equipmentLabels)),
+            _DetailRow(
+                label: 'Training days/week',
+                value: profile?.trainingDaysPerWeek?.toString() ?? 'Not set'),
+            _DetailRow(
+                label: 'Session length',
+                value: profile?.sessionDurationMinutes != null
+                    ? '${profile!.sessionDurationMinutes} min'
+                    : 'Not set'),
+            _DetailRow(
+                label: 'Daily activity level',
+                value: _detailOr(profile?.dailyActivityLevel)),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// One choice in the Appearance picker - value is what's sent to

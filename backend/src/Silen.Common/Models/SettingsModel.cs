@@ -12,6 +12,7 @@ public sealed class UserSettingsModel
     public bool RestTimerSoundEnabled { get; set; }
     public decimal BarbellStandardKg { get; set; }
     public string AppearanceMode { get; set; } = "Device";
+    public string AvatarChoice { get; set; } = "Male";
 
     public DateTime UpdatedAtUtc { get; set; }
 }

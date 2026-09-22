@@ -14,6 +14,7 @@ public sealed class SettingsService(IUserSettingsProvider userSettingsProvider) 
     private static readonly string[] WeightUnits = ["kg", "lb"];
     private static readonly string[] DistanceUnits = ["km", "mi"];
     private static readonly string[] AppearanceModes = ["Dark", "Light", "Device"];
+    private static readonly string[] AvatarChoices = ["Male", "Female"];
 
     public Task<ServiceResult<UserSettingsModel>> GetAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -44,6 +45,11 @@ public sealed class SettingsService(IUserSettingsProvider userSettingsProvider) 
         if (!AppearanceModes.Contains(request.AppearanceMode))
         {
             throw new ValidationException($"Unsupported appearance mode '{request.AppearanceMode}'.", "Choose dark, light, or device.");
+        }
+
+        if (!AvatarChoices.Contains(request.AvatarChoice))
+        {
+            throw new ValidationException($"Unsupported avatar choice '{request.AvatarChoice}'.", "Choose Male or Female.");
         }
 
         if (request.BarbellStandardKg <= 0)

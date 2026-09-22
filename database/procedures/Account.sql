@@ -167,7 +167,7 @@ BEGIN
     -- 4: Settings
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           UpdatedAtUtc
+           AvatarChoice, UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 

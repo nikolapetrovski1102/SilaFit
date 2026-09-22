@@ -49,7 +49,8 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _update(UserSettings Function(UserSettings current) transform) async {
+  Future<void> _update(
+      UserSettings Function(UserSettings current) transform) async {
     final previous = state.data;
     if (previous == null) return;
 
@@ -90,6 +91,9 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> setBarbellStandardKg(double value) =>
       _update((s) => s.copyWith(barbellStandardKg: value));
+
+  Future<void> setAvatarChoice(String value) =>
+      _update((s) => s.copyWith(avatarChoice: value));
 
   // Turning reminders on also refreshes the stored timezone from the device,
   // so they keep landing on the user's clock even if they skipped onboarding or

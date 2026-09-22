@@ -11,6 +11,7 @@ class UserSettings {
   final bool restTimerSoundEnabled;
   final double barbellStandardKg;
   final String appearanceMode;
+  final String avatarChoice;
 
   const UserSettings({
     required this.targetWaterMl,
@@ -22,6 +23,7 @@ class UserSettings {
     required this.restTimerSoundEnabled,
     required this.barbellStandardKg,
     required this.appearanceMode,
+    required this.avatarChoice,
   });
 
   factory UserSettings.fromJson(dynamic json) {
@@ -29,13 +31,15 @@ class UserSettings {
     return UserSettings(
       targetWaterMl: map['targetWaterMl'] as int,
       notificationsEnabled: map['notificationsEnabled'] as bool,
-      notificationLocalTime: map['notificationLocalTime'] as String? ?? '08:00:00',
+      notificationLocalTime:
+          map['notificationLocalTime'] as String? ?? '08:00:00',
       timeZoneId: map['timeZoneId'] as String? ?? 'UTC',
       weightUnit: map['weightUnit'] as String? ?? 'kg',
       distanceUnit: map['distanceUnit'] as String? ?? 'km',
       restTimerSoundEnabled: map['restTimerSoundEnabled'] as bool,
       barbellStandardKg: (map['barbellStandardKg'] as num).toDouble(),
       appearanceMode: map['appearanceMode'] as String? ?? 'Device',
+      avatarChoice: map['avatarChoice'] as String? ?? 'Male',
     );
   }
 
@@ -49,6 +53,7 @@ class UserSettings {
         'restTimerSoundEnabled': restTimerSoundEnabled,
         'barbellStandardKg': barbellStandardKg,
         'appearanceMode': appearanceMode,
+        'avatarChoice': avatarChoice,
       };
 
   UserSettings copyWith({
@@ -61,17 +66,21 @@ class UserSettings {
     bool? restTimerSoundEnabled,
     double? barbellStandardKg,
     String? appearanceMode,
+    String? avatarChoice,
   }) {
     return UserSettings(
       targetWaterMl: targetWaterMl ?? this.targetWaterMl,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
-      notificationLocalTime: notificationLocalTime ?? this.notificationLocalTime,
+      notificationLocalTime:
+          notificationLocalTime ?? this.notificationLocalTime,
       timeZoneId: timeZoneId ?? this.timeZoneId,
       weightUnit: weightUnit ?? this.weightUnit,
       distanceUnit: distanceUnit ?? this.distanceUnit,
-      restTimerSoundEnabled: restTimerSoundEnabled ?? this.restTimerSoundEnabled,
+      restTimerSoundEnabled:
+          restTimerSoundEnabled ?? this.restTimerSoundEnabled,
       barbellStandardKg: barbellStandardKg ?? this.barbellStandardKg,
       appearanceMode: appearanceMode ?? this.appearanceMode,
+      avatarChoice: avatarChoice ?? this.avatarChoice,
     );
   }
 }

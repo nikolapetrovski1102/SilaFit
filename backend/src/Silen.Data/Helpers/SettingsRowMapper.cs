@@ -17,6 +17,7 @@ public static class SettingsRowMapper
         RestTimerSoundEnabled = reader.GetBoolValue("RestTimerSoundEnabled"),
         BarbellStandardKg = reader.GetDecimalValue("BarbellStandardKg"),
         AppearanceMode = reader.GetStringValue("AppearanceMode"),
+        AvatarChoice = reader.GetStringValue("AvatarChoice"),
         UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
     };
 }
