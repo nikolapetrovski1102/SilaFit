@@ -311,7 +311,7 @@ public sealed class NotificationPublishService(
 
             return new PendingNotification(
                 NotificationCategories.Comeback,
-                NotificationMessageComposer.Comeback(candidate),
+                NotificationMessageComposer.Comeback(candidate, localDate),
                 $"comeback:{localDate:yyyy-MM-dd}",
                 localNow);
         }
@@ -335,7 +335,7 @@ public sealed class NotificationPublishService(
         {
             return new PendingNotification(
                 NotificationCategories.GymReminder,
-                NotificationMessageComposer.GymReminder(candidate),
+                NotificationMessageComposer.GymReminder(candidate, localDate),
                 $"gym:{localDate:yyyy-MM-dd}",
                 preferredLocal);
         }
@@ -355,7 +355,7 @@ public sealed class NotificationPublishService(
         {
             return new PendingNotification(
                 NotificationCategories.Motivation,
-                NotificationMessageComposer.Motivation(candidate),
+                NotificationMessageComposer.Motivation(candidate, localDate),
                 $"motivation:{localDate:yyyy-MM-dd}",
                 localNow);
         }
@@ -397,7 +397,7 @@ public sealed class NotificationPublishService(
 
         pending = new PendingNotification(
             NotificationCategories.MonthlyReviewUpsell,
-            NotificationMessageComposer.MonthlyReviewUpsell(candidate),
+            NotificationMessageComposer.MonthlyReviewUpsell(candidate, localDate),
             $"monthlyreview:{localDate:yyyy-MM}",
             target);
         return true;
@@ -438,7 +438,7 @@ public sealed class NotificationPublishService(
 
         pending = new PendingNotification(
             NotificationCategories.TrackSets,
-            NotificationMessageComposer.TrackSets(candidate, idle),
+            NotificationMessageComposer.TrackSets(candidate, idle, localDate),
             $"sets:{localDate:yyyy-MM-dd}:{bucket}",
             localNow);
         return true;
@@ -481,8 +481,8 @@ public sealed class NotificationPublishService(
             var useIdea = i % 2 == 1;
             var category = useIdea ? NotificationCategories.MealIdea : NotificationCategories.TrackCalories;
             var content = useIdea
-                ? NotificationMessageComposer.MealIdea(candidate)
-                : NotificationMessageComposer.TrackCalories(candidate);
+                ? NotificationMessageComposer.MealIdea(candidate, localDate)
+                : NotificationMessageComposer.TrackCalories(candidate, localDate);
 
             pending = new PendingNotification(
                 category,

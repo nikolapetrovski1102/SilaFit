@@ -384,6 +384,51 @@ public class NotificationPublishServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_UsesEachUsersPreferredLocalTimeAndTimeZone()
+    {
+        var options = BuildOptions(o => o.MealReminderLocalTimes = []);
+        var utcNow = DateTime.UtcNow;
+        var localNow = utcNow.AddHours(5).AddMinutes(45);
+        var candidate = Candidate(lastInteractionAtUtc: utcNow);
+        candidate.TimeZoneId = "+05:45";
+        candidate.NotificationLocalTime = new TimeSpan(localNow.Hour, localNow.Minute, 0);
+
+        var notification = new UserNotificationModel
+        {
+            NotificationId = Guid.NewGuid(),
+            UserId = candidate.UserId,
+            Category = NotificationCategories.GymReminder
+        };
+        NewNotificationModel? createdReminder = null;
+
+        pushSender.SetupGet(p => p.IsConfigured).Returns(true);
+        notificationProvider
+            .Setup(p => p.GetCandidatesAsync(options.MaxUsersPerRun, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([candidate]);
+        notificationProvider
+            .Setup(p => p.TryCreateNotificationAsync(It.IsAny<NewNotificationModel>(), It.IsAny<CancellationToken>()))
+            .Callback<NewNotificationModel, CancellationToken>((created, _) => createdReminder = created)
+            .ReturnsAsync(notification);
+        notificationProvider
+            .Setup(p => p.GetActiveDeviceTokensAsync(candidate.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UserDeviceTokenModel { PushToken = "tok1", Platform = "ios" }]);
+        pushSender
+            .Setup(p => p.SendAsync(It.IsAny<PushNotificationMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PushSendResult.Sent("provider-msg"));
+        notificationProvider
+            .Setup(p => p.MarkSentAsync(notification.NotificationId, notification.Category, "provider-msg", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await Sut(options).RunAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(createdReminder);
+        Assert.Equal(NotificationCategories.GymReminder, createdReminder.Category);
+        Assert.Equal(candidate.NotificationLocalTime, createdReminder.ScheduledLocalAt!.Value.TimeOfDay);
+        Assert.Equal($"gym:{createdReminder.ScheduledLocalAt:yyyy-MM-dd}", createdReminder.DedupeKey);
+    }
+
+    [Fact]
     public async Task FlushPendingAsync_MasterSwitchDisabled_DoesNotQueryPending()
     {
         pushSender.SetupGet(p => p.IsConfigured).Returns(true);

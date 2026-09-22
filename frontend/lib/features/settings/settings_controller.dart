@@ -103,6 +103,9 @@ class SettingsController extends ChangeNotifier {
         timeZoneId: value ? deviceTimeZoneId() : s.timeZoneId,
       ));
 
-  Future<void> setNotificationLocalTime(String value) =>
-      _update((s) => s.copyWith(notificationLocalTime: value));
+  // Save the time together with the device's current zone. This matters when a
+  // user travels and edits the reminder without toggling reminders off/on: the
+  // chosen wall-clock time should still be interpreted in the place they are.
+  Future<void> setNotificationLocalTime(String value) => _update((s) =>
+      s.copyWith(notificationLocalTime: value, timeZoneId: deviceTimeZoneId()));
 }
