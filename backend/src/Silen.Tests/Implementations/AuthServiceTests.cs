@@ -423,6 +423,8 @@ public class AuthServiceTests
             .ReturnsAsync(payload);
         authProvider.Setup(p => p.GetIdentityAsync("Google", payload.Subject, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
         authProvider.Setup(p => p.LinkExternalIdentityAsync(
                 request.ExistingUserId, "Google", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(newUserId);
@@ -450,6 +452,8 @@ public class AuthServiceTests
             .ReturnsAsync(payload);
         authProvider.Setup(p => p.GetIdentityAsync("Google", payload.Subject, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
         authProvider.Setup(p => p.LinkExternalIdentityAsync(
                 request.ExistingUserId, "Google", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(newUserId);
@@ -459,6 +463,75 @@ public class AuthServiceTests
         var result = await sut.LoginOrLinkGoogleAsync(request);
 
         Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkGoogleAsync_EmailBelongsToDifferentGuestSession_MergesIntoExistingAccount()
+    {
+        // The app is always logged in as something (typically an auto-provisioned
+        // Guest/device account). Signing in with Google using an email that
+        // already belongs to a different, real account must not stamp that
+        // email onto the guest row - it should sign into the existing account.
+        var guestSessionUserId = Guid.NewGuid();
+        var request = new GoogleLoginRequest { ExistingUserId = guestSessionUserId, IdToken = "good-token" };
+        var payload = new ExternalIdentityPayload { Subject = "google-sub-merge", Email = "existing@example.com", DisplayName = "Existing User" };
+        var guestSession = User(userId: guestSessionUserId, email: null);
+        guestSession.AccountTier = AccountTier.Guest;
+        var existingAccount = User(email: payload.Email);
+
+        googleTokenVerifier.Setup(v => v.VerifyAsync(request.IdToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Google", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingAccount);
+        authProvider.Setup(p => p.GetUserByIdAsync(guestSessionUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(guestSession);
+        authProvider.Setup(p => p.LinkExternalIdentityAsync(
+                existingAccount.UserId, "Google", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingAccount.UserId);
+        authProvider.Setup(p => p.GetUserByIdAsync(existingAccount.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingAccount);
+        authProvider.Setup(p => p.UpdateLastLoginAsync(existingAccount.UserId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.LoginOrLinkGoogleAsync(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(existingAccount.UserId, result.Data!.UserId);
+        authProvider.Verify(p => p.LinkExternalIdentityAsync(
+            existingAccount.UserId, "Google", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkGoogleAsync_EmailBelongsToDifferentRegisteredSession_ReturnsConflictInsteadOfLinking()
+    {
+        // The currently logged-in account is itself a real, distinct account
+        // (not a throwaway guest shell). Silently merging it into another
+        // account's data would be destructive, so this must surface a clear
+        // conflict rather than attempting to link and hitting the SQL unique
+        // constraint on Users.Email.
+        var currentUserId = Guid.NewGuid();
+        var request = new GoogleLoginRequest { ExistingUserId = currentUserId, IdToken = "good-token" };
+        var payload = new ExternalIdentityPayload { Subject = "google-sub-conflict", Email = "other@example.com", DisplayName = "Other User" };
+        var currentUser = User(userId: currentUserId, email: "me@example.com");
+        var otherAccount = User(email: payload.Email);
+
+        googleTokenVerifier.Setup(v => v.VerifyAsync(request.IdToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Google", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherAccount);
+        authProvider.Setup(p => p.GetUserByIdAsync(currentUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(currentUser);
+
+        var result = await sut.LoginOrLinkGoogleAsync(request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(409, result.StatusCode);
+        authProvider.Verify(p => p.LinkExternalIdentityAsync(
+            It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---- LoginOrLinkAppleAsync ----
@@ -512,6 +585,8 @@ public class AuthServiceTests
             .ReturnsAsync(payload);
         authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
         authProvider.Setup(p => p.LinkExternalIdentityAsync(
                 request.ExistingUserId, "Apple", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(newUserId);
@@ -539,6 +614,8 @@ public class AuthServiceTests
             .ReturnsAsync(payload);
         authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
         authProvider.Setup(p => p.LinkExternalIdentityAsync(
                 request.ExistingUserId, "Apple", payload.Subject, payload.Email, "Request Name", It.IsAny<CancellationToken>()))
             .ReturnsAsync(newUserId);
@@ -565,6 +642,8 @@ public class AuthServiceTests
             .ReturnsAsync(payload);
         authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
         authProvider.Setup(p => p.LinkExternalIdentityAsync(
                 request.ExistingUserId, "Apple", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(newUserId);
@@ -574,5 +653,71 @@ public class AuthServiceTests
         var result = await sut.LoginOrLinkAppleAsync(request);
 
         Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkAppleAsync_EmailBelongsToDifferentGuestSession_MergesIntoExistingAccount()
+    {
+        // Reproduces the reported bug: the app is silently logged in as a
+        // Guest/device account, and the user then signs in with Apple using
+        // an email that already belongs to a real, different account. This
+        // must sign into that existing account rather than trying to stamp
+        // the email onto the guest row and hitting Users.Email's unique
+        // constraint (which used to surface as a raw 500 "Something went wrong").
+        var guestSessionUserId = Guid.NewGuid();
+        var request = new AppleLoginRequest { ExistingUserId = guestSessionUserId, IdentityToken = "good-token" };
+        var payload = new ExternalIdentityPayload { Subject = "apple-sub-merge", Email = "existing@example.com", DisplayName = "Existing User" };
+        var guestSession = User(userId: guestSessionUserId, email: null);
+        guestSession.AccountTier = AccountTier.Guest;
+        var existingAccount = User(email: payload.Email);
+
+        appleTokenVerifier.Setup(v => v.VerifyAsync(request.IdentityToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingAccount);
+        authProvider.Setup(p => p.GetUserByIdAsync(guestSessionUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(guestSession);
+        authProvider.Setup(p => p.LinkExternalIdentityAsync(
+                existingAccount.UserId, "Apple", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingAccount.UserId);
+        authProvider.Setup(p => p.GetUserByIdAsync(existingAccount.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingAccount);
+        authProvider.Setup(p => p.UpdateLastLoginAsync(existingAccount.UserId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.LoginOrLinkAppleAsync(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(existingAccount.UserId, result.Data!.UserId);
+        authProvider.Verify(p => p.LinkExternalIdentityAsync(
+            existingAccount.UserId, "Apple", payload.Subject, payload.Email, payload.DisplayName, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkAppleAsync_EmailBelongsToDifferentRegisteredSession_ReturnsConflictInsteadOfLinking()
+    {
+        var currentUserId = Guid.NewGuid();
+        var request = new AppleLoginRequest { ExistingUserId = currentUserId, IdentityToken = "good-token" };
+        var payload = new ExternalIdentityPayload { Subject = "apple-sub-conflict", Email = "other@example.com", DisplayName = "Other User" };
+        var currentUser = User(userId: currentUserId, email: "me@example.com");
+        var otherAccount = User(email: payload.Email);
+
+        appleTokenVerifier.Setup(v => v.VerifyAsync(request.IdentityToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
+        authProvider.Setup(p => p.GetUserByEmailAsync(payload.Email!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherAccount);
+        authProvider.Setup(p => p.GetUserByIdAsync(currentUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(currentUser);
+
+        var result = await sut.LoginOrLinkAppleAsync(request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(409, result.StatusCode);
+        authProvider.Verify(p => p.LinkExternalIdentityAsync(
+            It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

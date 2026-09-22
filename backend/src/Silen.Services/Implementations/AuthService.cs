@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Silen.Common.Contracts;
 using Silen.Common.Dtos;
+using Silen.Common.Enums;
 using Silen.Common.Exceptions;
 using Silen.Common.Helpers;
 using Silen.Common.Options;
@@ -224,8 +225,12 @@ public sealed class AuthService(
 
             var existing = await authProvider.GetIdentityAsync("Google", payload.Subject, cancellationToken);
 
+            var linkUserId = existing is not null
+                ? existing.UserId
+                : await ResolveLinkTargetUserIdAsync(request.ExistingUserId, payload.Email, cancellationToken);
+
             var userId = existing?.UserId ?? await authProvider.LinkExternalIdentityAsync(
-                request.ExistingUserId, "Google", payload.Subject, payload.Email, payload.DisplayName, cancellationToken);
+                linkUserId, "Google", payload.Subject, payload.Email, payload.DisplayName, cancellationToken);
 
             var user = await authProvider.GetUserByIdAsync(userId, cancellationToken)
                 ?? throw new NotFoundException($"User '{userId}' was linked to Google but could not be re-read.");
@@ -252,8 +257,12 @@ public sealed class AuthService(
 
             var existing = await authProvider.GetIdentityAsync("Apple", payload.Subject, cancellationToken);
 
+            var linkUserId = existing is not null
+                ? existing.UserId
+                : await ResolveLinkTargetUserIdAsync(request.ExistingUserId, payload.Email, cancellationToken);
+
             var userId = existing?.UserId ?? await authProvider.LinkExternalIdentityAsync(
-                request.ExistingUserId, "Apple", payload.Subject, payload.Email, request.DisplayName ?? payload.DisplayName, cancellationToken);
+                linkUserId, "Apple", payload.Subject, payload.Email, request.DisplayName ?? payload.DisplayName, cancellationToken);
 
             var user = await authProvider.GetUserByIdAsync(userId, cancellationToken)
                 ?? throw new NotFoundException($"User '{userId}' was linked to Apple but could not be re-read.");
@@ -271,4 +280,49 @@ public sealed class AuthService(
                 DisplayName = user.DisplayName
             };
         });
+
+    /// <summary>
+    /// Picks the account an OAuth identity should be linked to. The caller's
+    /// current session (a Guest device account, in the common case, since the
+    /// app is always logged in as something) may not be the account this
+    /// email already belongs to - e.g. it was previously registered with a
+    /// password, or linked via the other provider. Blindly stamping the
+    /// email onto the current session's row would collide with UX_Users_Email
+    /// and surface as a raw SQL exception, so resolve the collision here
+    /// instead of leaving it to the stored procedure.
+    /// </summary>
+    private async Task<Guid?> ResolveLinkTargetUserIdAsync(Guid? existingUserId, string? email, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return existingUserId;
+        }
+
+        var emailOwner = await authProvider.GetUserByEmailAsync(email, cancellationToken);
+        if (emailOwner is null || emailOwner.UserId == existingUserId)
+        {
+            return existingUserId;
+        }
+
+        if (existingUserId is null)
+        {
+            // No active session - sign in to the account that already owns this email.
+            return emailOwner.UserId;
+        }
+
+        var currentUser = await authProvider.GetUserByIdAsync(existingUserId.Value, cancellationToken);
+        if (currentUser is null || currentUser.AccountTier == AccountTier.Guest)
+        {
+            // The current session is just an unclaimed device shell - sign in to
+            // the existing account instead of colliding with it.
+            return emailOwner.UserId;
+        }
+
+        // The current session is itself a distinct registered account - merging
+        // it into another real account's data silently would be surprising and
+        // destructive, so surface a clear, actionable conflict instead.
+        throw new ConflictException(
+            $"OAuth login email tag {LogRedaction.Tag(email)} belongs to a different account than the current session.",
+            "An account already exists with this email. Sign in with its original method, then link this provider from Settings.");
+    }
 }
