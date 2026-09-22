@@ -41,8 +41,6 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
         _options = options.Value;
         _logger = logger;
         _signingKey = TryLoadSigningKey(_options, _logger);
-        _httpClient.BaseAddress = new Uri(
-            string.Equals(_options.Environment, "Sandbox", StringComparison.OrdinalIgnoreCase) ? SandboxBaseUrl : ProductionBaseUrl);
     }
 
     public bool IsConfigured =>
@@ -70,7 +68,34 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
             return null;
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}");
+        var primaryBaseUrl = GetBaseUrl(_options.Environment);
+        var (info, notFound) = await TryFetchTransactionAsync(primaryBaseUrl, transactionId, token, cancellationToken).ConfigureAwait(false);
+        if (info is not null || !notFound)
+        {
+            return info;
+        }
+
+        // Apple returns 404 when the transaction only exists in the other environment
+        // (e.g. a sandbox/TestFlight purchase looked up against production, mirroring the
+        // old verifyReceipt status-21007 case). Retry once against the other environment.
+        var fallbackBaseUrl = GetFallbackBaseUrl(primaryBaseUrl);
+        _logger.LogInformation(
+            "Transaction '{TransactionId}' not found at {PrimaryBaseUrl}; retrying at {FallbackBaseUrl}.",
+            transactionId, primaryBaseUrl, fallbackBaseUrl);
+        var (fallbackInfo, _) = await TryFetchTransactionAsync(fallbackBaseUrl, transactionId, token, cancellationToken).ConfigureAwait(false);
+        return fallbackInfo;
+    }
+
+    private static string GetBaseUrl(string? environment) =>
+        string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase) ? SandboxBaseUrl : ProductionBaseUrl;
+
+    private static string GetFallbackBaseUrl(string baseUrl) =>
+        baseUrl == SandboxBaseUrl ? ProductionBaseUrl : SandboxBaseUrl;
+
+    private async Task<(AppStoreTransactionInfo? Info, bool NotFound)> TryFetchTransactionAsync(
+        string baseUrl, string transactionId, string token, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         try
@@ -80,24 +105,24 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "App Store Server API rejected transaction lookup for '{TransactionId}' ({Status}): {Body}",
-                    transactionId, (int)response.StatusCode, body);
-                return null;
+                    "App Store Server API rejected transaction lookup for '{TransactionId}' at {BaseUrl} ({Status}): {Body}",
+                    transactionId, baseUrl, (int)response.StatusCode, body);
+                return (null, response.StatusCode == System.Net.HttpStatusCode.NotFound);
             }
 
             using var document = JsonDocument.Parse(body);
             if (!document.RootElement.TryGetProperty("signedTransactionInfo", out var signedElement))
             {
-                _logger.LogWarning("App Store Server API response for '{TransactionId}' had no signedTransactionInfo.", transactionId);
-                return null;
+                _logger.LogWarning("App Store Server API response for '{TransactionId}' at {BaseUrl} had no signedTransactionInfo.", transactionId, baseUrl);
+                return (null, false);
             }
 
-            return DecodeTransaction(signedElement.GetString(), _options.BundleId, _logger);
+            return (DecodeTransaction(signedElement.GetString(), _options.BundleId, _logger), false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "App Store Server API call failed for transaction '{TransactionId}'.", transactionId);
-            return null;
+            _logger.LogError(ex, "App Store Server API call failed for transaction '{TransactionId}' at {BaseUrl}.", transactionId, baseUrl);
+            return (null, false);
         }
     }
 
