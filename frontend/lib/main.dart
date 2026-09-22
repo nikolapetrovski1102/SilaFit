@@ -22,6 +22,7 @@ import 'features/meals/meal_repository.dart';
 import 'features/notifications/notifications_repository.dart';
 import 'features/notifications/push_messaging_service.dart';
 import 'features/onboarding/onboarding_flow_screen.dart';
+import 'features/plans/iap_service.dart';
 import 'features/plans/plans_controller.dart';
 import 'features/plans/plans_repository.dart';
 import 'features/progress/analytics_controller.dart';
@@ -149,6 +150,7 @@ class _AppRun extends StatelessWidget {
         Provider(create: (_) => ProgressRepository(apiClient)),
         Provider(create: (_) => AnalyticsRepository(apiClient)),
         Provider(create: (_) => PlansRepository(apiClient)),
+        Provider(create: (_) => IapService()),
         Provider(create: (_) => SettingsRepository(apiClient)),
         Provider(create: (_) => MealRepository(apiClient)),
         Provider.value(value: notificationsRepository),
@@ -187,7 +189,8 @@ class _AppRun extends StatelessWidget {
             create: (ctx) =>
                 WeeklyAnalyticsController(ctx.read<AnalyticsRepository>())),
         ChangeNotifierProvider(
-            create: (ctx) => PlansController(ctx.read<PlansRepository>())),
+            create: (ctx) => PlansController(
+                ctx.read<PlansRepository>(), ctx.read<IapService>())),
         ChangeNotifierProvider(
             create: (ctx) => SettingsController(
                 ctx.read<SettingsRepository>(), sessionStore)),
@@ -299,7 +302,9 @@ class _AppRootState extends State<_AppRoot> {
           _pushSyncTriggered = true;
           Future.microtask(context.read<PushMessagingService>().syncToken);
         }
-        return const RootShell();
+        return RootShell(
+          showFeatureTour: !sessionStore.hasCompletedFeatureTour,
+        );
       },
     );
   }

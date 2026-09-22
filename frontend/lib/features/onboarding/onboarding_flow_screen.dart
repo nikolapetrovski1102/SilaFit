@@ -56,7 +56,8 @@ class _OnboardingFlowView extends StatelessWidget {
     await context.read<SessionStore>().markOnboardingComplete();
     if (!context.mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const RootShell()),
+      MaterialPageRoute(
+          builder: (_) => const RootShell(showFeatureTour: true)),
     );
   }
 

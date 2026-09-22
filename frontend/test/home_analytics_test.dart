@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:silafit/core/api/api_client.dart';
 import 'package:silafit/core/session/session_store.dart';
 import 'package:silafit/features/auth/auth_controller.dart';
+import 'package:silafit/features/plans/iap_service.dart';
 import 'package:silafit/features/plans/plans_controller.dart';
 import 'package:silafit/features/plans/plans_repository.dart';
 import 'package:silafit/features/progress/analytics_models.dart';
@@ -25,11 +26,6 @@ class FakePlans extends PlansRepository {
   FakePlans(this.code) : super(ApiClient(sessionStore: SessionStore()));
   @override
   Future<String> getActivePlanCode() async => code;
-  @override
-  Future<void> purchase(
-      {required String planId, required String billingCycle}) async {
-    code = planId;
-  }
 }
 
 class FakeAnalytics extends AnalyticsRepository {
@@ -57,7 +53,7 @@ void main() {
         'Home selects the correct recap for $tier and updates on purchase',
         (tester) async {
       final plans = FakePlans(tier);
-      final controller = PlansController(plans);
+      final controller = PlansController(plans, IapService());
       final analytics = FakeAnalytics();
       await tester.pumpWidget(MultiProvider(
           providers: [
@@ -83,7 +79,13 @@ void main() {
                   ? 'MONTHLY AI REVIEW'
                   : 'WEEKLY AI REVIEW'),
           findsOneWidget);
-      await controller.purchase('ADVANCED');
+      // Purchases now require a real native IAP round-trip that can't be
+      // driven from a widget test, so simulate the post-purchase state
+      // directly: the repository reporting the new plan code plus the
+      // revision bump the controller fires after a verified purchase.
+      plans.code = 'ADVANCED';
+      controller.purchaseRevision++;
+      controller.notifyListeners();
       await tester.pumpAndSettle();
       expect(find.text('WEEKLY AI REVIEW'), findsOneWidget);
       expect(find.text('UNLOCK'), findsNothing);

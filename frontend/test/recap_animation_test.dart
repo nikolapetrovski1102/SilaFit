@@ -16,7 +16,8 @@ void main() {
         'bar_graph',
         'heart_animated',
         'ai_stars',
-        'sparks'
+        'sparks',
+        'food',
       ]) {
         final composition = await loadRecapComposition(asset, brightness);
         expect(composition.duration, greaterThan(Duration.zero));
@@ -74,6 +75,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.value, 1);
     expect(tester.binding.hasScheduledFrame, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'food animation plays once, freezes at end, and survives theme changes',
+      (tester) async {
+    await tester.runAsync(() async {
+      for (final brightness in Brightness.values) {
+        await loadRecapComposition('food', brightness);
+      }
+    });
+    Future<void> show(bool active, Brightness brightness) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(brightness: brightness),
+        home: TickerMode(
+            enabled: active,
+            child: const SizedBox(
+                width: 152,
+                height: 152,
+                child: RecapAnimationStage(
+                    child: RecapAnimation(asset: 'food')))),
+      ));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pumpAndSettle();
+    }
+
+    await show(false, Brightness.dark);
+    final controller = tester.widget<Lottie>(find.byType(Lottie)).controller!;
+    expect(controller.value, 0);
+    await show(true, Brightness.dark);
+    expect(controller.value, 1);
+    expect(controller.isCompleted, isTrue);
+    await show(false, Brightness.dark);
+    await show(true, Brightness.light);
+    expect(tester.widget<Lottie>(find.byType(Lottie)).controller,
+        same(controller));
+    expect(controller.value, 1);
+    expect(controller.isCompleted, isTrue);
+
+    await tester.tap(find.byType(RecapAnimationStage));
+    await tester.pump();
+    expect(controller.value, lessThan(1));
+    await tester.pumpAndSettle();
+    expect(controller.value, 1);
     expect(tester.takeException(), isNull);
   });
 }

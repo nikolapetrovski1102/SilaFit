@@ -11,6 +11,7 @@ import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../onboarding/widgets/tour_guide_card.dart';
 import 'my_splits_screen.dart';
 import 'split_detail_screen.dart';
 import 'split_recommendation.dart';
@@ -19,7 +20,16 @@ import 'splits_models.dart';
 import 'splits_repository.dart';
 
 class SplitsScreen extends StatefulWidget {
-  const SplitsScreen({super.key});
+  final bool isTour;
+  final VoidCallback? onTourNext;
+  final VoidCallback? onTourSkip;
+
+  const SplitsScreen({
+    super.key,
+    this.isTour = false,
+    this.onTourNext,
+    this.onTourSkip,
+  });
 
   @override
   State<SplitsScreen> createState() => _SplitsScreenState();
@@ -27,6 +37,7 @@ class SplitsScreen extends StatefulWidget {
 
 class _SplitsScreenState extends State<SplitsScreen> {
   late final SplitsController _controller;
+  final _splitsSpotlightKey = GlobalKey();
 
   @override
   void initState() {
@@ -59,39 +70,66 @@ class _SplitsScreenState extends State<SplitsScreen> {
           ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-                AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Present the instant this screen is pushed, regardless of
-                // whether `_controller.load()` has resolved yet - this is
-                // the Hero that Home's "Active split" row expands into
-                // (ActiveSplitCard), and a Hero flight needs its
-                // destination widget to already exist when the push
-                // happens rather than gated behind the data fetch below.
-                const Hero(
-                  tag: 'active-split-hero',
-                  child: _SplitsHeader(),
+      body: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.marginMobile,
+                  AppSpacing.sm,
+                  AppSpacing.marginMobile,
+                  widget.isTour ? 200 : AppSpacing.sm,
                 ),
-                const SizedBox(height: AppSpacing.md),
-                HeroExpandReveal(
-                  child: ResourceBuilder<List<WorkoutSplit>>(
-                    state: _controller.state,
-                    onRetry: _controller.load,
-                    builder: (context, splits) =>
-                        _SplitsContent(splits: splits),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Present the instant this screen is pushed, regardless of
+                    // whether `_controller.load()` has resolved yet - this is
+                    // the Hero that Home's "Active split" row expands into
+                    // (ActiveSplitCard), and a Hero flight needs its
+                    // destination widget to already exist when the push
+                    // happens rather than gated behind the data fetch below.
+                    KeyedSubtree(
+                      key: _splitsSpotlightKey,
+                      child: const Hero(
+                        tag: 'active-split-hero',
+                        child: _SplitsHeader(),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    HeroExpandReveal(
+                      child: ResourceBuilder<List<WorkoutSplit>>(
+                        state: _controller.state,
+                        onRetry: _controller.load,
+                        builder: (context, splits) =>
+                            _SplitsContent(splits: splits),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              );
+            },
+          ),
+          if (widget.isTour)
+            Positioned.fill(
+              child: TourSpotlightOverlay(
+                key: const ValueKey('splits-tour-spotlight'),
+                targetKey: _splitsSpotlightKey,
+                stepIndex: 1,
+                stepCount: 5,
+                title: 'Workout Splits & Routines',
+                description:
+                    'Browse curated training routines tailored to your goals, or create and customize your own workout split.',
+                cardBottom:
+                    MediaQuery.of(context).padding.bottom + AppSpacing.lg,
+                onNext: widget.onTourNext ?? () => Navigator.of(context).pop(),
+                onSkip: widget.onTourSkip ?? () => Navigator.of(context).pop(),
+              ),
             ),
-          );
-        },
+        ],
       ),
     );
   }

@@ -24,6 +24,7 @@ import '../today_models.dart';
 class ActiveSplitCard extends StatelessWidget {
   final ActiveSplit? activeSplit;
   final double scale;
+  final GlobalKey? spotlightKey;
 
   /// How much bigger than a standard SlimActionRow this reads, on top of
   /// the FitHeight `scale` every row on Today already carries. Modest now
@@ -31,7 +32,7 @@ class ActiveSplitCard extends StatelessWidget {
   /// rather than being forced to one large fixed size.
   static const _emphasis = 1.15;
 
-  const ActiveSplitCard({super.key, required this.activeSplit, this.scale = 1});
+  const ActiveSplitCard({super.key, required this.activeSplit, this.scale = 1, this.spotlightKey});
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +45,7 @@ class ActiveSplitCard extends StatelessWidget {
 
     final rowScale = scale * _emphasis;
     final todayController = context.read<TodayController>();
-    return ContainerTransform(
+    final card = ContainerTransform(
       openBuilder: (_) => const SplitsScreen(),
       onClosed: () => unawaited(todayController.load(force: true)),
       closedBuilder: (context, openContainer) => SlimActionRow(
@@ -69,5 +70,9 @@ class ActiveSplitCard extends StatelessWidget {
         onTap: openContainer,
       ),
     );
+    if (spotlightKey != null) {
+      return KeyedSubtree(key: spotlightKey!, child: card);
+    }
+    return card;
   }
 }

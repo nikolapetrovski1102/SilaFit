@@ -737,7 +737,8 @@ class _RecapIcon extends StatelessWidget {
         icon == Icons.trending_up_rounded ||
         icon == Icons.favorite_outline_rounded ||
         icon == Icons.explore_outlined ||
-        icon == Icons.auto_awesome_rounded;
+        icon == Icons.auto_awesome_rounded ||
+        icon == Icons.restaurant_rounded;
     // Keep the original 152px layout slot. Only the artwork grows, so the
     // headings, stats and controls retain their original vertical positions.
     final art = SizedBox(
@@ -762,6 +763,12 @@ class _RecapIcon extends StatelessWidget {
           Icons.explore_outlined => const FittedBox(
               child: SizedBox(width: 184, height: 184, child: RecapCompass())),
           Icons.auto_awesome_rounded => const RecapAnimation(asset: 'ai_stars'),
+          Icons.restaurant_rounded => ClipOval(
+              child: Transform.scale(
+                scale: 1.15,
+                child: const RecapAnimation(asset: 'food'),
+              ),
+            ),
           _ => Icon(icon, size: 88, color: AppColors.accent),
         },
       ),

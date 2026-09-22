@@ -251,6 +251,10 @@ void main() {
       await advance(tester);
     }
     expect(find.text('AI recommended meals for 7 days'), findsOneWidget);
+    expect(
+        find.byWidgetPredicate(
+            (widget) => widget is RecapAnimation && widget.asset == 'food'),
+        findsOneWidget);
     expect(find.text('DAY 1'), findsOneWidget);
     expect(find.text('DAY 7'), findsOneWidget);
     expect(find.byType(PillChip), findsWidgets);

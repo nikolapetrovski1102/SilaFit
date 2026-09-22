@@ -31,9 +31,13 @@ const kSilenNavTabs = [
 class SilenBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final List<GlobalKey>? tabKeys;
 
   const SilenBottomNavBar(
-      {super.key, required this.currentIndex, required this.onTap});
+      {super.key,
+      required this.currentIndex,
+      required this.onTap,
+      this.tabKeys});
 
   // iOS gets the frosted-glass tab bar (BackdropFilter blur behind a
   // translucent fill), matching the system UIKit tab bar treatment. The
@@ -96,6 +100,7 @@ class SilenBottomNavBar extends StatelessWidget {
         children: [
           for (var i = 0; i < kSilenNavTabs.length; i++)
             _NavItem(
+                key: tabKeys != null && i < tabKeys!.length ? tabKeys![i] : null,
                 tab: kSilenNavTabs[i],
                 selected: i == currentIndex,
                 onTap: () => onTap(i)),
@@ -188,7 +193,10 @@ class _NavItem extends StatelessWidget {
   final VoidCallback onTap;
 
   const _NavItem(
-      {required this.tab, required this.selected, required this.onTap});
+      {super.key,
+      required this.tab,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {

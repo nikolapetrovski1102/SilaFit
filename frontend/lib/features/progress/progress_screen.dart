@@ -11,17 +11,21 @@ import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../plans/plans_screen.dart';
+import 'all_personal_records_screen.dart';
 import 'analytics_controller.dart';
 import 'analytics_models.dart';
 import 'monthly_overview_screen.dart';
 import 'progress_controller.dart';
 import 'progress_models.dart';
 import 'weekly_analytics_controller.dart';
+import 'widgets/personal_record_tile.dart';
 
 /// The AI-narrated progress screen. Registered-tier only - the caller
 /// (RootShell) runs it through AccountGate before this ever mounts.
 class ProgressScreen extends StatefulWidget {
-  const ProgressScreen({super.key});
+  final GlobalKey? spotlightKey;
+
+  const ProgressScreen({super.key, this.spotlightKey});
 
   @override
   State<ProgressScreen> createState() => _ProgressScreenState();
@@ -68,7 +72,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 // whole screen (title included) whenever the overview call
                 // alone was slow or failed; now a stalled/errored overview
                 // only empties its own two cards.
-                child: _ProgressContent(controller: _controller),
+                child: _ProgressContent(
+                  controller: _controller,
+                  spotlightKey: widget.spotlightKey,
+                ),
               ),
             );
           },
@@ -80,8 +87,9 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
 class _ProgressContent extends StatelessWidget {
   final ProgressController controller;
+  final GlobalKey? spotlightKey;
 
-  const _ProgressContent({required this.controller});
+  const _ProgressContent({required this.controller, this.spotlightKey});
 
   static const _timeframes = [
     (30, '1M'),
@@ -118,17 +126,23 @@ class _ProgressContent extends StatelessWidget {
         ResourceBuilder<ProgressOverview>(
           state: controller.state,
           onRetry: controller.load,
-          builder: (context, overview) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _StrengthProgressCard(overview: overview),
-              const SizedBox(height: AppSpacing.lg),
-              _YourInsightCard(
-                  insight: overview.insights.isNotEmpty
-                      ? overview.insights.first
-                      : null),
-            ],
-          ),
+          builder: (context, overview) {
+            final card = _StrengthProgressCard(overview: overview);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (spotlightKey != null)
+                  KeyedSubtree(key: spotlightKey!, child: card)
+                else
+                  card,
+                const SizedBox(height: AppSpacing.lg),
+                _YourInsightCard(
+                    insight: overview.insights.isNotEmpty
+                        ? overview.insights.first
+                        : null),
+              ],
+            );
+          },
         ),
         const SizedBox(height: AppSpacing.lg),
         _PersonalRecordsCard(controller: controller),
@@ -155,26 +169,43 @@ class _WeekBucket {
 List<_WeekBucket> _weeklyBuckets(List<HeatmapDay> days) {
   if (days.isEmpty) return [];
   final sorted = [...days]..sort((a, b) => a.date.compareTo(b.date));
-  final buckets = <_WeekBucket>[];
-  DateTime? bucketStart;
-  var tonnage = 0.0;
 
-  void flush() {
-    if (bucketStart == null) return;
-    buckets.add(_WeekBucket(start: bucketStart, totalTonnageKg: tonnage));
-  }
-
-  for (final day in sorted) {
-    bucketStart ??= day.date;
-    if (day.date.difference(bucketStart).inDays >= 7) {
-      flush();
-      bucketStart = day.date;
-      tonnage = 0;
+  // Anchor windows to the most recent day and walk backwards in full 7-day
+  // steps, so a requested range that isn't a multiple of 7 (30/90/180 days
+  // never are) leaves its partial leftover at the OLD end instead of the
+  // new one. Bucketing forward from the oldest day - as this used to do -
+  // put that partial window last, so the trend/% comparison and chart tail
+  // ended up reading a 1-2 day sliver as "this week", which read as a
+  // dramatic, fake collapse next to real full weeks.
+  final windows = <List<HeatmapDay>>[];
+  var windowEnd = sorted.last.date;
+  var index = sorted.length - 1;
+  while (index >= 0) {
+    final windowStart = windowEnd.subtract(const Duration(days: 6));
+    final window = <HeatmapDay>[];
+    while (index >= 0 && !sorted[index].date.isBefore(windowStart)) {
+      window.add(sorted[index]);
+      index--;
     }
-    if (day.tonnageKg != null) tonnage += day.tonnageKg!;
+    windows.add(window);
+    windowEnd = windowStart.subtract(const Duration(days: 1));
   }
-  flush();
-  return buckets;
+
+  // `windows` is newest-first; flip to chronological order and drop a
+  // leading partial window rather than let it stand in as a full week.
+  final chronological = windows.reversed.toList();
+  if (chronological.isNotEmpty && chronological.first.length < 7) {
+    chronological.removeAt(0);
+  }
+
+  return [
+    for (final window in chronological)
+      _WeekBucket(
+        start: window.map((d) => d.date).reduce((a, b) => a.isBefore(b) ? a : b),
+        totalTonnageKg:
+            window.fold(0.0, (sum, d) => sum + (d.tonnageKg ?? 0)),
+      ),
+  ];
 }
 
 /// Percent change from the first to the last weekly bucket - `null` when
@@ -344,15 +375,16 @@ class _TrendChart extends StatelessWidget {
   }
 }
 
-String _formatPrWeight(double kg) =>
-    kg % 1 == 0 ? kg.toStringAsFixed(0) : kg.toStringAsFixed(1);
-
 /// Real per-exercise Personal Records - the heaviest set ever logged for
 /// each exercise (see `usp_WorkoutSession_GetPersonalRecords`), sourced from
 /// [ProgressController.prsState] rather than mock data. That state loads
 /// independently of the overview (see the controller), so this card has its
 /// own loading/error/empty rendering instead of gating on the page's
 /// [ResourceBuilder].
+///
+/// The card itself only ever holds a top-3 preview (`prsState` is fetched
+/// with `top: 3`); tapping it opens [AllPersonalRecordsScreen], which fetches
+/// the full per-exercise list on its own.
 class _PersonalRecordsCard extends StatelessWidget {
   final ProgressController controller;
 
@@ -361,59 +393,49 @@ class _PersonalRecordsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.prsState;
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionEyebrow('Personal Records'),
-          const SizedBox(height: AppSpacing.md),
-          if (state.isLoading)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: AppColors.accent),
+    final hasRecords = state.data != null && state.data!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: hasRecords
+          ? () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const AllPersonalRecordsScreen()))
+          : null,
+      child: SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(child: SectionEyebrow('Personal Records')),
+                if (hasRecords)
+                  Icon(Icons.arrow_forward_rounded,
+                      size: 16, color: AppColors.onSurfaceVariant),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (state.isLoading)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: AppColors.accent),
+                  ),
                 ),
-              ),
-            )
-          else if (state.error != null)
-            Text(state.error!, style: AppTypography.bodySm)
-          else if (state.data == null || state.data!.isEmpty)
-            Text('Log a set during a workout to start tracking PRs.',
-                style: AppTypography.bodySm
-                    .copyWith(color: AppColors.onSurfaceVariant))
-          else
-            for (final record in state.data!)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  children: [
-                    Icon(Icons.emoji_events_rounded,
-                        size: 18, color: AppColors.secondary),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(record.exerciseName,
-                          style: AppTypography.bodyMd,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    Text(
-                        '${_formatPrWeight(record.weightKg)} kg × ${record.reps}',
-                        style: AppTypography.numericUnit
-                            .copyWith(fontWeight: FontWeight.w600)),
-                    if (record.deltaKg != null && record.deltaKg! > 0) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      Text('+${_formatPrWeight(record.deltaKg!)}',
-                          style: AppTypography.labelSm
-                              .copyWith(color: AppColors.accent)),
-                    ],
-                  ],
-                ),
-              ),
-        ],
+              )
+            else if (state.error != null)
+              Text(state.error!, style: AppTypography.bodySm)
+            else if (!hasRecords)
+              Text('Log a set during a workout to start tracking PRs.',
+                  style: AppTypography.bodySm
+                      .copyWith(color: AppColors.onSurfaceVariant))
+            else
+              for (final record in state.data!)
+                PersonalRecordTile(record: record),
+          ],
+        ),
       ),
     );
   }

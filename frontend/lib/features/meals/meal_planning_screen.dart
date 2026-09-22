@@ -23,7 +23,9 @@ import 'widgets/suggested_diet_plans_section.dart';
 /// meals for the selected day, a "Suggested This Month" strip of diet plans
 /// and a quick-add FAB.
 class MealPlanningScreen extends StatefulWidget {
-  const MealPlanningScreen({super.key});
+  final GlobalKey? spotlightKey;
+
+  const MealPlanningScreen({super.key, this.spotlightKey});
 
   @override
   State<MealPlanningScreen> createState() => _MealPlanningScreenState();
@@ -82,8 +84,15 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
                 ResourceBuilder<MealDay>(
                   state: _controller.state,
                   onRetry: _controller.load,
-                  builder: (context, day) =>
-                      _MealDayContent(controller: _controller, day: day),
+                  builder: (context, day) {
+                    final content =
+                        _MealDayContent(controller: _controller, day: day);
+                    if (widget.spotlightKey != null) {
+                      return KeyedSubtree(
+                          key: widget.spotlightKey!, child: content);
+                    }
+                    return content;
+                  },
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 ActiveDietPlanSection(mealController: _controller),

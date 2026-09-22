@@ -178,7 +178,11 @@ public static class WorkoutRowMapper
         MonthlyPrice = reader.GetDecimalValue("MonthlyPrice"),
         YearlyPrice = reader.GetDecimalValue("YearlyPrice"),
         IsFeatured = reader.GetBoolValue("IsFeatured"),
-        SortOrder = reader.GetInt32Value("SortOrder")
+        SortOrder = reader.GetInt32Value("SortOrder"),
+        AppStoreMonthlyProductId = HasColumn(reader, "AppStoreMonthlyProductId") ? reader.GetNullableString("AppStoreMonthlyProductId") : null,
+        AppStoreYearlyProductId = HasColumn(reader, "AppStoreYearlyProductId") ? reader.GetNullableString("AppStoreYearlyProductId") : null,
+        PlayStoreMonthlyProductId = HasColumn(reader, "PlayStoreMonthlyProductId") ? reader.GetNullableString("PlayStoreMonthlyProductId") : null,
+        PlayStoreYearlyProductId = HasColumn(reader, "PlayStoreYearlyProductId") ? reader.GetNullableString("PlayStoreYearlyProductId") : null
     };
 
     public static PlanFeatureModel MapPlanFeature(SqlDataReader reader) => new()
@@ -207,7 +211,27 @@ public static class WorkoutRowMapper
         StartedAtUtc = reader.GetDateTimeValue("StartedAtUtc"),
         ExpiresAtUtc = reader.GetNullableDateTime("ExpiresAtUtc"),
         PlanCode = HasColumn(reader, "Code") ? reader.GetNullableString("Code") : null,
-        PlanName = HasColumn(reader, "Name") ? reader.GetNullableString("Name") : null
+        PlanName = HasColumn(reader, "Name") ? reader.GetNullableString("Name") : null,
+        LatestReceiptId = HasColumn(reader, "LatestReceiptId") ? reader.GetNullableGuid("LatestReceiptId") : null,
+        AutoRenewing = HasColumn(reader, "AutoRenewing") && reader.GetBoolValue("AutoRenewing")
+    };
+
+    public static SubscriptionReceiptModel MapReceipt(SqlDataReader reader) => new()
+    {
+        ReceiptId = reader.GetGuidValue("ReceiptId"),
+        UserId = reader.GetGuidValue("UserId"),
+        PlanId = reader.GetGuidValue("PlanId"),
+        Store = reader.GetStringValue("Store"),
+        ProductId = reader.GetStringValue("ProductId"),
+        TransactionId = reader.GetStringValue("TransactionId"),
+        OriginalTransactionId = reader.GetNullableString("OriginalTransactionId"),
+        PurchaseToken = HasColumn(reader, "PurchaseToken") ? reader.GetNullableString("PurchaseToken") : null,
+        RawPayload = HasColumn(reader, "RawPayload") ? reader.GetNullableString("RawPayload") : null,
+        Status = reader.GetStringValue("Status"),
+        ExpiresAtUtc = reader.GetNullableDateTime("ExpiresAtUtc"),
+        AutoRenewing = reader.GetBoolValue("AutoRenewing"),
+        VerifiedAtUtc = HasColumn(reader, "VerifiedAtUtc") ? reader.GetDateTimeValue("VerifiedAtUtc") : default,
+        CreatedAtUtc = HasColumn(reader, "CreatedAtUtc") ? reader.GetDateTimeValue("CreatedAtUtc") : default
     };
 
     public static PlanEntitlementsModel MapPlanEntitlements(SqlDataReader reader) => new()

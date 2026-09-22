@@ -12,10 +12,12 @@ import '../../core/widgets/in_app_web_view.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../root_shell.dart';
 import '../account/account_repository.dart';
 import '../auth/auth_controller.dart';
 import '../notifications/push_messaging_service.dart';
 import '../onboarding/onboarding_flow_screen.dart';
+import '../plans/plans_controller.dart';
 import '../plans/plans_screen.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
@@ -34,7 +36,9 @@ const _privacyUrl = 'https://sila.fitness/privacy.html';
 /// Fit integration backs them - subscription state and every other row here
 /// reflect real session/settings data instead.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final GlobalKey? spotlightKey;
+
+  const SettingsScreen({super.key, this.spotlightKey});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -67,7 +71,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               AppSpacing.lg,
               AppSpacing.marginMobile,
               AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
-          child: _SettingsContent(controller: _controller),
+          child: _SettingsContent(
+            controller: _controller,
+            spotlightKey: widget.spotlightKey,
+          ),
         );
       },
     );
@@ -76,8 +83,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _SettingsContent extends StatelessWidget {
   final SettingsController controller;
+  final GlobalKey? spotlightKey;
 
-  const _SettingsContent({required this.controller});
+  const _SettingsContent({
+    required this.controller,
+    this.spotlightKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -107,8 +118,11 @@ class _SettingsContent extends StatelessWidget {
         ResourceBuilder<UserSettings>(
           state: controller.state,
           onRetry: controller.load,
-          builder: (context, settings) =>
-              _PreferencesSections(controller: controller, settings: settings),
+          builder: (context, settings) => _PreferencesSections(
+            controller: controller,
+            settings: settings,
+            spotlightKey: spotlightKey,
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
         const SectionEyebrow('Subscription & Data'),
@@ -153,6 +167,10 @@ class _SettingsContent extends StatelessWidget {
                   label: 'Export my data', onTap: () => _exportData(context)),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
+                  label: 'Restore purchases',
+                  onTap: () => _restorePurchases(context)),
+              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+              _LinkRow(
                   label: 'Privacy policy',
                   onTap: () =>
                       _openUrl(context, _privacyUrl, 'Privacy Policy')),
@@ -175,8 +193,28 @@ class _SettingsContent extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           const SectionEyebrow('Developer'),
           const SizedBox(height: AppSpacing.sm),
-          const SectionCard(
-            child: Column(children: [_OnboardingDebugToggle()]),
+          SectionCard(
+            child: Column(
+              children: [
+                _DevActionRow(
+                  icon: Icons.restart_alt_rounded,
+                  label: 'Start Onboarding Process',
+                  subtitle:
+                      'Replay full profile setup + feature tour + protocol offer',
+                  onTap: () => _restartFullOnboarding(context),
+                ),
+                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+                _DevActionRow(
+                  icon: Icons.tour_outlined,
+                  label: 'Start App Feature Tour',
+                  subtitle:
+                      'Walk through pages & Choose Your Protocol screen',
+                  onTap: () => _startFeatureTourOnly(context),
+                ),
+                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+                const _OnboardingDebugToggle(),
+              ],
+            ),
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
@@ -187,6 +225,31 @@ class _SettingsContent extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
       ],
+    );
+  }
+
+  Future<void> _restartFullOnboarding(BuildContext context) async {
+    final sessionStore = context.read<SessionStore>();
+    await sessionStore.resetAllOnboarding();
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const OnboardingFlowScreen(forceSplitReassign: true),
+      ),
+      (route) => false,
+    );
+  }
+
+  Future<void> _startFeatureTourOnly(BuildContext context) async {
+    final sessionStore = context.read<SessionStore>();
+    await sessionStore.setFeatureTourComplete(false);
+    await sessionStore.resetWelcomeOffer();
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const RootShell(showFeatureTour: true),
+      ),
+      (route) => false,
     );
   }
 
@@ -255,6 +318,23 @@ class _SettingsContent extends StatelessWidget {
     }
   }
 
+  /// Re-delivers any past purchase for this Apple/Google account - the
+  /// explicit entry point App Store Review requires for non-consumable IAP.
+  /// The actual re-grant happens asynchronously via the purchase stream
+  /// PlansController already listens to; this just kicks it off and reports
+  /// once that round-trip settles.
+  Future<void> _restorePurchases(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final plans = context.read<PlansController>();
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Restoring purchases...')));
+    await plans.restorePurchases();
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(
+        content: Text(plans.actionError ??
+            'Restore complete. Any past purchase has been reapplied.')));
+  }
+
   Future<void> _confirmDeleteAccount(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -306,13 +386,17 @@ class _SettingsContent extends StatelessWidget {
 class _PreferencesSections extends StatelessWidget {
   final SettingsController controller;
   final UserSettings settings;
+  final GlobalKey? spotlightKey;
 
-  const _PreferencesSections(
-      {required this.controller, required this.settings});
+  const _PreferencesSections({
+    required this.controller,
+    required this.settings,
+    this.spotlightKey,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final primaryPreferences = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SectionEyebrow('Appearance'),
@@ -345,6 +429,16 @@ class _PreferencesSections extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (spotlightKey != null)
+          KeyedSubtree(key: spotlightKey!, child: primaryPreferences)
+        else
+          primaryPreferences,
         const SizedBox(height: AppSpacing.lg),
         const SectionEyebrow('Training & Notifications'),
         const SizedBox(height: AppSpacing.sm),
@@ -812,7 +906,11 @@ class _OnboardingDebugToggleState extends State<_OnboardingDebugToggle> {
 
   Future<void> _toggle(
       BuildContext context, SessionStore sessionStore, bool value) async {
-    await sessionStore.setOnboardingComplete(value);
+    if (!value) {
+      await sessionStore.resetAllOnboarding();
+    } else {
+      await sessionStore.setOnboardingComplete(true);
+    }
     if (!context.mounted) return;
     setState(() {});
     if (!value) {
@@ -823,6 +921,62 @@ class _OnboardingDebugToggleState extends State<_OnboardingDebugToggle> {
         (route) => false,
       );
     }
+  }
+}
+
+class _DevActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _DevActionRow({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.inset),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(AppRadius.inset),
+              ),
+              child: Icon(icon, size: 20, color: AppColors.accent),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTypography.bodyMd),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: AppColors.onSurfaceVariant, size: 20),
+          ],
+        ),
+      ),
+    );
   }
 }
 

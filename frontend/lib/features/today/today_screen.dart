@@ -27,7 +27,14 @@ import 'widgets/streak_history_sheet.dart';
 /// The Today dashboard - the one screen fully wired end to end to the
 /// real API, per the project's "solid skeleton + one full slice" scope.
 class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key});
+  final GlobalKey? splitCardSpotlightKey;
+  final GlobalKey? overviewSpotlightKey;
+
+  const TodayScreen({
+    super.key,
+    this.splitCardSpotlightKey,
+    this.overviewSpotlightKey,
+  });
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -106,11 +113,12 @@ class _TodayScreenState extends State<TodayScreen> {
     final sessionId = dashboard.session.workoutSessionId;
     if (sessionId == null) {
       _draftCheckedForId = null;
-      if (_hasDraft)
+      if (_hasDraft) {
         setState(() {
           _hasDraft = false;
           _draftProgress = 0;
         });
+      }
       return;
     }
     if (sessionId == _draftCheckedForId) return;
@@ -209,7 +217,7 @@ class _TodayScreenState extends State<TodayScreen> {
             // text size) just has its excess sit inertly off the bottom
             // edge instead of throwing a hard overflow error.
             return SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
+              physics: const ClampingScrollPhysics(),
               child: ResourceBuilder<TodayDashboard>(
                 state: _controller.state,
                 onRetry: _controller.load,
@@ -245,6 +253,9 @@ class _TodayScreenState extends State<TodayScreen> {
                         isResumingWorkout: _hasDraft,
                         workoutProgress: _draftProgress,
                         onWorkoutScreenClosed: _onWorkoutScreenClosed,
+                        splitCardSpotlightKey: widget.splitCardSpotlightKey,
+                        overviewSpotlightKey: widget.overviewSpotlightKey,
+                        minHeight: (viewportHeight - (AppSpacing.md * scale + AppSpacing.sm)).clamp(0.0, double.infinity),
                       ),
                     ),
                   );
@@ -269,6 +280,9 @@ class _TodayContent extends StatelessWidget {
   final bool isResumingWorkout;
   final double workoutProgress;
   final VoidCallback onWorkoutScreenClosed;
+  final GlobalKey? splitCardSpotlightKey;
+  final GlobalKey? overviewSpotlightKey;
+  final double? minHeight;
 
   const _TodayContent({
     required this.controller,
@@ -281,6 +295,9 @@ class _TodayContent extends StatelessWidget {
     required this.isResumingWorkout,
     required this.workoutProgress,
     required this.onWorkoutScreenClosed,
+    this.splitCardSpotlightKey,
+    this.overviewSpotlightKey,
+    this.minHeight,
   });
 
   @override
@@ -293,7 +310,24 @@ class _TodayContent extends StatelessWidget {
             : 'Good evening';
     final dateLabel = DateFormat('EEEE, MMM d').format(now);
 
-    return Column(
+    final overviewCard = TodayOverviewCard(
+      dashboard: dashboard,
+      splitDetail: splitDetail,
+      selectedDate: selectedDate,
+      selectedKnownStatus: selectedKnownStatus,
+      onDaySelected: onDaySelected,
+      scale: scale,
+      isResumingWorkout: isResumingWorkout,
+      workoutProgress: workoutProgress,
+      workoutBuilder: (_) => ActiveWorkoutTrackerScreen(
+        session: dashboard.session,
+        exercises: dashboard.targetExercises,
+        controller: controller,
+      ),
+      onWorkoutClosed: onWorkoutScreenClosed,
+    );
+
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Plain-text greeting, no boxed date pill - this page's own large
@@ -334,27 +368,27 @@ class _TodayContent extends StatelessWidget {
         // Streak/calendar and today's session combined into one flowing
         // block - "am I on track" and "what do I do today" read as a single
         // glance instead of two stacked boxes.
-        TodayOverviewCard(
-          dashboard: dashboard,
-          splitDetail: splitDetail,
-          selectedDate: selectedDate,
-          selectedKnownStatus: selectedKnownStatus,
-          onDaySelected: onDaySelected,
-          scale: scale,
-          isResumingWorkout: isResumingWorkout,
-          workoutProgress: workoutProgress,
-          workoutBuilder: (_) => ActiveWorkoutTrackerScreen(
-            session: dashboard.session,
-            exercises: dashboard.targetExercises,
-            controller: controller,
-          ),
-          onWorkoutClosed: onWorkoutScreenClosed,
-        ),
+        if (overviewSpotlightKey != null)
+          KeyedSubtree(key: overviewSpotlightKey!, child: overviewCard)
+        else
+          overviewCard,
         SizedBox(height: AppSpacing.xl * scale),
-        ActiveSplitCard(activeSplit: dashboard.activeSplit, scale: scale),
+        const Spacer(),
+        ActiveSplitCard(
+            activeSplit: dashboard.activeSplit,
+            scale: scale,
+            spotlightKey: splitCardSpotlightKey),
         SizedBox(height: AppSpacing.md * scale),
         AiInsightsTeaserCard(scale: scale),
       ],
     );
+
+    if (minHeight != null) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(minHeight: minHeight!),
+        child: IntrinsicHeight(child: content),
+      );
+    }
+    return content;
   }
 }

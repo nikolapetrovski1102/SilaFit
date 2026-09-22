@@ -61,7 +61,9 @@ class ProgressController extends ChangeNotifier {
     prsState = const ResourceState.loading();
     notifyListeners();
     try {
-      final records = await _repository.getPersonalRecords();
+      // The card only ever shows a top-3 preview - the full list lives on
+      // AllPersonalRecordsScreen, fetched separately on tap.
+      final records = await _repository.getPersonalRecords(top: 3);
       prsState = ResourceState.data(records);
     } on ApiException catch (e) {
       prsState = ResourceState.error(e.userMessage);
