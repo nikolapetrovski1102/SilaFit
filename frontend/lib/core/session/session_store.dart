@@ -49,7 +49,6 @@ class SessionStore {
   static const _onboardingCompleteKey = 'silen.onboarding_complete';
   static const _appearanceModeKey = 'silen.appearance_mode';
   static const _featureTourCompleteKey = 'silen.feature_tour_complete';
-  static const _welcomeOfferExpiryKey = 'silen.welcome_offer_expiry';
 
   // encryptedSharedPreferences wraps the Android prefs file with a
   // Keystore-backed AES key (requires API 23+, see android/app/build.gradle.kts).
@@ -64,7 +63,6 @@ class SessionStore {
   bool _hasCompletedOnboarding = false;
   String? _cachedAppearanceMode;
   bool _hasCompletedFeatureTour = false;
-  int? _welcomeOfferExpiryMs;
 
   SilenSession? get current => _session;
   String? get currentToken => _session?.token;
@@ -83,12 +81,6 @@ class SessionStore {
   /// Whether the post-onboarding feature tour has already been shown.
   bool get hasCompletedFeatureTour => _hasCompletedFeatureTour;
 
-  /// The UTC-millisecondsSinceEpoch when the 24-hour welcome offer expires.
-  /// Null if no offer has been started yet.
-  DateTime? get welcomeOfferExpiry => _welcomeOfferExpiryMs != null
-      ? DateTime.fromMillisecondsSinceEpoch(_welcomeOfferExpiryMs!, isUtc: true)
-      : null;
-
   /// Loads the persisted device id (creating one on first launch) and any
   /// saved session. Call once at app startup before reading [current].
   Future<void> restore() async {
@@ -104,7 +96,6 @@ class SessionStore {
     _cachedAppearanceMode = prefs.getString(_appearanceModeKey);
     _hasCompletedFeatureTour =
         prefs.getBool(_featureTourCompleteKey) ?? false;
-    _welcomeOfferExpiryMs = prefs.getInt(_welcomeOfferExpiryKey);
 
     final token = await _secureStorage.read(key: _tokenKey);
     final userId = await _secureStorage.read(key: _userIdKey);
@@ -177,27 +168,10 @@ class SessionStore {
     await prefs.setBool(_featureTourCompleteKey, value);
   }
 
-  /// Persists the welcome-offer countdown expiry. Called once when the tour
-  /// first reaches the offer screen; subsequent launches read the stored value
-  /// and count down from wherever it left off.
-  Future<void> setWelcomeOfferExpiry(DateTime expiry) async {
-    _welcomeOfferExpiryMs = expiry.toUtc().millisecondsSinceEpoch;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_welcomeOfferExpiryKey, _welcomeOfferExpiryMs!);
-  }
-
-  /// Clears the welcome offer expiry timestamp so devs can test the countdown fresh.
-  Future<void> resetWelcomeOffer() async {
-    _welcomeOfferExpiryMs = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_welcomeOfferExpiryKey);
-  }
-
   /// Resets both profile onboarding and feature tour flags for testing.
   Future<void> resetAllOnboarding() async {
     await setOnboardingComplete(false);
     await setFeatureTourComplete(false);
-    await resetWelcomeOffer();
   }
 
   /// Clears the saved auth session only. Used by [ApiClient] when a request

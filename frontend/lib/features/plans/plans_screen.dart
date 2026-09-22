@@ -1,6 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session/session_store.dart';
@@ -41,11 +40,6 @@ double _welcomeOfferPrice(double price) => (price * 50).floorToDouble() / 100;
 class _PlansScreenState extends State<PlansScreen> {
   late final PlansController _controller;
 
-  static const _offerDuration = Duration(minutes: 5);
-  Timer? _ticker;
-  Duration _remaining = Duration.zero;
-  bool _expired = false;
-
   // Which row the sticky footer CTA acts on. Null until the user taps a
   // row, at which point it sticks - until then `_selectedEntry` derives a
   // sensible default (the featured paid tier) on every build instead.
@@ -65,49 +59,6 @@ class _PlansScreenState extends State<PlansScreen> {
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
-    if (widget.isWelcomeOffer) {
-      _initCountdown();
-    }
-  }
-
-  Future<void> _initCountdown() async {
-    final store = context.read<SessionStore>();
-    var expiry = store.welcomeOfferExpiry;
-    if (expiry == null) {
-      expiry = DateTime.now().toUtc().add(_offerDuration);
-      await store.setWelcomeOfferExpiry(expiry);
-    }
-    _updateRemaining(expiry);
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      _updateRemaining(expiry!);
-    });
-  }
-
-  void _updateRemaining(DateTime expiry) {
-    final now = DateTime.now().toUtc();
-    final diff = expiry.difference(now);
-    if (diff.isNegative) {
-      setState(() {
-        _remaining = Duration.zero;
-        _expired = true;
-      });
-      _ticker?.cancel();
-    } else {
-      setState(() => _remaining = diff);
-    }
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  String get _formattedTime {
-    final m = (_remaining.inMinutes % 60).toString().padLeft(2, '0');
-    final s = (_remaining.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
   }
 
   Future<void> _dismiss() async {
@@ -196,7 +147,7 @@ class _PlansScreenState extends State<PlansScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeOffer = widget.isWelcomeOffer && !_expired;
+    final activeOffer = widget.isWelcomeOffer;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -235,7 +186,6 @@ class _PlansScreenState extends State<PlansScreen> {
                             _PlansHeader(
                               controller: _controller,
                               isWelcomeOffer: activeOffer,
-                              formattedTime: _formattedTime,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             ResourceBuilder<List<PlanCatalogEntry>>(
@@ -317,12 +267,10 @@ class _TopControl extends StatelessWidget {
 class _PlansHeader extends StatelessWidget {
   final PlansController controller;
   final bool isWelcomeOffer;
-  final String formattedTime;
 
   const _PlansHeader({
     required this.controller,
     this.isWelcomeOffer = false,
-    this.formattedTime = '',
   });
 
   @override
@@ -345,13 +293,8 @@ class _PlansHeader extends StatelessWidget {
                     size: 14, color: AppColors.accent),
                 const SizedBox(width: 4),
                 Text(
-                  '50% OFF ENDS IN ',
+                  'NEW MEMBER · 50% OFF FIRST BILLING PERIOD',
                   style: AppTypography.labelCaps.copyWith(
-                      color: AppColors.accent, fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  formattedTime,
-                  style: AppTypography.numericUnit.copyWith(
                       color: AppColors.accent, fontWeight: FontWeight.w700),
                 ),
               ],
@@ -368,7 +311,7 @@ class _PlansHeader extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           isWelcomeOffer
-              ? 'New member exclusive: 50% off every premium tier.'
+              ? 'New members get 50% off their first billing period on every premium tier.'
               : 'Transparent pricing. Upgrade or cancel anytime.',
           style: AppTypography.bodySm,
           textAlign: TextAlign.center,
@@ -486,7 +429,7 @@ class _PlanList extends StatelessWidget {
 /// only one tier's details are ever on screen at once - the rest of the
 /// tradeoff-comparison stays out of the way instead of stacking three full
 /// cards' worth of copy.
-class _PlanRow extends StatelessWidget {
+class _PlanRow extends StatefulWidget {
   final PlanCatalogEntry entry;
   final PlansController controller;
   final bool selected;
@@ -506,8 +449,27 @@ class _PlanRow extends StatelessWidget {
       entry.plan.monthlyPrice == 0 && entry.plan.yearlyPrice == 0;
 
   @override
+  State<_PlanRow> createState() => _PlanRowState();
+}
+
+class _PlanRowState extends State<_PlanRow> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
+  void _handleTap() {
+    if (!widget.selected) HapticFeedback.selectionClick();
+    widget.onTap();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (_isFree) return _FreeRow(name: entry.plan.name);
+    if (widget._isFree) return _FreeRow(name: widget.entry.plan.name);
+
+    final entry = widget.entry;
+    final controller = widget.controller;
+    final selected = widget.selected;
+    final isWelcomeOffer = widget.isWelcomeOffer;
 
     final price =
         controller.isYearly ? entry.plan.yearlyPrice : entry.plan.monthlyPrice;
@@ -516,24 +478,39 @@ class _PlanRow extends StatelessWidget {
     final effectivePrice = isWelcomeOffer ? _welcomeOfferPrice(price) : price;
     final perDay = effectivePrice / periodDays;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: selected
-            ? AppColors.surfaceContainer
-            : AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-          color: selected ? AppColors.accent : AppColors.surfaceContainerHigh,
-          width: selected ? 1.5 : 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          onTap: onTap,
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      onTap: _handleTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.surfaceContainer
+                : AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color:
+                  selected ? AppColors.accent : AppColors.surfaceContainerHigh,
+              width: selected ? 1.5 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.accent.withValues(alpha: 0.18),
+                      blurRadius: 16,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
+                : const [],
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
@@ -605,8 +582,8 @@ class _PlanRow extends StatelessWidget {
                   ],
                 ),
                 AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOut,
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
                   alignment: Alignment.topCenter,
                   child: selected
                       ? _ExpandedDetails(entry: entry)
@@ -629,7 +606,8 @@ class _RadioDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutBack,
       width: 20,
       height: 20,
       decoration: BoxDecoration(
@@ -642,9 +620,19 @@ class _RadioDot extends StatelessWidget {
           width: 1.5,
         ),
       ),
-      child: selected
-          ? Icon(Icons.check_rounded, size: 14, color: AppColors.onAccent)
-          : null,
+      child: Center(
+        child: AnimatedScale(
+          scale: selected ? 1.0 : 0.4,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutBack,
+          child: AnimatedOpacity(
+            opacity: selected ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            child: Icon(Icons.check_rounded, size: 14, color: AppColors.onAccent),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -672,6 +660,32 @@ class _ExpandedDetails extends StatelessWidget {
   final PlanCatalogEntry entry;
 
   const _ExpandedDetails({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    // Fades and settles in from a slight offset each time this mounts (i.e.
+    // each time the row becomes selected), rather than snapping into place
+    // the instant AnimatedSize finishes making room for it.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * 6),
+          child: child,
+        ),
+      ),
+      child: _ExpandedDetailsContent(entry: entry),
+    );
+  }
+}
+
+class _ExpandedDetailsContent extends StatelessWidget {
+  final PlanCatalogEntry entry;
+
+  const _ExpandedDetailsContent({required this.entry});
 
   @override
   Widget build(BuildContext context) {
@@ -820,7 +834,7 @@ class _PlansFooter extends StatelessWidget {
                       fontWeight: FontWeight.w500)),
             ),
             if (isWelcomeOffer)
-              Text("You won't see this 50% discount again",
+              Text('50% off applies to your first billing period only',
                   style: AppTypography.bodySm.copyWith(
                       color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
                       fontSize: 10)),
