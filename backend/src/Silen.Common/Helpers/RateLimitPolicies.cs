@@ -15,4 +15,7 @@ public static class RateLimitPolicies
 
     /// <summary>Billable AI analytics calls, partitioned per authenticated user (fallback IP).</summary>
     public const string Analytics = "analytics";
+
+    /// <summary>Anonymous App Store / Play Store server notification callbacks, partitioned per client IP.</summary>
+    public const string Webhooks = "webhooks";
 }

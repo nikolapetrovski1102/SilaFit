@@ -2,6 +2,7 @@ using Moq;
 using Silen.Common.Dtos;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -10,11 +11,12 @@ namespace Silen.Tests.Implementations;
 public class PlanServiceTests
 {
     private readonly Mock<IPlansProvider> plansProvider = new(MockBehavior.Strict);
+    private readonly Mock<ISubscriptionReceiptService> subscriptionReceiptService = new(MockBehavior.Strict);
     private readonly PlanService sut;
 
     public PlanServiceTests()
     {
-        sut = new PlanService(plansProvider.Object);
+        sut = new PlanService(plansProvider.Object, subscriptionReceiptService.Object);
     }
 
     [Fact]

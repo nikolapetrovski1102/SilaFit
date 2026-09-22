@@ -11,7 +11,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT PlanId, Code, Name, Tagline, MonthlyPrice, YearlyPrice, IsFeatured, SortOrder
+    SELECT PlanId, Code, Name, Tagline, MonthlyPrice, YearlyPrice, IsFeatured, SortOrder,
+           AppStoreMonthlyProductId, AppStoreYearlyProductId, PlayStoreMonthlyProductId, PlayStoreYearlyProductId
     FROM dbo.SubscriptionPlans
     ORDER BY SortOrder;
 

@@ -29,6 +29,8 @@ builder.Services.Configure<NotificationPublishOptions>(builder.Configuration.Get
 builder.Services.Configure<PushNotificationOptions>(builder.Configuration.GetSection(PushNotificationOptions.SectionName));
 builder.Services.Configure<ReviewerBypassOptions>(builder.Configuration.GetSection(ReviewerBypassOptions.SectionName));
 builder.Services.Configure<ImageUploadOptions>(builder.Configuration.GetSection(ImageUploadOptions.SectionName));
+builder.Services.Configure<AppStoreServerOptions>(builder.Configuration.GetSection(AppStoreServerOptions.SectionName));
+builder.Services.Configure<GooglePlayOptions>(builder.Configuration.GetSection(GooglePlayOptions.SectionName));
 
 builder.Services.AddSilenData();
 builder.Services.AddSilenServices();
@@ -124,6 +126,20 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    // Generous: real store traffic (renewals, refunds, retries) is legitimate and
+    // bursty around billing cycles, but this is still an anonymous endpoint that
+    // shouldn't be left fully unbounded against abuse.
+    options.AddPolicy(RateLimitPolicies.Webhooks, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));

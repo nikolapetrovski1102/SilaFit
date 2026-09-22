@@ -36,10 +36,13 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IAdminConsoleService, AdminConsoleService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IImageUploadService, ImageUploadService>();
+        services.AddScoped<ISubscriptionReceiptService, SubscriptionReceiptService>();
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();
         services.AddHttpClient<IOpenRouterClient, OpenRouterClient>();
+        services.AddHttpClient<IAppStoreServerClient, AppStoreServerClient>();
+        services.AddHttpClient<IGooglePlayDeveloperClient, GooglePlayDeveloperClient>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         // Push transport: a real FCM sender when Push:Enabled with a service

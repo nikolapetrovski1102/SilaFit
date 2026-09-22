@@ -23,4 +23,37 @@ public interface IPlansProvider
     /// <summary>Null when the caller has no active subscription (Free tier) or their plan
     /// has no entitlements row yet.</summary>
     Task<PlanEntitlementsModel?> GetEntitlementsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Upserts a verified store receipt, keyed on (Store, TransactionId) so the
+    /// verify endpoint, webhooks, and the reconciliation job can all call this safely.</summary>
+    Task<SubscriptionReceiptModel?> InsertReceiptAsync(
+        Guid userId, Guid planId, string store, string productId, string transactionId,
+        string? originalTransactionId, string? purchaseToken, string? rawPayload,
+        string status, DateTime? expiresAtUtc, bool autoRenewing, CancellationToken cancellationToken = default);
+
+    /// <summary>Grants entitlement from a server-verified receipt. planId must already have
+    /// been resolved from the store's verified productId, never a client-claimed plan.</summary>
+    Task<UserSubscriptionModel?> ActivateFromReceiptAsync(
+        Guid userId, Guid planId, string billingCycle, DateTime expiresAtUtc,
+        Guid receiptId, bool autoRenewing, CancellationToken cancellationToken = default);
+
+    /// <summary>Active, auto-renewing receipts due for a store re-check, oldest-verified first -
+    /// the batch the periodic reconciliation job walks.</summary>
+    Task<List<SubscriptionReceiptModel>> GetReceiptsForReconciliationAsync(
+        int batchSize = 200, CancellationToken cancellationToken = default);
+
+    /// <summary>Looks up a receipt by its store natural key - how a webhook/reconciliation
+    /// event identifies a transaction before re-verifying and re-activating it.</summary>
+    Task<SubscriptionReceiptModel?> GetReceiptByStoreTransactionAsync(
+        string store, string transactionId, CancellationToken cancellationToken = default);
+
+    /// <summary>Looks up a PlayStore receipt by its purchase token - how a Google Pub/Sub
+    /// notification (which only carries the token, not the order id TransactionId is keyed
+    /// on) resolves which transaction to re-verify.</summary>
+    Task<SubscriptionReceiptModel?> GetReceiptByPurchaseTokenAsync(
+        string purchaseToken, CancellationToken cancellationToken = default);
+
+    /// <summary>Moves a subscription out of Active (Cancelled/Expired) without granting
+    /// entitlement - used when a store check finds the receipt is no longer current.</summary>
+    Task UpdateSubscriptionStatusAsync(Guid userId, string status, CancellationToken cancellationToken = default);
 }

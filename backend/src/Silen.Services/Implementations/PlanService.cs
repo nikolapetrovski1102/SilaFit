@@ -9,7 +9,7 @@ using Silen.Services.Abstractions;
 namespace Silen.Services.Implementations;
 
 /// <inheritdoc cref="IPlanService"/>
-public sealed class PlanService(IPlansProvider plansProvider) : IPlanService
+public sealed class PlanService(IPlansProvider plansProvider, ISubscriptionReceiptService subscriptionReceiptService) : IPlanService
 {
     public Task<ServiceResult<List<PlanCatalogEntryDto>>> GetCatalogAsync(CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -48,4 +48,8 @@ public sealed class PlanService(IPlansProvider plansProvider) : IPlanService
             return await plansProvider.PurchaseAsync(userId, request.PlanId, request.BillingCycle, cancellationToken)
                 ?? throw new NotFoundException($"Purchase for user '{userId}' did not return a subscription row.");
         });
+
+    public Task<ServiceResult<UserSubscriptionModel>> VerifyPurchaseAsync(
+        Guid userId, VerifyPurchaseRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(() => subscriptionReceiptService.VerifyAndActivateAsync(userId, request, cancellationToken));
 }

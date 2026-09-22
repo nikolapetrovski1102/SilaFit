@@ -33,4 +33,14 @@ public sealed class PlansController(IPlanService planService, ILogger<PlansContr
         var result = await planService.PurchaseAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult(logger);
     }
+
+    /// <summary>Verifies a completed native App Store / Play Store purchase server-side and,
+    /// if it's genuinely active, grants the plan its verified product id maps to.</summary>
+    [HttpPost("purchase/verify")]
+    [Authorize(Policy = AuthorizationPolicies.RequireLinkedAccount)]
+    public async Task<IActionResult> VerifyPurchase([FromBody] VerifyPurchaseRequest request, CancellationToken cancellationToken)
+    {
+        var result = await planService.VerifyPurchaseAsync(User.GetUserId(), request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
 }

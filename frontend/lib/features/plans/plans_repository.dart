@@ -29,4 +29,25 @@ class PlansRepository {
         (_) {},
         body: {'planId': planId, 'billingCycle': billingCycle},
       );
+
+  /// Hands a completed StoreKit/Play Billing purchase to the server for
+  /// receipt validation. The server derives which plan to grant from the
+  /// verified [productId] against the store, never from anything the client
+  /// claims - this call only tells it which transaction to go check.
+  Future<void> verifyPurchase({
+    required String store,
+    required String productId,
+    required String receiptData,
+    String? transactionId,
+  }) =>
+      _client.post(
+        '/plans/purchase/verify',
+        (_) {},
+        body: {
+          'store': store,
+          'productId': productId,
+          'receiptData': receiptData,
+          if (transactionId != null) 'transactionId': transactionId,
+        },
+      );
 }

@@ -751,16 +751,18 @@ GO
 ----------------------------------------------------------------------------
 -- Subscription plans
 ----------------------------------------------------------------------------
--- Prices are EUR. PRO leads the paid tier at 2.49/mo (the cheapest upgrade),
--- ADVANCED at 4.99/mo; yearly is ~30% off the monthly*12 sticker price - see
--- the "-30%" yearly toggle badge in plans_screen.dart, which must stay in
--- sync with these two ratios.
+-- Prices match the real App Store / Play Store subscription prices (USD) set
+-- up in Phase 5 - see database/schema/060_SubscriptionPlanStoreProductIds.sql
+-- for the product IDs these correspond to. PRO leads the paid tier at
+-- 2.99/mo, ADVANCED at 5.99/mo; yearly is ~30% off the monthly*12 sticker
+-- price - see the "-30%" yearly toggle badge in plans_screen.dart, which
+-- must stay in sync with these two ratios.
 INSERT INTO dbo.SubscriptionPlans (Code, Name, Tagline, MonthlyPrice, YearlyPrice, IsFeatured, SortOrder)
 SELECT v.Code, v.Name, v.Tagline, v.MonthlyPrice, v.YearlyPrice, v.IsFeatured, v.SortOrder
 FROM (VALUES
     (N'FREE', N'Free Tier', N'Essential hardware tracking and routine logging for self-guided lifters.', 0.00, 0.00, 0, 1),
-    (N'PRO', N'Pro Tier', N'Advanced volume telemetry, predictive PR curves, and automated deload signals.', 2.49, 20.99, 1, 2),
-    (N'ADVANCED', N'Advanced Tier', N'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.', 4.99, 41.99, 0, 3)
+    (N'PRO', N'Pro Tier', N'Advanced volume telemetry, predictive PR curves, and automated deload signals.', 2.99, 24.99, 1, 2),
+    (N'ADVANCED', N'Advanced Tier', N'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.', 5.99, 49.99, 0, 3)
 ) AS v(Code, Name, Tagline, MonthlyPrice, YearlyPrice, IsFeatured, SortOrder)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.SubscriptionPlans p WHERE p.Code = v.Code);
 GO
@@ -772,8 +774,8 @@ SET p.MonthlyPrice = v.MonthlyPrice, p.YearlyPrice = v.YearlyPrice
 FROM dbo.SubscriptionPlans p
 INNER JOIN (VALUES
     (N'FREE', 0.00, 0.00),
-    (N'PRO', 2.49, 20.99),
-    (N'ADVANCED', 4.99, 41.99)
+    (N'PRO', 2.99, 24.99),
+    (N'ADVANCED', 5.99, 49.99)
 ) AS v(Code, MonthlyPrice, YearlyPrice) ON v.Code = p.Code;
 GO
 
@@ -800,9 +802,8 @@ FROM (VALUES
     (N'PRO', N'Custom split builder with infinite routines', 5, 0),
     (N'ADVANCED', N'Everything included in Pro tier', 1, 0),
     (N'ADVANCED', N'Adaptive meal planner calibrated to load', 2, 1),
-    (N'ADVANCED', N'Weekly AI check-ins with prioritized recommendations', 3, 0),
-    (N'ADVANCED', N'AI-generated workout splits & diet plans on request', 4, 0),
-    (N'ADVANCED', N'Unlimited saved splits & diet plans', 5, 0)
+    (N'ADVANCED', N'AI-generated workout splits & diet plans on request', 3, 0),
+    (N'ADVANCED', N'Unlimited saved splits & diet plans', 4, 0)
 ) AS v(Code, FeatureText, SortOrder, IsHighlighted)
 INNER JOIN dbo.SubscriptionPlans p ON p.Code = v.Code
 WHERE NOT EXISTS (
@@ -897,11 +898,34 @@ GO
 -- Advanced plan feature: weekly AI overview (top tier only)
 ---------------------------------------------------------------------------
 INSERT INTO dbo.PlanFeatures (PlanId, FeatureText, SortOrder, IsHighlighted)
-SELECT p.PlanId, N'Weekly AI Overview with meal & split suggestions', 6, 1
+SELECT p.PlanId, N'Weekly AI Overview with meal & split suggestions', 5, 1
 FROM dbo.SubscriptionPlans p
 WHERE p.Code = N'ADVANCED'
   AND NOT EXISTS (
       SELECT 1 FROM dbo.PlanFeatures pf
       WHERE pf.PlanId = p.PlanId AND pf.FeatureText = N'Weekly AI Overview with meal & split suggestions'
   );
+GO
+
+-- Re-runnable correction: the "Weekly AI Overview" feature above duplicated
+-- the older "Weekly AI check-ins with prioritized recommendations" row (both
+-- describe the same shipped WeeklyAnalytics report) - the plans screen ended
+-- up showing both as separate Advanced-tier perks. Drop the superseded row
+-- and close the SortOrder gap for databases seeded before this fix.
+DELETE pf
+FROM dbo.PlanFeatures pf
+INNER JOIN dbo.SubscriptionPlans p ON p.PlanId = pf.PlanId
+WHERE p.Code = N'ADVANCED'
+  AND pf.FeatureText = N'Weekly AI check-ins with prioritized recommendations';
+GO
+
+UPDATE pf
+SET pf.SortOrder = v.NewSortOrder
+FROM dbo.PlanFeatures pf
+INNER JOIN dbo.SubscriptionPlans p ON p.PlanId = pf.PlanId
+INNER JOIN (VALUES
+    (N'ADVANCED', N'AI-generated workout splits & diet plans on request', 3),
+    (N'ADVANCED', N'Unlimited saved splits & diet plans', 4),
+    (N'ADVANCED', N'Weekly AI Overview with meal & split suggestions', 5)
+) AS v(Code, FeatureText, NewSortOrder) ON v.Code = p.Code AND pf.FeatureText = v.FeatureText;
 GO

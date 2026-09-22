@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silen.Tests", "src\Silen.Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silen.Tools.WeeklyPlanGeneration", "src\Silen.Tools.WeeklyPlanGeneration\Silen.Tools.WeeklyPlanGeneration.csproj", "{62278E74-9B44-42E9-A5FC-6C8ADBA6B3BB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silen.Tools.SubscriptionSync", "src\Silen.Tools.SubscriptionSync\Silen.Tools.SubscriptionSync.csproj", "{B764B870-FCF9-4463-AD1E-2A4BEB422F24}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -169,6 +171,18 @@ Global
 		{62278E74-9B44-42E9-A5FC-6C8ADBA6B3BB}.Release|x64.Build.0 = Release|Any CPU
 		{62278E74-9B44-42E9-A5FC-6C8ADBA6B3BB}.Release|x86.ActiveCfg = Release|Any CPU
 		{62278E74-9B44-42E9-A5FC-6C8ADBA6B3BB}.Release|x86.Build.0 = Release|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Debug|x64.Build.0 = Debug|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Debug|x86.Build.0 = Debug|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Release|x64.ActiveCfg = Release|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Release|x64.Build.0 = Release|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Release|x86.ActiveCfg = Release|Any CPU
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -185,5 +199,6 @@ Global
 		{671D6A8B-2575-4422-9C84-EBF7A0765F1A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{C6B1F558-C0E9-4BEC-AB59-FACB4BFC4939} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{62278E74-9B44-42E9-A5FC-6C8ADBA6B3BB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{B764B870-FCF9-4463-AD1E-2A4BEB422F24} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

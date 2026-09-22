@@ -413,6 +413,74 @@ the rest of the pipeline is unaffected.
 - Procedures: `database/procedures/NotificationPublish.sql` plus
   `usp_WorkoutSession_Heartbeat` in `database/procedures/WorkoutSession.sql`.
 
+## Subscription sync
+
+Purchases are verified server-side against the issuing store (App Store Server
+API / Play Developer API) and activated from the store's own response, never
+from a client-supplied plan id — see `ISubscriptionReceiptService` in
+`Silen.Services`. Two paths keep entitlements current after the initial
+purchase:
+
+- **Webhooks** (`SubscriptionWebhooksController`, `POST /api/webhooks/apple`
+  and `POST /api/webhooks/google`) apply renewals/cancellations/refunds the
+  moment the store reports them. These need one-time setup in each console —
+  see "App Store / Play Store review account" below and Phase 5 of the IAP
+  rollout for the exact URLs to register.
+- **`Silen.Tools.SubscriptionSync`** is the safety net for whatever a missed
+  or late webhook wouldn't have caught: it re-verifies every active,
+  auto-renewing `SubscriptionReceipts` row against its store. `deploy.sh`
+  builds its image once and installs a cron entry that runs it **every 4
+  hours**:
+
+```bash
+cat /etc/cron.d/silen-subscription-sync          # schedule + log path
+tail -f /var/log/silen-subscription-sync.log     # run output
+```
+
+Run it by hand (test one user without writing anything):
+
+```bash
+cd /opt/silen/deploy
+docker compose --profile tools run --rm silen-subscription-sync -- --dry-run
+docker compose --profile tools run --rm silen-subscription-sync -- --user=<user-guid> --dry-run
+```
+
+Exit codes: `0` clean run, `2` completed with per-receipt failures, `1` the run
+itself failed. Safe to re-run: activation is keyed on `(Store, TransactionId)`,
+so overlapping runs or a webhook and a sync tick landing at the same time never
+double-apply a change.
+
+### Configuration (`.env`)
+
+- `APP_STORE_SERVER_KEY_ID`, `APP_STORE_SERVER_ISSUER_ID`,
+  `APP_STORE_SERVER_BUNDLE_ID` (default `com.nikolapetrovski.silafit`),
+  `APP_STORE_SERVER_PRIVATE_KEY_PATH` (default
+  `/secrets/appstore-server-key.p8`), `APP_STORE_SERVER_ENVIRONMENT` (default
+  `Production`, set `Sandbox` while testing) — the App Store Server API key you
+  generate in App Store Connect under Users and Access → Integrations →
+  In-App Purchase. Drop the downloaded `.p8` at
+  `deploy/secrets/appstore-server-key.p8` (the `./secrets` dir is mounted
+  read-only into the API and the tool, and is gitignored — it never travels
+  with the repo).
+- `GOOGLE_PLAY_PACKAGE_NAME` (default `com.nikolapetrovski.silafit`),
+  `GOOGLE_PLAY_SERVICE_ACCOUNT_PATH` (default
+  `/secrets/play-service-account.json`) — a Play Console service account with
+  "View financial data" + Play Developer API access. Drop its downloaded JSON
+  key at `deploy/secrets/play-service-account.json`.
+
+Both sets of credentials are shared between `silen-api` (verify-purchase
+endpoint + webhooks) and `silen-subscription-sync`.
+
+### Where the state lives
+
+- `dbo.SubscriptionPlans.AppStoreProductId` / `PlayStoreProductId` — the store
+  product ids a verified purchase resolves to a plan through.
+- `dbo.SubscriptionReceipts` — append-only ledger of every verified receipt,
+  unique on `(Store, TransactionId)`.
+- `dbo.UserSubscriptions.LatestReceiptId` / `AutoRenewing` — the active
+  entitlement, kept in sync from the latest applied receipt.
+- Procedures: `database/procedures/SubscriptionReceipts.sql`.
+
 ## App Store / Play Store review account
 
 `REVIEWER_BYPASS_EMAIL` / `REVIEWER_BYPASS_CODE` (`.env`) give app reviewers a

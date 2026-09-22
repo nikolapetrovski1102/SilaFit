@@ -8,6 +8,15 @@ class SubscriptionPlan {
   final double yearlyPrice;
   final bool isFeatured;
 
+  // Store product IDs the catalogue is sold under - null for the free tier.
+  // The billing-cycle toggle picks which one a purchase targets; the server
+  // derives the granted plan from whichever of these the store confirms was
+  // actually bought, never from the client's planId.
+  final String? appStoreMonthlyProductId;
+  final String? appStoreYearlyProductId;
+  final String? playStoreMonthlyProductId;
+  final String? playStoreYearlyProductId;
+
   const SubscriptionPlan({
     required this.planId,
     required this.code,
@@ -16,6 +25,10 @@ class SubscriptionPlan {
     required this.monthlyPrice,
     required this.yearlyPrice,
     required this.isFeatured,
+    this.appStoreMonthlyProductId,
+    this.appStoreYearlyProductId,
+    this.playStoreMonthlyProductId,
+    this.playStoreYearlyProductId,
   });
 
   factory SubscriptionPlan.fromJson(dynamic json) {
@@ -28,6 +41,10 @@ class SubscriptionPlan {
       monthlyPrice: (map['monthlyPrice'] as num?)?.toDouble() ?? 0,
       yearlyPrice: (map['yearlyPrice'] as num?)?.toDouble() ?? 0,
       isFeatured: map['isFeatured'] as bool? ?? false,
+      appStoreMonthlyProductId: map['appStoreMonthlyProductId'] as String?,
+      appStoreYearlyProductId: map['appStoreYearlyProductId'] as String?,
+      playStoreMonthlyProductId: map['playStoreMonthlyProductId'] as String?,
+      playStoreYearlyProductId: map['playStoreYearlyProductId'] as String?,
     );
   }
 }

@@ -360,7 +360,8 @@ log "Ensuring HTTPS + nginx TLS block for $DOMAIN and $API_DOMAIN"
 # Best-effort: DNS for $DOMAIN/$API_DOMAIN might not point at this box yet (or
 # might have moved on, e.g. after a server migration), in which case ACME
 # validation fails by design. Treating that as fatal used to abort the script
-# here, before the monthly-review / notification-publish / weekly-plan-generation cron steps, leaving
+# here, before the monthly-review / notification-publish / subscription-sync /
+# weekly-plan-generation cron steps, leaving
 # them stale. certbot rolls its nginx edits back on failure, so it is safe to
 # warn and continue.
 if certbot --nginx -d "$DOMAIN" -d "$API_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect; then
@@ -449,6 +450,36 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 CRON
 chmod 644 /etc/cron.d/silen-notification-publish
 ok "cron installed: /etc/cron.d/silen-notification-publish -> $SCRIPT_DIR/run-notification-publish.sh"
+
+# ---- 12b. subscription reconciliation cron ----------------------------------
+# Safety net for App Store/Play Store renewals, cancellations, refunds and
+# expirations that SubscriptionWebhooksController's push notifications missed
+# or arrived late for (Silen.Tools.SubscriptionSync). Built once here, not
+# with --build in the wrapper, same reasoning as notification-publish above.
+# Idempotent: activation is keyed on (Store, TransactionId).
+log "Building subscription sync image"
+docker compose --profile tools build silen-subscription-sync >/dev/null
+ok "silen-subscription-sync image built"
+
+log "Installing subscription sync cron (every 4 hours)"
+cat > "$SCRIPT_DIR/run-subscription-sync.sh" <<'WRAPPER'
+#!/usr/bin/env bash
+# Installed by deploy.sh - runs the subscription reconciliation batch once.
+# Output is captured to /var/log/silen-subscription-sync.log by the cron entry.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+exec docker compose --profile tools run --rm silen-subscription-sync
+WRAPPER
+chmod 750 "$SCRIPT_DIR/run-subscription-sync.sh"
+
+cat > /etc/cron.d/silen-subscription-sync <<CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# m h dom mon dow user command
+0 */4 * * * root $SCRIPT_DIR/run-subscription-sync.sh >> /var/log/silen-subscription-sync.log 2>&1
+CRON
+chmod 644 /etc/cron.d/silen-subscription-sync
+ok "cron installed: /etc/cron.d/silen-subscription-sync -> $SCRIPT_DIR/run-subscription-sync.sh"
 
 # ---- 13. weekly AI plan generation cron -------------------------------------
 # Generates + delivers a fresh custom split + diet plan for every active

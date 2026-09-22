@@ -60,4 +60,78 @@ public sealed class PlansProvider(ISqlExecutor sqlExecutor) : IPlansProvider
             [SqlParameterBuilder.Create("@UserId", userId)],
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapPlanEntitlements, cancellationToken),
             cancellationToken);
+
+    public Task<SubscriptionReceiptModel?> InsertReceiptAsync(
+        Guid userId, Guid planId, string store, string productId, string transactionId,
+        string? originalTransactionId, string? purchaseToken, string? rawPayload,
+        string status, DateTime? expiresAtUtc, bool autoRenewing, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_SubscriptionReceipt_Insert",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@PlanId", planId),
+                SqlParameterBuilder.Create("@Store", store),
+                SqlParameterBuilder.Create("@ProductId", productId),
+                SqlParameterBuilder.Create("@TransactionId", transactionId),
+                SqlParameterBuilder.Create("@OriginalTransactionId", originalTransactionId),
+                SqlParameterBuilder.Create("@PurchaseToken", purchaseToken),
+                SqlParameterBuilder.Create("@RawPayload", rawPayload),
+                SqlParameterBuilder.Create("@Status", status),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc),
+                SqlParameterBuilder.Create("@AutoRenewing", autoRenewing)
+            ],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
+            cancellationToken);
+
+    public Task<UserSubscriptionModel?> ActivateFromReceiptAsync(
+        Guid userId, Guid planId, string billingCycle, DateTime expiresAtUtc,
+        Guid receiptId, bool autoRenewing, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Subscription_ActivateFromReceipt",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@PlanId", planId),
+                SqlParameterBuilder.Create("@BillingCycle", billingCycle),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc),
+                SqlParameterBuilder.Create("@ReceiptId", receiptId),
+                SqlParameterBuilder.Create("@AutoRenewing", autoRenewing)
+            ],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapSubscription, cancellationToken),
+            cancellationToken);
+
+    public Task<List<SubscriptionReceiptModel>> GetReceiptsForReconciliationAsync(
+        int batchSize = 200, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_SubscriptionReceipt_GetForReconciliation",
+            [SqlParameterBuilder.Create("@BatchSize", batchSize)],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
+            cancellationToken);
+
+    public Task<SubscriptionReceiptModel?> GetReceiptByStoreTransactionAsync(
+        string store, string transactionId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_SubscriptionReceipt_GetByStoreTransaction",
+            [
+                SqlParameterBuilder.Create("@Store", store),
+                SqlParameterBuilder.Create("@TransactionId", transactionId)
+            ],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
+            cancellationToken);
+
+    public Task<SubscriptionReceiptModel?> GetReceiptByPurchaseTokenAsync(
+        string purchaseToken, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_SubscriptionReceipt_GetByPurchaseToken",
+            [SqlParameterBuilder.Create("@PurchaseToken", purchaseToken)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
+            cancellationToken);
+
+    public Task UpdateSubscriptionStatusAsync(Guid userId, string status, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Subscription_SetStatus",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@Status", status)
+            ],
+            cancellationToken);
 }
