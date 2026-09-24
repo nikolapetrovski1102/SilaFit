@@ -47,7 +47,7 @@ public sealed class AdminAuthOptions
     public int TotpWindowSteps { get; set; } = 1;
 
     /// <summary>Origin the operator-creation confirmation email's link is built against. No trailing slash.</summary>
-    public string ConsoleBaseUrl { get; set; } = "https://sila.fitness";
+    public string ConsoleBaseUrl { get; set; } = "https://admin.sila.fitness";
 
     /// <summary>How long an operator's email-confirmation link stays clickable.</summary>
     public int EmailConfirmHours { get; set; } = 48;

@@ -38,7 +38,7 @@ cd /opt/silen/deploy && docker compose up -d --build silen-api
    (see "Column-encryption rollout" below for a caveat specific to that step)
 3. Enables Transparent Data Encryption (TDE) on `SilenDb` if not already on
 4. Builds & runs the API on `127.0.0.1:5010`
-5. nginx reverse proxy for `sila.fitness` (+ `api.sila.fitness`)
+5. nginx reverse proxy for `sila.fitness` (+ `api.sila.fitness`, `admin.sila.fitness`)
 6. Let's Encrypt HTTPS with auto HTTP->HTTPS redirect
 7. Installs a cron entry for the monthly progress-email batch (see "Monthly
    progress emails" below)
@@ -89,11 +89,13 @@ If you ever need to roll back after a cutover but before running 026, the
 
 ## Admin console (two-factor sign-in)
 
-`website/admin.html` is protected by nginx, not by anything inside the page. The
-`location = /admin.html` block in `nginx-sila.fitness.conf` issues an
-`auth_request` subrequest to `GET /api/admin/auth/session` and serves the console
-only on a 200; anything else is redirected to `admin-login.html`. That single
-location is the whole gate — everything else under `website/` (css, js, assets)
+The console is served at https://admin.sila.fitness/ (its own vhost in
+`nginx-sila.fitness.conf`, which needs a DNS A record pointing at the server);
+the old `sila.fitness/admin*.html` URLs 301 there. `website/admin.html` is
+protected by nginx, not by anything inside the page. The admin vhost's
+`location = /` block issues an `auth_request` subrequest to
+`GET /api/admin/auth/session` and serves the console only on a 200; anything
+else is redirected to `admin-login.html`. That single location is the whole gate — everything else under `website/` (css, js, assets)
 is shared with the public site and stays public, and the login page is
 deliberately ungated because it is what hands out the cookie in the first place.
 The gate **fails closed**: if the API is unreachable nginx answers 500 rather
