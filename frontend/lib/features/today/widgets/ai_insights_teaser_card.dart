@@ -12,6 +12,7 @@ import '../../plans/plans_screen.dart';
 import '../../progress/analytics_models.dart';
 import '../../progress/analytics_repository.dart';
 import '../../progress/monthly_overview_screen.dart';
+import '../../settings/ai_consent_gate.dart';
 import '../today_controller.dart';
 
 /// Home's paid recap entry point. Uses the actual subscription, independently
@@ -104,6 +105,8 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
       return;
     }
 
+    if (!await AiConsentGate.ensure(context) || !mounted) return;
+
     final request = ++_request;
     setState(() {
       _loading = true;
@@ -128,7 +131,9 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
         _loading = false;
         _message = e.isInsufficientData
             ? 'Log more workouts and meals to prepare your review'
-            : e.isForbidden
+            : e.isAiConsentRequired
+                ? 'Allow AI data sharing to see your review'
+                : e.isForbidden
                 ? 'Access changed. Tap to check your subscription'
                 : 'Could not load your review. Tap to retry';
       });

@@ -101,3 +101,89 @@ class PersonalRecord {
     );
   }
 }
+
+/// An exercise the account has logged at least one set for. Mirrors
+/// `Silen.Common.Dtos.TrackedExerciseDto`.
+class TrackedExercise {
+  final String exerciseId;
+  final String exerciseName;
+  final int sessionCount;
+  final DateTime lastTrainedAtUtc;
+
+  const TrackedExercise({
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.sessionCount,
+    required this.lastTrainedAtUtc,
+  });
+
+  factory TrackedExercise.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return TrackedExercise(
+      exerciseId: map['exerciseId'] as String,
+      exerciseName: map['exerciseName'] as String? ?? '',
+      sessionCount: map['sessionCount'] as int? ?? 0,
+      lastTrainedAtUtc: DateTime.parse(map['lastTrainedAtUtc'] as String),
+    );
+  }
+}
+
+/// One session's worth of a single exercise. Mirrors
+/// `Silen.Common.Dtos.ExerciseProgressPointDto`.
+class ExerciseProgressPoint {
+  final DateTime date;
+  final double topWeightKg;
+  final int topSetReps;
+  final double estimatedOneRmKg;
+  final double totalVolumeKg;
+  final int totalReps;
+  final int setCount;
+
+  const ExerciseProgressPoint({
+    required this.date,
+    required this.topWeightKg,
+    required this.topSetReps,
+    required this.estimatedOneRmKg,
+    required this.totalVolumeKg,
+    required this.totalReps,
+    required this.setCount,
+  });
+
+  factory ExerciseProgressPoint.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return ExerciseProgressPoint(
+      date: DateTime.parse(map['date'] as String),
+      topWeightKg: (map['topWeightKg'] as num?)?.toDouble() ?? 0,
+      topSetReps: map['topSetReps'] as int? ?? 0,
+      estimatedOneRmKg: (map['estimatedOneRmKg'] as num?)?.toDouble() ?? 0,
+      totalVolumeKg: (map['totalVolumeKg'] as num?)?.toDouble() ?? 0,
+      totalReps: map['totalReps'] as int? ?? 0,
+      setCount: map['setCount'] as int? ?? 0,
+    );
+  }
+}
+
+/// Per-session history of one exercise, oldest first. Mirrors
+/// `Silen.Common.Dtos.ExerciseProgressDto`.
+class ExerciseProgress {
+  final String exerciseId;
+  final int days;
+  final List<ExerciseProgressPoint> points;
+
+  const ExerciseProgress({
+    required this.exerciseId,
+    required this.days,
+    required this.points,
+  });
+
+  factory ExerciseProgress.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return ExerciseProgress(
+      exerciseId: map['exerciseId'] as String,
+      days: map['days'] as int? ?? 0,
+      points: (map['points'] as List<dynamic>? ?? [])
+          .map((e) => ExerciseProgressPoint.fromJson(e))
+          .toList(),
+    );
+  }
+}

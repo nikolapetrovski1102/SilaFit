@@ -31,3 +31,8 @@ public sealed class UpdateUserSettingsRequest
     [StringLength(10)]
     public string AvatarChoice { get; set; } = "Male";
 }
+
+public sealed class SetAiDataConsentRequest
+{
+    public bool Granted { get; set; }
+}

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -9,19 +10,22 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/progress_ring.dart';
 import '../../core/widgets/section_eyebrow.dart';
-import '../../core/widgets/silen_button.dart';
 import '../diet_plans/diet_plan_controller.dart';
+import '../diet_plans/widgets/locked_diet_plans.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
+import 'meal_tracker_screen.dart';
 import 'widgets/active_diet_plan_section.dart';
 import 'widgets/macro_bar.dart';
+import 'widgets/meal_log_card.dart';
 import 'widgets/suggested_diet_plans_section.dart';
 
 /// The Nutrition/Meal Planning screen - boxless: a calorie ring on the left
 /// with its macro bars beside it on the right, a 7-day pill strip below that
 /// connects up to the ring via a thin accent line, the active diet plan's
-/// meals for the selected day, a "Suggested This Month" strip of diet plans
-/// and a quick-add FAB.
+/// meals for the selected day, a "Log a meal" entry into the food-by-food
+/// meal tracker plus the day's meals, and the diet-plan sections (Pro - a
+/// locked preview on Free).
 class MealPlanningScreen extends StatefulWidget {
   final GlobalKey? spotlightKey;
 
@@ -55,25 +59,28 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
       animation: _controller,
       builder: (context, _) {
         // This screen's own Scaffold is nested inside RootShell's tab
-        // PageView, which now reaches all the way behind the real floating
-        // nav pill (RootShell's `extendBody: true`). Reserve that same
-        // footprint here too: `extendBody` so the meal list can actually
-        // scroll under the pill (letting its transparency/blur show real
-        // content), and an invisible bottomNavigationBar spacer so the FAB
-        // still anchors just above the pill instead of sliding down behind
-        // it.
+        // PageView, which reaches all the way behind the floating nav pill
+        // (RootShell's `extendBody: true`). Reserve that same footprint:
+        // `extendBody` so the meals scroll under the pill, and an invisible
+        // bottomNavigationBar spacer so the "log a meal" FAB anchors just
+        // above the pill instead of sliding down behind it.
         final navReserved = SilenBottomNavBar.reservedHeight(context);
+        final dietPlans = context.watch<DietPlansController>();
+        final activePlan = context.watch<ActiveDietPlanController>();
+        final hasActivePlan = activePlan.state.data?.plan != null;
         return Scaffold(
           backgroundColor: Colors.transparent,
           extendBody: true,
-          floatingActionButton: _QuickAddFab(controller: _controller),
+          floatingActionButton: _LogMealFab(controller: _controller),
           bottomNavigationBar: SizedBox(height: navReserved),
           body: SingleChildScrollView(
+            // Extra room at the end so the last meal can scroll clear of
+            // the FAB.
             padding: EdgeInsets.fromLTRB(
                 AppSpacing.marginMobile,
                 AppSpacing.lg,
                 AppSpacing.marginMobile,
-                AppSpacing.sm + navReserved),
+                AppSpacing.sm + navReserved + 72),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -95,10 +102,24 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
                   },
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                ActiveDietPlanSection(mealController: _controller),
+                // Free accounts keep following a plan they already had, but
+                // browsing/creating plans is Pro - show the locked preview.
+                if (dietPlans.requiresUpgrade && !hasActivePlan) ...[
+                  const SectionEyebrow('Diet Plans · Pro'),
+                  const SizedBox(height: AppSpacing.sm),
+                  LockedDietPlans(onReturn: () {
+                    if (!mounted) return;
+                    dietPlans.load(force: true);
+                    activePlan.load(force: true);
+                  }),
+                ] else ...[
+                  ActiveDietPlanSection(mealController: _controller),
+                  if (!dietPlans.requiresUpgrade) ...[
+                    const SizedBox(height: AppSpacing.xl),
+                    const SuggestedDietPlansSection(),
+                  ],
+                ],
                 const SizedBox(height: AppSpacing.xl),
-                const SuggestedDietPlansSection(),
-                const SizedBox(height: 96), // clears the FAB
               ],
             ),
           ),
@@ -205,7 +226,7 @@ class _DayPill extends StatelessWidget {
                           end: Alignment.topCenter,
                           colors: [
                             AppColors.accent,
-                            AppColors.accent.withOpacity(0),
+                            AppColors.accent.withValues(alpha: 0),
                           ],
                         ),
                       ),
@@ -330,51 +351,40 @@ class _MealDayContent extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         _DayStrip(controller: controller),
+        const SizedBox(height: AppSpacing.xl),
+        _DayMeals(controller: controller, day: day),
       ],
     );
   }
 }
 
-/// Opens the quick-add bottom sheet, optionally pre-filled from a tapped
-/// [MealSuggestion] - shared by the FAB and the suggestions strip so both
-/// entry points land on the same editable form rather than logging silently.
-Future<void> showQuickAddSheet(BuildContext context, MealController controller,
-    {MealSuggestion? initial}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surfaceContainer,
-    shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
-    builder: (_) => _QuickAddSheet(controller: controller, initial: initial),
-  );
-}
-
-/// The floating quick-add button - rotates 45 degrees into an "x" look while
-/// its bottom sheet is open, then eases back on close.
-class _QuickAddFab extends StatefulWidget {
+/// The sticky bottom-right "+" - opens the meal tracker for a new meal. The
+/// plus turns into an x while the tracker is up, so the hand-off reads as
+/// one gesture.
+class _LogMealFab extends StatefulWidget {
   final MealController controller;
 
-  const _QuickAddFab({required this.controller});
+  const _LogMealFab({required this.controller});
 
   @override
-  State<_QuickAddFab> createState() => _QuickAddFabState();
+  State<_LogMealFab> createState() => _LogMealFabState();
 }
 
-class _QuickAddFabState extends State<_QuickAddFab> {
+class _LogMealFabState extends State<_LogMealFab> {
   bool _open = false;
 
-  Future<void> _openSheet() async {
+  Future<void> _openTracker() async {
+    HapticFeedback.lightImpact();
     setState(() => _open = true);
-    await showQuickAddSheet(context, widget.controller);
+    await openMealTracker(context, widget.controller);
     if (mounted) setState(() => _open = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return FloatingActionButton(
-      onPressed: _openSheet,
+      onPressed: _openTracker,
+      tooltip: 'Log a meal',
       backgroundColor: AppColors.accent,
       foregroundColor: AppColors.onAccent,
       elevation: 0,
@@ -389,148 +399,70 @@ class _QuickAddFabState extends State<_QuickAddFab> {
   }
 }
 
-class _QuickAddSheet extends StatefulWidget {
-  final MealController controller;
-  final MealSuggestion? initial;
-
-  const _QuickAddSheet({required this.controller, this.initial});
-
-  @override
-  State<_QuickAddSheet> createState() => _QuickAddSheetState();
+/// Pushes the full-screen meal tracker - a new meal, or [existing] to edit.
+Future<void> openMealTracker(BuildContext context, MealController controller,
+    {MealLog? existing}) {
+  return Navigator.of(context).push(MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (_) =>
+        MealTrackerScreen(controller: controller, existing: existing),
+  ));
 }
 
-class _QuickAddSheetState extends State<_QuickAddSheet> {
-  late String _mealType;
-  late final _titleController =
-      TextEditingController(text: widget.initial?.title ?? '');
-  late final _caloriesController = TextEditingController(
-      text: widget.initial != null ? '${widget.initial!.caloriesKcal}' : '');
-  late final _proteinController = TextEditingController(
-      text: widget.initial != null ? '${widget.initial!.proteinG}' : '');
-  late final _carbsController = TextEditingController(
-      text: widget.initial != null ? '${widget.initial!.carbsG}' : '');
-  late final _fatsController = TextEditingController(
-      text: widget.initial != null ? '${widget.initial!.fatsG}' : '');
-  bool _submitting = false;
+/// The selected day's meals. Planned meals from an active diet plan are
+/// already listed (and logged) in that plan's section, so they're left out
+/// here while one is active.
+class _DayMeals extends StatelessWidget {
+  final MealController controller;
+  final MealDay day;
 
-  @override
-  void initState() {
-    super.initState();
-    _mealType =
-        widget.initial != null && kMealTypes.contains(widget.initial!.mealType)
-            ? widget.initial!.mealType
-            : kMealTypes.first;
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _caloriesController.dispose();
-    _proteinController.dispose();
-    _carbsController.dispose();
-    _fatsController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_titleController.text.trim().isEmpty || _submitting) return;
-    setState(() => _submitting = true);
-    final ok = await widget.controller.addMeal(
-      mealType: _mealType,
-      title: _titleController.text.trim(),
-      caloriesKcal: int.tryParse(_caloriesController.text) ?? 0,
-      proteinG: int.tryParse(_proteinController.text) ?? 0,
-      carbsG: int.tryParse(_carbsController.text) ?? 0,
-      fatsG: int.tryParse(_fatsController.text) ?? 0,
-    );
-    if (!mounted) return;
-    setState(() => _submitting = false);
-    if (ok) Navigator.of(context).pop();
-  }
+  const _DayMeals({required this.controller, required this.day});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: AppSpacing.marginMobile,
-        right: AppSpacing.marginMobile,
-        top: AppSpacing.lg,
-        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    final hasActivePlan =
+        context.watch<ActiveDietPlanController>().state.data?.plan != null;
+    final meals = [
+      for (final meal in day.meals)
+        if (meal.isLogged || !hasActivePlan) meal,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Text('Log a meal', style: AppTypography.headlineSm),
-            const SizedBox(height: AppSpacing.lg),
-            Wrap(
-              spacing: AppSpacing.xs,
-              children: [
-                for (final type in kMealTypes)
-                  PillChip(
-                    label: type,
-                    selected: type == _mealType,
-                    onTap: () => setState(() => _mealType = type),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: _titleController,
-              style: AppTypography.bodyMd,
-              decoration: const InputDecoration(hintText: 'What did you eat?'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                Expanded(
-                    child: _NumberField(
-                        controller: _caloriesController, hint: 'Kcal')),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                    child: _NumberField(
-                        controller: _proteinController, hint: 'Protein g')),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Row(
-              children: [
-                Expanded(
-                    child: _NumberField(
-                        controller: _carbsController, hint: 'Carbs g')),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                    child: _NumberField(
-                        controller: _fatsController, hint: 'Fats g')),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            PrimaryPillButton(
-              label: 'Log Meal',
-              isLoading: _submitting,
-              onPressed: _submit,
-            ),
+            const Expanded(child: SectionEyebrow('Meals')),
+            if (meals.isNotEmpty)
+              Text('${meals.where((m) => m.isLogged).length} logged',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurfaceVariant)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _NumberField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-
-  const _NumberField({required this.controller, required this.hint});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      style: AppTypography.bodyMd,
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(labelText: hint),
+        const SizedBox(height: AppSpacing.sm),
+        if (meals.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Text(
+                'Nothing logged yet. Tap + to build a meal food by food - its '
+                'macros count toward this day.',
+                style: AppTypography.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+          )
+        else
+          for (final meal in meals)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: MealLogCard(
+                key: ValueKey(meal.mealLogId),
+                meal: meal,
+                onOpen: () =>
+                    openMealTracker(context, controller, existing: meal),
+                onLog: () => controller.logMeal(meal),
+                onDelete: () => controller.deleteMeal(meal.mealLogId),
+              ),
+            ),
+      ],
     );
   }
 }

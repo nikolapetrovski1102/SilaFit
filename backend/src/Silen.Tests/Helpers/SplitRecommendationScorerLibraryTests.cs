@@ -99,7 +99,7 @@ public class SplitRecommendationScorerLibraryTests
         "Barbell, Bodyweight, Cables, Dumbbells", sourceCategories: "[\"Women\",\"Men\"]");
 
     private static readonly WorkoutSplitModel Celebrity = Split(
-        "Michael B. Jordan Inspired Workout (Killmonger)", "BroSplit", "Intermediate", "BuildMuscle", 5,
+        "5 Day Athletic Hypertrophy Split", "BroSplit", "Intermediate", "BuildMuscle", 5,
         "Barbell, Bodyweight, Cables, Dumbbells, EZ Bar, Machines", sourceCategories: "[\"Muscle Building\",\"Men\",\"Celebrity\"]");
 
     private static readonly WorkoutSplitModel[] Library =
@@ -111,9 +111,8 @@ public class SplitRecommendationScorerLibraryTests
     private static string PickName(PersonFit fit, string goal)
     {
         var ranked = SplitRecommendationScorer.Rank(Library, fit, goal);
-        var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
-        Assert.NotNull(pick);
-        return pick!.Name;
+        Assert.NotEmpty(ranked);
+        return ranked[0].Name;
     }
 
     [Fact]
@@ -164,15 +163,14 @@ public class SplitRecommendationScorerLibraryTests
     }
 
     [Fact]
-    public void SpecialisationAndUtility_AreNeverAutoAssigned()
+    public void SpecialisationAndUtility_AreNeverTheTopRecommendation()
     {
         var fit = PersonFit.From(175, 78, 30, 4, 60, "Intermediate", "FullGym", "Active", "Male");
         var ranked = SplitRecommendationScorer.Rank(Library, fit, "BuildMuscle");
-        var pick = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
 
-        Assert.NotEqual(Arms.SplitId, pick!.SplitId);
-        Assert.NotEqual(Deload.SplitId, pick.SplitId);
-        Assert.NotEqual(Celebrity.SplitId, pick.SplitId);
+        Assert.NotEqual(Arms.SplitId, ranked[0].SplitId);
+        Assert.NotEqual(Deload.SplitId, ranked[0].SplitId);
+        Assert.NotEqual(Celebrity.SplitId, ranked[0].SplitId);
         Assert.False(SplitRecommendationScorer.IsAutoAssignable(Arms));
         Assert.False(SplitRecommendationScorer.IsAutoAssignable(Deload));
         Assert.False(SplitRecommendationScorer.IsAutoAssignable(Celebrity));

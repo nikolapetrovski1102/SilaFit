@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session/session_store.dart';
@@ -8,34 +9,59 @@ import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/widgets/section_eyebrow.dart';
+import '../../core/utils/legal_links.dart';
 import '../../core/widgets/silen_ambient_backdrop.dart';
 import '../../core/widgets/silen_button.dart';
 import '../auth/account_gate.dart';
 import '../progress/analytics_controller.dart';
 import '../progress/weekly_analytics_controller.dart';
+import 'cancel_subscription_screen.dart';
+import 'iap_service.dart';
 import 'plans_controller.dart';
 import 'plans_models.dart';
+import 'restore_purchases_action.dart';
+
+/// Where Settings' "Manage" goes. A paying user lands on the plan list with
+/// their current plan selected - picking Free or "Cancel subscription" from
+/// there opens [CancelSubscriptionScreen]. Free users and guests have nothing
+/// to manage in-app, so they go straight to the store.
+Future<void> manageSubscription(
+    BuildContext context, CurrentSubscription? subscription) async {
+  if (subscription == null || !subscription.isPaid) {
+    await openManageSubscriptions();
+    return;
+  }
+  await Navigator.of(context).push(MaterialPageRoute(
+    builder: (_) => PlansScreen(currentSubscription: subscription),
+  ));
+}
 
 class PlansScreen extends StatefulWidget {
   final bool isWelcomeOffer;
   final VoidCallback? onDismiss;
 
+  /// The caller's paid plan when opened to manage it (see
+  /// [manageSubscription]) - preselects that plan and offers the cancel flow.
+  final CurrentSubscription? currentSubscription;
+
   const PlansScreen({
     super.key,
     this.isWelcomeOffer = false,
     this.onDismiss,
+    this.currentSubscription,
   });
 
   @override
   State<PlansScreen> createState() => _PlansScreenState();
 }
 
-/// 50% off, floored to the cent rather than rounded - so e.g. $2.99 shows as
-/// $1.49 (matching the $1.49 Apple/Play introductory-offer price actually
-/// charged) instead of $1.50, which toStringAsFixed's round-half-up would
-/// otherwise produce from the exact $1.495 midpoint.
-double _welcomeOfferPrice(double price) => (price * 50).floorToDouble() / 100;
+/// Every price on this screen comes from the store's own quote
+/// ([StoreQuote]) - localized, and including an intro offer only when the
+/// store says this user gets one (App Review 3.1.2 / 2.3.7). The catalogue's
+/// USD figures are only a fallback for when the store can't be reached, in
+/// which case purchasing is unavailable anyway.
+String _fallbackPrice(double usd) =>
+    NumberFormat.simpleCurrency(name: 'USD').format(usd);
 
 class _PlansScreenState extends State<PlansScreen> {
   late final PlansController _controller;
@@ -52,6 +78,11 @@ class _PlansScreenState extends State<PlansScreen> {
   GlobalKey _rowKeyFor(String planId) =>
       _rowKeys.putIfAbsent(planId, GlobalKey.new);
 
+  CurrentSubscription? get _current =>
+      widget.currentSubscription?.isPaid == true
+          ? widget.currentSubscription
+          : null;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +90,33 @@ class _PlansScreenState extends State<PlansScreen> {
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
+    // Open on the cycle the user actually pays for, so their current plan
+    // reads as current rather than as a switch to the other cycle.
+    final cycle = _current?.billingCycle;
+    if (cycle != null) {
+      Future.microtask(
+          () => _controller.setBillingCycle(yearly: cycle == 'Yearly'));
+    }
+  }
+
+  bool _isCurrentPlan(SubscriptionPlan plan) =>
+      _current != null && plan.code.toUpperCase() == _current!.planCode;
+
+  /// The current plan on the cycle it's billed on - anything else selected
+  /// is a plan change the store can process.
+  bool _isCurrentSelection(SubscriptionPlan plan) {
+    if (!_isCurrentPlan(plan)) return false;
+    final cycle = _current!.billingCycle;
+    return cycle == null || (cycle == 'Yearly') == _controller.isYearly;
+  }
+
+  Future<void> _openCancelFlow() async {
+    final switchTo = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => CancelSubscriptionScreen(subscription: _current!),
+      ),
+    );
+    if (switchTo != null && mounted) _selectPlan(switchTo);
   }
 
   Future<void> _dismiss() async {
@@ -90,6 +148,9 @@ class _PlansScreenState extends State<PlansScreen> {
       for (final entry in catalog) {
         if (entry.plan.planId == id) return entry;
       }
+    }
+    for (final entry in catalog) {
+      if (_isCurrentPlan(entry.plan)) return entry;
     }
     return _defaultEntry(catalog);
   }
@@ -153,9 +214,11 @@ class _PlansScreenState extends State<PlansScreen> {
       backgroundColor: AppColors.background,
       // No AppBar on this screen - a Material AppBar tints/dims as content
       // scrolls underneath it (scrolledUnderElevation), which fought the
-      // ambient blur backdrop. The close/back control below is a plain
-      // floating icon instead, so it never dims and the tier list can start
-      // right at the top of the screen.
+      // ambient blur backdrop. Regular plan browsing keeps a floating back
+      // control; the welcome-offer step gets a floating close control instead
+      // - it must stay dismissible even when the catalogue or store products
+      // fail to load and the footer's "Continue with Free Plan" never renders
+      // (App Review 3.1.2 / 5.6).
       body: Stack(
         children: [
           const Positioned.fill(child: SilenAmbientBackdrop()),
@@ -170,9 +233,9 @@ class _PlansScreenState extends State<PlansScreen> {
                   children: [
                     Expanded(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(
+                        padding: EdgeInsets.fromLTRB(
                           AppSpacing.marginMobile,
-                          AppSpacing.xs,
+                          activeOffer ? 0 : AppSpacing.xs,
                           AppSpacing.marginMobile,
                           AppSpacing.md,
                         ),
@@ -186,6 +249,7 @@ class _PlansScreenState extends State<PlansScreen> {
                             _PlansHeader(
                               controller: _controller,
                               isWelcomeOffer: activeOffer,
+                              isManaging: _current != null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             ResourceBuilder<List<PlanCatalogEntry>>(
@@ -199,6 +263,7 @@ class _PlansScreenState extends State<PlansScreen> {
                                 onSelect: _selectPlan,
                                 rowKeyFor: _rowKeyFor,
                                 isWelcomeOffer: activeOffer,
+                                currentPlanCode: _current?.planCode,
                               ),
                             ),
                           ],
@@ -211,8 +276,11 @@ class _PlansScreenState extends State<PlansScreen> {
                         entry: selected,
                         isWelcomeOffer: activeOffer,
                         isWelcomeOfferFlow: widget.isWelcomeOffer,
+                        isCurrent: _isCurrentSelection(selected.plan),
                         onPurchase: () => _purchase(selected.plan),
                         onSkip: _dismiss,
+                        onCancelSubscription:
+                            _current != null ? _openCancelFlow : null,
                       ),
                   ],
                 ),
@@ -222,17 +290,23 @@ class _PlansScreenState extends State<PlansScreen> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: _TopControl(
-                  icon: widget.isWelcomeOffer
-                      ? Icons.close_rounded
-                      : Icons.arrow_back_rounded,
-                  onPressed: widget.isWelcomeOffer
-                      ? _dismiss
-                      : () => Navigator.of(context).maybePop(),
-                ),
-              ),
+              child: widget.isWelcomeOffer
+                  ? Align(
+                      alignment: Alignment.topRight,
+                      child: _TopControl(
+                        icon: Icons.close_rounded,
+                        tooltip: 'Close',
+                        onPressed: _dismiss,
+                      ),
+                    )
+                  : Align(
+                      alignment: Alignment.topLeft,
+                      child: _TopControl(
+                        icon: Icons.arrow_back_rounded,
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -246,9 +320,11 @@ class _PlansScreenState extends State<PlansScreen> {
 /// scrolls beneath it.
 class _TopControl extends StatelessWidget {
   final IconData icon;
+  final String tooltip;
   final VoidCallback onPressed;
 
-  const _TopControl({required this.icon, required this.onPressed});
+  const _TopControl(
+      {required this.icon, required this.tooltip, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -257,7 +333,7 @@ class _TopControl extends StatelessWidget {
       shape: const CircleBorder(),
       child: IconButton(
         icon: Icon(icon, color: AppColors.onSurface),
-        tooltip: 'Back',
+        tooltip: tooltip,
         onPressed: onPressed,
       ),
     );
@@ -267,51 +343,24 @@ class _TopControl extends StatelessWidget {
 class _PlansHeader extends StatelessWidget {
   final PlansController controller;
   final bool isWelcomeOffer;
+  final bool isManaging;
 
   const _PlansHeader({
     required this.controller,
     this.isWelcomeOffer = false,
+    this.isManaging = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (isWelcomeOffer)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppRadius.full),
-              border:
-                  Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.local_fire_department_rounded,
-                    size: 14, color: AppColors.accent),
-                const SizedBox(width: 4),
-                Text(
-                  'NEW MEMBER · 50% OFF FIRST BILLING PERIOD',
-                  style: AppTypography.labelCaps.copyWith(
-                      color: AppColors.accent, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          )
-        else
-          const PillChip(
-              label: 'System Telemetry & Access',
-              icon: Icons.bolt_rounded,
-              selected: true),
-        const SizedBox(height: AppSpacing.sm),
-        Text('Choose Your Protocol',
+        Text(isManaging ? 'Manage Your Plan' : 'Choose Your Protocol',
             style: AppTypography.headlineMd, textAlign: TextAlign.center),
         const SizedBox(height: 2),
         Text(
-          isWelcomeOffer
-              ? 'New members get 50% off their first billing period on every premium tier.'
+          isWelcomeOffer && controller.hasIntroOffer
+              ? 'New members get an introductory price on their first billing period.'
               : 'Transparent pricing. Upgrade or cancel anytime.',
           style: AppTypography.bodySm,
           textAlign: TextAlign.center,
@@ -342,7 +391,10 @@ class _BillingToggle extends StatelessWidget {
               selected: !controller.isYearly,
               onTap: () => controller.setBillingCycle(yearly: false)),
           _ToggleButton(
-              label: 'Yearly · Save 30%',
+              label: switch (controller.yearlySavingsPercent) {
+                final pct? => 'Yearly · Save $pct%',
+                null => 'Yearly',
+              },
               selected: controller.isYearly,
               onTap: () => controller.setBillingCycle(yearly: true)),
         ],
@@ -391,6 +443,9 @@ class _PlanList extends StatelessWidget {
   final GlobalKey Function(String planId) rowKeyFor;
   final bool isWelcomeOffer;
 
+  /// The paid plan being managed, or null on a plain paywall.
+  final String? currentPlanCode;
+
   const _PlanList({
     required this.controller,
     required this.catalog,
@@ -398,6 +453,7 @@ class _PlanList extends StatelessWidget {
     required this.onSelect,
     required this.rowKeyFor,
     this.isWelcomeOffer = false,
+    this.currentPlanCode,
   });
 
   @override
@@ -415,6 +471,8 @@ class _PlanList extends StatelessWidget {
             controller: controller,
             selected: entry.plan.planId == selectedPlanId,
             isWelcomeOffer: isWelcomeOffer,
+            isManaging: currentPlanCode != null,
+            isCurrentPlan: entry.plan.code.toUpperCase() == currentPlanCode,
             onTap: () => onSelect(entry.plan.planId),
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -434,6 +492,8 @@ class _PlanRow extends StatefulWidget {
   final PlansController controller;
   final bool selected;
   final bool isWelcomeOffer;
+  final bool isManaging;
+  final bool isCurrentPlan;
   final VoidCallback onTap;
 
   const _PlanRow({
@@ -443,6 +503,8 @@ class _PlanRow extends StatefulWidget {
     required this.selected,
     required this.onTap,
     this.isWelcomeOffer = false,
+    this.isManaging = false,
+    this.isCurrentPlan = false,
   });
 
   bool get _isFree =>
@@ -464,19 +526,41 @@ class _PlanRowState extends State<_PlanRow> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget._isFree) return _FreeRow(name: widget.entry.plan.name);
+    if (widget._isFree) {
+      // Managing a paid plan, Free is a real choice (it leads to the cancel
+      // flow); on a plain paywall it's the user's current baseline.
+      return _FreeRow(
+        name: widget.entry.plan.name,
+        isCurrent: !widget.isManaging,
+        selected: widget.selected,
+        onTap: widget.isManaging ? _handleTap : null,
+      );
+    }
 
     final entry = widget.entry;
     final controller = widget.controller;
     final selected = widget.selected;
-    final isWelcomeOffer = widget.isWelcomeOffer;
 
-    final price =
+    final quote = controller.quoteFor(entry.plan);
+    final intro = quote?.intro;
+    final catalogPrice =
         controller.isYearly ? entry.plan.yearlyPrice : entry.plan.monthlyPrice;
+    final priceText = quote?.price ?? _fallbackPrice(catalogPrice);
     final cadence = controller.isYearly ? '/yr' : '/mo';
     final periodDays = controller.isYearly ? 365 : 30;
-    final effectivePrice = isWelcomeOffer ? _welcomeOfferPrice(price) : price;
-    final perDay = effectivePrice / periodDays;
+    final perDayText = quote != null
+        ? quote.format(quote.rawPrice / periodDays)
+        : _fallbackPrice(catalogPrice / periodDays);
+    final introPct = quote?.introDiscountPercent;
+    final String? introBadge = widget.isCurrentPlan
+        ? 'CURRENT PLAN'
+        : intro == null
+            ? null
+            : intro.isFreeTrial
+                ? 'FREE TRIAL'
+                : introPct != null
+                    ? '$introPct% OFF'
+                    : 'INTRO OFFER';
 
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
@@ -526,10 +610,10 @@ class _PlanRowState extends State<_PlanRow> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (isWelcomeOffer)
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 2),
-                              child: _Badge(label: '50% OFF'),
+                          if (introBadge != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: _Badge(label: introBadge),
                             )
                           else if (entry.plan.isFeatured)
                             const Padding(
@@ -551,29 +635,34 @@ class _PlanRowState extends State<_PlanRow> {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            if (isWelcomeOffer) ...[
+                            if (intro != null && !intro.isFreeTrial) ...[
                               Text(
-                                '\$${price.toStringAsFixed(2)}',
+                                priceText,
                                 style: AppTypography.bodySm.copyWith(
                                     decoration: TextDecoration.lineThrough),
                               ),
                               const SizedBox(width: 4),
                             ],
                             Text(
-                              '\$${effectivePrice.toStringAsFixed(2)}',
+                              intro == null || intro.isFreeTrial
+                                  ? priceText
+                                  : intro.displayPrice,
                               style: AppTypography.headlineSm.copyWith(
                                   fontSize: 18,
-                                  color: isWelcomeOffer
+                                  color: intro != null
                                       ? AppColors.accent
                                       : AppColors.highEmphasis),
                             ),
-                            Text(cadence,
-                                style: AppTypography.labelSm.copyWith(
-                                    color: AppColors.onSurfaceVariant)),
+                            if (intro == null || intro.isPerPeriod)
+                              Text(cadence,
+                                  style: AppTypography.labelSm.copyWith(
+                                      color: AppColors.onSurfaceVariant)),
                           ],
                         ),
                         Text(
-                          '≈ \$${perDay.toStringAsFixed(2)}/day',
+                          intro != null
+                              ? 'then $priceText$cadence'
+                              : '≈ $perDayText/day',
                           style: AppTypography.labelSm.copyWith(
                               fontSize: 11, color: AppColors.onSurfaceVariant),
                         ),
@@ -629,7 +718,8 @@ class _RadioDot extends StatelessWidget {
             opacity: selected ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 140),
             curve: Curves.easeOut,
-            child: Icon(Icons.check_rounded, size: 14, color: AppColors.onAccent),
+            child:
+                Icon(Icons.check_rounded, size: 14, color: AppColors.onAccent),
           ),
         ),
       ),
@@ -737,38 +827,62 @@ class _ExpandedDetailsContent extends StatelessWidget {
   }
 }
 
-/// The free tier shown as a muted, non-interactive line rather than a
-/// selectable row - it's a baseline for comparison, not something to "buy",
-/// so it shouldn't compete with the paid rows for tap targets or attention.
+/// The free tier shown as a muted line rather than a full plan row - on a
+/// plain paywall it's a non-interactive baseline, not something to "buy", so
+/// it shouldn't compete with the paid rows. When a paying user is managing
+/// their plan it becomes selectable ([onTap] set), since picking it is how
+/// they downgrade.
 class _FreeRow extends StatelessWidget {
   final String name;
+  final bool isCurrent;
+  final bool selected;
+  final VoidCallback? onTap;
 
-  const _FreeRow({required this.name});
+  const _FreeRow({
+    required this.name,
+    this.isCurrent = true,
+    this.selected = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.circle_outlined,
-              size: 18,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.5)),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(name,
-                style: AppTypography.bodyMd
-                    .copyWith(color: AppColors.onSurfaceVariant)),
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: selected ? AppColors.accent : Colors.transparent,
+            width: 1.5,
           ),
-          Text('Current Plan',
-              style: AppTypography.labelSm.copyWith(
-                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.7))),
-        ],
+        ),
+        child: Row(
+          children: [
+            if (onTap != null)
+              _RadioDot(selected: selected)
+            else
+              Icon(Icons.circle_outlined,
+                  size: 18,
+                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.5)),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(name,
+                  style: AppTypography.bodyMd
+                      .copyWith(color: AppColors.onSurfaceVariant)),
+            ),
+            if (isCurrent)
+              Text('Current Plan',
+                  style: AppTypography.labelSm.copyWith(
+                      color:
+                          AppColors.onSurfaceVariant.withValues(alpha: 0.7))),
+          ],
+        ),
       ),
     );
   }
@@ -783,8 +897,13 @@ class _PlansFooter extends StatelessWidget {
   final PlanCatalogEntry entry;
   final bool isWelcomeOffer;
   final bool isWelcomeOfferFlow;
+  final bool isCurrent;
   final VoidCallback onPurchase;
   final VoidCallback onSkip;
+
+  /// Set only when a paying user is managing their plan - opens the cancel
+  /// flow, from the Free row's CTA or the "Cancel subscription" link.
+  final VoidCallback? onCancelSubscription;
 
   const _PlansFooter({
     required this.controller,
@@ -793,18 +912,37 @@ class _PlansFooter extends StatelessWidget {
     required this.isWelcomeOfferFlow,
     required this.onPurchase,
     required this.onSkip,
+    this.isCurrent = false,
+    this.onCancelSubscription,
   });
+
+  bool get _isFree =>
+      entry.plan.monthlyPrice == 0 && entry.plan.yearlyPrice == 0;
 
   @override
   Widget build(BuildContext context) {
-    final price =
+    final quote = controller.quoteFor(entry.plan);
+    final intro = quote?.intro;
+    final catalogPrice =
         controller.isYearly ? entry.plan.yearlyPrice : entry.plan.monthlyPrice;
-    final effectivePrice = isWelcomeOffer ? _welcomeOfferPrice(price) : price;
+    final priceText = quote?.price ?? _fallbackPrice(catalogPrice);
     final cadence = controller.isYearly ? 'year' : 'month';
+    final mutedStyle = AppTypography.bodySm.copyWith(
+        color: AppColors.onSurfaceVariant, fontSize: 11, height: 1.35);
+    final linkStyle = AppTypography.bodySm.copyWith(
+        fontSize: 11.5,
+        color: AppColors.onSurfaceVariant,
+        fontWeight: FontWeight.w500,
+        decoration: TextDecoration.underline,
+        decorationColor: AppColors.onSurfaceVariant);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile, AppSpacing.xs,
-          AppSpacing.marginMobile, AppSpacing.xs),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.marginMobile,
+        AppSpacing.xs,
+        AppSpacing.marginMobile,
+        AppSpacing.xs,
+      ),
       decoration: BoxDecoration(
         border: Border(
             top: BorderSide(color: AppColors.surfaceContainerHigh, width: 1)),
@@ -813,49 +951,119 @@ class _PlansFooter extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           PrimaryPillButton(
-            label: isWelcomeOffer
-                ? 'Claim ${entry.plan.name} · \$${effectivePrice.toStringAsFixed(2)}/$cadence'
-                : 'Upgrade to ${entry.plan.name} · \$${effectivePrice.toStringAsFixed(2)}/$cadence',
-            icon: Icons.arrow_forward_rounded,
-            isLoading: controller.isPurchasing,
-            onPressed: onPurchase,
-            height: 42,
+            label: _isFree
+                ? 'Switch to ${entry.plan.name}'
+                : isCurrent
+                    ? 'Your current plan'
+                    : intro != null
+                        ? (intro.isFreeTrial
+                            ? 'Start free trial of ${entry.plan.name}'
+                            : 'Claim ${entry.plan.name} · ${intro.displayPrice}')
+                        : onCancelSubscription != null
+                            ? 'Switch to ${entry.plan.name} · $priceText/$cadence'
+                            : 'Upgrade to ${entry.plan.name} · $priceText/$cadence',
+            icon: isCurrent ? null : Icons.arrow_forward_rounded,
+            isLoading: !_isFree && controller.isPurchasing,
+            onPressed: _isFree
+                ? onCancelSubscription
+                : isCurrent
+                    ? null
+                    : onPurchase,
+            height: 50,
           ),
-          if (isWelcomeOfferFlow) ...[
+          if (onCancelSubscription != null && !_isFree)
+            TextButton(
+              onPressed: onCancelSubscription,
+              style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  visualDensity: VisualDensity.compact),
+              child: Text('Cancel subscription',
+                  style: AppTypography.bodySm.copyWith(
+                      fontSize: 14,
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.w600)),
+            ),
+          if (isWelcomeOfferFlow)
             TextButton(
               onPressed: onSkip,
+              // Full-size tap target and on-surface color: App Review rejects
+              // paywalls whose free path is hard to find (3.1.2 / 5.6).
               style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 24),
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  visualDensity: VisualDensity.compact),
               child: Text('Continue with Free Plan',
                   style: AppTypography.bodySm.copyWith(
-                      fontSize: 11,
-                      color: AppColors.onSurfaceVariant,
-                      fontWeight: FontWeight.w500)),
+                      fontSize: 14,
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.w600)),
             ),
-            if (isWelcomeOffer)
-              Text('50% off applies to your first billing period only',
-                  style: AppTypography.bodySm.copyWith(
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
-                      fontSize: 10)),
-          ] else
+          // Auto-renewal disclosure + Terms/Privacy links: App Review 3.1.2
+          // requires both on the purchase screen itself.
+          if (!_isFree)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.lock_outline_rounded,
-                      size: 12, color: AppColors.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Text('Cancel anytime · Secure payment',
-                      style: AppTypography.bodySm.copyWith(
-                          color: AppColors.onSurfaceVariant, fontSize: 11)),
-                ],
+              child: Text(
+                '${intro != null ? '${intro.summary}, then $priceText/$cadence. ' : ''}'
+                'Auto-renews at $priceText/$cadence until cancelled. Cancel anytime '
+                'in your $storeName settings at least 24 hours before the '
+                'current period ends.',
+                textAlign: TextAlign.center,
+                style: mutedStyle,
               ),
             ),
+          // App Review looks for Restore on the paywall itself, not just in
+          // Settings (guideline 3.1.1).
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _FooterLink(
+                label: 'Terms of Use',
+                style: linkStyle,
+                onPressed: () =>
+                    openHostedPage(context, termsUrl, 'Terms of Use'),
+              ),
+              _FooterLink(
+                label: 'Privacy Policy',
+                style: linkStyle,
+                onPressed: () =>
+                    openHostedPage(context, privacyUrl, 'Privacy Policy'),
+              ),
+              _FooterLink(
+                label: 'Restore purchases',
+                style: linkStyle,
+                onPressed: controller.isRestoring
+                    ? null
+                    : () => runRestorePurchases(context),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _FooterLink extends StatelessWidget {
+  final String label;
+  final TextStyle style;
+  final VoidCallback? onPressed;
+
+  const _FooterLink(
+      {required this.label, required this.style, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact),
+      child: Text(label, style: style),
     );
   }
 }

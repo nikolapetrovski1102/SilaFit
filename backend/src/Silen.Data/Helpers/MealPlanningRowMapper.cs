@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
@@ -35,8 +36,19 @@ public static class MealPlanningRowMapper
         Status = reader.GetStringValue("Status"),
         PlannedLocalTime = reader.IsDBNull(reader.GetOrdinal("PlannedLocalTime")) ? null : reader.GetTimeSpanValue("PlannedLocalTime"),
         LoggedAtUtc = reader.GetNullableDateTime("LoggedAtUtc"),
-        CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
+        CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
+        Items = DecryptItems(reader.GetNullableBytes("Items"), key)
     };
+
+    /// <summary>A meal's foods travel as one encrypted JSON array (MealLogs.Items).
+    /// Null or empty means "no item list" - on an update the proc then keeps what's stored.</summary>
+    public static byte[]? EncryptItems(List<MealLogItemModel>? items, byte[] key) =>
+        items is { Count: > 0 } ? FieldCipher.EncryptString(JsonSerializer.Serialize(items), key) : null;
+
+    private static List<MealLogItemModel> DecryptItems(byte[]? ciphertext, byte[] key) =>
+        ciphertext is null
+            ? []
+            : JsonSerializer.Deserialize<List<MealLogItemModel>>(FieldCipher.DecryptString(ciphertext, key)) ?? [];
 
     /// <summary>System-authored content (not user data) - stays plaintext.</summary>
     public static MealSuggestionModel MapMealSuggestion(SqlDataReader reader) => new()

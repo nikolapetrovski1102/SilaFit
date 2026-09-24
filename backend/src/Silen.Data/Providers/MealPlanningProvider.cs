@@ -73,7 +73,8 @@ public sealed class MealPlanningProvider : IMealPlanningProvider
                 SqlParameterBuilder.Create("@CarbsG", FieldCipher.EncryptInt(request.CarbsG, _key)),
                 SqlParameterBuilder.Create("@FatsG", FieldCipher.EncryptInt(request.FatsG, _key)),
                 SqlParameterBuilder.Create("@Status", request.Status),
-                SqlParameterBuilder.Create("@PlannedLocalTime", request.PlannedLocalTime)
+                SqlParameterBuilder.Create("@PlannedLocalTime", request.PlannedLocalTime),
+                SqlParameterBuilder.Create("@Items", MealPlanningRowMapper.EncryptItems(request.Items, _key))
             ],
             async reader => await reader.ReadAsync(cancellationToken) ? MealPlanningRowMapper.MapMealLog(reader, _key) : null,
             cancellationToken) ?? throw new InvalidOperationException("usp_MealLogs_Upsert did not return a row.");

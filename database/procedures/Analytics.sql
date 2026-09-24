@@ -8,9 +8,10 @@ GO
 
 -- Feeds AnalyticsService's monthly AI report: every real number the prompt
 -- template's {{Placeholder}} tokens get substituted with, as a single flat
--- row. CurrentStreakDays/WeeklyCompliancePercent mirror usp_Streak_GetStatus
--- (current-state, not scoped to the requested month - a mid-month streak
--- read is still meaningful context for the AI).
+-- row. CurrentStreakDays/WeeklyCompliancePercent come from the same
+-- dbo.ufn_Streak_GetStatus as usp_Streak_GetStatus (current-state, not
+-- scoped to the requested month - a mid-month streak read is still
+-- meaningful context for the AI).
 --
 -- StartWeightKg/EndWeightKg/AvgCaloriesLogged are NOT computed here anymore:
 -- BodyweightLogs.WeightKg and MealLogs.CaloriesKcal are AES-256-GCM
@@ -28,35 +29,7 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
-    -- See usp_Streak_GetStatus: DATEDIFF(WEEK, ...) is DATEFIRST-dependent
-    -- and rolls a Sunday @Today into next week on the US-English default
-    -- (@@DATEFIRST = 7). DATEDIFF(DAY, ...) mod 7 off the fixed Monday
-    -- epoch (1900-01-01) is not.
-    DECLARE @WeekStart DATE = DATEADD(DAY, -(DATEDIFF(DAY, 0, @Today) % 7), @Today);
 
-    ;WITH Calendar AS (
-        SELECT @Today AS CalendarDate
-        UNION ALL
-        SELECT DATEADD(DAY, -1, CalendarDate)
-        FROM Calendar
-        WHERE CalendarDate > DATEADD(DAY, -59, @Today)
-    ),
-    DayStatus AS (
-        SELECT c.CalendarDate,
-               MAX(CASE WHEN ws.Status IN ('Completed', 'ActiveRest') THEN 1 ELSE 0 END) AS IsCompleted
-        FROM Calendar c
-        LEFT JOIN dbo.WorkoutSessions ws
-               ON ws.UserId = @UserId AND ws.ScheduledDateUtc = c.CalendarDate
-        GROUP BY c.CalendarDate
-    ),
-    Ranked AS (
-        SELECT CalendarDate, IsCompleted,
-               ROW_NUMBER() OVER (ORDER BY CalendarDate DESC) AS Rn
-        FROM DayStatus
-    ),
-    FirstBreak AS (
-        SELECT MIN(Rn) AS BreakRn FROM Ranked WHERE IsCompleted = 0
-    )
     SELECT
         ISNULL(u.DisplayName, N'Athlete') AS DisplayName,
 
@@ -65,16 +38,15 @@ BEGIN
         ISNULL(ws.TotalTonnageKg, 0) AS TotalTonnageKg,
         ISNULL(ws.AvgRpe, 0) AS AvgRpe,
 
-        (SELECT COUNT(*) FROM Ranked WHERE Rn < ISNULL((SELECT BreakRn FROM FirstBreak), 999)) AS CurrentStreakDays,
-        ISNULL((SELECT CAST(ROUND(100.0 * SUM(IsCompleted) / 7.0, 0) AS INT)
-         FROM DayStatus
-         WHERE CalendarDate BETWEEN @WeekStart AND DATEADD(DAY, 6, @WeekStart)), 0) AS WeeklyCompliancePercent,
+        st.CurrentStreakDays,
+        st.WeeklyCompliancePercent,
 
         ISNULL(ml.LoggedMealDays, 0) AS LoggedMealDays,
         DATEDIFF(DAY, @FromDateUtc, @ToDateUtc) + 1 AS TotalDaysInRange,
         nt.TargetCalories
 
     FROM dbo.Users u
+    CROSS APPLY dbo.ufn_Streak_GetStatus(@UserId, @Today) st
     OUTER APPLY (
         SELECT
             COUNT(CASE WHEN Status = 'Completed' THEN 1 END) AS CompletedSessions,
@@ -90,8 +62,7 @@ BEGIN
         WHERE UserId = @UserId AND Status = 'Logged' AND LogDateUtc BETWEEN @FromDateUtc AND @ToDateUtc
     ) ml
     LEFT JOIN dbo.UserNutritionTargets nt ON nt.UserId = @UserId
-    WHERE u.UserId = @UserId
-    OPTION (MAXRECURSION 100);
+    WHERE u.UserId = @UserId;
 END
 GO
 

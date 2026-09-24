@@ -16,4 +16,10 @@ class SettingsRepository {
         UserSettings.fromJson,
         body: settings.toUpdateJson(),
       );
+
+  Future<UserSettings> setAiDataConsent(bool granted) => _client.put(
+        '/settings/ai-consent',
+        UserSettings.fromJson,
+        body: {'granted': granted},
+      );
 }

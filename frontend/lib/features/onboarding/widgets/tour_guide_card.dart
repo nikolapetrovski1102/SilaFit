@@ -5,6 +5,53 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 
+/// Copy for each step of the post-onboarding feature tour, in order: Home,
+/// Splits, Progress, Nutrition, Settings. Shared by [RootShell] and the
+/// pushed Splits step so the two can't drift apart. Each description leads
+/// with the spotlighted element, then points at what sits around it.
+/// [access] says what on that page is free and what needs a paid plan -
+/// keep it in step with the backend's `SubscriptionGate` checks.
+const kFeatureTourSteps =
+    <({String title, String description, String access})>[
+  (
+    title: 'Home & Today\'s Workout',
+    description:
+        'See today\'s session and tap Start Workout to open the live tracker. Tap any '
+            'day in the strip to preview it, and the flame up top counts your '
+            'streak.',
+    access: 'Free: workouts, logging and streaks.',
+  ),
+  (
+    title: 'Workout Splits',
+    description:
+        'Browse routines ranked for your goal, or tap My splits to build your '
+            'own. Get back here anytime from the Active split card on Home.',
+    access: 'Free: build your own split. Pro: the suggested routine library.',
+  ),
+  (
+    title: 'Progress & Records',
+    description:
+        'Chart estimated 1RM, top sets and volume per exercise over 1, 3 or 6 '
+            'months. Below: your personal records and AI weekly and monthly '
+            'reviews.',
+    access: 'Pro: charts, records and monthly AI review. Advanced: weekly AI review.',
+  ),
+  (
+    title: 'Nutrition & Macros',
+    description:
+        'The ring shows calories left today; the bars track protein, carbs and '
+            'fats. Tap + to log a meal, and follow a diet plan further down.',
+    access: 'Free: meal logging and macros. Pro: browsing and building diet plans.',
+  ),
+  (
+    title: 'Settings & Preferences',
+    description:
+        'Set light or dark mode and your units. Further down: rest timer '
+            'sound, barbell weight, workout reminders and your subscription.',
+    access: 'Free: every setting.',
+  ),
+];
+
 /// Full-screen overlay that softly dims the screen, cuts out a rounded-rect
 /// spotlight hole around [targetKey] with an accent ring, and displays the
 /// floating [TourGuideCard] above the bottom navigation bar.
@@ -14,6 +61,7 @@ class TourSpotlightOverlay extends StatefulWidget {
   final int stepCount;
   final String title;
   final String description;
+  final String? access;
   final VoidCallback onNext;
   final VoidCallback onSkip;
   final String nextLabel;
@@ -26,6 +74,7 @@ class TourSpotlightOverlay extends StatefulWidget {
     required this.stepCount,
     required this.title,
     required this.description,
+    this.access,
     required this.onNext,
     required this.onSkip,
     this.nextLabel = 'Next',
@@ -164,6 +213,7 @@ class _TourSpotlightOverlayState extends State<TourSpotlightOverlay>
               stepCount: widget.stepCount,
               title: widget.title,
               description: widget.description,
+              access: widget.access,
               nextLabel: widget.nextLabel,
               onNext: widget.onNext,
               onSkip: widget.onSkip,
@@ -241,6 +291,9 @@ class TourGuideCard extends StatelessWidget {
   final int stepCount;
   final String title;
   final String description;
+
+  /// Optional one-line note on which parts of the page are free vs paid.
+  final String? access;
   final VoidCallback onNext;
   final VoidCallback onSkip;
   final String nextLabel;
@@ -251,6 +304,7 @@ class TourGuideCard extends StatelessWidget {
     required this.stepCount,
     required this.title,
     required this.description,
+    this.access,
     required this.onNext,
     required this.onSkip,
     this.nextLabel = 'Next',
@@ -326,6 +380,29 @@ class TourGuideCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
+          if (access != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(Icons.workspace_premium_rounded,
+                      size: 14, color: AppColors.accent),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    access!,
+                    style: AppTypography.labelSm.copyWith(
+                      color: AppColors.accent,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [

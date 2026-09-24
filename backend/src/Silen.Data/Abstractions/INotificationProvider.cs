@@ -47,5 +47,5 @@ public interface INotificationProvider
     Task MarkSkippedAsync(Guid notificationId, string reason, CancellationToken cancellationToken = default);
 
     Task RecordWorkoutHeartbeatAsync(
-        Guid userId, Guid? workoutSessionId, DateTime atUtc, CancellationToken cancellationToken = default);
+        Guid userId, Guid? workoutSessionId, DateTime atUtc, bool hasCompletedSets, CancellationToken cancellationToken = default);
 }

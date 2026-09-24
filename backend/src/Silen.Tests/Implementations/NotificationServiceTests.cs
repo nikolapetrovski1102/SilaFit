@@ -151,16 +151,19 @@ public class NotificationServiceTests
     }
 
     [Fact]
-    public async Task RecordWorkoutHeartbeatAsync_Succeeds_AndForwardsSessionId()
+    public async Task RecordWorkoutHeartbeatAsync_Succeeds_AndForwardsSessionIdAndCompletedSets()
     {
         var userId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
         notificationProvider
-            .Setup(p => p.RecordWorkoutHeartbeatAsync(userId, sessionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.RecordWorkoutHeartbeatAsync(userId, sessionId, It.IsAny<DateTime>(), true, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await sut.RecordWorkoutHeartbeatAsync(userId, sessionId);
+        var result = await sut.RecordWorkoutHeartbeatAsync(userId, sessionId, hasCompletedSets: true);
 
         Assert.True(result.IsSuccess);
+        notificationProvider.Verify(
+            p => p.RecordWorkoutHeartbeatAsync(userId, sessionId, It.IsAny<DateTime>(), true, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

@@ -12,14 +12,16 @@ import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 
 /// The closing screen of the flow: animated bell, "Stay on track" pitch,
-/// a real OS notification-permission prompt behind "Allow notifications",
-/// and a "Not now" skip - either path finishes onboarding the same way.
+/// and a real OS notification-permission prompt behind "Continue". There is
+/// deliberately no skip: App Review (guideline 5.1.1(iv)) rejects
+/// pre-permission screens that say "Allow" or let the user bypass the system
+/// prompt - declining happens in the OS dialog itself.
 class NotificationPermissionScreen extends StatelessWidget {
   final VoidCallback onBack;
   final bool isSubmitting;
 
   /// True when the OS permission was actually granted (or the platform has no
-  /// prompt to grant), false for "Not now"/denied - the caller saves the
+  /// prompt to grant), false when denied in the OS dialog - the caller saves the
   /// timezone + opt-in either way, just with a different enabled flag.
   final ValueChanged<bool> onFinish;
 
@@ -117,18 +119,9 @@ class NotificationPermissionScreen extends StatelessWidget {
             ),
             const Spacer(flex: 2),
             PrimaryPillButton(
-              label: 'Allow notifications',
+              label: 'Continue',
               isLoading: isSubmitting,
               onPressed: isSubmitting ? null : _requestAndFinish,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Center(
-              child: GestureDetector(
-                onTap: isSubmitting ? null : () => onFinish(false),
-                child: Text('Not now',
-                    style: AppTypography.bodyMd
-                        .copyWith(color: AppColors.onSurfaceVariant)),
-              ),
             ),
             const SizedBox(height: AppSpacing.md),
           ],

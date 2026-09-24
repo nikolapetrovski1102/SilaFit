@@ -23,6 +23,7 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IMealPlanningService, MealPlanningService>();
+        services.AddScoped<IFoodService, FoodService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IMonthlyReviewService, MonthlyReviewService>();
         services.AddScoped<IWeeklyPlanGenerationService, WeeklyPlanGenerationService>();
@@ -40,6 +41,7 @@ public static class ServicesServiceCollectionExtensions
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();
+        services.AddHttpClient<IAppleSignInRevoker, AppleSignInRevoker>();
         services.AddHttpClient<IOpenRouterClient, OpenRouterClient>();
         services.AddHttpClient<IAppStoreServerClient, AppStoreServerClient>();
         services.AddHttpClient<IGooglePlayDeveloperClient, GooglePlayDeveloperClient>();

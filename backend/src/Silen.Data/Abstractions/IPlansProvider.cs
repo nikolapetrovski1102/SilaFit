@@ -53,6 +53,12 @@ public interface IPlansProvider
     Task<SubscriptionReceiptModel?> GetReceiptByPurchaseTokenAsync(
         string purchaseToken, CancellationToken cancellationToken = default);
 
+    /// <summary>Finds the receipt that first tied a store subscription to a Silen account -
+    /// matched by App Store original transaction id or Play purchase token, both of which stay
+    /// the same across renewals. Null when no account has claimed it yet.</summary>
+    Task<SubscriptionReceiptModel?> GetSubscriptionOwnerAsync(
+        string store, string? originalTransactionId, string? purchaseToken, CancellationToken cancellationToken = default);
+
     /// <summary>Moves a subscription out of Active (Cancelled/Expired) without granting
     /// entitlement - used when a store check finds the receipt is no longer current.</summary>
     Task UpdateSubscriptionStatusAsync(Guid userId, string status, CancellationToken cancellationToken = default);

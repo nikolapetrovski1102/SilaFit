@@ -14,5 +14,10 @@ public sealed class UserSettingsModel
     public string AppearanceMode { get; set; } = "Device";
     public string AvatarChoice { get; set; } = "Male";
 
+    /// <summary>When the user agreed to share their data with the third-party AI provider; null = not granted.</summary>
+    public DateTime? AiDataConsentAtUtc { get; set; }
+
+    public bool AiDataConsent => AiDataConsentAtUtc.HasValue;
+
     public DateTime UpdatedAtUtc { get; set; }
 }

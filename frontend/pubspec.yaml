@@ -43,6 +43,11 @@ dependencies:
   # Native subscription purchases - StoreKit on iOS, Play Billing on Android.
   # See lib/features/plans/iap_service.dart.
   in_app_purchase: ^3.2.0
+  # Platform halves of in_app_purchase, imported directly for store offer
+  # details: Play's per-offer products (intro offer + its offer token) and
+  # StoreKit. See lib/features/plans/iap_service.dart.
+  in_app_purchase_android: ^0.5.3
+  in_app_purchase_storekit: ^0.4.13
 
   # Progress screen's 1RM trend line chart (bezier smoothing, gradient fill,
   # tap tooltips) - the one deliberate exception to this codebase's
@@ -81,6 +86,11 @@ dependencies:
   # asset set small next to bundling a PNG per icon per theme.
   flutter_svg: ^2.3.0
 
+  # Memory + disk cache for network artwork (split hero images served by the
+  # API under /api/static - see lib/features/splits/widgets/split_hero_image.dart)
+  # so a card scrolls in instantly after the first load and works offline.
+  cached_network_image: ^3.4.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -100,6 +110,7 @@ flutter:
     - assets/avatars/male/
     - assets/avatars/female/
     - assets/mascot/
+    - assets/splits/
     - assets/lottie_animations/
 
   # Hanken Grotesk (Precision Kinetic type scale, see

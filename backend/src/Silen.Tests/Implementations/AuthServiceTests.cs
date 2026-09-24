@@ -17,6 +17,7 @@ public class AuthServiceTests
     private readonly Mock<IAuthProvider> authProvider = new(MockBehavior.Strict);
     private readonly Mock<IGoogleTokenVerifier> googleTokenVerifier = new(MockBehavior.Strict);
     private readonly Mock<IAppleTokenVerifier> appleTokenVerifier = new(MockBehavior.Strict);
+    private readonly Mock<IAppleSignInRevoker> appleSignInRevoker = new(MockBehavior.Strict);
     private readonly Mock<IEmailSender> emailSender = new(MockBehavior.Strict);
     private readonly AuthService sut;
 
@@ -32,7 +33,7 @@ public class AuthServiceTests
 
         var reviewerBypassOptions = Options.Create(new ReviewerBypassOptions());
 
-        sut = new AuthService(authProvider.Object, googleTokenVerifier.Object, appleTokenVerifier.Object, emailSender.Object, jwtOptions, reviewerBypassOptions);
+        sut = new AuthService(authProvider.Object, googleTokenVerifier.Object, appleTokenVerifier.Object, appleSignInRevoker.Object, emailSender.Object, jwtOptions, reviewerBypassOptions);
     }
 
     private static UserAccountModel User(Guid? userId = null, string? email = "user@example.com", byte[]? passwordHash = null, byte[]? passwordSalt = null) => new()
@@ -571,6 +572,30 @@ public class AuthServiceTests
         Assert.Equal(user.UserId, result.Data!.UserId);
         authProvider.Verify(p => p.LinkExternalIdentityAsync(
             It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkAppleAsync_WithAuthorizationCode_StoresItForTokenRevocation()
+    {
+        var request = new AppleLoginRequest { IdentityToken = "good-token", AuthorizationCode = "auth-code" };
+        var payload = new ExternalIdentityPayload { Subject = "apple-sub-1", Email = "a@example.com" };
+        var user = User(email: payload.Email);
+
+        appleTokenVerifier.Setup(v => v.VerifyAsync(request.IdentityToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+        authProvider.Setup(p => p.GetUserByIdAsync(user.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+        authProvider.Setup(p => p.UpdateLastLoginAsync(user.UserId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        appleSignInRevoker.Setup(r => r.StoreAuthorizationAsync(user.UserId, "auth-code", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.LoginOrLinkAppleAsync(request);
+
+        Assert.True(result.IsSuccess);
+        appleSignInRevoker.Verify(r => r.StoreAuthorizationAsync(user.UserId, "auth-code", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

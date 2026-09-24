@@ -15,7 +15,8 @@ public sealed class AnalyticsService(
     IAnalyticsProvider analyticsProvider,
     ISubscriptionGate subscriptionGate,
     IOpenRouterClient openRouterClient,
-    IAiRefreshThrottle aiRefreshThrottle) : IAnalyticsService
+    IAiRefreshThrottle aiRefreshThrottle,
+    IUserSettingsProvider userSettingsProvider) : IAnalyticsService
 {
     private const string MonthlyTemplateKey = "MonthlyAnalytics";
     private const string WeeklyTemplateKey = "WeeklyAnalytics";
@@ -227,6 +228,14 @@ public sealed class AnalyticsService(
             {
                 return new GeneratedReport(cached.Snapshot, cached.ResultJson, cached.GeneratedAtUtc);
             }
+        }
+
+        // Serving a cached report sends nothing anywhere; generating one sends the
+        // user's stats to the third-party AI provider, which needs their consent.
+        var settings = await userSettingsProvider.GetAsync(userId, cancellationToken).ConfigureAwait(false);
+        if (settings is not { AiDataConsent: true })
+        {
+            throw new AiConsentRequiredException($"User {userId} requested an AI report without AI data-sharing consent.");
         }
 
         var snapshot = await analyticsProvider.GetPeriodSnapshotAsync(userId, period.FromDate, period.ToDate, cancellationToken)

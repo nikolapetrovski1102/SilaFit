@@ -42,10 +42,13 @@ class NotificationsRepository {
       });
 
   /// "Still in the gym" ping while a workout is open - lets the server time a
-  /// "log your sets" nudge around actual idle time.
-  Future<void> sendWorkoutHeartbeat({String? workoutSessionId}) =>
+  /// "log your sets" nudge around actual idle time. [hasCompletedSets] pins
+  /// today's session to its split day, so a later split switch leaves it be.
+  Future<void> sendWorkoutHeartbeat(
+          {String? workoutSessionId, bool hasCompletedSets = false}) =>
       _post('/notifications/workout-heartbeat', {
         if (workoutSessionId != null) 'workoutSessionId': workoutSessionId,
+        'hasCompletedSets': hasCompletedSets,
       });
 
   Future<void> _post(String path, Map<String, dynamic> body) =>

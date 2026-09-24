@@ -9,5 +9,7 @@ public interface IUserSettingsProvider
 
     Task SetNotificationsEnabledAsync(Guid userId, bool enabled, CancellationToken cancellationToken = default);
 
+    Task<UserSettingsModel?> SetAiDataConsentAsync(Guid userId, bool granted, CancellationToken cancellationToken = default);
+
     Task<UserSettingsModel?> UpdateAsync(Guid userId, UpdateUserSettingsRequest request, CancellationToken cancellationToken = default);
 }

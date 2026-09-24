@@ -13,6 +13,11 @@ class UserSettings {
   final String appearanceMode;
   final String avatarChoice;
 
+  /// Whether the user agreed to share their data with the third-party AI
+  /// provider. Read-only here - it's changed only through
+  /// `SettingsRepository.setAiDataConsent`, never by a settings save.
+  final bool aiDataConsent;
+
   const UserSettings({
     required this.targetWaterMl,
     required this.notificationsEnabled,
@@ -24,6 +29,7 @@ class UserSettings {
     required this.barbellStandardKg,
     required this.appearanceMode,
     required this.avatarChoice,
+    this.aiDataConsent = false,
   });
 
   factory UserSettings.fromJson(dynamic json) {
@@ -40,6 +46,7 @@ class UserSettings {
       barbellStandardKg: (map['barbellStandardKg'] as num).toDouble(),
       appearanceMode: map['appearanceMode'] as String? ?? 'Device',
       avatarChoice: map['avatarChoice'] as String? ?? 'Male',
+      aiDataConsent: map['aiDataConsent'] as bool? ?? false,
     );
   }
 
@@ -67,6 +74,7 @@ class UserSettings {
     double? barbellStandardKg,
     String? appearanceMode,
     String? avatarChoice,
+    bool? aiDataConsent,
   }) {
     return UserSettings(
       targetWaterMl: targetWaterMl ?? this.targetWaterMl,
@@ -81,6 +89,7 @@ class UserSettings {
       barbellStandardKg: barbellStandardKg ?? this.barbellStandardKg,
       appearanceMode: appearanceMode ?? this.appearanceMode,
       avatarChoice: avatarChoice ?? this.avatarChoice,
+      aiDataConsent: aiDataConsent ?? this.aiDataConsent,
     );
   }
 }

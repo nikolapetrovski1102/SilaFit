@@ -10,7 +10,10 @@ using Silen.Services.Abstractions;
 namespace Silen.Services.Implementations;
 
 /// <inheritdoc cref="IAccountService"/>
-public sealed class AccountService(IAccountProvider accountProvider, IEmailSender emailSender) : IAccountService
+public sealed class AccountService(
+    IAccountProvider accountProvider,
+    IEmailSender emailSender,
+    IAppleSignInRevoker appleSignInRevoker) : IAccountService
 {
     private static readonly JsonSerializerOptions ExportJsonOptions = new() { WriteIndented = true };
 
@@ -23,6 +26,9 @@ public sealed class AccountService(IAccountProvider accountProvider, IEmailSende
     public Task<ServiceResult<bool>> DeleteAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            // Before the delete - the stored Apple refresh token goes with the
+            // account's rows. Best-effort: never blocks the deletion itself.
+            await appleSignInRevoker.RevokeAsync(userId, cancellationToken);
             await accountProvider.DeleteAsync(userId, cancellationToken);
             return true;
         });

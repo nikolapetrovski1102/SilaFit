@@ -77,6 +77,24 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Grants or revokes AI data-sharing consent. Unlike [_update] this isn't
+  /// optimistic: the AI gate waits on it, so it must only report success once
+  /// the server has actually recorded the choice.
+  Future<bool> setAiDataConsent(bool granted) async {
+    try {
+      final result = await _repository.setAiDataConsent(granted);
+      state = ResourceState.data(result);
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      actionError = e.userMessage;
+    } catch (_) {
+      actionError = ApiException.genericMessage;
+    }
+    notifyListeners();
+    return false;
+  }
+
   Future<void> setAppearanceMode(String mode) =>
       _update((s) => s.copyWith(appearanceMode: mode));
 

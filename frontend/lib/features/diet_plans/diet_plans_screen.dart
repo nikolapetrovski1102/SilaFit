@@ -11,6 +11,7 @@ import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
 import 'my_diet_plans_screen.dart';
 import 'widgets/diet_plan_card.dart';
+import 'widgets/locked_diet_plans.dart';
 
 /// Browse view for diet plans - the meal-planning equivalent of
 /// `SplitsScreen`. Unlike splits, plans carry no server-computed
@@ -36,19 +37,29 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MyDietPlansScreen())),
-            icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
-            label: Text('My plans',
-                style: AppTypography.labelSm.copyWith(color: AppColors.onSurface)),
-          ),
+          // Building your own plans is Pro too - no way in while locked.
+          if (!_controller.requiresUpgrade)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const MyDietPlansScreen())),
+              icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
+              label: Text('My plans',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurface)),
+            ),
         ],
       ),
       body: AnimatedBuilder(
@@ -65,11 +76,18 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
                 const SizedBox(height: 4),
                 Text('Diet Plans', style: AppTypography.headlineLg),
                 const SizedBox(height: AppSpacing.md),
-                ResourceBuilder<List<DietPlan>>(
-                  state: _controller.state,
-                  onRetry: _controller.load,
-                  builder: (context, plans) => _buildContent(plans),
-                ),
+                if (_controller.requiresUpgrade)
+                  LockedDietPlans(
+                    onReturn: () {
+                      if (mounted) _controller.load(force: true);
+                    },
+                  )
+                else
+                  ResourceBuilder<List<DietPlan>>(
+                    state: _controller.state,
+                    onRetry: _controller.load,
+                    builder: (context, plans) => _buildContent(plans),
+                  ),
               ],
             ),
           );

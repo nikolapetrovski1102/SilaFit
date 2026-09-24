@@ -31,6 +31,31 @@ public sealed class MealLogModel
     public TimeSpan? PlannedLocalTime { get; set; }
     public DateTime? LoggedAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+
+    /// <summary>The foods this meal was built from, one by one. Empty for a meal
+    /// logged as a single macro total (e.g. a planned diet-plan meal); when present,
+    /// the macro totals above are the sum of these items.</summary>
+    public List<MealLogItemModel> Items { get; set; } = [];
+}
+
+/// <summary>One food inside a logged meal. Macros are for <see cref="Grams"/>
+/// (already scaled from the catalog's per-100 g values), snapshotted at log time so
+/// a later catalog re-import never rewrites what the user ate.</summary>
+public sealed class MealLogItemModel
+{
+    /// <summary>dbo.FoodNutrition row this came from; null for a food typed in
+    /// without a catalog row.</summary>
+    public long? FoodNutritionId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? BrandName { get; set; }
+    public decimal Grams { get; set; }
+    public decimal CaloriesKcal { get; set; }
+    public decimal ProteinG { get; set; }
+    public decimal CarbsG { get; set; }
+    public decimal FatsG { get; set; }
+    public decimal? FiberG { get; set; }
+    public decimal? SugarG { get; set; }
+    public decimal? SodiumMg { get; set; }
 }
 
 /// <summary>A curated meal idea from the seeded dbo.MealSuggestions library -

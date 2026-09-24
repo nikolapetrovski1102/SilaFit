@@ -15,6 +15,7 @@ public sealed class AuthService(
     IAuthProvider authProvider,
     IGoogleTokenVerifier googleTokenVerifier,
     IAppleTokenVerifier appleTokenVerifier,
+    IAppleSignInRevoker appleSignInRevoker,
     IEmailSender emailSender,
     IOptions<JwtOptions> jwtOptions,
     IOptions<ReviewerBypassOptions> reviewerBypassOptions) : IAuthService
@@ -268,6 +269,13 @@ public sealed class AuthService(
                 ?? throw new NotFoundException($"User '{userId}' was linked to Apple but could not be re-read.");
 
             await authProvider.UpdateLastLoginAsync(user.UserId, cancellationToken);
+
+            // Refreshed on every Apple login (codes are single-use and short-lived),
+            // so account deletion always has a live token to revoke.
+            if (!string.IsNullOrWhiteSpace(request.AuthorizationCode))
+            {
+                await appleSignInRevoker.StoreAuthorizationAsync(user.UserId, request.AuthorizationCode, cancellationToken);
+            }
 
             var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
 

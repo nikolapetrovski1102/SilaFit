@@ -99,6 +99,25 @@ public static class WorkoutRowMapper
         PreviousBestWeightKg = reader.GetNullableDecimal("PreviousBestWeightKg")
     };
 
+    public static TrackedExerciseModel MapTrackedExercise(SqlDataReader reader) => new()
+    {
+        ExerciseId = reader.GetGuidValue("ExerciseId"),
+        ExerciseName = reader.GetStringValue("ExerciseName"),
+        SessionCount = reader.GetInt32Value("SessionCount"),
+        LastTrainedAtUtc = reader.GetDateTimeValue("LastTrainedAtUtc")
+    };
+
+    public static ExerciseProgressPointModel MapExerciseProgressPoint(SqlDataReader reader) => new()
+    {
+        ScheduledDateUtc = reader.GetDateTimeValue("ScheduledDateUtc"),
+        TopWeightKg = reader.GetDecimalValue("TopWeightKg"),
+        TopSetReps = reader.GetInt16Value("TopSetReps"),
+        EstimatedOneRmKg = reader.GetDecimalValue("EstimatedOneRmKg"),
+        TotalVolumeKg = reader.GetDecimalValue("TotalVolumeKg"),
+        TotalReps = reader.GetInt32Value("TotalReps"),
+        SetCount = reader.GetInt32Value("SetCount")
+    };
+
     public static WorkoutSplitModel MapSplit(SqlDataReader reader) => new()
     {
         SplitId = reader.GetGuidValue("SplitId"),

@@ -8,28 +8,42 @@ bool isSameCalendarDay(DateTime a, DateTime b) =>
 
 String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 
+/// The Monday of the week [activatedAtUtc] falls in. Every split's rotation
+/// is anchored here so its first day always lands on a Monday - activating
+/// mid-week picks up at that weekday's slot. Mirrors `@AnchorDate` in
+/// `usp_WorkoutSession_GetTodayScheduled`.
+DateTime splitCycleAnchor(DateTime activatedAtUtc) {
+  final activated = dateOnly(activatedAtUtc);
+  return activated
+      .subtract(Duration(days: activated.weekday - DateTime.monday));
+}
+
 /// Looks up which day of the active split's rotation lands on [date], given
-/// when the split was activated - the same `DATEDIFF(...) % DurationDays`
-/// cycle the backend uses to resolve *today's* scheduled session
-/// (`usp_WorkoutSession_GetTodayScheduled`), just evaluated for an arbitrary
-/// date so the strip can preview days that haven't happened yet.
+/// when the split was activated - the same cycle the backend uses to resolve
+/// *today's* scheduled session (`usp_WorkoutSession_GetTodayScheduled`),
+/// just evaluated for an arbitrary date so the strip can preview days that
+/// haven't happened yet. The rotation runs indefinitely - it keeps repeating
+/// until the user activates a different split.
 ///
-/// The day is picked by its *ordinal position* in the split, not by its
-/// stored `dayIndex`, mirroring `usp_WorkoutSession_GetTodayScheduled`: system
-/// splits are seeded 0-based while custom/AI splits are written 1-based, and
-/// position-based matching keeps both on the same rotation.
+/// The rotation is whole weeks long ([splitCycleLength]) and anchored to a
+/// Monday, so Day 1 always falls on a Monday. The day is picked by its stored
+/// `dayIndex` (slot `i` is Day `i + 1`), so a gap in the numbering - Day 1,
+/// Day 2, Day 4 - rests on the missing day instead of pulling the later days
+/// forward, and any slot with no authored day resolves to [implicitRestDay].
 SplitDayWithExercises? resolveSplitDayWithExercises(
     DateTime date, ActiveSplit split, SplitDetail detail) {
   final duration = split.durationDays;
   if (duration == null || duration <= 0) return null;
-  final activated = dateOnly(split.activatedAtUtc);
+  final anchor = splitCycleAnchor(split.activatedAtUtc);
   final target = dateOnly(date);
-  final cycleLength = duration;
-  final diff = target.difference(activated).inDays;
+  final ordered = daysWithImplicitRest(detail.days, duration);
+  final cycleLength = ordered.length;
+  // Compared as UTC dates: local midnights are 23h apart across a DST
+  // spring-forward, which would make `inDays` come up a day short.
+  final diff = DateTime.utc(target.year, target.month, target.day)
+      .difference(DateTime.utc(anchor.year, anchor.month, anchor.day))
+      .inDays;
   final cycleIndex = ((diff % cycleLength) + cycleLength) % cycleLength;
-  final ordered = [...detail.days]
-    ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
-  if (cycleIndex >= ordered.length) return null;
   return ordered[cycleIndex];
 }
 

@@ -5,6 +5,7 @@
     <Project Path="src/Silen.Data/Silen.Data.csproj" />
     <Project Path="src/Silen.Services/Silen.Services.csproj" />
     <Project Path="src/Silen.Tools.EncryptExistingData/Silen.Tools.EncryptExistingData.csproj" />
+    <Project Path="src/Silen.Tools.ImportFoodNutrition/Silen.Tools.ImportFoodNutrition.csproj" />
     <Project Path="src/Silen.Tools.AdminProvision/Silen.Tools.AdminProvision.csproj" />
     <Project Path="src/Silen.Tools.MonthlyReview/Silen.Tools.MonthlyReview.csproj" />
     <Project Path="src/Silen.Tools.NotificationPublish/Silen.Tools.NotificationPublish.csproj" />

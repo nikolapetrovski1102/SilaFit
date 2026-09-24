@@ -58,7 +58,8 @@ class _FakeTodayRepo extends TodayRepository {
       weeklyCompliancePercent: 85,
       weekStatuses: [
         WeekDayStatus(
-          date: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+          date: DateTime(
+              DateTime.now().year, DateTime.now().month, DateTime.now().day),
           status: 'Scheduled',
         ),
       ],
@@ -93,7 +94,8 @@ class _FakeRestTodayRepo extends TodayRepository {
       weeklyCompliancePercent: 85,
       weekStatuses: [
         WeekDayStatus(
-          date: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+          date: DateTime(
+              DateTime.now().year, DateTime.now().month, DateTime.now().day),
           status: 'Rest',
         ),
       ],
@@ -108,7 +110,8 @@ class _FakeRestTodayRepo extends TodayRepository {
 }
 
 void main() {
-  testWidgets('TodayScreen builds and displays active split and AI review', (tester) async {
+  testWidgets('TodayScreen builds and displays active split and AI review',
+      (tester) async {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -158,7 +161,9 @@ void main() {
     expect(teaserRect.bottom, closeTo(828.0, 2.0));
   });
 
-  testWidgets('TodayScreen pins active split and AI review to bottom on rest day', (tester) async {
+  testWidgets(
+      'TodayScreen pins active split and AI review to bottom on rest day',
+      (tester) async {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -208,7 +213,8 @@ void main() {
     expect(teaserRect.bottom, closeTo(828.0, 2.0));
   });
 
-  testWidgets('TodayScreen renders without overflow on compact screen', (tester) async {
+  testWidgets('TodayScreen renders without overflow on compact screen',
+      (tester) async {
     tester.view.physicalSize = const Size(360, 600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);

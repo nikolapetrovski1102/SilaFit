@@ -189,3 +189,45 @@ class SplitDetail {
     );
   }
 }
+
+/// A rotation slot nobody built a day for - either past the last authored
+/// day (a 4-day split rests the remaining 3 days of its week) or a gap in
+/// the numbering (Day 1, Day 2, Day 4 rests on Day 3). Same as
+/// `usp_WorkoutSession_GetTodayScheduled` leaves that day's session unset
+/// (and therefore a rest day) when no SplitDay has the slot's `DayIndex`.
+SplitDayWithExercises implicitRestDay(int cyclePos) => SplitDayWithExercises(
+      day: SplitDay(
+        splitDayId: '',
+        dayIndex: cyclePos + 1,
+        title: 'Rest Day',
+        estimatedMinutes: 0,
+        isRestDay: true,
+      ),
+      exercises: const [],
+    );
+
+/// Length of a split's rotation: whole weeks, so Day 1 always lands on a
+/// Monday. Covers both `durationDays` and the highest authored `dayIndex`
+/// (a day numbered past the duration still gets its slot) - so a 4-day
+/// split rotates weekly and a 10-day one every two weeks. Mirrors
+/// `@CycleLength` in `usp_WorkoutSession_GetTodayScheduled`.
+int splitCycleLength(List<SplitDayWithExercises> days, int durationDays) {
+  var span = durationDays < 1 ? 1 : durationDays;
+  for (final d in days) {
+    if (d.day.dayIndex > span) span = d.day.dayIndex;
+  }
+  return ((span + 6) ~/ 7) * 7;
+}
+
+/// The full rotation as it actually repeats: one entry per day of
+/// [splitCycleLength], where slot `i` is the day stored with `dayIndex`
+/// `i + 1` and any slot nobody authored is an [implicitRestDay].
+List<SplitDayWithExercises> daysWithImplicitRest(
+    List<SplitDayWithExercises> days, int durationDays) {
+  final byIndex = {for (final d in days) d.day.dayIndex: d};
+  final cycleLength = splitCycleLength(days, durationDays);
+  return [
+    for (var cyclePos = 0; cyclePos < cycleLength; cyclePos++)
+      byIndex[cyclePos + 1] ?? implicitRestDay(cyclePos),
+  ];
+}

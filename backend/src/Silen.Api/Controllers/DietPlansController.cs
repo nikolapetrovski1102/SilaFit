@@ -6,8 +6,10 @@ using Silen.Services.Abstractions;
 
 namespace Silen.Api.Controllers;
 
-/// <summary>The diet plan library is browsable by anyone; building/editing a plan of
-/// one's own - and choosing/activating one - is open to any authenticated tier.</summary>
+/// <summary>Diet plans are a Pro/Advanced feature: browsing the library, building or
+/// editing a plan of one's own, and activating one all return 403 for Free callers
+/// (enforced in DietPlanService). Reading a plan the caller already has, and deleting
+/// their own, stay open. Free users log meals food-by-food via <see cref="FoodsController"/>.</summary>
 [ApiController]
 [Route("api/diet-plans")]
 public sealed class DietPlansController(

@@ -46,7 +46,7 @@ public sealed class NotificationsController(INotificationService notificationSer
         [FromBody] WorkoutHeartbeatRequest? request, CancellationToken cancellationToken)
     {
         var result = await notificationService.RecordWorkoutHeartbeatAsync(
-            User.GetUserId(), request?.WorkoutSessionId, cancellationToken);
+            User.GetUserId(), request?.WorkoutSessionId, request?.HasCompletedSets ?? false, cancellationToken);
         return result.ToActionResult(logger);
     }
 }

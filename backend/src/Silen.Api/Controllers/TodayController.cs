@@ -49,4 +49,11 @@ public sealed class TodayController(ITodayService todayService, ILogger<TodayCon
         var result = await todayService.GetWorkoutHistoryAsync(User.GetUserId(), date, cancellationToken);
         return result.ToActionResult(logger);
     }
+
+    [HttpGet("exercises/{exerciseId:guid}/history")]
+    public async Task<IActionResult> GetExerciseHistory(Guid exerciseId, CancellationToken cancellationToken)
+    {
+        var result = await todayService.GetExerciseHistoryAsync(User.GetUserId(), exerciseId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
 }

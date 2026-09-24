@@ -12,13 +12,12 @@ namespace Silen.Tests.Implementations;
 public class UserProfileServiceTests
 {
     private readonly Mock<IUserProfileProvider> userProfileProvider = new(MockBehavior.Strict);
-    private readonly Mock<ISplitService> splitService = new(MockBehavior.Strict);
     private readonly Mock<IMealPlanningService> mealPlanningService = new(MockBehavior.Strict);
     private readonly UserProfileService sut;
 
     public UserProfileServiceTests()
     {
-        sut = new UserProfileService(userProfileProvider.Object, splitService.Object, mealPlanningService.Object);
+        sut = new UserProfileService(userProfileProvider.Object, mealPlanningService.Object);
     }
 
     private static UpsertUserProfileRequest ValidRequest() => new()
@@ -221,14 +220,13 @@ public class UserProfileServiceTests
 
         Assert.False(result.IsSuccess);
         userProfileProvider.Verify(p => p.UpsertAsync(It.IsAny<Guid>(), It.IsAny<UpsertUserProfileRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-        splitService.Verify(s => s.AutoAssignRecommendedAsync(It.IsAny<Guid>(), It.IsAny<UserProfileModel>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         mealPlanningService.Verify(m => m.RecomputeTargetsAsync(It.IsAny<Guid>(), It.IsAny<UserProfileModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---- UpsertAsync: success + side-effect orchestration ----
 
     [Fact]
-    public async Task UpsertAsync_ValidRequest_SavesProfile_AndTriggersSplitAutoAssignAndTargetsRecompute()
+    public async Task UpsertAsync_ValidRequest_SavesProfile_AndTriggersTargetsRecompute()
     {
         var userId = Guid.NewGuid();
         var request = ValidRequest();
@@ -236,8 +234,6 @@ public class UserProfileServiceTests
 
         userProfileProvider.Setup(p => p.UpsertAsync(userId, request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(savedProfile);
-        splitService.Setup(s => s.AutoAssignRecommendedAsync(userId, savedProfile, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ServiceResult<ActiveSplitModel?>.Success(null));
         mealPlanningService.Setup(m => m.RecomputeTargetsAsync(userId, savedProfile, It.IsAny<CancellationToken>()))
             .ReturnsAsync(ServiceResult<UserNutritionTargetsModel>.Success(new UserNutritionTargetsModel { UserId = userId }));
 
@@ -245,14 +241,13 @@ public class UserProfileServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(userId, result.Data!.UserId);
-        splitService.Verify(s => s.AutoAssignRecommendedAsync(userId, savedProfile, It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
         mealPlanningService.Verify(m => m.RecomputeTargetsAsync(userId, savedProfile, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task UpsertAsync_SplitAutoAssignReturnsFailureResult_DoesNotFailProfileSave()
+    public async Task UpsertAsync_TargetsRecomputeReturnsFailureResult_DoesNotFailProfileSave()
     {
-        // AutoAssignRecommendedAsync/RecomputeTargetsAsync report failures via ServiceResult.IsSuccess = false
+        // RecomputeTargetsAsync reports failures via ServiceResult.IsSuccess = false
         // rather than throwing, so a failed side effect must not abort the overall Upsert.
         var userId = Guid.NewGuid();
         var request = ValidRequest();
@@ -260,10 +255,8 @@ public class UserProfileServiceTests
 
         userProfileProvider.Setup(p => p.UpsertAsync(userId, request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(savedProfile);
-        splitService.Setup(s => s.AutoAssignRecommendedAsync(userId, savedProfile, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ServiceResult<ActiveSplitModel?>.Failure(500, "Could not assign a split.", "auto-assign blew up"));
         mealPlanningService.Setup(m => m.RecomputeTargetsAsync(userId, savedProfile, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ServiceResult<UserNutritionTargetsModel>.Success(new UserNutritionTargetsModel { UserId = userId }));
+            .ReturnsAsync(ServiceResult<UserNutritionTargetsModel>.Failure(500, "Could not compute targets.", "targets recompute blew up"));
 
         var result = await sut.UpsertAsync(userId, request);
 

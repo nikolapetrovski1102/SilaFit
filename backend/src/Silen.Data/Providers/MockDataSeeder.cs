@@ -118,6 +118,14 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
         var activatedAtUtc = today.AddDays(-(days + 14)).ToDateTime(TimeOnly.MinValue);
         await ActivateSplitAsync(connection, userId, tier.Split.SplitId, activatedAtUtc, cancellationToken).ConfigureAwait(false);
 
+        // The rotation is anchored to the Monday of the activation week, not the
+        // activation day itself - see @AnchorDate in usp_WorkoutSession_GetTodayScheduled.
+        var cycleAnchorUtc = activatedAtUtc.AddDays(-(((int)activatedAtUtc.DayOfWeek + 6) % 7));
+
+        // Whole weeks covering DurationDays and the highest DayIndex - see @CycleLength there.
+        var cycleSpan = Math.Max(Math.Max((int)tier.Split.DurationDays, 1), tier.Split.Days.Select(d => (int)d.DayIndex).DefaultIfEmpty(0).Max());
+        var cycleLength = (cycleSpan + 6) / 7 * 7;
+
         await WipeExistingMockDataAsync(connection, userId, cancellationToken).ConfigureAwait(false);
 
         var startDate = today.AddDays(-(days - 1));
@@ -133,8 +141,8 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             var date = startDate.AddDays(offsetFromStart);
             var daysFromToday = (today.ToDateTime(TimeOnly.MinValue) - date.ToDateTime(TimeOnly.MinValue)).Days;
 
-            var cycleIndex = (int)(((date.ToDateTime(TimeOnly.MinValue) - activatedAtUtc).Days % tier.Split.DurationDays + tier.Split.DurationDays) % tier.Split.DurationDays);
-            var splitDay = tier.Split.Days.FirstOrDefault(d => d.DayIndex == cycleIndex);
+            var cycleIndex = ((date.ToDateTime(TimeOnly.MinValue) - cycleAnchorUtc).Days % cycleLength + cycleLength) % cycleLength;
+            var splitDay = tier.Split.Days.FirstOrDefault(d => d.DayIndex == cycleIndex + 1);
 
             if (splitDay is not null)
             {

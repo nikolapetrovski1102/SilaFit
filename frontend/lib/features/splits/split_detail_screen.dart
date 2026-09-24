@@ -16,6 +16,7 @@ import 'split_recommendation.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
 import 'splits_repository.dart';
+import 'widgets/split_hero_image.dart';
 
 class SplitDetailScreen extends StatefulWidget {
   final SplitDetailController controller;
@@ -141,10 +142,7 @@ class _DetailBody extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.card),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: detail.split.heroImageUrl != null
-                  ? Image.network(detail.split.heroImageUrl!, fit: BoxFit.cover)
-                  : Image.asset('assets/branding/split_hero.png',
-                      fit: BoxFit.cover),
+              child: SplitHeroImage(detail.split.heroImageUrl),
             ),
           ),
         ),
@@ -211,7 +209,12 @@ class _DetailBody extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
               Text('WEEKLY BREAKDOWN', style: AppTypography.labelCaps),
               const SizedBox(height: AppSpacing.sm),
-              for (final day in detail.days) ...[
+              // The full Monday-anchored week(s): any slot nobody built a
+              // day for (a gap like Day 3, or the days past the last one)
+              // rests by default, same as the backend resolves a day it has
+              // no session for.
+              for (final day in daysWithImplicitRest(
+                  detail.days, detail.split.durationDays)) ...[
                 _DayCard(day: day),
                 const SizedBox(height: AppSpacing.sm),
               ],

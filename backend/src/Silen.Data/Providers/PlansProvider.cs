@@ -126,6 +126,18 @@ public sealed class PlansProvider(ISqlExecutor sqlExecutor) : IPlansProvider
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
             cancellationToken);
 
+    public Task<SubscriptionReceiptModel?> GetSubscriptionOwnerAsync(
+        string store, string? originalTransactionId, string? purchaseToken, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_SubscriptionReceipt_GetOwner",
+            [
+                SqlParameterBuilder.Create("@Store", store),
+                SqlParameterBuilder.Create("@OriginalTransactionId", originalTransactionId),
+                SqlParameterBuilder.Create("@PurchaseToken", purchaseToken)
+            ],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
+            cancellationToken);
+
     public Task UpdateSubscriptionStatusAsync(Guid userId, string status, CancellationToken cancellationToken = default) =>
         sqlExecutor.ExecuteAsync(
             "dbo.usp_Subscription_SetStatus",

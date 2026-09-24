@@ -75,8 +75,14 @@ BEGIN
     DELETE FROM dbo.HydrationLogs WHERE UserId = @UserId;
     DELETE FROM dbo.BodyweightLogs WHERE UserId = @UserId;
     DELETE FROM dbo.MealLogs WHERE UserId = @UserId;
+    -- Private foods this user added to the catalog while logging meals (066).
+    DELETE FROM dbo.FoodNutrition WHERE CreatedByUserId = @UserId;
     DELETE FROM dbo.UserNutritionTargets WHERE UserId = @UserId;
     DELETE FROM dbo.UserSubscriptions WHERE UserId = @UserId;
+    -- After UserSubscriptions (its LatestReceiptId points here). Also frees the
+    -- store subscription so the same Apple/Google account can restore it onto
+    -- a new Silen account (see usp_SubscriptionReceipt_GetOwner).
+    DELETE FROM dbo.SubscriptionReceipts WHERE UserId = @UserId;
     DELETE FROM dbo.MonthlyReviewDeliveries WHERE UserId = @UserId;
     DELETE FROM dbo.MonthlyAnalyticsReports WHERE UserId = @UserId;
     DELETE FROM dbo.WeeklyAnalyticsReports WHERE UserId = @UserId;
@@ -167,7 +173,7 @@ BEGIN
     -- 4: Settings
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           AvatarChoice, UpdatedAtUtc
+           AvatarChoice, AiDataConsentAtUtc, UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 
@@ -189,7 +195,7 @@ BEGIN
     ORDER BY LoggedAtUtc ASC;
 
     -- 8: Meal logs
-    SELECT MealLogId, UserId, LogDateUtc, MealType, Title, CaloriesKcal, ProteinG, CarbsG, FatsG,
+    SELECT MealLogId, UserId, LogDateUtc, MealType, Title, CaloriesKcal, ProteinG, CarbsG, FatsG, Items,
            Status, PlannedLocalTime, LoggedAtUtc, CreatedAtUtc
     FROM dbo.MealLogs
     WHERE UserId = @UserId
@@ -212,5 +218,32 @@ BEGIN
     SELECT UserId, PlanId, BillingCycle, Status, StartedAtUtc, ExpiresAtUtc
     FROM dbo.UserSubscriptions
     WHERE UserId = @UserId;
+END
+GO
+
+-- Stores the (encrypted) Sign in with Apple refresh token on the user's
+-- Apple identity, so account deletion can revoke it with Apple.
+CREATE OR ALTER PROCEDURE dbo.usp_Account_SetAppleRefreshToken
+    @UserId UNIQUEIDENTIFIER,
+    @RefreshTokenCiphertext VARBINARY(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.UserAuthIdentities
+    SET RefreshTokenCiphertext = @RefreshTokenCiphertext
+    WHERE UserId = @UserId AND Provider = 'Apple';
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_Account_GetAppleRefreshToken
+    @UserId UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT RefreshTokenCiphertext
+    FROM dbo.UserAuthIdentities
+    WHERE UserId = @UserId AND Provider = 'Apple' AND RefreshTokenCiphertext IS NOT NULL;
 END
 GO

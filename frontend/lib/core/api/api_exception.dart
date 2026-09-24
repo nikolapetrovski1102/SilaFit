@@ -15,6 +15,10 @@ class ApiException implements Exception {
   /// (currently: AnalyticsController's monthly review before a month has real activity logged).
   bool get isInsufficientData => statusCode == 422;
 
+  /// 428 - an AI feature needs the user's consent to share their data with
+  /// the third-party AI provider first (see `AiConsentGate`).
+  bool get isAiConsentRequired => statusCode == 428;
+
   static const String genericMessage = 'Something went wrong';
 
   @override

@@ -25,4 +25,12 @@ public sealed class SettingsController(ISettingsService settingsService, ILogger
         var result = await settingsService.UpdateAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult(logger);
     }
+
+    /// <summary>Grants or revokes consent to send the user's data to the third-party AI provider.</summary>
+    [HttpPut("ai-consent")]
+    public async Task<IActionResult> SetAiDataConsent([FromBody] SetAiDataConsentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await settingsService.SetAiDataConsentAsync(User.GetUserId(), request.Granted, cancellationToken);
+        return result.ToActionResult(logger);
+    }
 }

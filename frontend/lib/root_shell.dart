@@ -18,6 +18,7 @@ import 'features/meals/meal_controller.dart';
 import 'features/meals/meal_planning_screen.dart';
 import 'features/notifications/notifications_repository.dart';
 import 'features/onboarding/widgets/tour_guide_card.dart';
+import 'features/plans/plans_controller.dart';
 import 'features/plans/plans_screen.dart';
 import 'features/progress/progress_controller.dart';
 import 'features/progress/progress_screen.dart';
@@ -54,22 +55,6 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   // Feature tour state
   bool _showingTour = false;
   int _tourStep = 0; // 0: Home, 1: Splits, 2: Progress, 3: Nutrition, 4: Settings
-
-  static const _tourTitles = [
-    'Home · Your Daily Hub',
-    'Workout Splits & Routines',
-    'Progress & Analytics',
-    'Nutrition & Macro Goals',
-    'Settings & Preferences',
-  ];
-
-  static const _tourDescriptions = [
-    "Your daily hub. Track today's scheduled workout, start your session with the live exercise tracker, and build your streak.",
-    'Browse curated training routines tailored to your goals, or create and customize your own workout split.',
-    'Visualize your strength progression over time with volume charts, celebrate personal records (PRs), and unlock AI monthly reviews.',
-    'Stay on top of your daily nutrition. Track calories, hit your Protein, Carbs, and Fats macro targets, and follow structured meal plans.',
-    'Fine-tune your training experience. Adjust rest timer alerts, barbell plate weights, light/dark appearance, and workout reminders.',
-  ];
 
   // The interaction ping exists to say "the user is here", so rapid
   // background/resume cycling doesn't need a request each time. Throttled to
@@ -112,6 +97,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _reportInteraction();
+      _syncEntitlements();
       if (widget.showFeatureTour) {
         // Pre-warm data for subsequent tour steps so they render instantly
         unawaited(context.read<ProgressController>().load().catchError((_) {}));
@@ -140,7 +126,16 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _reportInteraction();
+      _syncEntitlements();
     }
+  }
+
+  /// Picks up a subscription bought or renewed outside the app (a Play Store
+  /// promo code, a purchase that was still pending when the app closed).
+  /// Guests can't hold a subscription, so there's nothing to sync for them.
+  void _syncEntitlements() {
+    if (!mounted || !context.read<AuthController>().isRegistered) return;
+    unawaited(context.read<PlansController>().syncEntitlements());
   }
 
   /// Tells the server the user is actually here (and refreshes the timezone).
@@ -164,12 +159,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   /// Tap path (bottom nav): gate *before* the page starts moving, so a
   /// declined gate never shows so much as a peek of Progress.
   Future<void> _onTabSelected(int index) async {
-    // ignore: avoid_print
-    print('[TAB] onTabSelected($index), current=$_index');
     if (index == _index) return;
     if (index == 1 && !_showingTour && !await _ensureProgressUnlocked()) {
-      // ignore: avoid_print
-      print('[TAB] onTabSelected($index) gate declined, staying put');
       return;
     }
     if (!mounted) return;
@@ -181,14 +172,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   /// this fires, so the gate can only run after the fact - if it's
   /// declined, slide straight back to where the swipe started.
   void _onPageChanged(int index) {
-    // ignore: avoid_print
-    print('[TAB] onPageChanged($index), previous=$_index');
     final previous = _index;
     HapticFeedback.selectionClick();
     setState(() => _index = index);
     if (index == 1 && !_showingTour && !context.read<AuthController>().isRegistered) {
-      // ignore: avoid_print
-      print('[TAB] onPageChanged triggering gate for index 1');
       _ensureProgressUnlocked().then((unlocked) {
         if (!unlocked && mounted) {
           _pageController.animateToPage(previous,
@@ -290,10 +277,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                 key: ValueKey(_tourStep),
                 targetKey: _currentSpotlightKey,
                 stepIndex: _tourStep,
-                stepCount: 5,
-                title: _tourTitles[_tourStep],
-                description: _tourDescriptions[_tourStep],
-                nextLabel: _tourStep == 4 ? 'Choose Protocol' : 'Next',
+                stepCount: kFeatureTourSteps.length,
+                title: kFeatureTourSteps[_tourStep].title,
+                description: kFeatureTourSteps[_tourStep].description,
+                access: kFeatureTourSteps[_tourStep].access,
+                nextLabel: _tourStep == kFeatureTourSteps.length - 1
+                    ? 'Choose Protocol'
+                    : 'Next',
                 cardBottom:
                     SilenBottomNavBar.reservedHeight(context) + AppSpacing.sm,
                 onNext: _nextTourStep,

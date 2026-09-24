@@ -5,14 +5,10 @@ using System.Text.RegularExpressions;
 namespace Silen.Services.Helpers;
 
 /// <summary>
-/// Scores and ranks the split library against one user's onboarding profile, and
-/// picks the split to auto-activate. Two callers share this:
-/// <see cref="Implementations.SplitService.GetAllAsync"/> (the ranked screen list,
-/// whose first row is the "best for you" hero) and
-/// <see cref="Implementations.SplitService.AutoAssignRecommendedAsync"/> (the
-/// first-time default written at account creation, re-checked on later profile
-/// saves until the user activates a split themselves), so the auto-selected split
-/// is always exactly the one the screen shows first.
+/// Scores and ranks the split library against one user's onboarding profile, so
+/// <see cref="Implementations.SplitService.GetAllAsync"/> can show the ranked
+/// screen list whose first row is the "best for you" hero. Purely advisory: the
+/// user always activates a split themselves.
 ///
 /// <para><b>Why this is not a single weighted sum.</b> A weighted sum lets a
 /// strong preference outvote a hard constraint: a goal-matched barbell program
@@ -41,7 +37,7 @@ namespace Silen.Services.Helpers;
 ///
 /// <para><b>Non-programs.</b> Single-muscle-group, celebrity, warm-up, deload and
 /// glute/arm/ab-specialisation entries stay browseable in <see cref="Rank"/> but
-/// are penalised and are never auto-assigned while a real weekly program exists.</para>
+/// are penalised so a real weekly program is ranked first whenever one exists.</para>
 ///
 /// <para>Every answer is optional, so legacy profiles that only answered
 /// height/weight/age/goal rank exactly as before (identical score to the old
@@ -236,10 +232,10 @@ public static class SplitRecommendationScorer
     /* ------------------------------ hard constraints ------------------------------- */
 
     /// <summary>
-    /// True when a split is a whole weekly program the recommender may auto-assign.
-    /// Body-part specialisations, celebrity routines and utility content (warm-ups,
-    /// deloads) stay in the ranked library so they remain browseable, but are never
-    /// the default plan.
+    /// True when a split is a whole weekly program, as opposed to a body-part
+    /// specialisation, celebrity routine or utility content (warm-ups, deloads).
+    /// Those stay in the ranked library so they remain browseable, but <see cref="Rank"/>
+    /// penalizes them so a real weekly program is favored as the top recommendation.
     /// </summary>
     public static bool IsAutoAssignable(WorkoutSplitModel split)
     {
@@ -351,72 +347,6 @@ public static class SplitRecommendationScorer
     /// </summary>
     public static bool IsSessionCompatible(WorkoutSplitModel split, PersonFit fit) =>
         fit.SessionDurationMinutes is not { } minutes || TypicalMinutes(split) <= minutes + SessionToleranceMinutes;
-
-    /* -------------------------------- auto-assign ---------------------------------- */
-
-    /// <summary>
-    /// Chooses the split to auto-activate, applying the profile's hard constraints
-    /// in precedence order and relaxing each one only when it would leave no
-    /// candidate at all:
-    ///  1. audience   - never an explicit opposite-gender program;
-    ///  2. equipment  - never a program the person's kit can't support;
-    ///  3. whole-program only - no single-muscle-group / warm-up / deload stubs;
-    ///  4. level      - never above the self-reported, safety-capped level;
-    ///  5. schedule   - the best-fitting week wins; when nothing fits, the fewest
-    ///                  days over is the closest to their week;
-    ///  6. session    - prefer a day length they can finish.
-    ///
-    /// <see cref="Rank"/> already returns the candidates best-first, so the first
-    /// survivor of the cascade is the safest, most doable, best-matching pick.
-    /// </summary>
-    public static WorkoutSplitModel? PickForAutoAssign(IReadOnlyList<WorkoutSplitModel> ranked, PersonFit fit)
-    {
-        var candidates = ranked.ToList();
-
-        candidates = Narrow(candidates, s => !IsAudienceMismatch(s, fit));
-        candidates = Narrow(candidates, s => IsEquipmentCompatible(s, fit));
-        candidates = Narrow(candidates, IsAutoAssignable);
-
-        if (fit.TrainingExperience is not null)
-        {
-            candidates = Narrow(candidates, s => IsLevelCompatible(s, fit));
-        }
-
-        if (fit.TrainingDaysPerWeek is { } days)
-        {
-            var compatible = candidates.Where(s => IsScheduleCompatible(s, fit)).ToList();
-            candidates = compatible.Count > 0
-                ? compatible
-                : ClosestCadence(candidates, days);
-        }
-
-        if (fit.SessionDurationMinutes is not null)
-        {
-            candidates = Narrow(candidates, s => IsSessionCompatible(s, fit));
-        }
-
-        return candidates.FirstOrDefault();
-    }
-
-    /// <summary>Fewest days over the person's week first; LINQ's stable ordering
-    /// keeps the ranked (fit) order for exact ties.</summary>
-    private static List<WorkoutSplitModel> ClosestCadence(List<WorkoutSplitModel> candidates, int days)
-    {
-        var comparable = candidates.Where(s => IsWeeklyCadence(WeeklyDays(s))).ToList();
-        return comparable.Count == 0
-            ? candidates
-            : comparable.OrderBy(s => WeeklyDays(s) - days).ToList();
-    }
-
-    /// <summary>Applies a constraint only when it leaves a candidate; otherwise the
-    /// constraint is relaxed rather than returning nothing.</summary>
-    private static List<WorkoutSplitModel> Narrow(
-        List<WorkoutSplitModel> candidates,
-        Func<WorkoutSplitModel, bool> predicate)
-    {
-        var narrowed = candidates.Where(predicate).ToList();
-        return narrowed.Count > 0 ? narrowed : candidates;
-    }
 
     /* -------------------------------- split shape ---------------------------------- */
 

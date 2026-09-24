@@ -10,6 +10,10 @@ class DietPlansController extends ChangeNotifier {
 
   ResourceState<List<DietPlan>> state = const ResourceState.loading();
 
+  /// Set once `/diet-plans` answers 403 - browsing and creating diet plans is
+  /// PRO/Advanced only, so screens render their locked state instead.
+  bool requiresUpgrade = false;
+
   // App-wide provider: skip a repeat load when we already have the catalogue,
   // and never overlap two loads. `force` is the explicit refresh path.
   bool _isLoading = false;
@@ -24,8 +28,10 @@ class DietPlansController extends ChangeNotifier {
     notifyListeners();
     try {
       final plans = await _repository.getAll();
+      requiresUpgrade = false;
       state = ResourceState.data(plans);
     } on ApiException catch (e) {
+      requiresUpgrade = e.isForbidden;
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);

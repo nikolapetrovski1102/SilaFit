@@ -22,6 +22,11 @@ class QuestionScaffold extends StatelessWidget {
   final bool hideBelowCta;
   final Widget? footer;
 
+  /// The header title next to the back button - "Assessment" for onboarding,
+  /// overridable for other step-by-step flows built on this same shell (e.g.
+  /// the split creation wizard).
+  final String title;
+
   const QuestionScaffold({
     super.key,
     required this.onBack,
@@ -35,6 +40,7 @@ class QuestionScaffold extends StatelessWidget {
     this.belowCta,
     this.hideBelowCta = false,
     this.footer,
+    this.title = 'Assessment',
   });
 
   @override
@@ -62,7 +68,7 @@ class QuestionScaffold extends StatelessWidget {
                 _BackButton(onTap: onBack),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text('Assessment',
+                  child: Text(title,
                       style: AppTypography.headlineMd.copyWith(
                         fontWeight: FontWeight.w700,
                       )),

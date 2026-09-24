@@ -108,4 +108,30 @@ void main() {
     final cardTopLeft = tester.getTopLeft(find.byType(TourGuideCard));
     expect(cardTopLeft.dy, lessThan(100));
   });
+
+  testWidgets('TourGuideCard shows the free/paid note only when given',
+      (tester) async {
+    Future<void> pumpCard({String? access}) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TourGuideCard(
+                stepIndex: 0,
+                stepCount: 5,
+                title: 'Title',
+                description: 'Description',
+                access: access,
+                onNext: () {},
+                onSkip: () {},
+              ),
+            ),
+          ),
+        );
+
+    await pumpCard(access: 'Free: every setting.');
+    expect(find.text('Free: every setting.'), findsOneWidget);
+    expect(find.byIcon(Icons.workspace_premium_rounded), findsOneWidget);
+
+    await pumpCard();
+    expect(find.byIcon(Icons.workspace_premium_rounded), findsNothing);
+  });
 }

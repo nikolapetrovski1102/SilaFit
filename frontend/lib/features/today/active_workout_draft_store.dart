@@ -45,17 +45,41 @@ class ActiveWorkoutDraft {
   // (now stale) split-day plan; carrying the full record avoids needing a
   // by-id refetch endpoint that doesn't exist.
   final List<TargetExercise> exercises;
+  // Exercise ids of the split-day plan the draft was started from - unlike
+  // [exercises], never touched by swap/add. Lets the tracker tell a draft
+  // that's been customised mid-workout apart from one saved against a plan
+  // that's since changed under it (the user switched splits before logging a
+  // set, so the server re-pointed the session at a different split day).
+  // Empty on a draft saved before this field existed.
+  final List<String> planExerciseIds;
   final DateTime startedAtUtc;
   final DateTime savedAtUtc;
+  // Set when the lifter left the workout screen (Leave button or back
+  // gesture), null while it's open. The clock is paused from here until the
+  // workout is resumed - see [resumedStartedAtUtc].
+  final DateTime? pausedAtUtc;
 
   const ActiveWorkoutDraft({
     required this.workoutSessionId,
     required this.exerciseIndex,
     required this.setsByExercise,
     required this.exercises,
+    this.planExerciseIds = const [],
     required this.startedAtUtc,
     required this.savedAtUtc,
+    this.pausedAtUtc,
   });
+
+  /// The start time to resume the elapsed clock from at [nowUtc]: the saved
+  /// start pushed forward by however long the workout sat paused, so time
+  /// spent outside the workout screen never counts towards it. Unchanged
+  /// for a draft that was never paused (e.g. the app was killed mid-set).
+  DateTime resumedStartedAtUtc(DateTime nowUtc) {
+    final pausedAt = pausedAtUtc;
+    if (pausedAt == null) return startedAtUtc;
+    final away = nowUtc.difference(pausedAt);
+    return away.isNegative ? startedAtUtc : startedAtUtc.add(away);
+  }
 
   /// Completed sets over total sets, across every exercise - what Home's
   /// session-card ring shows for "Continue Workout" instead of the flat 0
@@ -78,8 +102,10 @@ class ActiveWorkoutDraft {
             .map((sets) => sets.map((s) => s.toJson()).toList())
             .toList(),
         'exercises': exercises.map((e) => e.toJson()).toList(),
+        'planExerciseIds': planExerciseIds,
         'startedAtUtc': startedAtUtc.toIso8601String(),
         'savedAtUtc': savedAtUtc.toIso8601String(),
+        if (pausedAtUtc != null) 'pausedAtUtc': pausedAtUtc!.toIso8601String(),
       };
 
   factory ActiveWorkoutDraft.fromJson(Map<String, dynamic> json) =>
@@ -100,8 +126,14 @@ class ActiveWorkoutDraft {
                 ?.map((e) => TargetExercise.fromJson(e))
                 .toList() ??
             const [],
+        planExerciseIds:
+            (json['planExerciseIds'] as List<dynamic>?)?.cast<String>() ??
+                const [],
         startedAtUtc: DateTime.parse(json['startedAtUtc'] as String),
         savedAtUtc: DateTime.parse(json['savedAtUtc'] as String),
+        pausedAtUtc: json['pausedAtUtc'] == null
+            ? null
+            : DateTime.parse(json['pausedAtUtc'] as String),
       );
 }
 
@@ -138,8 +170,8 @@ class ActiveWorkoutDraftStore {
 
     ActiveWorkoutDraft draft;
     try {
-      draft = ActiveWorkoutDraft.fromJson(
-          jsonDecode(raw) as Map<String, dynamic>);
+      draft =
+          ActiveWorkoutDraft.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       await prefs.remove(_key);
       return null;

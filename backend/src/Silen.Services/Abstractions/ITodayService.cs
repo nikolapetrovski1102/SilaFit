@@ -17,4 +17,8 @@ public interface ITodayService
 
     /// <summary>Every set logged for the session scheduled on <paramref name="date"/> - powers Home's "View set history" button.</summary>
     Task<ServiceResult<List<SetLogDto>>> GetWorkoutHistoryAsync(Guid userId, DateTime date, CancellationToken cancellationToken = default);
+
+    /// <summary>Every set logged for one exercise, most recent session first - powers the Active Workout Tracker's
+    /// "Last time" card. PRO/Advanced only; throws <see cref="Silen.Common.Exceptions.ProUpgradeRequiredException"/> otherwise.</summary>
+    Task<ServiceResult<List<SetLogDto>>> GetExerciseHistoryAsync(Guid userId, Guid exerciseId, CancellationToken cancellationToken = default);
 }

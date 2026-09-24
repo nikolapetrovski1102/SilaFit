@@ -47,6 +47,27 @@ public class PlanServiceTests
     }
 
     [Fact]
+    public async Task GetCatalogAsync_DuplicateFeatureRows_ListedOnce()
+    {
+        var plan = new SubscriptionPlanModel { PlanId = Guid.NewGuid(), Code = "PRO", Name = "Pro" };
+        var features = new List<PlanFeatureModel>
+        {
+            new() { PlanId = plan.PlanId, FeatureText = "Suggested splits", SortOrder = 1 },
+            new() { PlanId = plan.PlanId, FeatureText = "suggested splits ", SortOrder = 2 },
+            new() { PlanId = plan.PlanId, FeatureText = "Per-exercise progress", SortOrder = 3 }
+        };
+        plansProvider
+            .Setup(p => p.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<SubscriptionPlanModel> { plan }, features));
+
+        var result = await sut.GetCatalogAsync();
+
+        Assert.True(result.IsSuccess);
+        var entry = Assert.Single(result.Data!);
+        Assert.Equal(["Suggested splits", "Per-exercise progress"], entry.Features.Select(f => f.FeatureText));
+    }
+
+    [Fact]
     public async Task GetCurrentAsync_ActiveUnexpiredSubscription_ReturnsIt()
     {
         var userId = Guid.NewGuid();

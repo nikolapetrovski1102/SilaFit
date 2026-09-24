@@ -9,7 +9,7 @@
 #   - Docker Engine + compose plugin
 #   - SQL Server 2022 (Docker) + SilenDb database + schema/procedures/seed
 #   - Silen.Api (.NET 8, Docker) on 127.0.0.1:5010
-#   - nginx reverse proxy for sila.fitness (+ api.sila.fitness)
+#   - nginx reverse proxy for sila.fitness (+ api.sila.fitness, admin.sila.fitness)
 #   - Let's Encrypt HTTPS (certbot)
 #
 # Idempotent: safe to re-run. Secrets are generated once and cached in ./.env.
@@ -23,6 +23,7 @@ set -euo pipefail
 DOMAIN="sila.fitness"
 API_DOMAIN="api.$DOMAIN"
 IMAGES_DOMAIN="images.$DOMAIN"
+ADMIN_DOMAIN="admin.$DOMAIN"
 LE_EMAIL="nikpetrovski007@gmail.com"
 DB_NAME="SilenDb"
 SWAP_GB=4
@@ -234,6 +235,10 @@ chmod 755 "$SCRIPT_DIR/uploads"
 # only applies what's new.
 log "Creating database [$DB_NAME]"
 run_sql master "IF DB_ID('$DB_NAME') IS NULL CREATE DATABASE [$DB_NAME];"
+# SIMPLE recovery: backups here are full-only (/var/opt/mssql/backup), never
+# log backups, so FULL recovery only let the log grow without bound - the
+# food catalog import alone left a 7.5 GB log that could never be reused.
+run_sql master "IF (SELECT recovery_model_desc FROM sys.databases WHERE name = N'$DB_NAME') <> N'SIMPLE' ALTER DATABASE [$DB_NAME] SET RECOVERY SIMPLE;"
 ok "database ensured"
 
 # database/manual-migrations/ is intentionally NOT one of these directories —
@@ -381,20 +386,27 @@ if certbot --nginx -d "$IMAGES_DOMAIN" --non-interactive --agree-tos -m "$LE_EMA
 else
   warn "certbot could not (re)issue a certificate for $IMAGES_DOMAIN — continuing; add a DNS A record for $IMAGES_DOMAIN pointing at this server, then re-run deploy.sh."
 fi
+# Same reasoning as $IMAGES_DOMAIN: its own certificate, so a missing DNS record for
+# the admin host never takes the public site's cert down with it.
+if certbot --nginx -d "$ADMIN_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect; then
+  ok "HTTPS certificate + nginx TLS block ensured for $ADMIN_DOMAIN"
+else
+  warn "certbot could not (re)issue a certificate for $ADMIN_DOMAIN — continuing; add a DNS A record for $ADMIN_DOMAIN pointing at this server, then re-run deploy.sh."
+fi
 systemctl reload nginx
 
 # ---- 10b. verify the console gate actually refuses anonymous access --------
-# admin.html must never answer 200 to a request with no session cookie. Checked
-# over HTTPS (certbot just configured it); best-effort, since DNS/TLS can need a
-# moment on a first-ever deploy.
+# The console (https://$ADMIN_DOMAIN/) must never answer 200 to a request with no
+# session cookie. Checked over HTTPS (certbot just configured it); best-effort,
+# since DNS/TLS can need a moment on a first-ever deploy.
 log "Checking the admin console gate"
-console_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 "https://$DOMAIN/admin.html" 2>/dev/null || true)"
+console_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 "https://$ADMIN_DOMAIN/" 2>/dev/null || true)"
 case "${console_code:-000}" in
-  302|303) ok "anonymous request to /admin.html is redirected to the sign-in page (HTTP $console_code)" ;;
-  401|403) ok "anonymous request to /admin.html is refused (HTTP $console_code)" ;;
-  200)    warn "SERVER /admin.html WITHOUT A SESSION — the gate is not enforcing. Check the auth_request block and that the API answers /api/admin/auth/session with 401." ;;
-  000)    warn "could not reach https://$DOMAIN yet (DNS/TLS may still be settling) — re-check the gate by hand with: curl -skI https://$DOMAIN/admin.html" ;;
-  *)      warn "unexpected HTTP $console_code from /admin.html" ;;
+  302|303) ok "anonymous request to https://$ADMIN_DOMAIN/ is redirected to the sign-in page (HTTP $console_code)" ;;
+  401|403) ok "anonymous request to https://$ADMIN_DOMAIN/ is refused (HTTP $console_code)" ;;
+  200)    warn "SERVED THE CONSOLE WITHOUT A SESSION — the gate is not enforcing. Check the auth_request block and that the API answers /api/admin/auth/session with 401." ;;
+  000)    warn "could not reach https://$ADMIN_DOMAIN yet (DNS/TLS may still be settling) — re-check the gate by hand with: curl -skI https://$ADMIN_DOMAIN/" ;;
+  *)      warn "unexpected HTTP $console_code from https://$ADMIN_DOMAIN/" ;;
 esac
 
 # ---- 11. monthly review cron ------------------------------------------------

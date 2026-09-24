@@ -20,6 +20,7 @@ public class TodayServiceTests
     private readonly Mock<ISplitsProvider> splitsProvider = new(MockBehavior.Strict);
     private readonly Mock<IUserProfileProvider> userProfileProvider = new(MockBehavior.Strict);
     private readonly Mock<IMealPlanningService> mealPlanningService = new(MockBehavior.Strict);
+    private readonly Mock<ISubscriptionGate> subscriptionGate = new(MockBehavior.Strict);
     private readonly TodayService sut;
 
     public TodayServiceTests()
@@ -33,6 +34,7 @@ public class TodayServiceTests
             splitsProvider.Object,
             userProfileProvider.Object,
             mealPlanningService.Object,
+            subscriptionGate.Object,
             NullLogger<TodayService>.Instance);
     }
 
@@ -307,5 +309,55 @@ public class TodayServiceTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(404, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetExerciseHistoryAsync_FreeUser_ReturnsProUpgradeRequiredFailure()
+    {
+        var userId = Guid.NewGuid();
+        var exerciseId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await sut.GetExerciseHistoryAsync(userId, exerciseId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetExerciseHistoryAsync_ProUser_ReturnsHistoryForThatExercise()
+    {
+        var userId = Guid.NewGuid();
+        var exerciseId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        workoutSessionProvider
+            .Setup(p => p.GetExerciseHistoryAsync(userId, exerciseId, 5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SetLogModel>
+            {
+                new() { ExerciseId = exerciseId, ExerciseName = "Bench Press", SetNumber = 1, WeightKg = 100m, Reps = 8, CompletedAtUtc = new DateTime(2026, 3, 2) }
+            });
+
+        var result = await sut.GetExerciseHistoryAsync(userId, exerciseId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Data!);
+        Assert.Equal("Bench Press", result.Data![0].ExerciseName);
+        Assert.Equal(100m, result.Data![0].WeightKg);
+    }
+
+    [Fact]
+    public async Task GetExerciseHistoryAsync_ProUserNoHistory_ReturnsEmptyList()
+    {
+        var userId = Guid.NewGuid();
+        var exerciseId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        workoutSessionProvider
+            .Setup(p => p.GetExerciseHistoryAsync(userId, exerciseId, 5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SetLogModel>());
+
+        var result = await sut.GetExerciseHistoryAsync(userId, exerciseId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Data!);
     }
 }

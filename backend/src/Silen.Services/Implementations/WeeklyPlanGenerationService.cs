@@ -27,6 +27,7 @@ public sealed class WeeklyPlanGenerationService(
     ISplitsProvider splitsProvider,
     ISubscriptionGate subscriptionGate,
     IOpenRouterClient openRouterClient,
+    IUserSettingsProvider userSettingsProvider,
     INotificationProvider notificationProvider,
     IPushNotificationSender pushSender,
     IEmailSender emailSender,
@@ -164,6 +165,13 @@ public sealed class WeeklyPlanGenerationService(
                 throw new ProUpgradeRequiredException(
                     $"User '{userId}' requested on-demand diet plan generation without AllowAiGeneration.",
                     "AI-generated diet plans aren't included in your plan. Upgrade to unlock them.");
+            }
+
+            var settings = await userSettingsProvider.GetAsync(userId, cancellationToken).ConfigureAwait(false);
+            if (settings is not { AiDataConsent: true })
+            {
+                throw new AiConsentRequiredException(
+                    $"User '{userId}' requested on-demand diet plan generation without AI data-sharing consent.");
             }
 
             var opts = options.Value;

@@ -10,11 +10,11 @@ import 'package:silafit/features/today/widgets/day_preview.dart';
 void main() {
   group('future day preview', () {
     test('resolves the future split day and its exercises', () {
-      final today = dateOnly(DateTime.now());
+      final monday = _upcomingMonday();
       final split = ActiveSplit(
         splitId: 'split-1',
         durationDays: 2,
-        activatedAtUtc: today,
+        activatedAtUtc: monday,
       );
       final detail = _splitDetail([
         _day(index: 1, title: 'Push', exercise: 'Bench press'),
@@ -22,7 +22,7 @@ void main() {
       ]);
 
       final preview = DayPreview.resolve(
-        date: today.add(const Duration(days: 1)),
+        date: monday.add(const Duration(days: 1)),
         dashboard: _dashboard(split),
         splitDetail: detail,
       );
@@ -35,19 +35,19 @@ void main() {
     });
 
     test('keeps future rest days as rest previews', () {
-      final today = dateOnly(DateTime.now());
+      final monday = _upcomingMonday();
       final split = ActiveSplit(
         splitId: 'split-1',
         durationDays: 2,
-        activatedAtUtc: today,
+        activatedAtUtc: monday,
       );
       final detail = _splitDetail([
-        _day(index: 0, title: 'Push', exercise: 'Bench press'),
-        _day(index: 1, title: 'Recovery', isRestDay: true),
+        _day(index: 1, title: 'Push', exercise: 'Bench press'),
+        _day(index: 2, title: 'Recovery', isRestDay: true),
       ]);
 
       final preview = DayPreview.resolve(
-        date: today.add(const Duration(days: 1)),
+        date: monday.add(const Duration(days: 1)),
         dashboard: _dashboard(split),
         splitDetail: detail,
       );
@@ -57,35 +57,165 @@ void main() {
       expect(preview.scheduledExercises, isEmpty);
     });
 
-    test('uses ordinal order for splits with one-based day indexes', () {
-      final today = dateOnly(DateTime.now());
+    test('treats rotation slots with no authored day as rest days', () {
+      // A 7-day split with only 5 days built: the other 2 slots in the
+      // rotation rest by default, same as the backend leaving that day's
+      // session unset when it has no split day to point at.
+      final monday = _upcomingMonday();
+      final split = ActiveSplit(
+        splitId: 'split-1',
+        durationDays: 7,
+        activatedAtUtc: monday,
+      );
+      final detail = SplitDetail(
+        split: const WorkoutSplit(
+          splitId: 'split-1',
+          name: 'Five-day split',
+          category: 'Strength',
+          level: 'Beginner',
+          durationDays: 7,
+          isSystemDefault: false,
+        ),
+        days: [
+          for (var i = 1; i <= 5; i++)
+            _day(index: i, title: 'Day $i', exercise: 'Exercise $i'),
+        ],
+      );
+
+      for (final offset in [5, 6]) {
+        final preview = DayPreview.resolve(
+          date: monday.add(Duration(days: offset)),
+          dashboard: _dashboard(split),
+          splitDetail: detail,
+        );
+        expect(preview.isRestDay, isTrue, reason: 'offset $offset');
+        expect(preview.scheduledExercises, isEmpty, reason: 'offset $offset');
+      }
+
+      // And the cycle keeps repeating indefinitely - day 7 of the next lap
+      // lands back on the first authored day rather than running out.
+      final nextLap = DayPreview.resolve(
+        date: monday.add(const Duration(days: 7)),
+        dashboard: _dashboard(split),
+        splitDetail: detail,
+      );
+      expect(nextLap.isRestDay, isFalse);
+      expect(nextLap.title, 'Day 1');
+    });
+
+    test('rests on gaps in the day numbering', () {
+      // Day 1, Day 2, Day 4 - Day 3 was never built, so Wednesday rests and
+      // Day 4 stays on Thursday instead of sliding forward.
+      final monday = _upcomingMonday();
+      final split = ActiveSplit(
+        splitId: 'split-1',
+        durationDays: 3,
+        activatedAtUtc: monday,
+      );
+      final detail = _splitDetail([
+        _day(index: 1, title: 'Push'),
+        _day(index: 2, title: 'Pull'),
+        _day(index: 4, title: 'Legs'),
+      ]);
+
+      String? titleOn(int offset) =>
+          resolveSplitDay(monday.add(Duration(days: offset)), split, detail)
+              ?.title;
+      bool? restOn(int offset) =>
+          resolveSplitDay(monday.add(Duration(days: offset)), split, detail)
+              ?.isRestDay;
+
+      expect(titleOn(0), 'Push');
+      expect(titleOn(1), 'Pull');
+      expect(restOn(2), isTrue);
+      expect(titleOn(3), 'Legs');
+      for (final offset in [4, 5, 6]) {
+        expect(restOn(offset), isTrue, reason: 'offset $offset');
+      }
+    });
+
+    test('starts Day 1 on every Monday, whatever the split length', () {
+      // A 4-day split rotates weekly rather than every 4 days, so Friday
+      // rests and the next Monday is Day 1 again.
+      final monday = _upcomingMonday();
+      final split = ActiveSplit(
+        splitId: 'split-1',
+        durationDays: 4,
+        activatedAtUtc: monday,
+      );
+      final detail = _splitDetail([
+        for (var i = 1; i <= 4; i++) _day(index: i, title: 'Day $i'),
+      ]);
+
+      expect(
+          resolveSplitDay(monday.add(const Duration(days: 4)), split, detail)
+              ?.isRestDay,
+          isTrue);
+      for (final week in [1, 2, 5]) {
+        expect(
+          // Calendar arithmetic, not Duration: week 5 can cross a DST change.
+          resolveSplitDay(
+                  DateTime(monday.year, monday.month, monday.day + 7 * week),
+                  split,
+                  detail)
+              ?.title,
+          'Day 1',
+          reason: 'week $week',
+        );
+      }
+    });
+
+    test('orders days by their index', () {
+      final monday = _upcomingMonday();
       final split = ActiveSplit(
         splitId: 'split-1',
         durationDays: 2,
-        activatedAtUtc: today,
+        activatedAtUtc: monday,
       );
       final detail = _splitDetail([
         _day(index: 2, title: 'Second'),
         _day(index: 1, title: 'First'),
       ]);
 
-      expect(resolveSplitDay(today, split, detail)?.title, 'First');
+      expect(resolveSplitDay(monday, split, detail)?.title, 'First');
       expect(
-        resolveSplitDay(today.add(const Duration(days: 1)), split, detail)
+        resolveSplitDay(monday.add(const Duration(days: 1)), split, detail)
             ?.title,
         'Second',
       );
     });
 
+    test('anchors the rotation to the Monday of the activation week', () {
+      // Activated on a Wednesday: the first day still belongs to that week's
+      // Monday, so Wednesday resolves to the third day, not the first.
+      final monday = _upcomingMonday();
+      final wednesday = monday.add(const Duration(days: 2));
+      final split = ActiveSplit(
+        splitId: 'split-1',
+        durationDays: 7,
+        activatedAtUtc: wednesday,
+      );
+      final detail = _splitDetail([
+        for (var i = 1; i <= 7; i++) _day(index: i, title: 'Day $i'),
+      ]);
+
+      expect(resolveSplitDay(wednesday, split, detail)?.title, 'Day 3');
+      expect(
+        resolveSplitDay(monday.add(const Duration(days: 7)), split, detail)
+            ?.title,
+        'Day 1',
+      );
+    });
+
     testWidgets('opens the complete workout from the future-day button',
         (tester) async {
-      final today = dateOnly(DateTime.now());
-      final futureDate = today.add(const Duration(days: 1));
+      final monday = _upcomingMonday();
+      final futureDate = monday.add(const Duration(days: 1));
       final split = ActiveSplit(
         splitId: 'split-1',
         name: 'Strength rotation',
         durationDays: 2,
-        activatedAtUtc: today,
+        activatedAtUtc: monday,
       );
       final detail = _splitDetail([
         _day(index: 1, title: 'Push'),
@@ -157,6 +287,13 @@ void main() {
       expect(find.text('7 total sets'), findsOneWidget);
     });
   });
+}
+
+/// A Monday strictly after today, so every date the tests resolve is a
+/// future day and the split's rotation starts exactly on it.
+DateTime _upcomingMonday() {
+  final today = dateOnly(DateTime.now());
+  return today.add(Duration(days: 8 - today.weekday));
 }
 
 TodayDashboard _dashboard(ActiveSplit split) => TodayDashboard(

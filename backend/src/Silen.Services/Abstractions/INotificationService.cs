@@ -20,5 +20,5 @@ public interface INotificationService
         Guid userId, RecordNotificationInteractionRequest request, CancellationToken cancellationToken = default);
 
     Task<ServiceResult<bool>> RecordWorkoutHeartbeatAsync(
-        Guid userId, Guid? workoutSessionId, CancellationToken cancellationToken = default);
+        Guid userId, Guid? workoutSessionId, bool hasCompletedSets, CancellationToken cancellationToken = default);
 }

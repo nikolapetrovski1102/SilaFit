@@ -8,14 +8,15 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/dumbbell_icon.dart';
 import '../../../core/widgets/container_transform.dart';
 import '../../../core/widgets/slim_action_row.dart';
-import '../../splits/splits_screen.dart';
+import '../../splits/my_splits_screen.dart';
 import '../today_controller.dart';
 import '../today_models.dart';
 
 /// Replaces the old "armed push trigger" banner on Today: surfaces the
-/// user's currently active split, or a prompt to pick one if they haven't
-/// activated anything yet. Tapping through opens the split library so
-/// browsing/switching splits is still reachable without a dedicated tab.
+/// user's currently active split, or a prompt to create one if they haven't
+/// built anything yet. Tapping through opens My Splits, where the user
+/// creates and activates their own splits (with a link out to browse
+/// suggested splits from there).
 ///
 /// Sized up from `SlimActionRow`'s default - this is the one piece of
 /// Today that tells the user what program they're actually running, so it
@@ -38,7 +39,7 @@ class ActiveSplitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final split = activeSplit;
     final value = split == null
-        ? 'Tap to choose a split'
+        ? 'Create your first split'
         : split.durationDays != null
             ? '${split.name} · ${split.durationDays}-day program'
             : split.name ?? 'Split active';
@@ -46,7 +47,7 @@ class ActiveSplitCard extends StatelessWidget {
     final rowScale = scale * _emphasis;
     final todayController = context.read<TodayController>();
     final card = ContainerTransform(
-      openBuilder: (_) => const SplitsScreen(),
+      openBuilder: (_) => const MySplitsScreen(),
       onClosed: () => unawaited(todayController.load(force: true)),
       closedBuilder: (context, openContainer) => SlimActionRow(
         icon: Icons.fitness_center_rounded,
@@ -54,7 +55,7 @@ class ActiveSplitCard extends StatelessWidget {
             SoftDumbbellIcon(size: 22 * rowScale, color: AppColors.accent),
         iconColor: AppColors.accent,
         iconBackground: AppColors.accent.withOpacity(0.16),
-        label: 'ACTIVE SPLIT',
+        label: 'MY SPLIT',
         value: value,
         // A ceiling, not a fixed size - FittedBox in SlimActionRow scales
         // this down for a long split name and leaves it be for a short one,

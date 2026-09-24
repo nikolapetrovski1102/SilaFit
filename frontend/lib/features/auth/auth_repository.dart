@@ -68,7 +68,9 @@ class AuthRepository {
       );
 
   Future<AuthResult> loginApple(
-          {required String identityToken, String? displayName}) =>
+          {required String identityToken,
+          String? displayName,
+          String? authorizationCode}) =>
       _client.post(
         '/auth/login/apple',
         AuthResult.fromJson,
@@ -76,6 +78,10 @@ class AuthRepository {
           'identityToken': identityToken,
           if (displayName != null && displayName.isNotEmpty)
             'displayName': displayName,
+          // Exchanged server-side for a refresh token, so deleting the
+          // account can revoke Sign in with Apple (App Review 5.1.1(v)).
+          if (authorizationCode != null && authorizationCode.isNotEmpty)
+            'authorizationCode': authorizationCode,
         },
       );
 }

@@ -299,4 +299,59 @@ public class MealPlanningServiceTests
 
         Assert.False(result.IsSuccess);
     }
+
+    [Fact]
+    public async Task UpsertMealAsync_WithItems_TotalsComeFromTheFoods_NotTheClient()
+    {
+        var userId = Guid.NewGuid();
+        var request = new UpsertMealLogRequest
+        {
+            LogDateUtc = new DateOnly(2026, 9, 23),
+            MealType = "Lunch",
+            Title = "Chicken bowl",
+            Status = "Logged",
+            CaloriesKcal = 9999,
+            Items =
+            [
+                new MealLogItemModel { Name = " Chicken breast ", Grams = 150, CaloriesKcal = 247.5m, ProteinG = 46.5m, CarbsG = 0, FatsG = 5.4m },
+                new MealLogItemModel { Name = "White rice", Grams = 200, CaloriesKcal = 260m, ProteinG = 5.4m, CarbsG = 56.2m, FatsG = 0.6m, FiberG = 0.8m }
+            ]
+        };
+        UpsertMealLogRequest? captured = null;
+        mealPlanningProvider
+            .Setup(p => p.UpsertMealAsync(userId, It.IsAny<UpsertMealLogRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, UpsertMealLogRequest, CancellationToken>((_, r, _) => captured = r)
+            .ReturnsAsync(new MealLogModel());
+
+        var result = await sut.UpsertMealAsync(userId, request);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(captured);
+        Assert.Equal(508, captured!.CaloriesKcal);
+        Assert.Equal(52, captured.ProteinG);
+        Assert.Equal(56, captured.CarbsG);
+        Assert.Equal(6, captured.FatsG);
+        Assert.Equal("Chicken breast", captured.Items![0].Name);
+    }
+
+    [Theory]
+    [InlineData("", 100, 10)]
+    [InlineData("Rice", 0, 10)]
+    [InlineData("Rice", 100, -1)]
+    public async Task UpsertMealAsync_InvalidItem_FailsValidation_AndNeverWrites(string name, decimal grams, decimal kcal)
+    {
+        var request = new UpsertMealLogRequest
+        {
+            LogDateUtc = new DateOnly(2026, 9, 23),
+            MealType = "Lunch",
+            Title = "Lunch",
+            Status = "Logged",
+            Items = [new MealLogItemModel { Name = name, Grams = grams, CaloriesKcal = kcal }]
+        };
+
+        var result = await sut.UpsertMealAsync(Guid.NewGuid(), request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
 }

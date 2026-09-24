@@ -75,11 +75,11 @@ public sealed class NotificationService(
         });
 
     public Task<ServiceResult<bool>> RecordWorkoutHeartbeatAsync(
-        Guid userId, Guid? workoutSessionId, CancellationToken cancellationToken = default) =>
+        Guid userId, Guid? workoutSessionId, bool hasCompletedSets, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
             await notificationProvider
-                .RecordWorkoutHeartbeatAsync(userId, workoutSessionId, DateTime.UtcNow, cancellationToken)
+                .RecordWorkoutHeartbeatAsync(userId, workoutSessionId, DateTime.UtcNow, hasCompletedSets, cancellationToken)
                 .ConfigureAwait(false);
             return true;
         });

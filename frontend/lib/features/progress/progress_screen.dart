@@ -1,6 +1,6 @@
-import 'package:fl_chart/fl_chart.dart';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/state/resource_state.dart';
@@ -10,18 +10,26 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/upgrade_lock_card.dart';
+import '../plans/plans_controller.dart';
 import '../plans/plans_screen.dart';
+import '../settings/ai_consent_gate.dart';
 import 'all_personal_records_screen.dart';
 import 'analytics_controller.dart';
 import 'analytics_models.dart';
+import 'exercise_progress_controller.dart';
 import 'monthly_overview_screen.dart';
 import 'progress_controller.dart';
 import 'progress_models.dart';
 import 'weekly_analytics_controller.dart';
+import 'widgets/exercise_progress_card.dart';
 import 'widgets/personal_record_tile.dart';
 
 /// The AI-narrated progress screen. Registered-tier only - the caller
-/// (RootShell) runs it through AccountGate before this ever mounts.
+/// (RootShell) runs it through AccountGate before this ever mounts - and a
+/// PRO/Advanced feature: a Free account sees the whole screen blurred behind
+/// an upgrade prompt. Entitlement comes from [ExerciseProgressController]
+/// (a 403 on the gated per-exercise endpoints), not a client-side plan read.
 class ProgressScreen extends StatefulWidget {
   final GlobalKey? spotlightKey;
 
@@ -33,22 +41,79 @@ class ProgressScreen extends StatefulWidget {
 
 class _ProgressScreenState extends State<ProgressScreen> {
   late final ProgressController _controller;
+  late final ExerciseProgressController _exerciseController;
+  int? _purchaseRevision;
 
   @override
   void initState() {
     super.initState();
     _controller = context.read<ProgressController>();
+    _exerciseController = context.read<ExerciseProgressController>();
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
+    Future.microtask(_exerciseController.load);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A purchase or restore anywhere in the app can flip entitlement - re-ask
+    // the server rather than leave the screen locked until a restart.
+    final revision = context.watch<PlansController>().purchaseRevision;
+    if (_purchaseRevision != null && _purchaseRevision != revision) {
+      Future.microtask(() => _exerciseController.load(force: true));
+    }
+    _purchaseRevision = revision;
+  }
+
+  Future<void> _openPlans() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+    if (mounted) await _exerciseController.load(force: true);
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: Listenable.merge([_controller, _exerciseController]),
       builder: (context, _) {
-        return SingleChildScrollView(
+        final access = _exerciseController.access;
+        // Stay blurred while the very first entitlement check is in flight
+        // so a Free account never gets a flash of the unlocked screen. A
+        // failed check (network, 5xx) un-blurs instead - the exercise card
+        // shows its own retry, and the rest of the screen isn't gated
+        // server-side anyway.
+        final blurred = access == ExerciseProgressAccess.locked ||
+            (access == ExerciseProgressAccess.unknown &&
+                _exerciseController.exercisesState.isLoading);
+        return Stack(
+          children: [
+            ImageFiltered(
+              enabled: blurred,
+              imageFilter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+              child: IgnorePointer(
+                ignoring: blurred,
+                child: _buildScrollView(context),
+              ),
+            ),
+            // Hidden during the feature tour so it can't sit over the
+            // spotlighted card - the blur alone still shows it's locked.
+            if (blurred && widget.spotlightKey == null)
+              Positioned.fill(
+                child: _ProgressLockOverlay(
+                  checking: access == ExerciseProgressAccess.unknown,
+                  onUnlock: _openPlans,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildScrollView(BuildContext context) {
+    return SingleChildScrollView(
           // Bottom padding clears the floating nav pill (now that
           // RootShell's Scaffold extends its body under it) plus the
           // usual breathing room, so the last card scrolls up past the
@@ -59,27 +124,68 @@ class _ProgressScreenState extends State<ProgressScreen> {
               AppSpacing.marginMobile,
               AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
           // Header, timeframe pills, and the PR / AI review entry
-          // points don't need `overview` - only
-          // `_StrengthProgressCard` and `_YourInsightCard` do. Gating
-          // all of that behind one ResourceBuilder used to blank the
-          // whole screen (title included) whenever the overview call
-          // alone was slow or failed; now a stalled/errored overview
-          // only empties its own two cards.
+          // points don't need `overview` - only `_YourInsightCard`
+          // does. Gating all of that behind one ResourceBuilder used to
+          // blank the whole screen (title included) whenever the overview
+          // call alone was slow or failed; now a stalled/errored overview
+          // only empties its own card.
           child: _ProgressContent(
             controller: _controller,
+            exerciseController: _exerciseController,
             spotlightKey: widget.spotlightKey,
           ),
         );
-      },
+  }
+}
+
+/// Sits over the blurred Progress screen for a Free account.
+class _ProgressLockOverlay extends StatelessWidget {
+  final bool checking;
+  final VoidCallback onUnlock;
+
+  const _ProgressLockOverlay({required this.checking, required this.onUnlock});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.background.withValues(alpha: 0.35),
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.marginMobile,
+              AppSpacing.lg,
+              AppSpacing.marginMobile,
+              SilenBottomNavBar.reservedHeight(context)),
+          child: checking
+              ? SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppColors.accent),
+                )
+              : UpgradeLockCard(
+                  title: 'Track every lift',
+                  message: 'See your estimated 1RM, top sets and volume for '
+                      'each exercise over time, plus AI reviews.',
+                  actionLabel: 'Unlock Progress',
+                  onUnlock: onUnlock,
+                ),
+        ),
+      ),
     );
   }
 }
 
 class _ProgressContent extends StatelessWidget {
   final ProgressController controller;
+  final ExerciseProgressController exerciseController;
   final GlobalKey? spotlightKey;
 
-  const _ProgressContent({required this.controller, this.spotlightKey});
+  const _ProgressContent({
+    required this.controller,
+    required this.exerciseController,
+    this.spotlightKey,
+  });
 
   static const _timeframes = [
     (30, '1M'),
@@ -102,37 +208,35 @@ class _ProgressContent extends StatelessWidget {
               PillChip(
                 label: label,
                 selected: controller.days == days,
-                onTap: () => controller.setDays(days),
+                onTap: () {
+                  controller.setDays(days);
+                  exerciseController.setDays(days);
+                },
               ),
               const SizedBox(width: AppSpacing.xs),
             ],
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
-        // Only these two cards depend on `controller.state` (the overview
-        // call) - scoping the ResourceBuilder to just them means a slow or
+        if (spotlightKey != null)
+          KeyedSubtree(
+            key: spotlightKey!,
+            child: ExerciseProgressCard(controller: exerciseController),
+          )
+        else
+          ExerciseProgressCard(controller: exerciseController),
+        const SizedBox(height: AppSpacing.lg),
+        // Only the insight card depends on `controller.state` (the overview
+        // call) - scoping the ResourceBuilder to just it means a slow or
         // failed overview fetch no longer blanks the header/pills above or
         // the PR / AI review entry points below.
         ResourceBuilder<ProgressOverview>(
           state: controller.state,
           onRetry: controller.load,
-          builder: (context, overview) {
-            final card = _StrengthProgressCard(overview: overview);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (spotlightKey != null)
-                  KeyedSubtree(key: spotlightKey!, child: card)
-                else
-                  card,
-                const SizedBox(height: AppSpacing.lg),
-                _YourInsightCard(
-                    insight: overview.insights.isNotEmpty
-                        ? overview.insights.first
-                        : null),
-              ],
-            );
-          },
+          builder: (context, overview) => _YourInsightCard(
+              insight: overview.insights.isNotEmpty
+                  ? overview.insights.first
+                  : null),
         ),
         const SizedBox(height: AppSpacing.lg),
         _PersonalRecordsCard(controller: controller),
@@ -142,225 +246,6 @@ class _ProgressContent extends StatelessWidget {
         const _AiWeeklyReviewSection(),
         const SizedBox(height: AppSpacing.lg),
       ],
-    );
-  }
-}
-
-/// One calendar week's worth of the heatmap, reduced to summed tonnage - the
-/// only series the hero card can honestly plot as "strength progress"; no
-/// per-exercise 1RM history exists to derive a truer strength curve from.
-class _WeekBucket {
-  final DateTime start;
-  final double totalTonnageKg;
-
-  const _WeekBucket({required this.start, required this.totalTonnageKg});
-}
-
-List<_WeekBucket> _weeklyBuckets(List<HeatmapDay> days) {
-  if (days.isEmpty) return [];
-  final sorted = [...days]..sort((a, b) => a.date.compareTo(b.date));
-
-  // Anchor windows to the most recent day and walk backwards in full 7-day
-  // steps, so a requested range that isn't a multiple of 7 (30/90/180 days
-  // never are) leaves its partial leftover at the OLD end instead of the
-  // new one. Bucketing forward from the oldest day - as this used to do -
-  // put that partial window last, so the trend/% comparison and chart tail
-  // ended up reading a 1-2 day sliver as "this week", which read as a
-  // dramatic, fake collapse next to real full weeks.
-  final windows = <List<HeatmapDay>>[];
-  var windowEnd = sorted.last.date;
-  var index = sorted.length - 1;
-  while (index >= 0) {
-    final windowStart = windowEnd.subtract(const Duration(days: 6));
-    final window = <HeatmapDay>[];
-    while (index >= 0 && !sorted[index].date.isBefore(windowStart)) {
-      window.add(sorted[index]);
-      index--;
-    }
-    windows.add(window);
-    windowEnd = windowStart.subtract(const Duration(days: 1));
-  }
-
-  // `windows` is newest-first; flip to chronological order and drop a
-  // leading partial window rather than let it stand in as a full week.
-  final chronological = windows.reversed.toList();
-  if (chronological.isNotEmpty && chronological.first.length < 7) {
-    chronological.removeAt(0);
-  }
-
-  return [
-    for (final window in chronological)
-      _WeekBucket(
-        start: window.map((d) => d.date).reduce((a, b) => a.isBefore(b) ? a : b),
-        totalTonnageKg:
-            window.fold(0.0, (sum, d) => sum + (d.tonnageKg ?? 0)),
-      ),
-  ];
-}
-
-/// Percent change from the first to the last weekly bucket - `null` when
-/// there isn't enough range to compare, or the starting point was zero.
-double? _percentChange(List<_WeekBucket> buckets) {
-  if (buckets.length < 2) return null;
-  final first = buckets.first.totalTonnageKg;
-  final last = buckets.last.totalTonnageKg;
-  if (first <= 0) return null;
-  return (last - first) / first * 100;
-}
-
-class _StrengthProgressCard extends StatelessWidget {
-  final ProgressOverview overview;
-
-  const _StrengthProgressCard({required this.overview});
-
-  @override
-  Widget build(BuildContext context) {
-    final buckets = _weeklyBuckets(overview.heatmap);
-    final pct = _percentChange(buckets);
-
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionEyebrow('Strength Progress'),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            pct == null
-                ? '--'
-                : '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
-            style: AppTypography.displayStatMobile.copyWith(
-                color: pct == null
-                    ? AppColors.onSurfaceVariant
-                    : (pct >= 0 ? AppColors.accent : AppColors.error)),
-          ),
-          const SizedBox(height: 2),
-          Text('Overall strength',
-              style: AppTypography.bodySm
-                  .copyWith(color: AppColors.onSurfaceVariant)),
-          const SizedBox(height: AppSpacing.md),
-          if (buckets.length < 2)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                  child: Text('Log a few sessions to see your trend.',
-                      style: AppTypography.bodySm)),
-            )
-          else
-            SizedBox(height: 140, child: _TrendChart(buckets: buckets)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrendChart extends StatelessWidget {
-  final List<_WeekBucket> buckets;
-
-  const _TrendChart({required this.buckets});
-
-  @override
-  Widget build(BuildContext context) {
-    final spots = [
-      for (var i = 0; i < buckets.length; i++)
-        FlSpot(i.toDouble(), buckets[i].totalTonnageKg),
-    ];
-    final maxValue =
-        buckets.map((b) => b.totalTonnageKg).reduce((a, b) => a > b ? a : b);
-    final maxY = maxValue <= 0 ? 1.0 : maxValue * 1.2;
-
-    return LineChart(
-      LineChartData(
-        minY: 0,
-        maxY: maxY,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxY / 3,
-          getDrawingHorizontalLine: (_) => FlLine(
-              color: AppColors.onSurface.withValues(alpha: 0.06),
-              strokeWidth: 1),
-        ),
-        borderData: FlBorderData(show: false),
-        titlesData: FlTitlesData(
-          leftTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 22,
-              // Only the first and last week get a date label - the mockup
-              // shows a plain start/end range under the sparkline, not a
-              // tick per week.
-              interval: 1,
-              getTitlesWidget: (value, meta) {
-                final i = value.round();
-                if (i != 0 && i != buckets.length - 1) {
-                  return const SizedBox.shrink();
-                }
-                final isLast = i == buckets.length - 1;
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    DateFormat('MMM d').format(buckets[i].start),
-                    style: AppTypography.labelCaps.copyWith(
-                        fontSize: 10,
-                        color: isLast ? AppColors.accent : AppColors.outline),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => AppColors.surfaceContainerHighest,
-            getTooltipItems: (touchedSpots) => [
-              for (final spot in touchedSpots)
-                LineTooltipItem(
-                  '${spot.y.toStringAsFixed(0)} kg\n${DateFormat('MMM d').format(buckets[spot.x.round()].start)}',
-                  AppTypography.labelSm.copyWith(color: AppColors.onSurface),
-                ),
-            ],
-          ),
-        ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            curveSmoothness: 0.3,
-            color: AppColors.accent,
-            barWidth: 2.5,
-            isStrokeCapRound: true,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, bar, index) {
-                final isLast = index == spots.length - 1;
-                return FlDotCirclePainter(
-                  radius: isLast ? 5 : 3,
-                  color: isLast ? AppColors.accent : AppColors.surfaceContainer,
-                  strokeColor: isLast ? AppColors.accent : AppColors.outline,
-                  strokeWidth: 1.5,
-                );
-              },
-            ),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.accent.withValues(alpha: 0.16),
-                  AppColors.accent.withValues(alpha: 0),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -507,6 +392,7 @@ class _AiReviewEntryState extends State<_AiReviewEntry> {
 
   Future<void> _open() async {
     if (_loading) return;
+    if (!await AiConsentGate.ensure(context) || !mounted) return;
     setState(() => _loading = true);
 
     AnalyticsRecap? report;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Common.Options;
 using Silen.Data.Abstractions;
@@ -21,6 +22,25 @@ public sealed class AccountProvider : IAccountProvider
         _sqlExecutor.ExecuteAsync(
             "dbo.usp_Account_Delete",
             [SqlParameterBuilder.Create("@UserId", userId)],
+            cancellationToken);
+
+    public Task SetAppleRefreshTokenAsync(Guid userId, string refreshToken, CancellationToken cancellationToken = default) =>
+        _sqlExecutor.ExecuteAsync(
+            "dbo.usp_Account_SetAppleRefreshToken",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@RefreshTokenCiphertext", FieldCipher.EncryptString(refreshToken, _key))
+            ],
+            cancellationToken);
+
+    public Task<string?> GetAppleRefreshTokenAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        _sqlExecutor.QueryAsync(
+            "dbo.usp_Account_GetAppleRefreshToken",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(
+                reader,
+                r => FieldCipher.DecryptString((byte[])r["RefreshTokenCiphertext"], _key),
+                cancellationToken),
             cancellationToken);
 
     public Task<ExportEligibilityModel> TryBeginExportAsync(Guid userId, int cooldownDays, CancellationToken cancellationToken = default) =>

@@ -228,6 +228,21 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads"
 });
 
+// Built-in artwork that ships with the API (StaticAssets/, copied to the publish
+// output) - today the auto-assigned split hero images, requested by the app as
+// {API_BASE_URL}/static/splits/{dark|light}/{key}.jpg. Under /api so it rides the
+// same nginx proxy as every API call. Clients may cache for a week without
+// asking; after that the ETag/Last-Modified the middleware emits turn the
+// revalidation into a body-less 304.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(app.Environment.ContentRootPath, "StaticAssets")),
+    RequestPath = "/api/static",
+    OnPrepareResponse = context =>
+        context.Context.Response.Headers.CacheControl = "public, max-age=604800, stale-while-revalidate=86400"
+});
+
 // Baseline response hardening for the API. The static site / admin console get
 // their own headers from nginx; these keep direct API responses safe too.
 app.Use(async (context, next) =>

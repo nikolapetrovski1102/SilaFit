@@ -18,6 +18,7 @@ public static class SettingsRowMapper
         BarbellStandardKg = reader.GetDecimalValue("BarbellStandardKg"),
         AppearanceMode = reader.GetStringValue("AppearanceMode"),
         AvatarChoice = reader.GetStringValue("AvatarChoice"),
+        AiDataConsentAtUtc = reader.GetNullableDateTime("AiDataConsentAtUtc"),
         UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
     };
 }

@@ -40,7 +40,8 @@ void main() {
   test('granted permission stores the FCM token with the opt-in', () async {
     final client = PostRecordingClient();
     final notifications = NotificationsRepository(client);
-    final push = FakePushMessagingService(notifications, token: 'fcm-token-123');
+    final push =
+        FakePushMessagingService(notifications, token: 'fcm-token-123');
     final controller = OnboardingController(
       OnboardingRepository(client),
       notifications,

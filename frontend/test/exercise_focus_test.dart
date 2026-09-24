@@ -69,7 +69,8 @@ void main() {
     });
 
     test('focus label is considered alongside the title', () {
-      final focus = resolveExerciseFocus(title: 'Day 1', focus: 'Chest/Triceps');
+      final focus =
+          resolveExerciseFocus(title: 'Day 1', focus: 'Chest/Triceps');
 
       expect(focus.muscleGroups, ['chest', 'arms']);
       expect(focus.fromTitle, isTrue);

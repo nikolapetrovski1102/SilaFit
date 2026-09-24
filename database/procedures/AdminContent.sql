@@ -543,6 +543,21 @@ BEGIN
         RETURN;
     END
 
+    -- One row per perk: the plans screen lists every row, so a repeated text
+    -- would show twice. Checked here so the console gets a sentence instead of
+    -- a unique-index violation.
+    IF EXISTS (
+        SELECT 1 FROM dbo.PlanFeatures
+        WHERE PlanId = @PlanId AND FeatureText = @FeatureText
+          AND (@PlanFeatureId IS NULL OR PlanFeatureId <> @PlanFeatureId)
+    )
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, CAST(NULL AS UNIQUEIDENTIFIER) AS EntityId,
+               N'''' + @PlanName + N''' already lists that feature.' AS Detail;
+        RETURN;
+    END
+
     DECLARE @Action NVARCHAR(30);
 
     IF @PlanFeatureId IS NULL

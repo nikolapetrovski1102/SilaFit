@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../core/api/api_client.dart';
@@ -9,8 +10,8 @@ import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/utils/legal_links.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
-import '../../core/widgets/in_app_web_view.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
@@ -22,15 +23,13 @@ import '../onboarding/onboarding_flow_screen.dart';
 import '../onboarding/onboarding_models.dart';
 import '../onboarding/onboarding_repository.dart';
 import '../plans/plans_controller.dart';
+import '../plans/plans_models.dart';
+import '../plans/plans_repository.dart';
 import '../plans/plans_screen.dart';
+import '../plans/restore_purchases_action.dart';
+import 'ai_consent_gate.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
-
-/// Support and Privacy Policy are real hosted pages, not in-app content, so
-/// they open in the in-app browser (see [InAppWebViewScreen]) rather than as
-/// bundled screens.
-const _supportUrl = 'https://sila.fitness/support.html';
-const _privacyUrl = 'https://sila.fitness/privacy.html';
 
 /// The Settings screen - preferences, units, and account. Originally matched
 /// `settings_preferences/screen.png` (profile row, appearance toggle, unit
@@ -58,6 +57,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // back to the neutral silhouette and the details sheet shows "Not set".
   UserProfile? _profile;
 
+  // The caller's plan from `/plans/current` - null while loading or after a
+  // failed check, so the card never claims "Free" for a paying user it just
+  // couldn't reach. Re-fetched whenever the session changes or a purchase /
+  // restore anywhere in the app bumps [PlansController.purchaseRevision].
+  CurrentSubscription? _subscription;
+  bool _subscriptionFailed = false;
+  Object? _session;
+  int? _purchaseRevision;
+  int _subscriptionRequest = 0;
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +79,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .then((profile) {
       if (mounted) setState(() => _profile = profile);
     }).catchError((_) {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final session = context.watch<AuthController>().session;
+    final revision = context.watch<PlansController>().purchaseRevision;
+    if (_session != session || _purchaseRevision != revision) {
+      _session = session;
+      _purchaseRevision = revision;
+      _loadSubscription();
+    }
+  }
+
+  Future<void> _loadSubscription() async {
+    final request = ++_subscriptionRequest;
+    final plans = context.read<PlansRepository>();
+    setState(() {
+      _subscription = null;
+      _subscriptionFailed = false;
+    });
+    CurrentSubscription? subscription;
+    try {
+      subscription = await plans.getCurrent();
+    } catch (_) {}
+    if (!mounted || request != _subscriptionRequest) return;
+    setState(() {
+      _subscription = subscription;
+      _subscriptionFailed = subscription == null;
+    });
   }
 
   @override
@@ -91,6 +130,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             controller: _controller,
             spotlightKey: widget.spotlightKey,
             profile: _profile,
+            subscription: _subscription,
+            subscriptionFailed: _subscriptionFailed,
+            onReloadSubscription: _loadSubscription,
           ),
         );
       },
@@ -102,11 +144,17 @@ class _SettingsContent extends StatelessWidget {
   final SettingsController controller;
   final GlobalKey? spotlightKey;
   final UserProfile? profile;
+  final CurrentSubscription? subscription;
+  final bool subscriptionFailed;
+  final Future<void> Function() onReloadSubscription;
 
   const _SettingsContent({
     required this.controller,
     this.spotlightKey,
     this.profile,
+    this.subscription,
+    required this.subscriptionFailed,
+    required this.onReloadSubscription,
   });
 
   @override
@@ -131,7 +179,11 @@ class _SettingsContent extends StatelessWidget {
           subtitle: auth.isRegistered
               ? (session?.email ?? 'Registered account')
               : 'Guest device - progress not linked',
-          tierLabel: auth.isRegistered ? 'Member' : 'Guest',
+          tierLabel: !auth.isRegistered
+              ? 'Guest'
+              : (subscription?.isPaid ?? false)
+                  ? subscription!.planName
+                  : 'Member',
           profile: profile,
           controller: controller,
         ),
@@ -148,37 +200,11 @@ class _SettingsContent extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         const SectionEyebrow('Subscription & Data'),
         const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(auth.isRegistered ? 'SilaFit Free' : 'Guest access',
-                        style: AppTypography.headlineSm),
-                    const SizedBox(height: 2),
-                    Text(
-                        auth.isRegistered
-                            ? 'Upgrade for AI insights and predictive forecasts'
-                            : 'Create an account to unlock plans, AI insights, and forecasts',
-                        style: AppTypography.bodySm
-                            .copyWith(color: AppColors.onSurfaceVariant)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              SizedBox(
-                width: 120,
-                child: SecondaryPillButton(
-                  label: auth.isRegistered ? 'Upgrade' : 'Get Started',
-                  foregroundColor: AppColors.accent,
-                  onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const PlansScreen())),
-                ),
-              ),
-            ],
-          ),
+        _SubscriptionCard(
+          isRegistered: auth.isRegistered,
+          subscription: subscription,
+          failed: subscriptionFailed,
+          onReload: onReloadSubscription,
         ),
         const SizedBox(height: AppSpacing.sm),
         SectionCard(
@@ -189,16 +215,25 @@ class _SettingsContent extends StatelessWidget {
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Restore purchases',
-                  onTap: () => _restorePurchases(context)),
+                  onTap: () => runRestorePurchases(context)),
+              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+              _LinkRow(
+                  label: 'Manage subscription',
+                  onTap: () => manageSubscription(context, subscription)),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Privacy policy',
                   onTap: () =>
-                      _openUrl(context, _privacyUrl, 'Privacy Policy')),
+                      openHostedPage(context, privacyUrl, 'Privacy Policy')),
+              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+              _LinkRow(
+                  label: 'Terms of use',
+                  onTap: () =>
+                      openHostedPage(context, termsUrl, 'Terms of Use')),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Support',
-                  onTap: () => _openUrl(context, _supportUrl, 'Support')),
+                  onTap: () => openHostedPage(context, supportUrl, 'Support')),
               Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
               _LinkRow(
                   label: 'Delete account',
@@ -254,7 +289,7 @@ class _SettingsContent extends StatelessWidget {
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => const OnboardingFlowScreen(forceSplitReassign: true),
+        builder: (_) => const OnboardingFlowScreen(),
       ),
       (route) => false,
     );
@@ -309,15 +344,6 @@ class _SettingsContent extends StatelessWidget {
     await authController.logout();
   }
 
-  /// Opens one of the app's own hosted pages (Support / Privacy Policy) in the
-  /// in-app browser, so the user stays in the app. The WebView's toolbar still
-  /// offers "open in browser" for anyone who wants the real browser.
-  void _openUrl(BuildContext context, String url, String title) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => InAppWebViewScreen(title: title, url: url),
-    ));
-  }
-
   /// Asks the server to email the full "download my data" payload to the
   /// account's address - there's no in-app viewer for it, this is a one-shot
   /// request, not a screen.
@@ -337,32 +363,33 @@ class _SettingsContent extends StatelessWidget {
     }
   }
 
-  /// Re-delivers any past purchase for this Apple/Google account - the
-  /// explicit entry point App Store Review requires for non-consumable IAP.
-  /// The actual re-grant happens asynchronously via the purchase stream
-  /// PlansController already listens to; this just kicks it off and reports
-  /// once that round-trip settles.
-  Future<void> _restorePurchases(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final plans = context.read<PlansController>();
-    messenger
-        .showSnackBar(const SnackBar(content: Text('Restoring purchases...')));
-    await plans.restorePurchases();
-    if (!context.mounted) return;
-    messenger.showSnackBar(SnackBar(
-        content: Text(plans.actionError ??
-            'Restore complete. Any past purchase has been reapplied.')));
-  }
-
   Future<void> _confirmDeleteAccount(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete account?'),
-        content: const Text(
-            'This permanently deletes your account and all of your data - '
-            'profile, workouts, nutrition logs, bodyweight history, and '
-            'subscription. This cannot be undone.'),
+        // The store owns renewal, so deleting the account can't stop billing -
+        // App Review expects users to be told how to cancel (5.1.1(v)).
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'This permanently deletes your account and all of your data - '
+                'profile, workouts, nutrition logs, and bodyweight history. '
+                'This cannot be undone.'),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+                'Deleting your account does not cancel an active subscription. '
+                'Cancel it in your $storeName subscription settings first, or '
+                'you will keep being billed.'),
+            TextButton(
+              onPressed: openManageSubscriptions,
+              style: TextButton.styleFrom(padding: EdgeInsets.zero),
+              child: const Text('Manage subscription'),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -487,6 +514,16 @@ class _PreferencesSections extends StatelessWidget {
                   onSelected: controller.setNotificationLocalTime,
                 ),
               ],
+              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+              // Turning it on goes through the same disclosure sheet the AI
+              // features show, so consent is always given with the facts.
+              _SwitchRow(
+                label: 'Share data with AI provider',
+                value: settings.aiDataConsent,
+                onChanged: (value) => value
+                    ? AiConsentGate.ensure(context)
+                    : controller.setAiDataConsent(false),
+              ),
             ],
           ),
         ),
@@ -558,6 +595,109 @@ Widget _avatarImage(String? choice, {required double size}) {
         ? SvgPicture.asset(asset, width: size, height: size, fit: BoxFit.cover)
         : Image.asset(asset, width: size, height: size, fit: BoxFit.cover),
   );
+}
+
+/// The "Subscription & Data" headline card, mapped from the caller's real
+/// plan: guests get the sign-up pitch, Free users the upgrade pitch, and
+/// paying users their tier, billing cycle and renewal/end date.
+class _SubscriptionCard extends StatelessWidget {
+  final bool isRegistered;
+  final CurrentSubscription? subscription;
+  final bool failed;
+  final Future<void> Function() onReload;
+
+  const _SubscriptionCard({
+    required this.isRegistered,
+    required this.subscription,
+    required this.failed,
+    required this.onReload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = subscription;
+    final String title;
+    final String subtitle;
+    final String action;
+    VoidCallback onPressed = () => _openPlans(context);
+
+    if (!isRegistered) {
+      title = 'Guest access';
+      subtitle =
+          'Create an account to unlock plans, AI insights, and forecasts';
+      action = 'Get Started';
+    } else if (sub == null) {
+      title = 'SilaFit';
+      subtitle = failed
+          ? 'Could not check your subscription'
+          : 'Checking your subscription...';
+      action = failed ? 'Retry' : 'View plans';
+      if (failed) onPressed = onReload;
+    } else if (!sub.isPaid) {
+      title = 'SilaFit Free';
+      subtitle = 'Upgrade for AI insights and predictive forecasts';
+      action = 'Upgrade';
+    } else {
+      title = 'SilaFit ${sub.planName}';
+      subtitle = _paidSubtitle(sub);
+      // ADVANCED is the top tier - nothing left to upsell, so the button
+      // goes to the store's own subscription management instead.
+      if (sub.planCode == 'ADVANCED') {
+        action = 'Manage';
+        onPressed = () => manageSubscription(context, sub);
+      } else {
+        action = 'Upgrade';
+      }
+    }
+
+    return SectionCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTypography.headlineSm),
+                const SizedBox(height: 2),
+                Text(subtitle,
+                    style: AppTypography.bodySm
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          SizedBox(
+            width: 120,
+            child: SecondaryPillButton(
+              label: action,
+              foregroundColor: AppColors.accent,
+              onPressed: onPressed,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _paidSubtitle(CurrentSubscription sub) {
+    final cycle = switch (sub.billingCycle) {
+      'Yearly' => 'Yearly plan',
+      'Monthly' => 'Monthly plan',
+      _ => 'Active plan',
+    };
+    final expiry = sub.expiresAtUtc;
+    if (expiry == null) return cycle;
+    final date = DateFormat.yMMMd().format(expiry.toLocal());
+    return sub.autoRenewing ? '$cycle · Renews $date' : '$cycle · Ends $date';
+  }
+
+  Future<void> _openPlans(BuildContext context) async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+    // A purchase bumps purchaseRevision (which reloads this on its own), but
+    // a lapsed/changed plan the store reported meanwhile only shows on a refetch.
+    await onReload();
+  }
 }
 
 class _ProfileRow extends StatelessWidget {
@@ -1167,9 +1307,7 @@ class _ReminderTimeRow extends StatelessWidget {
 /// Turning it off immediately drops into [OnboardingFlowScreen]; turning it
 /// back on just marks onboarding complete again without navigating, since
 /// the dev is presumably still inside that replayed flow or back in
-/// Settings already. The replay is started with `forceSplitReassign: true`
-/// so completing it re-runs the split recommender even over a manually
-/// picked split - real onboarding never does this.
+/// Settings already.
 class _OnboardingDebugToggle extends StatefulWidget {
   const _OnboardingDebugToggle();
 
@@ -1218,7 +1356,7 @@ class _OnboardingDebugToggleState extends State<_OnboardingDebugToggle> {
     if (!value) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => const OnboardingFlowScreen(forceSplitReassign: true),
+          builder: (_) => const OnboardingFlowScreen(),
         ),
         (route) => false,
       );

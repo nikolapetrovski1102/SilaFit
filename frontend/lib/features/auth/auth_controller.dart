@@ -162,6 +162,7 @@ class AuthController extends ChangeNotifier {
         final result = await _repository.loginApple(
           identityToken: credential.identityToken ?? '',
           displayName: displayName.isEmpty ? null : displayName,
+          authorizationCode: credential.authorizationCode,
         );
         await _applySession(result);
       });

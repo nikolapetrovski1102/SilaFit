@@ -1,6 +1,7 @@
 using Moq;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -10,11 +11,12 @@ public class ProgressServiceTests
 {
     private readonly Mock<IWorkoutSessionProvider> workoutSessionProvider = new(MockBehavior.Strict);
     private readonly Mock<IStreakProvider> streakProvider = new(MockBehavior.Strict);
+    private readonly Mock<ISubscriptionGate> subscriptionGate = new(MockBehavior.Strict);
     private readonly ProgressService sut;
 
     public ProgressServiceTests()
     {
-        sut = new ProgressService(workoutSessionProvider.Object, streakProvider.Object);
+        sut = new ProgressService(workoutSessionProvider.Object, streakProvider.Object, subscriptionGate.Object);
     }
 
     [Fact]
@@ -159,5 +161,88 @@ public class ProgressServiceTests
         Assert.Equal(100m, result.Data![0].WeightKg);
         Assert.Equal((short)5, result.Data![0].Reps);
         Assert.Equal(95m, result.Data![0].PreviousBestWeightKg);
+    }
+
+    [Fact]
+    public async Task GetTrackedExercisesAsync_FreeUser_ReturnsProUpgradeRequiredFailure()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await sut.GetTrackedExercisesAsync(userId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetTrackedExercisesAsync_ProUser_MapsEveryTrackedExercise()
+    {
+        var userId = Guid.NewGuid();
+        var exerciseId = Guid.NewGuid();
+        var lastTrained = new DateTime(2026, 9, 20, 18, 0, 0, DateTimeKind.Utc);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        workoutSessionProvider
+            .Setup(p => p.GetTrackedExercisesAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackedExerciseModel { ExerciseId = exerciseId, ExerciseName = "Bench Press", SessionCount = 6, LastTrainedAtUtc = lastTrained }]);
+
+        var result = await sut.GetTrackedExercisesAsync(userId);
+
+        Assert.True(result.IsSuccess);
+        var exercise = Assert.Single(result.Data!);
+        Assert.Equal(exerciseId, exercise.ExerciseId);
+        Assert.Equal("Bench Press", exercise.ExerciseName);
+        Assert.Equal(6, exercise.SessionCount);
+        Assert.Equal(lastTrained, exercise.LastTrainedAtUtc);
+    }
+
+    [Fact]
+    public async Task GetExerciseProgressAsync_FreeUser_ReturnsProUpgradeRequiredFailure()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await sut.GetExerciseProgressAsync(userId, Guid.NewGuid(), 90);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0, 90)]
+    [InlineData(30, 30)]
+    [InlineData(5000, 730)]
+    public async Task GetExerciseProgressAsync_ProUser_ClampsRangeAndMapsPoints(int requestedDays, int expectedDays)
+    {
+        var userId = Guid.NewGuid();
+        var exerciseId = Guid.NewGuid();
+        DateTime capturedFrom = default;
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        workoutSessionProvider
+            .Setup(p => p.GetExerciseProgressAsync(userId, exerciseId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, DateTime, CancellationToken>((_, _, from, _) => capturedFrom = from)
+            .ReturnsAsync([new ExerciseProgressPointModel
+            {
+                ScheduledDateUtc = new DateTime(2026, 9, 1),
+                TopWeightKg = 100m,
+                TopSetReps = 5,
+                EstimatedOneRmKg = 116.67m,
+                TotalVolumeKg = 1500m,
+                TotalReps = 15,
+                SetCount = 3
+            }]);
+
+        var result = await sut.GetExerciseProgressAsync(userId, exerciseId, requestedDays);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(expectedDays, result.Data!.Days);
+        Assert.Equal(expectedDays - 1, (DateTime.UtcNow.Date - capturedFrom).Days);
+        var point = Assert.Single(result.Data.Points);
+        Assert.Equal(100m, point.TopWeightKg);
+        Assert.Equal(5, point.TopSetReps);
+        Assert.Equal(116.67m, point.EstimatedOneRmKg);
+        Assert.Equal(1500m, point.TotalVolumeKg);
+        Assert.Equal(15, point.TotalReps);
+        Assert.Equal(3, point.SetCount);
     }
 }

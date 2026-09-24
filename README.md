@@ -74,6 +74,11 @@ Notes:
 
 ## Architecture notes
 
+The local database can also host a merged, searchable catalog of food macros
+from USDA, CNF, CoFID, and Open Food Facts. See
+[`docs/food-nutrition-import.md`](docs/food-nutrition-import.md) for the import
+and refresh workflow.
+
 - **Backend**: controllers are thin (DI'd interfaces only, no private helper methods), all
   responses share one envelope shape, and every unhandled/unsupported error surfaces to the
   client as a single generic "Something went wrong" message while the real detail is logged

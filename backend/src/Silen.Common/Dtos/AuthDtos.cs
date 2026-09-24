@@ -64,6 +64,11 @@ public sealed class AppleLoginRequest
 
     [StringLength(100)]
     public string? DisplayName { get; set; }
+
+    /// <summary>The credential's one-time authorization code - exchanged for a
+    /// refresh token so deleting the account can revoke it with Apple.</summary>
+    [StringLength(1024)]
+    public string? AuthorizationCode { get; set; }
 }
 
 public sealed class AuthResultDto

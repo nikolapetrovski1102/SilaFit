@@ -20,6 +20,7 @@ public sealed class TodayService(
     ISplitsProvider splitsProvider,
     IUserProfileProvider userProfileProvider,
     IMealPlanningService mealPlanningService,
+    ISubscriptionGate subscriptionGate,
     ILogger<TodayService> logger) : ITodayService
 {
     public Task<ServiceResult<TodayDashboardDto>> GetDashboardAsync(Guid userId, CancellationToken cancellationToken = default) =>
@@ -176,6 +177,27 @@ public sealed class TodayService(
         ServiceExecutor.RunAsync(async () =>
         {
             var setLogs = await workoutSessionProvider.GetSetLogsByDateAsync(userId, date, cancellationToken);
+
+            return setLogs.Select(s => new SetLogDto
+            {
+                ExerciseId = s.ExerciseId,
+                ExerciseName = s.ExerciseName,
+                SetNumber = s.SetNumber,
+                WeightKg = s.WeightKg,
+                Reps = s.Reps,
+                CompletedAtUtc = s.CompletedAtUtc
+            }).ToList();
+        });
+
+    public Task<ServiceResult<List<SetLogDto>>> GetExerciseHistoryAsync(Guid userId, Guid exerciseId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            if (!await subscriptionGate.HasActiveProAsync(userId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new ProUpgradeRequiredException($"User {userId} requested exercise history without an active Pro/Advanced subscription.");
+            }
+
+            var setLogs = await workoutSessionProvider.GetExerciseHistoryAsync(userId, exerciseId, top: 5, cancellationToken);
 
             return setLogs.Select(s => new SetLogDto
             {

@@ -100,9 +100,11 @@ BEGIN
 END
 GO
 
--- The weekly batch's audience: every active ADVANCED subscriber. Building a
--- fresh weekly split/diet plan is part of what the ADVANCED plan buys, so
--- there is no opt-in flag. Generated diet plans become active automatically;
+-- The weekly batch's audience: every active ADVANCED subscriber who has
+-- consented to sharing their data with the third-party AI provider
+-- (UserSettings.AiDataConsentAtUtc). Building a fresh weekly split/diet plan
+-- is part of what the ADVANCED plan buys, but without that consent none of
+-- the user's data may leave for the model. Generated diet plans become active automatically;
 -- generated training splits remain recommendations until the user activates one.
 CREATE OR ALTER PROCEDURE dbo.usp_WeeklyAiPlan_GetCandidateUsers
 AS
@@ -118,7 +120,9 @@ BEGIN
     FROM dbo.UserSubscriptions us
     INNER JOIN dbo.SubscriptionPlans sp ON sp.PlanId = us.PlanId
     INNER JOIN dbo.Users u ON u.UserId = us.UserId
+    INNER JOIN dbo.UserSettings st ON st.UserId = u.UserId
     WHERE sp.Code = N'ADVANCED'
+      AND st.AiDataConsentAtUtc IS NOT NULL
       AND us.Status = 'Active'
       AND u.IsActive = 1
       AND (us.ExpiresAtUtc IS NULL OR us.ExpiresAtUtc > SYSUTCDATETIME())

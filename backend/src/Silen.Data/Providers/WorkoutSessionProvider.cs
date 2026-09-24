@@ -91,4 +91,36 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
             ],
             reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapSetLog, cancellationToken),
             cancellationToken);
+
+    public Task<List<SetLogModel>> GetExerciseHistoryAsync(
+        Guid userId, Guid exerciseId, int top, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_WorkoutSetLog_GetHistoryByExercise",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@ExerciseId", exerciseId),
+                SqlParameterBuilder.Create("@Top", top)
+            ],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapSetLog, cancellationToken),
+            cancellationToken);
+
+    public Task<List<TrackedExerciseModel>> GetTrackedExercisesAsync(
+        Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_WorkoutSetLog_GetTrackedExercises",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapTrackedExercise, cancellationToken),
+            cancellationToken);
+
+    public Task<List<ExerciseProgressPointModel>> GetExerciseProgressAsync(
+        Guid userId, Guid exerciseId, DateTime fromDateUtc, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_WorkoutSetLog_GetExerciseProgress",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@ExerciseId", exerciseId),
+                SqlParameterBuilder.Create("@FromDateUtc", fromDateUtc.Date)
+            ],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapExerciseProgressPoint, cancellationToken),
+            cancellationToken);
 }

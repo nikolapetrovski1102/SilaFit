@@ -86,3 +86,27 @@ public sealed class PersonalRecordModel
     public DateTime AchievedAtUtc { get; set; }
     public decimal? PreviousBestWeightKg { get; set; }
 }
+
+/// <summary>One exercise the user has logged sets for - see `usp_WorkoutSetLog_GetTrackedExercises`.</summary>
+public sealed class TrackedExerciseModel
+{
+    public Guid ExerciseId { get; set; }
+    public string ExerciseName { get; set; } = string.Empty;
+    public int SessionCount { get; set; }
+    public DateTime LastTrainedAtUtc { get; set; }
+}
+
+/// <summary>
+/// One session's worth of a single exercise, reduced to its heaviest set, best
+/// estimated 1RM and totals - see `usp_WorkoutSetLog_GetExerciseProgress`.
+/// </summary>
+public sealed class ExerciseProgressPointModel
+{
+    public DateTime ScheduledDateUtc { get; set; }
+    public decimal TopWeightKg { get; set; }
+    public short TopSetReps { get; set; }
+    public decimal EstimatedOneRmKg { get; set; }
+    public decimal TotalVolumeKg { get; set; }
+    public int TotalReps { get; set; }
+    public int SetCount { get; set; }
+}

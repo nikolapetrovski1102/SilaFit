@@ -57,3 +57,5 @@ data/scraped/muscleandstrength/.browser-profile/
 
 # /graphify skill scratch output - not project content
 graphify-out/
+# Downloaded nutrition source archives are large and reproducible.
+data/import/food-nutrition/

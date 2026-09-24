@@ -17,6 +17,9 @@ public sealed class MealPlanningService(
     private static readonly string[] MealTypes = ["Breakfast", "Lunch", "Dinner", "Snack"];
     private static readonly string[] Statuses = ["Planned", "Logged"];
 
+    private const int MaxMealItems = 50;
+    private const decimal MaxItemGrams = 5000;
+
     // Used when the user hasn't completed onboarding yet (no profile row), so
     // there's nothing to derive Mifflin-St Jeor targets from.
     private const short FallbackTargetCalories = 2200;
@@ -103,8 +106,65 @@ public sealed class MealPlanningService(
                 throw new ValidationException("Meal title was blank.", "Give the meal a name.");
             }
 
+            if (request.Items is { Count: > 0 } items)
+            {
+                ApplyItemTotals(request, items);
+            }
+
             return await mealPlanningProvider.UpsertMealAsync(userId, request, cancellationToken);
         });
+
+    /// <summary>
+    /// A meal built food-by-food: validates each item and makes the meal's
+    /// stored totals the sum of its foods, so the client can't send totals
+    /// that disagree with the list it shows. Item macros are already scaled
+    /// to the logged grams (snapshotted from the catalog at log time).
+    /// </summary>
+    private static void ApplyItemTotals(UpsertMealLogRequest request, List<MealLogItemModel> items)
+    {
+        if (items.Count > MaxMealItems)
+        {
+            throw new ValidationException($"Meal had {items.Count} items.", $"A meal can hold up to {MaxMealItems} foods.");
+        }
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Name))
+            {
+                throw new ValidationException("Meal item name was blank.", "Every food needs a name.");
+            }
+
+            if (item.Grams is <= 0 or > MaxItemGrams)
+            {
+                throw new ValidationException($"Invalid item grams '{item.Grams}'.", $"Enter an amount between 1 and {MaxItemGrams} g.");
+            }
+
+            if (item.CaloriesKcal < 0 || item.ProteinG < 0 || item.CarbsG < 0 || item.FatsG < 0
+                || item.FiberG < 0 || item.SugarG < 0 || item.SodiumMg < 0)
+            {
+                throw new ValidationException("Meal item had a negative macro.", "Macros can't be negative.");
+            }
+
+            item.Name = item.Name.Trim();
+            item.BrandName = string.IsNullOrWhiteSpace(item.BrandName) ? null : item.BrandName.Trim();
+            item.Grams = Math.Round(item.Grams, 1);
+            item.CaloriesKcal = Math.Round(item.CaloriesKcal, 1);
+            item.ProteinG = Math.Round(item.ProteinG, 1);
+            item.CarbsG = Math.Round(item.CarbsG, 1);
+            item.FatsG = Math.Round(item.FatsG, 1);
+            item.FiberG = item.FiberG is { } fiber ? Math.Round(fiber, 1) : null;
+            item.SugarG = item.SugarG is { } sugar ? Math.Round(sugar, 1) : null;
+            item.SodiumMg = item.SodiumMg is { } sodium ? Math.Round(sodium, 0) : null;
+        }
+
+        request.CaloriesKcal = ToTotal(items.Sum(i => i.CaloriesKcal));
+        request.ProteinG = ToTotal(items.Sum(i => i.ProteinG));
+        request.CarbsG = ToTotal(items.Sum(i => i.CarbsG));
+        request.FatsG = ToTotal(items.Sum(i => i.FatsG));
+    }
+
+    private static short ToTotal(decimal value) =>
+        (short)Math.Min(short.MaxValue, Math.Round(value, MidpointRounding.AwayFromZero));
 
     public Task<ServiceResult<int>> ApplyPlannedMealsAsync(Guid userId, List<UpsertMealLogRequest> requests, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>

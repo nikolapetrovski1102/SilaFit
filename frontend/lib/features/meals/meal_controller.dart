@@ -168,6 +168,83 @@ class MealController extends ChangeNotifier {
     return false;
   }
 
+  /// Saves a meal built food-by-food in the meal tracker - a new Logged meal
+  /// on the selected day, or an edit of [existing]. Totals are sent for
+  /// completeness, but the server recomputes them from [items].
+  Future<bool> saveTrackedMeal({
+    MealLog? existing,
+    required String mealType,
+    required String title,
+    required List<MealLogItem> items,
+  }) async {
+    final totals = MealTotals.of(items);
+    try {
+      if (existing == null) {
+        await _repository.createLog(
+          logDate: _selectedDate,
+          mealType: mealType,
+          title: title,
+          caloriesKcal: totals.caloriesKcal.round(),
+          proteinG: totals.proteinG.round(),
+          carbsG: totals.carbsG.round(),
+          fatsG: totals.fatsG.round(),
+          status: 'Logged',
+          items: items,
+        );
+      } else {
+        await _repository.updateLog(MealLog(
+          mealLogId: existing.mealLogId,
+          logDateUtc: existing.logDateUtc,
+          mealType: mealType,
+          title: title,
+          caloriesKcal: totals.caloriesKcal.round(),
+          proteinG: totals.proteinG.round(),
+          carbsG: totals.carbsG.round(),
+          fatsG: totals.fatsG.round(),
+          status: 'Logged',
+          plannedLocalTime: existing.plannedLocalTime,
+          items: items,
+        ));
+      }
+      await _loadFor(_selectedDate, force: true);
+      return true;
+    } on ApiException catch (e) {
+      actionError = e.userMessage;
+    } catch (_) {
+      actionError = ApiException.genericMessage;
+    }
+    notifyListeners();
+    return false;
+  }
+
+  Future<List<FoodItem>> searchFoods(String query) =>
+      _repository.searchFoods(query);
+
+  Future<FoodItem> createCustomFood({
+    required String name,
+    String? brandName,
+    double? servingSizeG,
+    required double caloriesKcal,
+    required double proteinG,
+    required double carbohydrateG,
+    required double fatG,
+    double? fiberG,
+    double? sugarG,
+    double? sodiumMg,
+  }) =>
+      _repository.createCustomFood(
+        name: name,
+        brandName: brandName,
+        servingSizeG: servingSizeG,
+        caloriesKcal: caloriesKcal,
+        proteinG: proteinG,
+        carbohydrateG: carbohydrateG,
+        fatG: fatG,
+        fiberG: fiberG,
+        sugarG: sugarG,
+        sodiumMg: sodiumMg,
+      );
+
   Future<void> deleteMeal(String mealLogId) async {
     if (state.data == null) return;
     try {

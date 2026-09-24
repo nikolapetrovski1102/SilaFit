@@ -38,3 +38,31 @@ public sealed class PersonalRecordDto
     public DateTime AchievedAtUtc { get; set; }
     public decimal? PreviousBestWeightKg { get; set; }
 }
+
+/// <summary>An exercise the caller has logged at least one set for - the Progress screen's exercise picker.</summary>
+public sealed class TrackedExerciseDto
+{
+    public Guid ExerciseId { get; set; }
+    public string ExerciseName { get; set; } = string.Empty;
+    public int SessionCount { get; set; }
+    public DateTime LastTrainedAtUtc { get; set; }
+}
+
+/// <summary>Per-session history of one exercise over the requested range, oldest first.</summary>
+public sealed class ExerciseProgressDto
+{
+    public Guid ExerciseId { get; set; }
+    public int Days { get; set; }
+    public List<ExerciseProgressPointDto> Points { get; set; } = new();
+}
+
+public sealed class ExerciseProgressPointDto
+{
+    public DateTime Date { get; set; }
+    public decimal TopWeightKg { get; set; }
+    public short TopSetReps { get; set; }
+    public decimal EstimatedOneRmKg { get; set; }
+    public decimal TotalVolumeKg { get; set; }
+    public int TotalReps { get; set; }
+    public int SetCount { get; set; }
+}

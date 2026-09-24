@@ -116,13 +116,14 @@ public sealed class NotificationProvider(ISqlExecutor sqlExecutor) : INotificati
             cancellationToken);
 
     public Task RecordWorkoutHeartbeatAsync(
-        Guid userId, Guid? workoutSessionId, DateTime atUtc, CancellationToken cancellationToken = default) =>
+        Guid userId, Guid? workoutSessionId, DateTime atUtc, bool hasCompletedSets, CancellationToken cancellationToken = default) =>
         sqlExecutor.ExecuteAsync(
             "dbo.usp_WorkoutSession_Heartbeat",
             [
                 SqlParameterBuilder.Create("@UserId", userId),
                 SqlParameterBuilder.Create("@WorkoutSessionId", workoutSessionId),
-                SqlParameterBuilder.Create("@AtUtc", atUtc)
+                SqlParameterBuilder.Create("@AtUtc", atUtc),
+                SqlParameterBuilder.Create("@HasCompletedSets", hasCompletedSets)
             ],
             cancellationToken);
 

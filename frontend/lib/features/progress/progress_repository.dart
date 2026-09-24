@@ -37,6 +37,21 @@ class ProgressRepository {
             .toList(),
         query: {'top': '$top'},
       );
+
+  /// PRO/Advanced only - a Free caller gets a 403, which is how the Progress
+  /// screen learns it should render locked.
+  Future<List<TrackedExercise>> getTrackedExercises() => _client.get(
+        '/progress/exercises',
+        (json) => (json as List<dynamic>)
+            .map((e) => TrackedExercise.fromJson(e))
+            .toList(),
+      );
+
+  /// PRO/Advanced only - 403 otherwise.
+  Future<ExerciseProgress> getExerciseProgress(String exerciseId,
+          {required int days}) =>
+      _client.get('/progress/exercises/$exerciseId', ExerciseProgress.fromJson,
+          query: {'days': '$days'});
 }
 
 class _CachedOverview {

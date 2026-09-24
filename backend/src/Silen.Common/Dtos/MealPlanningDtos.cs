@@ -15,6 +15,11 @@ public sealed class UpsertMealLogRequest
     public short FatsG { get; set; }
     public string Status { get; set; } = "Planned";
     public TimeSpan? PlannedLocalTime { get; set; }
+
+    /// <summary>The foods making up this meal. When non-empty, the service derives
+    /// CaloriesKcal/ProteinG/CarbsG/FatsG from them and ignores the values sent above;
+    /// null on an update keeps the meal's stored foods.</summary>
+    public List<MealLogItemModel>? Items { get; set; }
 }
 
 public sealed class UpsertNutritionTargetsRequest

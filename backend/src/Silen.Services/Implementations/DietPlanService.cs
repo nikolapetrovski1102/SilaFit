@@ -13,9 +13,21 @@ namespace Silen.Services.Implementations;
 public sealed class DietPlanService(
     IDietPlansProvider dietPlansProvider, ISubscriptionGate subscriptionGate, IMealPlanningService mealPlanningService) : IDietPlanService
 {
+    private const string BrowseUpgradeMessage = "Upgrade to Pro to browse diet plans.";
+    private const string CreateUpgradeMessage = "Upgrade to Pro to create and follow diet plans.";
+
     public Task<ServiceResult<List<DietPlanModel>>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            // Browsing the plan library is Pro/Advanced. Free users log meals
+            // food-by-food instead; an anonymous caller has no subscription at all.
+            if (userId is not { } subscriberId)
+            {
+                throw new ProUpgradeRequiredException("Anonymous caller requested the diet plan library.", BrowseUpgradeMessage);
+            }
+
+            await RequireProAsync(subscriberId, "browse the diet plan library", BrowseUpgradeMessage, cancellationToken);
+
             var plans = await dietPlansProvider.GetAllAsync(userId, cancellationToken);
 
             if (userId is { } callerId)
@@ -72,6 +84,8 @@ public sealed class DietPlanService(
     public Task<ServiceResult<AdminWriteResultDto>> ActivateAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            await RequireProAsync(userId, "activate a diet plan", CreateUpgradeMessage, cancellationToken);
+
             // Reuse the detail read as the visibility check: a private/shared plan
             // the caller can't see comes back null, so it can't be activated. The
             // same read also gives us the days/meals needed to fill the week below,
@@ -151,6 +165,18 @@ public sealed class DietPlanService(
             "Apply diet plan to upcoming week");
     }
 
+    /// <summary>Diet plans (browsing, building, activating) are a Pro/Advanced feature.
+    /// Reads of a plan the user already has, and deletes, stay open so a lapsed
+    /// subscriber can still see and clean up what they made.</summary>
+    private async Task RequireProAsync(Guid userId, string action, string userMessage, CancellationToken cancellationToken)
+    {
+        if (!await subscriptionGate.HasActiveProAsync(userId, cancellationToken).ConfigureAwait(false))
+        {
+            throw new ProUpgradeRequiredException(
+                $"User '{userId}' tried to {action} without an active Pro/Advanced subscription.", userMessage);
+        }
+    }
+
     private static int DayIndexFor(DateOnly date, int durationDays)
     {
         var days = durationDays <= 0 ? 1 : durationDays;
@@ -226,6 +252,8 @@ public sealed class DietPlanService(
             }
             request.Name = name;
 
+            await RequireProAsync(userId, "save a diet plan", CreateUpgradeMessage, cancellationToken);
+
             if (request.DietPlanId is null)
             {
                 var entitlements = await subscriptionGate.GetEntitlementsAsync(userId, cancellationToken);
@@ -256,6 +284,7 @@ public sealed class DietPlanService(
     public Task<ServiceResult<AdminWriteResultDto>> KeepMyPlanAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            await RequireProAsync(userId, "keep a diet plan", CreateUpgradeMessage, cancellationToken);
             var mutation = await dietPlansProvider.KeepUserDietPlanAsync(dietPlanId, userId, cancellationToken);
             return AdminMutationOutcomeMapper.Resolve(mutation, "This plan is now permanent.");
         });
@@ -276,6 +305,8 @@ public sealed class DietPlanService(
             }
             request.Title = request.Title?.Trim();
 
+            await RequireProAsync(userId, "save a diet plan day", CreateUpgradeMessage, cancellationToken);
+
             var mutation = await dietPlansProvider.UpsertUserDietPlanDayAsync(request, userId, cancellationToken);
             return AdminMutationOutcomeMapper.Resolve(mutation, $"Day {request.DayIndex} saved.");
         });
@@ -295,6 +326,8 @@ public sealed class DietPlanService(
             {
                 throw new ValidationException("Diet plan meal upsert called without a meal suggestion.", "Choose a meal first.");
             }
+
+            await RequireProAsync(userId, "save a diet plan meal", CreateUpgradeMessage, cancellationToken);
 
             var mutation = await dietPlansProvider.UpsertUserDietPlanMealAsync(request, userId, cancellationToken);
             return AdminMutationOutcomeMapper.Resolve(mutation, "Meal saved to the day.");

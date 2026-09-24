@@ -19,7 +19,17 @@ public class DietPlanServiceTests
     public DietPlanServiceTests()
     {
         sut = new DietPlanService(provider.Object, subscriptionGate.Object, mealPlanningService.Object);
+
+        // Diet plans are Pro/Advanced; every caller is Pro unless a test says otherwise.
+        subscriptionGate
+            .Setup(g => g.HasActiveProAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
     }
+
+    private void MakeFree(Guid userId) =>
+        subscriptionGate
+            .Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
     private static DietPlanModel Plan(Guid planId, string name = "Weekly Plan") => new()
     {
@@ -182,5 +192,91 @@ public class DietPlanServiceTests
             Enumerable.Range(0, 7).Select(today.AddDays),
             captured.Select(r => r.LogDateUtc));
         Assert.All(captured, r => Assert.Equal("Planned", r.Status));
+    }
+
+    [Fact]
+    public async Task GetAllAsync_FreeUser_RequiresUpgrade_AndNeverReads()
+    {
+        var userId = Guid.NewGuid();
+        MakeFree(userId);
+
+        var result = await sut.GetAllAsync(userId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        provider.Verify(p => p.GetAllAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_AnonymousCaller_RequiresUpgrade()
+    {
+        var result = await sut.GetAllAsync(null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ProUser_ListsPlans()
+    {
+        var userId = Guid.NewGuid();
+        provider
+            .Setup(p => p.GetAllAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Plan(Guid.NewGuid())]);
+
+        var result = await sut.GetAllAsync(userId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Data!);
+    }
+
+    [Fact]
+    public async Task CreateOrUpdateMyPlanAsync_FreeUser_RequiresUpgrade_AndNeverWrites()
+    {
+        var userId = Guid.NewGuid();
+        MakeFree(userId);
+
+        var result = await sut.CreateOrUpdateMyPlanAsync(userId, new UserDietPlanUpsertRequest
+        {
+            Name = "My plan",
+            PeriodType = "Weekly",
+            DurationDays = 7
+        });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        provider.Verify(
+            p => p.UpsertUserDietPlanAsync(It.IsAny<UserDietPlanUpsertRequest>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_FreeUser_RequiresUpgrade_AndNeverWrites()
+    {
+        var userId = Guid.NewGuid();
+        MakeFree(userId);
+
+        var result = await sut.ActivateAsync(userId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        provider.Verify(
+            p => p.SetActiveDietPlanAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteMyPlanAsync_FreeUser_StillAllowed()
+    {
+        var userId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        MakeFree(userId);
+        provider
+            .Setup(p => p.DeleteUserDietPlanAsync(planId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.Success, EntityId = planId });
+
+        var result = await sut.DeleteMyPlanAsync(userId, planId);
+
+        Assert.True(result.IsSuccess);
     }
 }

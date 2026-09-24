@@ -113,6 +113,28 @@ BEGIN
 END
 GO
 
+-- Finds the Silen account a store subscription already belongs to - by
+-- OriginalTransactionId for the App Store (shared by every renewal) or by
+-- purchase token for Play (stable across renewals). The verify endpoint uses
+-- it to refuse activating one store subscription on a second account.
+CREATE OR ALTER PROCEDURE dbo.usp_SubscriptionReceipt_GetOwner
+    @Store NVARCHAR(10),
+    @OriginalTransactionId NVARCHAR(100) = NULL,
+    @PurchaseToken NVARCHAR(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT TOP (1) ReceiptId, UserId, PlanId, Store, ProductId, TransactionId, OriginalTransactionId,
+           PurchaseToken, RawPayload, Status, ExpiresAtUtc, AutoRenewing, VerifiedAtUtc, CreatedAtUtc
+    FROM dbo.SubscriptionReceipts
+    WHERE Store = @Store
+      AND ((@OriginalTransactionId IS NOT NULL AND OriginalTransactionId = @OriginalTransactionId)
+        OR (@PurchaseToken IS NOT NULL AND PurchaseToken = @PurchaseToken))
+    ORDER BY CreatedAtUtc ASC;
+END
+GO
+
 -- Moves a subscription out of Active (Cancelled/Expired) without touching
 -- which plan/receipt it's tied to - used when a webhook/reconciliation check
 -- finds the store no longer considers the receipt current.

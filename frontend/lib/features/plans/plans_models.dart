@@ -80,3 +80,46 @@ class PlanCatalogEntry {
     );
   }
 }
+
+/// The caller's current plan, mirroring `Silen.Common.Models.UserSubscriptionModel`
+/// as `/plans/current` returns it. The server already substitutes a FREE row
+/// when nothing active is on file; [CurrentSubscription.fromJson] re-applies
+/// the same active/unexpired check so a row that lapsed since is FREE too.
+class CurrentSubscription {
+  final String planCode;
+  final String planName;
+  final String? billingCycle;
+  final DateTime? expiresAtUtc;
+  final bool autoRenewing;
+
+  const CurrentSubscription({
+    required this.planCode,
+    required this.planName,
+    this.billingCycle,
+    this.expiresAtUtc,
+    this.autoRenewing = false,
+  });
+
+  static const free = CurrentSubscription(planCode: 'FREE', planName: 'Free');
+
+  bool get isPaid => planCode != 'FREE';
+
+  factory CurrentSubscription.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    if (map['status'] != 'Active') return free;
+    final expiry = DateTime.tryParse(map['expiresAtUtc'] as String? ?? '');
+    if (expiry != null && !expiry.toUtc().isAfter(DateTime.now().toUtc())) {
+      return free;
+    }
+    final code = (map['planCode'] as String? ?? 'FREE').toUpperCase();
+    if (code == 'FREE') return free;
+    final name = map['planName'] as String?;
+    return CurrentSubscription(
+      planCode: code,
+      planName: name == null || name.isEmpty ? code : name,
+      billingCycle: map['billingCycle'] as String?,
+      expiresAtUtc: expiry,
+      autoRenewing: map['autoRenewing'] as bool? ?? false,
+    );
+  }
+}

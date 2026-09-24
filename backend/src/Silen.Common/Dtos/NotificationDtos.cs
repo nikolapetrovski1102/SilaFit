@@ -52,6 +52,12 @@ public sealed class RecordNotificationInteractionRequest
 public sealed class WorkoutHeartbeatRequest
 {
     public Guid? WorkoutSessionId { get; set; }
+
+    /// <summary>
+    /// True once at least one set has been ticked off. Pins today's session to
+    /// its split day, so switching splits no longer re-points it.
+    /// </summary>
+    public bool HasCompletedSets { get; set; }
 }
 
 /// <summary>Result of one publish run, printed by the cron tool and returned for observability.</summary>

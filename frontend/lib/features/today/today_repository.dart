@@ -57,4 +57,15 @@ class TodayRepository {
             .toList(),
         query: {'date': DateFormat('yyyy-MM-dd').format(date)},
       );
+
+  /// Every set ever logged for [exerciseId], most recent session first -
+  /// powers the Active Workout Tracker's gated "Last time" card. PRO/
+  /// Advanced only; throws [ApiException] with status 403 otherwise.
+  Future<List<SetLogHistoryEntry>> getExerciseHistory(String exerciseId) =>
+      _client.get(
+        '/today/exercises/$exerciseId/history',
+        (json) => (json as List<dynamic>)
+            .map((e) => SetLogHistoryEntry.fromJson(e))
+            .toList(),
+      );
 }

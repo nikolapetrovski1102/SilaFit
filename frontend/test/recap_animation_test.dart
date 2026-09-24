@@ -94,8 +94,8 @@ void main() {
             child: const SizedBox(
                 width: 152,
                 height: 152,
-                child: RecapAnimationStage(
-                    child: RecapAnimation(asset: 'food')))),
+                child:
+                    RecapAnimationStage(child: RecapAnimation(asset: 'food')))),
       ));
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pumpAndSettle();

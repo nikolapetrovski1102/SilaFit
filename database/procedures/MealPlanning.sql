@@ -65,7 +65,7 @@ BEGIN
     SET NOCOUNT ON;
 
     SELECT MealLogId, UserId, LogDateUtc, MealType, Title, CaloriesKcal, ProteinG, CarbsG, FatsG,
-           Status, PlannedLocalTime, LoggedAtUtc, CreatedAtUtc
+           Status, PlannedLocalTime, LoggedAtUtc, CreatedAtUtc, Items
     FROM dbo.MealLogs
     WHERE UserId = @UserId AND LogDateUtc = @LogDateUtc
     ORDER BY CreatedAtUtc ASC;
@@ -74,7 +74,9 @@ GO
 
 -- Insert when @MealLogId is NULL, otherwise update the existing row (must
 -- already belong to @UserId). Stamps LoggedAtUtc the moment Status flips to
--- 'Logged' and leaves it untouched on every other write.
+-- 'Logged' and leaves it untouched on every other write. @Items (encrypted
+-- food list, see 066_FoodTracking.sql) is kept as-is when an update omits it,
+-- so a plain Planned -> Logged flip never drops a meal's foods.
 CREATE OR ALTER PROCEDURE dbo.usp_MealLogs_Upsert
     @MealLogId UNIQUEIDENTIFIER = NULL,
     @UserId UNIQUEIDENTIFIER,
@@ -86,7 +88,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_MealLogs_Upsert
     @CarbsG VARBINARY(64),
     @FatsG VARBINARY(64),
     @Status NVARCHAR(10),
-    @PlannedLocalTime TIME(0) = NULL
+    @PlannedLocalTime TIME(0) = NULL,
+    @Items VARBINARY(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -97,10 +100,10 @@ BEGIN
 
         INSERT INTO dbo.MealLogs
             (MealLogId, UserId, LogDateUtc, MealType, Title, CaloriesKcal, ProteinG, CarbsG, FatsG,
-             Status, PlannedLocalTime, LoggedAtUtc)
+             Status, PlannedLocalTime, LoggedAtUtc, Items)
         VALUES
             (@MealLogId, @UserId, @LogDateUtc, @MealType, @Title, @CaloriesKcal, @ProteinG, @CarbsG, @FatsG,
-             @Status, @PlannedLocalTime, CASE WHEN @Status = 'Logged' THEN SYSUTCDATETIME() ELSE NULL END);
+             @Status, @PlannedLocalTime, CASE WHEN @Status = 'Logged' THEN SYSUTCDATETIME() ELSE NULL END, @Items);
     END
     ELSE
     BEGIN
@@ -114,6 +117,7 @@ BEGIN
             FatsG = @FatsG,
             Status = @Status,
             PlannedLocalTime = @PlannedLocalTime,
+            Items = COALESCE(@Items, Items),
             LoggedAtUtc = CASE
                 WHEN @Status = 'Logged' AND LoggedAtUtc IS NULL THEN SYSUTCDATETIME()
                 WHEN @Status = 'Planned' THEN NULL
@@ -123,7 +127,7 @@ BEGIN
     END
 
     SELECT MealLogId, UserId, LogDateUtc, MealType, Title, CaloriesKcal, ProteinG, CarbsG, FatsG,
-           Status, PlannedLocalTime, LoggedAtUtc, CreatedAtUtc
+           Status, PlannedLocalTime, LoggedAtUtc, CreatedAtUtc, Items
     FROM dbo.MealLogs
     WHERE MealLogId = @MealLogId AND UserId = @UserId;
 END

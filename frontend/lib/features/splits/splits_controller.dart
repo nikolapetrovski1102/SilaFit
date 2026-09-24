@@ -10,6 +10,10 @@ class SplitsController extends ChangeNotifier {
 
   ResourceState<List<WorkoutSplit>> state = const ResourceState.loading();
 
+  /// Set once `/splits` answers 403 - the suggested-split library is
+  /// PRO/Advanced only, so the screen renders its locked state instead.
+  bool requiresUpgrade = false;
+
   // App-wide provider: skip a repeat load when we already have the catalogue,
   // and never overlap two loads. `force` is the explicit refresh path.
   bool _isLoading = false;
@@ -24,8 +28,10 @@ class SplitsController extends ChangeNotifier {
     notifyListeners();
     try {
       final splits = await _repository.getAll();
+      requiresUpgrade = false;
       state = ResourceState.data(splits);
     } on ApiException catch (e) {
+      requiresUpgrade = e.isForbidden;
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       state = const ResourceState.error(ApiException.genericMessage);

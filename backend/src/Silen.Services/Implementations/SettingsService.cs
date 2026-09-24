@@ -41,6 +41,11 @@ public sealed class SettingsService(IUserSettingsProvider userSettingsProvider) 
                 ?? throw new NotFoundException($"Settings for user '{userId}' were not found.", "We couldn't find your settings.");
         });
 
+    public Task<ServiceResult<UserSettingsModel>> SetAiDataConsentAsync(Guid userId, bool granted, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+            await userSettingsProvider.SetAiDataConsentAsync(userId, granted, cancellationToken)
+                ?? throw new NotFoundException($"Settings for user '{userId}' were not found.", "We couldn't find your settings."));
+
     private static void Validate(UpdateUserSettingsRequest request)
     {
         if (!WeightUnits.Contains(request.WeightUnit))

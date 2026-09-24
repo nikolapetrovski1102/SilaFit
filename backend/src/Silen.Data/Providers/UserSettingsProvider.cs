@@ -20,6 +20,13 @@ public sealed class UserSettingsProvider(ISqlExecutor sqlExecutor) : IUserSettin
             [SqlParameterBuilder.Create("@UserId", userId), SqlParameterBuilder.Create("@NotificationsEnabled", enabled)],
             cancellationToken);
 
+    public Task<UserSettingsModel?> SetAiDataConsentAsync(Guid userId, bool granted, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_UserSettings_SetAiDataConsent",
+            [SqlParameterBuilder.Create("@UserId", userId), SqlParameterBuilder.Create("@Granted", granted)],
+            async reader => await reader.ReadAsync(cancellationToken) ? SettingsRowMapper.MapSettings(reader) : null,
+            cancellationToken);
+
     public Task<UserSettingsModel?> UpdateAsync(Guid userId, UpdateUserSettingsRequest request, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_UserSettings_Update",

@@ -20,7 +20,12 @@ public sealed class PlanService(IPlansProvider plansProvider, ISubscriptionRecei
                 .Select(plan => new PlanCatalogEntryDto
                 {
                     Plan = plan,
-                    Features = features.Where(f => f.PlanId == plan.PlanId).OrderBy(f => f.SortOrder).ToList()
+                    // Backstop for the unique index: a repeated perk would render twice on the plans screen.
+                    Features = features
+                        .Where(f => f.PlanId == plan.PlanId)
+                        .OrderBy(f => f.SortOrder)
+                        .DistinctBy(f => f.FeatureText.Trim(), StringComparer.OrdinalIgnoreCase)
+                        .ToList()
                 })
                 .ToList();
         });

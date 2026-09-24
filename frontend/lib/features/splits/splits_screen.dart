@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,13 +13,17 @@ import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/upgrade_lock_card.dart';
 import '../onboarding/widgets/tour_guide_card.dart';
+import '../plans/plans_controller.dart';
+import '../plans/plans_screen.dart';
 import 'my_splits_screen.dart';
 import 'split_detail_screen.dart';
 import 'split_recommendation.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
 import 'splits_repository.dart';
+import 'widgets/split_hero_image.dart';
 
 class SplitsScreen extends StatefulWidget {
   final bool isTour;
@@ -38,6 +44,7 @@ class SplitsScreen extends StatefulWidget {
 class _SplitsScreenState extends State<SplitsScreen> {
   late final SplitsController _controller;
   final _splitsSpotlightKey = GlobalKey();
+  int? _purchaseRevision;
 
   @override
   void initState() {
@@ -46,6 +53,24 @@ class _SplitsScreenState extends State<SplitsScreen> {
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A purchase or restore can unlock the library - re-ask the server
+    // rather than leave it locked until the next app launch.
+    final revision = context.watch<PlansController>().purchaseRevision;
+    if (_purchaseRevision != null && _purchaseRevision != revision) {
+      Future.microtask(() => _controller.load(force: true));
+    }
+    _purchaseRevision = revision;
+  }
+
+  Future<void> _openPlans() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+    if (mounted) await _controller.load(force: true);
   }
 
   @override
@@ -66,7 +91,8 @@ class _SplitsScreenState extends State<SplitsScreen> {
                 MaterialPageRoute(builder: (_) => const MySplitsScreen())),
             icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
             label: Text('My splits',
-                style: AppTypography.labelSm.copyWith(color: AppColors.onSurface)),
+                style:
+                    AppTypography.labelSm.copyWith(color: AppColors.onSurface)),
           ),
         ],
       ),
@@ -101,12 +127,19 @@ class _SplitsScreenState extends State<SplitsScreen> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     HeroExpandReveal(
-                      child: ResourceBuilder<List<WorkoutSplit>>(
-                        state: _controller.state,
-                        onRetry: _controller.load,
-                        builder: (context, splits) =>
-                            _SplitsContent(splits: splits),
-                      ),
+                      child: _controller.requiresUpgrade
+                          ? _LockedSplitsContent(
+                              // The tour card sits at the bottom of the
+                              // screen - keep the prompt out from under it.
+                              showPrompt: !widget.isTour,
+                              onUnlock: _openPlans,
+                            )
+                          : ResourceBuilder<List<WorkoutSplit>>(
+                              state: _controller.state,
+                              onRetry: _controller.load,
+                              builder: (context, splits) =>
+                                  _SplitsContent(splits: splits),
+                            ),
                     ),
                   ],
                 ),
@@ -119,10 +152,10 @@ class _SplitsScreenState extends State<SplitsScreen> {
                 key: const ValueKey('splits-tour-spotlight'),
                 targetKey: _splitsSpotlightKey,
                 stepIndex: 1,
-                stepCount: 5,
-                title: 'Workout Splits & Routines',
-                description:
-                    'Browse curated training routines tailored to your goals, or create and customize your own workout split.',
+                stepCount: kFeatureTourSteps.length,
+                title: kFeatureTourSteps[1].title,
+                description: kFeatureTourSteps[1].description,
+                access: kFeatureTourSteps[1].access,
                 cardBottom:
                     MediaQuery.of(context).padding.bottom + AppSpacing.lg,
                 onNext: widget.onTourNext ?? () => Navigator.of(context).pop(),
@@ -147,6 +180,81 @@ class _SplitsHeader extends StatelessWidget {
         SectionEyebrow('Training Protocols', color: AppColors.accent),
         const SizedBox(height: 4),
         Text('Workout Splits', style: AppTypography.headlineLg),
+      ],
+    );
+  }
+}
+
+/// What a Free (or guest) account sees: a placeholder of the ranked view,
+/// blurred and untappable, under an upgrade prompt. The server returns no
+/// splits for this caller, so the placeholder is never real data. Only the
+/// suggested library is gated - "My splits" in the app bar stays open.
+class _LockedSplitsContent extends StatelessWidget {
+  final bool showPrompt;
+  final VoidCallback onUnlock;
+
+  const _LockedSplitsContent(
+      {required this.showPrompt, required this.onUnlock});
+
+  static const _placeholder = [
+    WorkoutSplit(
+      splitId: 'locked-ppl',
+      name: 'Push Pull Legs',
+      category: 'PushPullLegs',
+      level: 'Intermediate',
+      durationDays: 6,
+      isSystemDefault: true,
+      matchesGoal: true,
+    ),
+    WorkoutSplit(
+      splitId: 'locked-upper-lower',
+      name: 'Upper / Lower',
+      category: 'UpperLower',
+      level: 'Beginner',
+      durationDays: 4,
+      isSystemDefault: true,
+    ),
+    WorkoutSplit(
+      splitId: 'locked-full-body',
+      name: 'Full Body Foundations',
+      category: 'FullBody',
+      level: 'Beginner',
+      durationDays: 3,
+      isSystemDefault: true,
+    ),
+    WorkoutSplit(
+      splitId: 'locked-arnold',
+      name: 'Arnold Split',
+      category: 'ArnoldSplit',
+      level: 'Advanced',
+      durationDays: 6,
+      isSystemDefault: true,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+          child: const IgnorePointer(
+            child: _SplitsContent(splits: _placeholder),
+          ),
+        ),
+        if (showPrompt)
+          Positioned.fill(
+            child: Align(
+              alignment: const Alignment(0, -0.4),
+              child: UpgradeLockCard(
+                title: 'Splits picked for you',
+                message: 'Get training splits ranked for your goal, level and '
+                    'body, and browse the full protocol library.',
+                actionLabel: 'Unlock suggested splits',
+                onUnlock: onUnlock,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -316,6 +424,23 @@ class _SplitLibraryState extends State<_SplitLibrary> {
   // across categories (e.g. a BuildMuscle match can be PPL or Arnold split).
   bool _recommendedOnly = false;
 
+  // Start every card's artwork downloading now rather than as each one
+  // scrolls into view (and again when the theme flips to the other variant).
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheSplitHeroImages(context, widget.splits.map((s) => s.heroImageUrl));
+  }
+
+  @override
+  void didUpdateWidget(_SplitLibrary oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.splits != widget.splits) {
+      precacheSplitHeroImages(
+          context, widget.splits.map((s) => s.heroImageUrl));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final categories = {for (final s in widget.splits) s.category}.toList()
@@ -441,14 +566,7 @@ class _SplitCard extends StatelessWidget {
                         top: Radius.circular(AppRadius.inset)),
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: split.heroImageUrl != null
-                          ? Image.network(split.heroImageUrl!,
-                              fit: BoxFit.cover)
-                          // No per-split hero image on record yet - the same
-                          // stock training photo every split card falls back
-                          // to in `workout_splits_library/code.html`.
-                          : Image.asset('assets/branding/split_hero.png',
-                              fit: BoxFit.cover),
+                      child: SplitHeroImage(split.heroImageUrl),
                     ),
                   ),
                   if (split.isSystemDefault)

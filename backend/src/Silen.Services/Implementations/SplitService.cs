@@ -15,6 +15,17 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
     public Task<ServiceResult<List<WorkoutSplitModel>>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            // The suggested-split library is a PRO/Advanced feature. A guest has no
+            // subscription to check, so it is refused the same way as a Free account.
+            // The user's own splits (GetMySplitsAsync) and any split's detail stay open.
+            if (userId is not { } subscriberId
+                || !await subscriptionGate.HasActiveProAsync(subscriberId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new ProUpgradeRequiredException(
+                    $"User {userId?.ToString() ?? "(guest)"} requested the split library without an active Pro/Advanced subscription.",
+                    "Upgrade to Pro to browse suggested splits.");
+            }
+
             var splits = await splitsProvider.GetAllAsync(userId, cancellationToken);
 
             // Profile lookup is best-effort: a guest/registered user who hasn't
@@ -84,59 +95,6 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
             await splitsProvider.SetActiveAsync(userId, request.SplitId, isAutoAssigned: false, cancellationToken: cancellationToken)
                 ?? throw new NotFoundException($"Split '{request.SplitId}' could not be activated for user '{userId}'.", "That split couldn't be activated."));
 
-    public Task<ServiceResult<ActiveSplitModel?>> AutoAssignRecommendedAsync(Guid userId, UserProfileModel profile, bool forceReassign = false, CancellationToken cancellationToken = default) =>
-        ServiceExecutor.RunAsync(async () =>
-        {
-            var active = await splitsProvider.GetActiveAsync(userId, cancellationToken);
-
-            // Never override a split the user picked for themselves via the
-            // Splits screen - only a split still flagged as the recommender's
-            // own pick (IsAutoAssigned) is ever eligible for a re-check, so
-            // this stays a one-time default for anyone who has made their own
-            // choice, while still tracking later onboarding answers for
-            // anyone who hasn't. `forceReassign` bypasses this for the
-            // Settings screen's dev-only onboarding replay toggle, so the
-            // recommender can be re-tested without hand-clearing the active
-            // split first - it must never be set from a real user submission.
-            if (active is not null && !active.IsAutoAssigned && !forceReassign)
-            {
-                return (ActiveSplitModel?)null;
-            }
-
-            if (profile.Goal is null)
-            {
-                return null;
-            }
-
-            var splits = await splitsProvider.GetAllAsync(userId, cancellationToken);
-
-            // Same scorer the Splits screen uses, so the split auto-selected at
-            // account creation - or re-checked after later onboarding answers -
-            // is exactly the one that would be shown as "best for you" - no
-            // second, divergent notion of "recommended". The pick honors the
-            // person's weekly schedule: a split that needs more days than they
-            // answered can never be auto-activated while a compatible one exists,
-            // and the closest cadence is used when none fits at all.
-            var fit = PersonFit.From(profile);
-            var ranked = SplitRecommendationScorer.Rank(splits, fit, profile.Goal);
-            var recommended = SplitRecommendationScorer.PickForAutoAssign(ranked, fit);
-
-            if (recommended is null)
-            {
-                return null;
-            }
-
-            // Already on the current best pick - skip the write so a profile
-            // save that didn't change any capacity answer doesn't needlessly
-            // bump ActivatedAtUtc.
-            if (active is not null && active.SplitId == recommended.SplitId)
-            {
-                return null;
-            }
-
-            return await splitsProvider.SetActiveAsync(userId, recommended.SplitId, isAutoAssigned: true, cancellationToken: cancellationToken);
-        });
-
     /* ----------------------------- user-owned splits ----------------------------- */
 
     public Task<ServiceResult<List<WorkoutSplitModel>>> GetMySplitsAsync(Guid userId, CancellationToken cancellationToken = default) =>
@@ -166,6 +124,7 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
                 throw new ValidationException($"Split upsert called with out-of-range duration {request.DurationDays}.", "Duration must be between 1 and 14 days.");
             }
             request.Name = name;
+            request.HeroImageUrl = SplitHeroImages.Resolve(request.HeroImageUrl, request.Category, name, request.Description);
 
             if (request.SplitId is null)
             {

@@ -27,6 +27,7 @@ import 'features/plans/plans_controller.dart';
 import 'features/plans/plans_repository.dart';
 import 'features/progress/analytics_controller.dart';
 import 'features/progress/analytics_repository.dart';
+import 'features/progress/exercise_progress_controller.dart';
 import 'features/progress/progress_controller.dart';
 import 'features/progress/weekly_analytics_controller.dart';
 import 'features/progress/progress_repository.dart';
@@ -182,6 +183,9 @@ class _AppRun extends StatelessWidget {
         ChangeNotifierProvider(
             create: (ctx) =>
                 ProgressController(ctx.read<ProgressRepository>())),
+        ChangeNotifierProvider(
+            create: (ctx) =>
+                ExerciseProgressController(ctx.read<ProgressRepository>())),
         ChangeNotifierProvider(
             create: (ctx) =>
                 AnalyticsController(ctx.read<AnalyticsRepository>())),

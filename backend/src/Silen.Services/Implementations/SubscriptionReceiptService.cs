@@ -96,6 +96,18 @@ public sealed class SubscriptionReceiptService(
             }
         }
 
+        // One store subscription backs one Silen account. Without this, signing into a
+        // second account and tapping Restore (or posting someone else's transaction id)
+        // would unlock it there too, while renewals kept flowing only to the first.
+        var owner = await plansProvider.GetSubscriptionOwnerAsync(
+            request.Store, originalTransactionId, purchaseToken, cancellationToken);
+        if (owner is not null && owner.UserId != userId)
+        {
+            throw new ConflictException(
+                $"{request.Store} subscription is already linked to user '{owner.UserId}'.",
+                "This subscription is linked to a different Silen account. Sign in with that account to use it.");
+        }
+
         var receipt = await plansProvider.InsertReceiptAsync(
             userId, resolved.PlanId, request.Store, request.ProductId, transactionId,
             originalTransactionId, purchaseToken, rawPayload, status, expiresAtUtc, autoRenewing, cancellationToken)

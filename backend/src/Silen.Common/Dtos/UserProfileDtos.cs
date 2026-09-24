@@ -23,9 +23,4 @@ public sealed class UpsertUserProfileRequest
     public string? TrainingExperience { get; set; }
     public string? EquipmentAccess { get; set; }
     public string? DailyActivityLevel { get; set; }
-
-    /// <summary>Dev-only: set from the Settings screen's onboarding-replay toggle to bypass the
-    /// "never override a manually picked split" guard in <see cref="Silen.Services.Abstractions.ISplitService.AutoAssignRecommendedAsync"/>.
-    /// Must never be set by a real onboarding submission.</summary>
-    public bool ForceSplitReassign { get; set; }
 }

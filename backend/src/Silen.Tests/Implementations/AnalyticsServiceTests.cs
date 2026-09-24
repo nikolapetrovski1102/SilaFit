@@ -15,11 +15,40 @@ public class AnalyticsServiceTests
     private readonly Mock<ISubscriptionGate> subscriptionGate = new(MockBehavior.Strict);
     private readonly Mock<IOpenRouterClient> openRouterClient = new(MockBehavior.Strict);
     private readonly Mock<IAiRefreshThrottle> aiRefreshThrottle = new(MockBehavior.Strict);
+    private readonly Mock<IUserSettingsProvider> userSettingsProvider = new(MockBehavior.Strict);
     private readonly AnalyticsService sut;
 
     public AnalyticsServiceTests()
     {
-        sut = new AnalyticsService(analyticsProvider.Object, subscriptionGate.Object, openRouterClient.Object, aiRefreshThrottle.Object);
+        sut = new AnalyticsService(
+            analyticsProvider.Object, subscriptionGate.Object, openRouterClient.Object, aiRefreshThrottle.Object, userSettingsProvider.Object);
+
+        // Consented by default; the consent test below overrides this.
+        userSettingsProvider
+            .Setup(p => p.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new UserSettingsModel { UserId = id, AiDataConsentAtUtc = DateTime.UtcNow });
+    }
+
+    [Fact]
+    public async Task GetMonthlyAsync_WithoutAiDataConsent_ReturnsConsentRequiredWithoutCallingAi()
+    {
+        var userId = Guid.NewGuid();
+        const int year = 2026;
+        const int month = 3;
+
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        analyticsProvider
+            .Setup(p => p.GetCachedReportAsync(userId, year, month, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((MonthlyAnalyticsReportModel?)null);
+        userSettingsProvider
+            .Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserSettingsModel { UserId = userId, AiDataConsentAtUtc = null });
+
+        var result = await sut.GetMonthlyAsync(userId, year, month, refresh: false);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(428, result.StatusCode);
+        openRouterClient.VerifyNoOtherCalls();
     }
 
     [Theory]

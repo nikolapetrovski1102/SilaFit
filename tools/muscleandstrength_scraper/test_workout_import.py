@@ -92,6 +92,39 @@ class WorkoutSqlTests(unittest.TestCase):
         self.assertIn("WHERE (SourceUrl LIKE", sql)
         self.assertNotIn("WHERE SourceUrl IS NULL OR", sql)
 
+    def test_import_keeps_facts_but_not_source_prose_images_or_brand(self) -> None:
+        sql = "\n".join(
+            render_workouts(
+                [
+                    {
+                        "title": "Muscle & Strength's 12 Week Women's Workout Program",
+                        "url": "https://www.muscleandstrength.com/workouts/test",
+                        "summary": "Copied summary text.",
+                        "description_text": "Copied article text.",
+                        "image_url": "https://cdn.muscleandstrength.com/test.jpg",
+                        "author": "M&S Team",
+                        "experience_level": "Beginner",
+                        "days_per_week": "3",
+                        "program_duration": "12 weeks",
+                        "days": [
+                            {
+                                "title": "Day 1",
+                                "notes": "Tag @muscleandstrength and let us know in the comments!",
+                                "exercise_tables": [[{"Exercise": "Squat", "Sets": "3", "Reps": "8"}]],
+                                "is_rest_day": False,
+                            },
+                        ],
+                    }
+                ]
+            )
+        )
+
+        self.assertIn("N'12 Week Women''s Workout Program'", sql)
+        self.assertIn("HeroImageUrl=NULL", sql)
+        self.assertIn("N'A 12-week 3-day", sql)
+        for copied in ("Copied summary", "Copied article", "cdn.muscleandstrength", "M&S Team", "comments"):
+            self.assertNotIn(copied, sql)
+
 
 if __name__ == "__main__":
     unittest.main()

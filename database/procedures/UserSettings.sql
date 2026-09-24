@@ -14,7 +14,7 @@ BEGIN
 
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           AvatarChoice, UpdatedAtUtc
+           AvatarChoice, AiDataConsentAtUtc, UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 END
@@ -30,6 +30,29 @@ BEGIN
     UPDATE dbo.UserSettings
     SET NotificationsEnabled = @NotificationsEnabled,
         UpdatedAtUtc = SYSUTCDATETIME()
+    WHERE UserId = @UserId;
+END
+GO
+
+-- Grants (stamps now) or revokes (clears) consent to share the user's data
+-- with the third-party AI provider. Kept out of usp_UserSettings_Update so a
+-- plain settings save can never flip it by accident.
+CREATE OR ALTER PROCEDURE dbo.usp_UserSettings_SetAiDataConsent
+    @UserId UNIQUEIDENTIFIER,
+    @Granted BIT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.UserSettings
+    SET AiDataConsentAtUtc = CASE WHEN @Granted = 1 THEN COALESCE(AiDataConsentAtUtc, SYSUTCDATETIME()) ELSE NULL END,
+        UpdatedAtUtc = SYSUTCDATETIME()
+    WHERE UserId = @UserId;
+
+    SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
+           WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
+           AvatarChoice, AiDataConsentAtUtc, UpdatedAtUtc
+    FROM dbo.UserSettings
     WHERE UserId = @UserId;
 END
 GO
@@ -66,7 +89,7 @@ BEGIN
 
     SELECT UserId, TargetWaterMl, NotificationsEnabled, NotificationLocalTime, TimeZoneId,
            WeightUnit, DistanceUnit, RestTimerSoundEnabled, BarbellStandardKg, AppearanceMode,
-           AvatarChoice, UpdatedAtUtc
+           AvatarChoice, AiDataConsentAtUtc, UpdatedAtUtc
     FROM dbo.UserSettings
     WHERE UserId = @UserId;
 END

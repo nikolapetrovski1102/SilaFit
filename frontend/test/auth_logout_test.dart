@@ -76,8 +76,7 @@ void main() {
     expect(await store.deviceId(), 'device-old');
   });
 
-  test('logout signs out through the session store before reloading',
-      () async {
+  test('logout signs out through the session store before reloading', () async {
     final sessionStore = RecordingSessionStore();
     var reloadCount = 0;
     final controller = AuthController(
