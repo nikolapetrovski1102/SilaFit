@@ -13,6 +13,14 @@ public sealed class SmtpEmailSender(IOptions<SmtpOptions> options) : IEmailSende
     public Task SendAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default) =>
         SendMessageAsync(toEmail, subject, new BodyBuilder { HtmlBody = htmlBody }, cancellationToken);
 
+    public Task SendWithReplyToAsync(
+        string toEmail,
+        string subject,
+        string htmlBody,
+        string replyToEmail,
+        CancellationToken cancellationToken = default) =>
+        SendMessageAsync(toEmail, subject, new BodyBuilder { HtmlBody = htmlBody }, cancellationToken, replyToEmail);
+
     public Task SendWithAttachmentAsync(
         string toEmail,
         string subject,
@@ -27,13 +35,22 @@ public sealed class SmtpEmailSender(IOptions<SmtpOptions> options) : IEmailSende
         return SendMessageAsync(toEmail, subject, builder, cancellationToken);
     }
 
-    private async Task SendMessageAsync(string toEmail, string subject, BodyBuilder bodyBuilder, CancellationToken cancellationToken)
+    private async Task SendMessageAsync(
+        string toEmail,
+        string subject,
+        BodyBuilder bodyBuilder,
+        CancellationToken cancellationToken,
+        string? replyToEmail = null)
     {
         var settings = options.Value;
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(settings.FromName, settings.FromAddress));
         message.To.Add(MailboxAddress.Parse(toEmail));
+        if (!string.IsNullOrWhiteSpace(replyToEmail))
+        {
+            message.ReplyTo.Add(MailboxAddress.Parse(replyToEmail));
+        }
         message.Subject = subject;
         message.Body = bodyBuilder.ToMessageBody();
 

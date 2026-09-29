@@ -57,6 +57,11 @@ BEGIN
 
     DELETE FROM dbo.WorkoutSplits WHERE OwnerUserId = @UserId;
 
+    -- Private exercises this user added from the picker (071). After their set
+    -- logs and owned split days above - the only rows that can point at them,
+    -- since usp_UserSplitDayExercise_Upsert won't take another user's exercise.
+    DELETE FROM dbo.Exercises WHERE CreatedByUserId = @UserId;
+
     -- Owned-diet-plan tree (see 045-048_DietPlan*.sql): meals -> days -> the
     -- plan rows themselves, for every plan this user built via the app.
     DELETE dpm
@@ -72,11 +77,17 @@ BEGIN
 
     DELETE FROM dbo.NutritionPlans WHERE OwnerUserId = @UserId;
 
+    -- Meals this user built from ingredients (073); their ingredient lines
+    -- cascade. After the owned plan tree above - the only rows pointing here.
+    DELETE FROM dbo.MealSuggestions WHERE OwnerUserId = @UserId;
+
     DELETE FROM dbo.HydrationLogs WHERE UserId = @UserId;
     DELETE FROM dbo.BodyweightLogs WHERE UserId = @UserId;
     DELETE FROM dbo.MealLogs WHERE UserId = @UserId;
     -- Private foods this user added to the catalog while logging meals (066).
     DELETE FROM dbo.FoodNutrition WHERE CreatedByUserId = @UserId;
+    -- AI food-scan allowance ledger (072) - timestamps only.
+    DELETE FROM dbo.FoodScans WHERE UserId = @UserId;
     DELETE FROM dbo.UserNutritionTargets WHERE UserId = @UserId;
     DELETE FROM dbo.UserSubscriptions WHERE UserId = @UserId;
     -- After UserSubscriptions (its LatestReceiptId points here). Also frees the

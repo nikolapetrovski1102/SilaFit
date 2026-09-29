@@ -243,7 +243,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   }
 
   Future<void> _drainLoggedSets() async {
-    if (!_ready) return;
+    if (!_ready || _exercises.isEmpty) return;
     final sessionId = widget.session.workoutSessionId;
     if (sessionId == null || sessionId.isEmpty) return;
     final pending =
@@ -352,8 +352,12 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     // Surface the session on the Lock Screen / Dynamic Island / Android
     // notification tray for the whole time it's in progress. The elapsed
     // clock is computed natively from `_startedAtUtc`, so this only needs to
-    // fire on state changes, not on every ticker tick.
-    unawaited(LiveWorkoutNotifier.instance.start(_liveSnapshot));
+    // fire on state changes, not on every ticker tick. A day with no
+    // exercises has nothing to show there yet - [_addExercise] starts it
+    // once the first one is added.
+    if (_exercises.isNotEmpty) {
+      unawaited(LiveWorkoutNotifier.instance.start(_liveSnapshot));
+    }
     // Cold-start case: a "Log set" tap landed while the app was fully killed
     // (not just backgrounded), so there's no resume transition to catch it -
     // this screen re-opening from the restored draft is the only signal.
@@ -476,6 +480,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   /// Fire-and-forget push of the current snapshot into an already-visible live
   /// surface - a no-op when the platform has none, or when the OS dropped it.
   void _syncLiveWorkout() {
+    if (_exercises.isEmpty) return;
     unawaited(LiveWorkoutNotifier.instance.update(_liveSnapshot));
   }
 
@@ -663,12 +668,17 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     if (picked == null || !mounted) return;
     final memory = await ExerciseMemoryStore.instance.loadAll();
     if (!mounted) return;
+    final wasEmpty = _exercises.isEmpty;
     setState(() {
       _exercises.add(_toTargetExercise(picked, 1, 0, 0));
       _setsByExercise.add(_seedSets(picked, 1, 0, 0, memory));
     });
     _saveDraft();
-    _syncLiveWorkout();
+    if (wasEmpty) {
+      unawaited(LiveWorkoutNotifier.instance.start(_liveSnapshot));
+    } else {
+      _syncLiveWorkout();
+    }
   }
 
   /// Opens the drag-and-drop reorder sheet and, once confirmed, applies the
@@ -885,6 +895,72 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
+  /// A scheduled day whose split day has no exercises on it - everything
+  /// else on this screen reads the current exercise, so this stands in
+  /// until the lifter adds one.
+  Widget _buildEmptyWorkout() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                  AppSpacing.sm, AppSpacing.marginMobile, 0),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: _confirmExit,
+                    behavior: HitTestBehavior.opaque,
+                    child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(Icons.close_rounded,
+                          size: 20, color: AppColors.onSurface),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.marginMobile),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.fitness_center_rounded,
+                          size: 56, color: AppColors.accent),
+                      const SizedBox(height: AppSpacing.md),
+                      Text('No exercises yet',
+                          style: AppTypography.headlineSm),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                          'This day has no exercises assigned. Add one to get started.',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyMd
+                              .copyWith(color: AppColors.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                  AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
+              child: PrimaryPillButton(
+                label: 'Add Exercise',
+                icon: Icons.add_rounded,
+                onPressed: _addExercise,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
@@ -899,6 +975,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
         ),
       );
     }
+    if (_exercises.isEmpty) return _buildEmptyWorkout();
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(

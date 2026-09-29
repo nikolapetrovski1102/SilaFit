@@ -395,6 +395,9 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     if (dayId == null || _takenIds.contains(id)) return;
     final from = overlayRectOf(context, _rowKeys[id]);
     HapticFeedback.selectionClick();
+    // Drop the keyboard so the header and chips ease back in and the pick
+    // flies home.
+    _searchFocus.unfocus();
 
     final sortOrder = _savedExercises.length + _pendingAdds.length;
     setState(() {
@@ -430,11 +433,16 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
       return;
     }
     late final OverlayEntry flight;
-    flight = flyExercise(context, label: exercise.name, from: from, to: to,
+    flight = flyExercise(context,
+        label: exercise.name,
+        from: from,
+        to: to,
+        // The chip is still sliding back into place as the header unfolds.
+        track: () => overlayRectOf(context, _chipKeys[id]),
         onLanded: () {
-      _flights.remove(flight);
-      if (mounted) setState(() => _inFlight.remove(id));
-    });
+          _flights.remove(flight);
+          if (mounted) setState(() => _inFlight.remove(id));
+        });
     _flights.add(flight);
   }
 
@@ -602,8 +610,9 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
   }
 
   /// While the exercise search has focus the keyboard eats half the screen,
-  /// so the header folds away and the day's title moves up into the top
-  /// bar - leaving the room to the results.
+  /// so the header and the day's chips fold away, the field rises to the top
+  /// and the day's title moves up into the top bar - leaving the room to the
+  /// results.
   bool get _compact => _searchFocus.hasFocus;
 
   Widget _buildCompactTitle() {
@@ -778,7 +787,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
           duration: kInkQuick,
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
-          child: hasChips
+          child: hasChips && !_compact
               ? Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                   child: ConstrainedBox(

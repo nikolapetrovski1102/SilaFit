@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Silen.Common.Dtos;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
@@ -8,6 +9,13 @@ namespace Silen.Data.Providers;
 /// <inheritdoc cref="IDietPlansProvider"/>
 public sealed class DietPlansProvider(ISqlExecutor sqlExecutor) : IDietPlansProvider
 {
+    // camelCase to match the `$.foodNutritionId`/`$.grams` paths
+    // usp_UserDietPlanCustomMeal_Create's OPENJSON call expects.
+    private static readonly JsonSerializerOptions ItemsJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public Task<List<DietPlanModel>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_DietPlans_GetAll",
@@ -102,6 +110,20 @@ public sealed class DietPlansProvider(ISqlExecutor sqlExecutor) : IDietPlansProv
                 SqlParameterBuilder.Create("@MealType", request.MealType),
                 SqlParameterBuilder.Create("@MealSuggestionId", request.MealSuggestionId),
                 SqlParameterBuilder.Create("@SortOrder", request.SortOrder)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> CreateUserDietPlanCustomMealAsync(UserDietPlanCustomMealCreateRequest request, Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_UserDietPlanCustomMeal_Create",
+            [
+                SqlParameterBuilder.Create("@DietPlanDayId", request.DietPlanDayId),
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@MealType", request.MealType),
+                SqlParameterBuilder.Create("@Title", request.Title),
+                SqlParameterBuilder.Create("@SortOrder", request.SortOrder),
+                SqlParameterBuilder.Create("@ItemsJson", JsonSerializer.Serialize(request.Items, ItemsJsonOptions))
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);

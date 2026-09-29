@@ -124,6 +124,10 @@ public sealed class ExerciseModel
     public bool IsCompound { get; set; }
     public string? DemoVideoUrl { get; set; }
 
+    /// <summary>True for an exercise the caller added themselves from the picker
+    /// (private to them); false for the shared catalogue.</summary>
+    public bool IsCustom { get; set; }
+
     /// <summary>Set only by the suggestion read (<c>ExercisesService.SuggestAsync</c>):
     /// higher means a better fit for this person's equipment and experience level.
     /// Null on plain search results, so a client can tell the two apart.</summary>

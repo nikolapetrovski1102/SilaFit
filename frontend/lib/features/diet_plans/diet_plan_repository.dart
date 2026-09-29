@@ -101,6 +101,34 @@ class DietPlanRepository {
         },
       );
 
+  /// Builds a meal from catalog foods and adds it to the day; the server sums
+  /// the macros. [items] are (foodNutritionId, grams) pairs. Returns the new
+  /// meal slot's id.
+  Future<String?> createCustomMeal({
+    required String dietPlanDayId,
+    required String mealType,
+    required String title,
+    required int sortOrder,
+    required List<({int foodNutritionId, double grams})> items,
+  }) =>
+      _client.post(
+        '/diet-plans/meals/custom',
+        (json) => (json as Map<String, dynamic>)['id'] as String?,
+        body: {
+          'dietPlanDayId': dietPlanDayId,
+          'mealType': mealType,
+          'title': title,
+          'sortOrder': sortOrder,
+          'items': [
+            for (final item in items)
+              {
+                'foodNutritionId': item.foodNutritionId,
+                'grams': item.grams.roundToDouble(),
+              },
+          ],
+        },
+      );
+
   Future<void> deleteMeal(String dietPlanMealId) =>
       _client.delete('/diet-plans/meals/$dietPlanMealId', (_) => null);
 }

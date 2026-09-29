@@ -10,6 +10,16 @@ public interface IEmailSender
 {
     Task SendAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default);
 
+    /// <summary>Same as <see cref="SendAsync"/> but with a Reply-To header - used by the
+    /// website's support form, which mails our own inbox on a visitor's behalf so
+    /// that hitting "reply" answers the visitor rather than our sending mailbox.</summary>
+    Task SendWithReplyToAsync(
+        string toEmail,
+        string subject,
+        string htmlBody,
+        string replyToEmail,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Same as <see cref="SendAsync"/> but with a single file attachment - used
     /// by the account data export, which emails the JSON payload rather than
     /// returning it in the response body.</summary>

@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Silen.Common.Dtos;
 using Silen.Common.Helpers;
 using Silen.Services.Abstractions;
 
 namespace Silen.Api.Controllers;
 
 /// <summary>Exercise search, backing the split builder's exercise picker and the
-/// live-workout swap/add sheet. Open to any authenticated tier.</summary>
+/// live-workout swap/add sheet. Open to any authenticated tier. Search covers the
+/// catalogue plus the caller's own exercises; POST adds one the catalogue is
+/// missing (private to its creator).</summary>
 [ApiController]
 [Route("api/exercises")]
 [Authorize]
@@ -15,7 +18,23 @@ public sealed class ExercisesController(IExercisesService exercisesService, ILog
     [HttpGet]
     public async Task<IActionResult> Search([FromQuery] string? muscleGroup, [FromQuery] string? search, CancellationToken cancellationToken)
     {
-        var result = await exercisesService.SearchAsync(muscleGroup, search, cancellationToken);
+        var result = await exercisesService.SearchAsync(User.GetUserIdOrNull(), muscleGroup, search, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    /// <summary>"Did you mean" picks for a search that returned nothing - names a
+    /// typo or two away from what was typed.</summary>
+    [HttpGet("close-matches")]
+    public async Task<IActionResult> CloseMatches([FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        var result = await exercisesService.CloseMatchesAsync(User.GetUserId(), search, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CreateCustom([FromBody] CreateCustomExerciseRequest request, CancellationToken cancellationToken)
+    {
+        var result = await exercisesService.CreateCustomAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult(logger);
     }
 

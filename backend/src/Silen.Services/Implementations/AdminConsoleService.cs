@@ -16,7 +16,8 @@ public sealed class AdminConsoleService(
     IAdminRbacProvider adminRbacProvider,
     IAdminContentProvider contentProvider,
     IMockDataSeeder mockDataSeeder,
-    IImageUploadService imageUploadService) : IAdminConsoleService
+    IImageUploadService imageUploadService,
+    IDietPlanService dietPlanService) : IAdminConsoleService
 {
     /* ------------------------------- exercises ------------------------------ */
 
@@ -298,7 +299,7 @@ public sealed class AdminConsoleService(
             }
 
             var mutation = await contentProvider.AssignSplitAsync(request, actor, canManageAll, cancellationToken);
-            return AdminMutationOutcomeMapper.Resolve(mutation, "Split assigned.");
+            return AdminMutationOutcomeMapper.Resolve(mutation, request.SetActive ? "Split assigned and set active." : "Split assigned.");
         });
 
     public Task<ServiceResult<AdminWriteResultDto>> RemoveSplitAssignmentAsync(string? sessionToken, Guid splitId, Guid userId, string? clientIp, CancellationToken cancellationToken = default) =>
@@ -447,7 +448,19 @@ public sealed class AdminConsoleService(
             }
 
             var mutation = await contentProvider.AssignDietPlanAsync(request, actor, canManageAll, cancellationToken);
-            return AdminMutationOutcomeMapper.Resolve(mutation, "Plan assigned.");
+            var result = AdminMutationOutcomeMapper.Resolve(mutation, request.SetActive ? "Plan assigned and set active." : "Plan assigned.");
+
+            // Activating from the app also pre-fills the next 7 days with the plan's
+            // meals as Planned logs; do the same for the client here so a trainer's
+            // activation lands identically. Best effort: the assignment itself is
+            // already committed, and the Nutrition screen still renders the plan's
+            // meals without these rows, so a failure here is not surfaced.
+            if (request.SetActive)
+            {
+                await dietPlanService.ApplyToUpcomingWeekAsync(request.UserId, request.DietPlanId, cancellationToken);
+            }
+
+            return result;
         });
 
     public Task<ServiceResult<AdminWriteResultDto>> RemoveDietPlanAssignmentAsync(string? sessionToken, Guid dietPlanId, Guid userId, string? clientIp, CancellationToken cancellationToken = default) =>

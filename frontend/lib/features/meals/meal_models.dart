@@ -193,7 +193,8 @@ class MealLogItem {
     final f = grams / 100;
     double? scale(double? v) => v == null ? null : v * f;
     return MealLogItem(
-      foodNutritionId: food.foodNutritionId,
+      // Foods that never came from the catalog (AI photo scans) carry id 0.
+      foodNutritionId: food.foodNutritionId > 0 ? food.foodNutritionId : null,
       name: food.name,
       brandName: food.brandName,
       grams: grams,
@@ -414,5 +415,121 @@ class MealSuggestion {
     if (preview == null || preview.isEmpty) return null;
     final remaining = ingredientCount - 4;
     return remaining > 0 ? '$preview · +$remaining more' : preview;
+  }
+}
+
+/// Mirrors `Silen.Common.Dtos.FoodScanQuotaDto` - the Advanced-only AI photo
+/// scan allowance for the user's current local day.
+class FoodScanQuota {
+  final bool isAvailable;
+  final int dailyLimit;
+  final int usedToday;
+  final int remainingToday;
+
+  const FoodScanQuota({
+    required this.isAvailable,
+    required this.dailyLimit,
+    required this.usedToday,
+    required this.remainingToday,
+  });
+
+  factory FoodScanQuota.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return FoodScanQuota(
+      isAvailable: map['isAvailable'] as bool? ?? false,
+      dailyLimit: map['dailyLimit'] as int? ?? 0,
+      usedToday: map['usedToday'] as int? ?? 0,
+      remainingToday: map['remainingToday'] as int? ?? 0,
+    );
+  }
+}
+
+/// One ingredient the AI saw in a meal photo. Nutrients are per 100 g, like
+/// [FoodItem]; [estimatedGrams] is the portion it judged from the photo.
+class FoodScanItem {
+  final String name;
+  final double estimatedGrams;
+  final double caloriesKcal;
+  final double proteinG;
+  final double carbohydrateG;
+  final double fatG;
+  final double? fiberG;
+
+  /// Not visible in the photo but almost certainly there (cooking oil,
+  /// dressing) - shown as "likely" and left unticked by default.
+  final bool isAssumed;
+  final String confidence;
+
+  const FoodScanItem({
+    required this.name,
+    required this.estimatedGrams,
+    required this.caloriesKcal,
+    required this.proteinG,
+    required this.carbohydrateG,
+    required this.fatG,
+    this.fiberG,
+    required this.isAssumed,
+    required this.confidence,
+  });
+
+  factory FoodScanItem.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return FoodScanItem(
+      name: map['name'] as String? ?? '',
+      estimatedGrams: _toDouble(map['estimatedGrams']),
+      caloriesKcal: _toDouble(map['caloriesKcal']),
+      proteinG: _toDouble(map['proteinG']),
+      carbohydrateG: _toDouble(map['carbohydrateG']),
+      fatG: _toDouble(map['fatG']),
+      fiberG: _toNullableDouble(map['fiberG']),
+      isAssumed: map['isAssumed'] as bool? ?? false,
+      confidence: map['confidence'] as String? ?? 'medium',
+    );
+  }
+
+  /// A catalog-less food so the item flows through the same
+  /// [MealLogItem.fromFood] path (and grams editing) as searched foods.
+  FoodItem toFood() => FoodItem(
+        foodNutritionId: 0,
+        name: name,
+        sourceName: 'AI scan',
+        servingSizeG: estimatedGrams,
+        caloriesKcal: caloriesKcal,
+        proteinG: proteinG,
+        carbohydrateG: carbohydrateG,
+        fatG: fatG,
+        fiberG: fiberG,
+      );
+
+  MealLogItem toLogItem() => MealLogItem.fromFood(toFood(), estimatedGrams);
+}
+
+class FoodScanResult {
+  final bool isFood;
+  final String dishName;
+  final List<FoodScanItem> items;
+  final String notes;
+  final FoodScanQuota quota;
+
+  const FoodScanResult({
+    required this.isFood,
+    required this.dishName,
+    required this.items,
+    required this.notes,
+    required this.quota,
+  });
+
+  factory FoodScanResult.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return FoodScanResult(
+      isFood: map['isFood'] as bool? ?? false,
+      dishName: map['dishName'] as String? ?? '',
+      items: [
+        for (final e in (map['items'] as List? ?? const []))
+          FoodScanItem.fromJson(e)
+      ],
+      notes: map['notes'] as String? ?? '',
+      quota: FoodScanQuota.fromJson(map['quota']),
+    );
   }
 }

@@ -65,7 +65,7 @@ class _AiConsentSheet extends StatelessWidget {
                 style: AppTypography.headlineSm),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'AI reviews and AI weekly plans are written by a third-party AI '
+              'AI reviews, AI weekly plans and meal photo scans are handled by a third-party AI '
               'service. To create them, SilaFit sends OpenRouter, and the '
               'AI model provider it routes the request to, the following:',
               style: body,
@@ -76,6 +76,7 @@ class _AiConsentSheet extends StatelessWidget {
               'Workouts: sessions, exercises, weights, volume, effort and streaks',
               'Nutrition: logged meals, calories and your calorie and macro targets',
               'Body weight change, training goal, experience level and equipment',
+              'Meal photos you choose to scan, and the meal name (photos are not stored)',
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.xs),

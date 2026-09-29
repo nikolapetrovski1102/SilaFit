@@ -41,6 +41,8 @@ BEGIN
            e.CreatedAtUtc,
            (SELECT COUNT(*) FROM dbo.SplitDayExercises sde WHERE sde.ExerciseId = e.ExerciseId) AS UsageCount
     FROM dbo.Exercises e
+    -- Users' private exercises (071) aren't catalogue content to curate.
+    WHERE e.CreatedByUserId IS NULL
     ORDER BY e.MuscleGroup, e.Name;
 END
 GO
@@ -190,7 +192,8 @@ BEGIN
            SortOrder,
            CreatedAtUtc
     FROM dbo.MealSuggestions
-    WHERE (@SuggestedMonth IS NULL OR SuggestedMonth = @SuggestedMonth)
+    WHERE OwnerUserId IS NULL
+      AND (@SuggestedMonth IS NULL OR SuggestedMonth = @SuggestedMonth)
       AND (@MealType IS NULL OR MealType = @MealType)
       AND (@Search IS NULL OR Title LIKE N'%' + @Search + N'%')
     ORDER BY SuggestedMonth, MealType, SortOrder, Title;

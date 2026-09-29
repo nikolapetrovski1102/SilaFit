@@ -1,7 +1,7 @@
 name: silafit
 description: SilaFit - AI-assisted fitness tracker (Kinetic Pulse design system).
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0+3
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -90,6 +90,8 @@ dependencies:
   # API under /api/static - see lib/features/splits/widgets/split_hero_image.dart)
   # so a card scrolls in instantly after the first load and works offline.
   cached_network_image: ^3.4.1
+  image_picker: ^1.2.3
+  http_parser: ^4.1.2
 
 dev_dependencies:
   flutter_test:

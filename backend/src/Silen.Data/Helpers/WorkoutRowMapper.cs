@@ -185,7 +185,8 @@ public static class WorkoutRowMapper
         MuscleGroup = reader.GetStringValue("MuscleGroup"),
         EquipmentType = reader.GetNullableString("EquipmentType"),
         IsCompound = reader.GetBoolValue("IsCompound"),
-        DemoVideoUrl = reader.GetNullableString("DemoVideoUrl")
+        DemoVideoUrl = reader.GetNullableString("DemoVideoUrl"),
+        IsCustom = reader.GetBoolValue("IsCustom")
     };
 
     public static SubscriptionPlanModel MapPlan(SqlDataReader reader) => new()

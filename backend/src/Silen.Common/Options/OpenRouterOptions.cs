@@ -13,5 +13,10 @@ public sealed class OpenRouterOptions
     /// see OpenRouterClient's structured-output request.</summary>
     public string Model { get; set; } = "openai/gpt-4.1";
 
+    /// <summary>Vision model behind the meal tracker's photo scan (Advanced). Needs image input and
+    /// json_schema support; set via OPENROUTER_FOOD_SCAN_MODEL. Separate from <see cref="Model"/> because
+    /// the text reports don't need vision, and the scan is tuned for this model's reasoning.</summary>
+    public string FoodScanModel { get; set; } = "openai/gpt-6-sol";
+
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1/chat/completions";
 }

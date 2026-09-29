@@ -38,6 +38,10 @@ public interface IDietPlansProvider
 
     Task<AdminMutationResultModel> UpsertUserDietPlanMealAsync(UserDietPlanMealUpsertRequest request, Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>Creates a private meal from ingredients and slots it into the day in one
+    /// transaction (usp_UserDietPlanCustomMeal_Create); EntityId is the new slot's id.</summary>
+    Task<AdminMutationResultModel> CreateUserDietPlanCustomMealAsync(UserDietPlanCustomMealCreateRequest request, Guid userId, CancellationToken cancellationToken = default);
+
     Task<AdminMutationResultModel> DeleteUserDietPlanMealAsync(Guid dietPlanMealId, Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>The plan currently active for this user, or null when none is active

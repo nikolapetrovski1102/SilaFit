@@ -116,7 +116,8 @@ class MacroLine extends StatelessWidget {
       runSpacing: 2,
       children: [
         _MacroDot(label: 'P', value: proteinG, color: AppColors.accent),
-        _MacroDot(label: 'C', value: carbsG, color: AppColors.tertiaryContainer),
+        _MacroDot(
+            label: 'C', value: carbsG, color: AppColors.tertiaryContainer),
         _MacroDot(label: 'F', value: fatsG, color: AppColors.secondary),
       ],
     );
@@ -181,7 +182,8 @@ class _GramsEditorState extends State<_GramsEditor> {
       TextEditingController(text: _fmt(widget.initialGrams));
 
   double get _grams {
-    final parsed = double.tryParse(_textController.text.trim().replaceAll(',', '.')) ?? 0;
+    final parsed =
+        double.tryParse(_textController.text.trim().replaceAll(',', '.')) ?? 0;
     return parsed.clamp(0, _max).toDouble();
   }
 
@@ -368,8 +370,8 @@ class NutrientGrid extends StatelessWidget {
                       children: [
                         Text(value, style: AppTypography.labelSm),
                         Text(label.toUpperCase(),
-                            style: AppTypography.labelCaps
-                                .copyWith(fontSize: 9)),
+                            style:
+                                AppTypography.labelCaps.copyWith(fontSize: 9)),
                       ],
                     ),
                   ),
@@ -410,8 +412,7 @@ class _Stat extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
               ],
-              Text(label,
-                  style: AppTypography.labelCaps.copyWith(fontSize: 9)),
+              Text(label, style: AppTypography.labelCaps.copyWith(fontSize: 9)),
             ],
           ),
         ],
@@ -458,8 +459,10 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
     super.dispose();
   }
 
-  Set<MacroKind> get _usedKinds =>
-      {for (final e in _entries) if (e.kind != null) e.kind!};
+  Set<MacroKind> get _usedKinds => {
+        for (final e in _entries)
+          if (e.kind != null) e.kind!
+      };
 
   double? _valueOf(MacroKind kind) {
     for (final e in _entries) {
@@ -505,7 +508,7 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
       if (v > e.kind!.maxPer100g) {
         setState(() => _error =
             '${e.kind!.label} can\'t be more than ${_fmt(e.kind!.maxPer100g)} '
-            '${e.kind!.unit} per 100 g.');
+                '${e.kind!.unit} per 100 g.');
         return;
       }
     }
@@ -513,7 +516,9 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
     final protein = _valueOf(MacroKind.protein);
     final carbs = _valueOf(MacroKind.carbs);
     final fat = _valueOf(MacroKind.fat);
-    if ((kcal ?? 0) == 0 && (protein ?? 0) == 0 && (carbs ?? 0) == 0 &&
+    if ((kcal ?? 0) == 0 &&
+        (protein ?? 0) == 0 &&
+        (carbs ?? 0) == 0 &&
         (fat ?? 0) == 0) {
       setState(() => _error = 'Enter at least calories or one macro.');
       return;
@@ -533,8 +538,8 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
             _servingController.text.trim().replaceAll(',', '.')),
         // Calories fall back to the Atwater estimate when only macros were
         // entered, so the food still counts toward the day's energy.
-        caloriesKcal: kcal ??
-            ((protein ?? 0) * 4 + (carbs ?? 0) * 4 + (fat ?? 0) * 9),
+        caloriesKcal:
+            kcal ?? ((protein ?? 0) * 4 + (carbs ?? 0) * 4 + (fat ?? 0) * 9),
         proteinG: protein ?? 0,
         carbohydrateG: carbs ?? 0,
         fatG: fat ?? 0,
@@ -594,8 +599,8 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
                     flex: 2,
                     child: TextField(
                       controller: _servingController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       style: AppTypography.bodyMd,
                       decoration: const InputDecoration(
                           labelText: 'Serving', suffixText: 'g'),

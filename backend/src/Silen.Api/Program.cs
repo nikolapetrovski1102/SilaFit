@@ -28,6 +28,7 @@ builder.Services.Configure<AdminAuthOptions>(builder.Configuration.GetSection(Ad
 builder.Services.Configure<NotificationPublishOptions>(builder.Configuration.GetSection(NotificationPublishOptions.SectionName));
 builder.Services.Configure<PushNotificationOptions>(builder.Configuration.GetSection(PushNotificationOptions.SectionName));
 builder.Services.Configure<ReviewerBypassOptions>(builder.Configuration.GetSection(ReviewerBypassOptions.SectionName));
+builder.Services.Configure<SupportOptions>(builder.Configuration.GetSection(SupportOptions.SectionName));
 builder.Services.Configure<ImageUploadOptions>(builder.Configuration.GetSection(ImageUploadOptions.SectionName));
 builder.Services.Configure<AppStoreServerOptions>(builder.Configuration.GetSection(AppStoreServerOptions.SectionName));
 builder.Services.Configure<GooglePlayOptions>(builder.Configuration.GetSection(GooglePlayOptions.SectionName));
@@ -140,6 +141,19 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 120,
                 Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    // Anonymous and it sends mail, so it's tight: a real visitor sends one or two
+    // messages, not a stream. Stops the form being used to flood the support inbox.
+    options.AddPolicy(RateLimitPolicies.SupportContact, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(30),
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));

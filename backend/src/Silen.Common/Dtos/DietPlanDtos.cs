@@ -52,3 +52,21 @@ public sealed class UserDietPlanMealUpsertRequest
     public Guid MealSuggestionId { get; set; }
     public int SortOrder { get; set; }
 }
+
+/// <summary>A meal the user builds from ingredients in the diet-plan wizard. The server
+/// sums the macros from the food catalog (usp_UserDietPlanCustomMeal_Create) - the
+/// client only says which foods and how much of each.</summary>
+public sealed class UserDietPlanCustomMealCreateRequest
+{
+    public Guid DietPlanDayId { get; set; }
+    public string MealType { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public List<UserDietPlanCustomMealItem> Items { get; set; } = new();
+}
+
+public sealed class UserDietPlanCustomMealItem
+{
+    public long FoodNutritionId { get; set; }
+    public decimal Grams { get; set; }
+}

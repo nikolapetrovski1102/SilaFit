@@ -944,7 +944,7 @@
     var backdrop = openModal(
       modalHead('Assign "' + split.name + '"') +
       '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
-        'Assigned clients can see this split in the app. Tick "make it their active split" to set it as their program right away.' +
+        'Assigned clients can see this split in the app. With "make it their active split" on (the default), it also becomes their current program right away.' +
       '</p>' +
       '<div class="eyebrow">Assigned clients</div>' +
       '<div id="assignList"></div>' +
@@ -955,7 +955,7 @@
         '<div class="field field--full"><label>Client (plan shown so you can see who is paying)</label>' +
           '<select class="select" id="assignUser"></select></div>' +
         '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
-          '<label class="switch"><input type="checkbox" id="assignActive" /><span class="track"></span></label>' +
+          '<label class="switch"><input type="checkbox" id="assignActive" checked /><span class="track"></span></label>' +
           '<span class="label-sm">Make it their active split</span>' +
         '</div>' +
       '</div>' +
@@ -1008,12 +1008,30 @@
                 (a.isActive ? ' · <span class="chip chip--accent">Active split</span>' : '') +
               '</div>' +
             '</div>' +
+            (a.isActive ? '' :
+              '<button class="btn btn--ghost btn--sm" data-unassign-activate="' + a.userId + '" title="Make this their active split">Make active</button>') +
             '<button class="icon-btn icon-btn--danger" data-unassign="' + a.userId + '" title="Unassign">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
             '</button>' +
           '</div>'
         );
       }).join('') : '<div class="empty-state" style="padding:16px"><div class="body-sm">Not assigned to anyone yet.</div></div>';
+
+      // Re-assigning is idempotent server-side, so "make active" on an existing
+      // assignment is just an assign with setActive on.
+      $$('[data-unassign-activate]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var userId = b.getAttribute('data-unassign-activate');
+          b.disabled = true;
+          auth.assignSplit(splitId, userId, true).then(function (result) {
+            b.disabled = false;
+            if (!toastOnFailure(result, 'Could not set it active.')) return;
+            toast((result.data && result.data.message) || 'Set active.');
+            load();
+            loadSplits();
+          });
+        });
+      });
 
       $$('[data-unassign]').forEach(function (b) {
         b.addEventListener('click', function () {
@@ -1036,7 +1054,7 @@
     function load() {
       return Promise.all([
         auth.getSplitAssignments(splitId),
-        auth.getUsers('', 200)
+        auth.getUsers(search, 200)
       ]).then(function (results) {
         var assignmentResult = results[0];
         var userResult = results[1];
@@ -1048,9 +1066,21 @@
       });
     }
 
+    // The user list is capped at 200, so search on the server rather than only
+    // filtering the first page locally - otherwise older clients can't be found.
+    var searchTimer = null;
     $('#assignSearch').addEventListener('input', function () {
       search = $('#assignSearch').value.trim();
       renderUserOptions();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        var q = search;
+        auth.getUsers(q, 200).then(function (userResult) {
+          if (q !== search) return;
+          users = userResult && userResult.ok ? (userResult.data || []) : [];
+          renderUserOptions();
+        });
+      }, 250);
     });
 
     $('#assignSave').addEventListener('click', function () {
@@ -1059,7 +1089,6 @@
       auth.assignSplit(splitId, userId, $('#assignActive').checked).then(function (result) {
         if (!toastOnFailure(result, 'Could not assign split.')) return;
         toast((result.data && result.data.message) || 'Split assigned.');
-        $('#assignActive').checked = false;
         load();
         loadSplits();
       });
@@ -1480,7 +1509,7 @@
     var backdrop = openModal(
       modalHead('Assign "' + plan.name + '"') +
       '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
-        'Assigned clients can see this plan in the app. Tick "make it their active plan" to set it as their program right away.' +
+        'Assigned clients can see this plan in the app. With "make it their active plan" on (the default), it also becomes their current diet plan right away.' +
       '</p>' +
       '<div class="eyebrow">Assigned clients</div>' +
       '<div id="dietAssignList"></div>' +
@@ -1491,7 +1520,7 @@
         '<div class="field field--full"><label>Client (plan shown so you can see who is paying)</label>' +
           '<select class="select" id="dietAssignUser"></select></div>' +
         '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
-          '<label class="switch"><input type="checkbox" id="dietAssignActive" /><span class="track"></span></label>' +
+          '<label class="switch"><input type="checkbox" id="dietAssignActive" checked /><span class="track"></span></label>' +
           '<span class="label-sm">Make it their active plan</span>' +
         '</div>' +
       '</div>' +
@@ -1544,12 +1573,30 @@
                 (a.isActive ? ' · <span class="chip chip--accent">Active plan</span>' : '') +
               '</div>' +
             '</div>' +
+            (a.isActive ? '' :
+              '<button class="btn btn--ghost btn--sm" data-diet-unassign-activate="' + a.userId + '" title="Make this their active plan">Make active</button>') +
             '<button class="icon-btn icon-btn--danger" data-diet-unassign="' + a.userId + '" title="Unassign">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
             '</button>' +
           '</div>'
         );
       }).join('') : '<div class="empty-state" style="padding:16px"><div class="body-sm">Not assigned to anyone yet.</div></div>';
+
+      // Re-assigning is idempotent server-side, so "make active" on an existing
+      // assignment is just an assign with setActive on.
+      $$('[data-diet-unassign-activate]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var userId = b.getAttribute('data-diet-unassign-activate');
+          b.disabled = true;
+          auth.assignDietPlan(dietPlanId, userId, true).then(function (result) {
+            b.disabled = false;
+            if (!toastOnFailure(result, 'Could not set it active.')) return;
+            toast((result.data && result.data.message) || 'Set active.');
+            load();
+            loadDietPlans();
+          });
+        });
+      });
 
       $$('[data-diet-unassign]').forEach(function (b) {
         b.addEventListener('click', function () {
@@ -1572,7 +1619,7 @@
     function load() {
       return Promise.all([
         auth.getDietPlanAssignments(dietPlanId),
-        auth.getUsers('', 200)
+        auth.getUsers(search, 200)
       ]).then(function (results) {
         var assignmentResult = results[0];
         var userResult = results[1];
@@ -1584,9 +1631,21 @@
       });
     }
 
+    // The user list is capped at 200, so search on the server rather than only
+    // filtering the first page locally - otherwise older clients can't be found.
+    var searchTimer = null;
     $('#dietAssignSearch').addEventListener('input', function () {
       search = $('#dietAssignSearch').value.trim();
       renderUserOptions();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        var q = search;
+        auth.getUsers(q, 200).then(function (userResult) {
+          if (q !== search) return;
+          users = userResult && userResult.ok ? (userResult.data || []) : [];
+          renderUserOptions();
+        });
+      }, 250);
     });
 
     $('#dietAssignSave').addEventListener('click', function () {
@@ -1595,7 +1654,6 @@
       auth.assignDietPlan(dietPlanId, userId, $('#dietAssignActive').checked).then(function (result) {
         if (!toastOnFailure(result, 'Could not assign diet plan.')) return;
         toast((result.data && result.data.message) || 'Diet plan assigned.');
-        $('#dietAssignActive').checked = false;
         load();
         loadDietPlans();
       });

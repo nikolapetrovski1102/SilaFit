@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../session/session_store.dart';
 import 'api_config.dart';
@@ -49,8 +50,7 @@ class ApiClient {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     return _send(
         path,
-        () =>
-            _http.put(uri, headers: _headers(), body: jsonEncode(body ?? {})),
+        () => _http.put(uri, headers: _headers(), body: jsonEncode(body ?? {})),
         parse);
   }
 
@@ -64,6 +64,36 @@ class ApiClient {
         parse);
   }
 
+  /// Uploads [bytes] as the multipart file field [fileField] alongside plain
+  /// text [fields]. The request is rebuilt on every attempt (a sent
+  /// `MultipartRequest` can't be re-sent), so the silent re-auth retry works.
+  /// [timeout] is longer than normal requests' because the server may be
+  /// waiting on an AI model before it answers.
+  Future<T> postMultipart<T>(
+    String path,
+    T Function(dynamic json) parse, {
+    required String fileField,
+    required List<int> bytes,
+    required String filename,
+    required MediaType contentType,
+    Map<String, String> fields = const {},
+    Duration timeout = const Duration(seconds: 90),
+  }) {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    Future<http.Response> request() async {
+      final multipart = http.MultipartRequest('POST', uri)
+        ..fields.addAll(fields)
+        ..files.add(http.MultipartFile.fromBytes(fileField, bytes,
+            filename: filename, contentType: contentType));
+      // No JSON content type here - MultipartRequest sets its own boundary.
+      final token = sessionStore.currentToken;
+      if (token != null) multipart.headers['Authorization'] = 'Bearer $token';
+      return http.Response.fromStream(await _http.send(multipart));
+    }
+
+    return _send(path, request, parse, timeout: timeout);
+  }
+
   Map<String, String> _headers() {
     final headers = {'Content-Type': 'application/json'};
     final token = sessionStore.currentToken;
@@ -73,10 +103,10 @@ class ApiClient {
 
   Future<T> _send<T>(String path, Future<http.Response> Function() request,
       T Function(dynamic json) parse,
-      {bool isRetry = false}) async {
+      {bool isRetry = false, Duration timeout = _requestTimeout}) async {
     late final http.Response response;
     try {
-      response = await request().timeout(_requestTimeout);
+      response = await request().timeout(timeout);
     } on TimeoutException {
       throw const ApiException(
           'The server took too long to respond. Check your connection and try again.');
@@ -104,7 +134,7 @@ class ApiClient {
         // from an /auth/ endpoint is a failed credential, not a dead session,
         // so it must not clear the guest session the way this used to.
         if (!isRetry && await _trySilentDeviceReauth()) {
-          return _send(path, request, parse, isRetry: true);
+          return _send(path, request, parse, isRetry: true, timeout: timeout);
         }
         await sessionStore.clear();
       }
@@ -141,9 +171,8 @@ class ApiClient {
 
       if (response.statusCode < 200 || response.statusCode >= 300) return false;
 
-      final data =
-          (jsonDecode(response.body) as Map<String, dynamic>)['data']
-              as Map<String, dynamic>?;
+      final data = (jsonDecode(response.body) as Map<String, dynamic>)['data']
+          as Map<String, dynamic>?;
       final token = data?['token'] as String?;
       final userId = data?['userId'] as String?;
       if (token == null || token.isEmpty || userId != current.userId) {

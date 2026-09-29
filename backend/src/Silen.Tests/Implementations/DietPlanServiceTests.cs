@@ -279,4 +279,73 @@ public class DietPlanServiceTests
 
         Assert.True(result.IsSuccess);
     }
+
+    [Fact]
+    public async Task CreateMyPlanCustomMealAsync_NoUsableIngredients_FailsValidation_AndNeverWrites()
+    {
+        var result = await sut.CreateMyPlanCustomMealAsync(Guid.NewGuid(), new UserDietPlanCustomMealCreateRequest
+        {
+            DietPlanDayId = Guid.NewGuid(),
+            MealType = "Lunch",
+            Title = "Chicken bowl",
+            Items = [new UserDietPlanCustomMealItem { FoodNutritionId = 12, Grams = 0 }]
+        });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+        provider.Verify(
+            p => p.CreateUserDietPlanCustomMealAsync(It.IsAny<UserDietPlanCustomMealCreateRequest>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateMyPlanCustomMealAsync_FreeUser_RequiresUpgrade_AndNeverWrites()
+    {
+        var userId = Guid.NewGuid();
+        MakeFree(userId);
+
+        var result = await sut.CreateMyPlanCustomMealAsync(userId, new UserDietPlanCustomMealCreateRequest
+        {
+            DietPlanDayId = Guid.NewGuid(),
+            MealType = "Lunch",
+            Title = "Chicken bowl",
+            Items = [new UserDietPlanCustomMealItem { FoodNutritionId = 12, Grams = 150 }]
+        });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        provider.Verify(
+            p => p.CreateUserDietPlanCustomMealAsync(It.IsAny<UserDietPlanCustomMealCreateRequest>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateMyPlanCustomMealAsync_TrimsTitle_AndDropsEmptyItems_BeforeWriting()
+    {
+        var userId = Guid.NewGuid();
+        var mealId = Guid.NewGuid();
+        UserDietPlanCustomMealCreateRequest? written = null;
+        provider
+            .Setup(p => p.CreateUserDietPlanCustomMealAsync(It.IsAny<UserDietPlanCustomMealCreateRequest>(), userId, It.IsAny<CancellationToken>()))
+            .Callback<UserDietPlanCustomMealCreateRequest, Guid, CancellationToken>((r, _, _) => written = r)
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.Success, EntityId = mealId });
+
+        var result = await sut.CreateMyPlanCustomMealAsync(userId, new UserDietPlanCustomMealCreateRequest
+        {
+            DietPlanDayId = Guid.NewGuid(),
+            MealType = "Lunch",
+            Title = "  Chicken bowl ",
+            Items =
+            [
+                new UserDietPlanCustomMealItem { FoodNutritionId = 12, Grams = 150 },
+                new UserDietPlanCustomMealItem { FoodNutritionId = 0, Grams = 80 },
+                new UserDietPlanCustomMealItem { FoodNutritionId = 13, Grams = 0 }
+            ]
+        });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Chicken bowl", written!.Title);
+        Assert.Single(written.Items);
+        Assert.Equal(12, written.Items[0].FoodNutritionId);
+    }
 }

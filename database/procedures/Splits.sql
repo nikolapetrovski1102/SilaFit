@@ -137,6 +137,25 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Same visibility predicate as usp_Splits_GetDetail: a Shared/Private split
+    -- the caller was never assigned can't be activated just by knowing its id.
+    -- No row back means "not found" to SplitService.ActivateAsync.
+    IF NOT EXISTS (SELECT 1
+                   FROM dbo.WorkoutSplits s
+                   WHERE s.SplitId = @SplitId
+                     AND (s.IsSystemDefault = 1
+                          OR s.Visibility = N'Public'
+                          OR s.OwnerUserId = @UserId
+                          OR EXISTS (SELECT 1
+                                     FROM dbo.SplitAssignments a
+                                     WHERE a.SplitId = s.SplitId
+                                       AND a.UserId = @UserId)))
+    BEGIN
+        -- Still emit the result shape so the reader sees an empty set, not none.
+        SELECT UserId, SplitId, ActivatedAtUtc, IsAutoAssigned FROM dbo.UserActiveSplits WHERE 1 = 0;
+        RETURN;
+    END
+
     MERGE dbo.UserActiveSplits AS target
     USING (SELECT @UserId AS UserId, @SplitId AS SplitId, @IsAutoAssigned AS IsAutoAssigned) AS source
     ON target.UserId = source.UserId

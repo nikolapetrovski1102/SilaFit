@@ -365,7 +365,11 @@ BEGIN
     DECLARE @ExerciseName NVARCHAR(150);
     DECLARE @DayTitle NVARCHAR(150);
 
-    SELECT @ExerciseName = Name FROM dbo.Exercises WHERE ExerciseId = @ExerciseId;
+    -- Another user's private exercise (071) is treated as missing.
+    SELECT @ExerciseName = Name
+    FROM dbo.Exercises
+    WHERE ExerciseId = @ExerciseId
+      AND (CreatedByUserId IS NULL OR CreatedByUserId = @UserId);
 
     IF @ExerciseName IS NULL
     BEGIN

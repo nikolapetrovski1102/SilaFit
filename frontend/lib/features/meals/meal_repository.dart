@@ -1,3 +1,5 @@
+import 'package:http_parser/http_parser.dart';
+
 import '../../core/api/api_client.dart';
 import 'meal_models.dart';
 
@@ -118,6 +120,28 @@ class MealRepository {
           'fiberG': fiberG,
           'sugarG': sugarG,
           'sodiumMg': sodiumMg,
+        },
+      );
+
+  /// Today's AI photo-scan allowance (Advanced only; `isAvailable` is false
+  /// below it).
+  Future<FoodScanQuota> getScanQuota() =>
+      _client.get('/foods/scan/quota', FoodScanQuota.fromJson);
+
+  /// Sends a meal photo (already downsized JPEG) for AI ingredient and macro
+  /// estimation. [mealName] is a hint only. Waits on the model, so it uses a
+  /// long timeout.
+  Future<FoodScanResult> scanFood(List<int> jpegBytes, {String? mealName}) =>
+      _client.postMultipart(
+        '/foods/scan',
+        FoodScanResult.fromJson,
+        fileField: 'image',
+        bytes: jpegBytes,
+        filename: 'meal.jpg',
+        contentType: MediaType('image', 'jpeg'),
+        fields: {
+          if (mealName != null && mealName.trim().isNotEmpty)
+            'mealName': mealName.trim(),
         },
       );
 }

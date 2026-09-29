@@ -16,6 +16,10 @@ public sealed class DietPlanService(
     private const string BrowseUpgradeMessage = "Upgrade to Pro to browse diet plans.";
     private const string CreateUpgradeMessage = "Upgrade to Pro to create and follow diet plans.";
 
+    // Match usp_UserDietPlanCustomMeal_Create / dbo.MealSuggestions.Title.
+    private const int MaxCustomMealTitleLength = 200;
+    private const int MaxCustomMealItems = 40;
+
     public Task<ServiceResult<List<DietPlanModel>>> GetAllAsync(Guid? userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
@@ -331,6 +335,37 @@ public sealed class DietPlanService(
 
             var mutation = await dietPlansProvider.UpsertUserDietPlanMealAsync(request, userId, cancellationToken);
             return AdminMutationOutcomeMapper.Resolve(mutation, "Meal saved to the day.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> CreateMyPlanCustomMealAsync(Guid userId, UserDietPlanCustomMealCreateRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            AdminContentFieldRules.ThrowIfUnknown(request.MealType, AdminContentFieldRules.MealTypes, "meal type");
+            request.Title = request.Title?.Trim() ?? string.Empty;
+            if (request.Title.Length == 0)
+            {
+                throw new ValidationException("Custom diet plan meal called without a title.", "Give the meal a name.");
+            }
+            if (request.Title.Length > MaxCustomMealTitleLength)
+            {
+                throw new ValidationException("Custom diet plan meal title too long.", $"Keep the meal name under {MaxCustomMealTitleLength} characters.");
+            }
+            request.Items = request.Items
+                .Where(i => i.FoodNutritionId > 0 && i.Grams > 0)
+                .ToList();
+            if (request.Items.Count == 0)
+            {
+                throw new ValidationException("Custom diet plan meal called without ingredients.", "Add at least one ingredient.");
+            }
+            if (request.Items.Count > MaxCustomMealItems)
+            {
+                throw new ValidationException("Custom diet plan meal has too many ingredients.", $"A meal can have up to {MaxCustomMealItems} ingredients.");
+            }
+
+            await RequireProAsync(userId, "save a diet plan meal", CreateUpgradeMessage, cancellationToken);
+
+            var mutation = await dietPlansProvider.CreateUserDietPlanCustomMealAsync(request, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, $"{request.Title} added to the day.");
         });
 
     public Task<ServiceResult<AdminWriteResultDto>> DeleteMyPlanMealAsync(Guid userId, Guid dietPlanMealId, CancellationToken cancellationToken = default) =>

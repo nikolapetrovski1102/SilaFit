@@ -290,7 +290,7 @@ public sealed class WeeklyPlanGenerationService(
                 $"No active '{SplitTemplateKey}' prompt template configured.",
                 "AI plan generation is temporarily unavailable.");
 
-        var allExercises = await exercisesProvider.SearchAsync(null, null, cancellationToken).ConfigureAwait(false);
+        var allExercises = await exercisesProvider.SearchAsync(null, null, null, cancellationToken).ConfigureAwait(false);
         var candidateExercises = ExerciseRecommendationScorer.Rank(allExercises, fit, opts.ExerciseCandidatePoolSize);
         if (candidateExercises.Count == 0)
         {

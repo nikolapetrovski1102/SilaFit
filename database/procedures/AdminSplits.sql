@@ -746,10 +746,12 @@ BEGIN
         MERGE dbo.UserActiveSplits AS target
         USING (SELECT @UserId AS UserId, @SplitId AS SplitId) AS source
         ON target.UserId = source.UserId
+        -- A trainer's pick is deliberate, never the recommender's, so it also
+        -- clears any IsAutoAssigned flag left by the split it replaces.
         WHEN MATCHED THEN
-            UPDATE SET SplitId = source.SplitId, ActivatedAtUtc = SYSUTCDATETIME()
+            UPDATE SET SplitId = source.SplitId, ActivatedAtUtc = SYSUTCDATETIME(), IsAutoAssigned = 0
         WHEN NOT MATCHED THEN
-            INSERT (UserId, SplitId, ActivatedAtUtc) VALUES (source.UserId, source.SplitId, SYSUTCDATETIME());
+            INSERT (UserId, SplitId, ActivatedAtUtc, IsAutoAssigned) VALUES (source.UserId, source.SplitId, SYSUTCDATETIME(), 0);
     END
 
     INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)

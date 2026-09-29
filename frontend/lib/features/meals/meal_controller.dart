@@ -220,6 +220,11 @@ class MealController extends ChangeNotifier {
   Future<List<FoodItem>> searchFoods(String query) =>
       _repository.searchFoods(query);
 
+  Future<FoodScanQuota> getScanQuota() => _repository.getScanQuota();
+
+  Future<FoodScanResult> scanFood(List<int> jpegBytes, {String? mealName}) =>
+      _repository.scanFood(jpegBytes, mealName: mealName);
+
   Future<FoodItem> createCustomFood({
     required String name,
     String? brandName,

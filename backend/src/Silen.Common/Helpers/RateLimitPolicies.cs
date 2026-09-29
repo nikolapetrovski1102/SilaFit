@@ -18,4 +18,7 @@ public static class RateLimitPolicies
 
     /// <summary>Anonymous App Store / Play Store server notification callbacks, partitioned per client IP.</summary>
     public const string Webhooks = "webhooks";
+
+    /// <summary>The website's anonymous support contact form, partitioned per client IP.</summary>
+    public const string SupportContact = "support-contact";
 }

@@ -13,7 +13,7 @@ import '../diet_plan_models.dart';
 import '../diet_plan_repository.dart';
 
 /// One diet-plan catalogue card. Shared by the full "Diet Plans" catalog (full
-/// width) and the Nutrition screen's "Suggested This Month" strip ([width]
+/// width) and the Nutrition screen's horizontal strips ([width]
 /// constrained to a fixed horizontal card). Tapping opens the plan's detail.
 class DietPlanCard extends StatelessWidget {
   final DietPlan plan;

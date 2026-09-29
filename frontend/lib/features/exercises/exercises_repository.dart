@@ -47,4 +47,36 @@ class ExercisesRepository {
       query: query.isEmpty ? null : query,
     );
   }
+
+  /// "Did you mean" picks for a search that found nothing - catalogue names a
+  /// typo or two away from [search]. Empty means nothing is close.
+  Future<List<ExerciseSummary>> closeMatches(String search) {
+    return _client.get(
+      '/exercises/close-matches',
+      (json) => (json as List<dynamic>)
+          .map((e) => ExerciseSummary.fromJson(e))
+          .toList(),
+      query: {'search': search},
+    );
+  }
+
+  /// Adds an exercise the catalogue doesn't have; private to this user. If the
+  /// catalogue (or the user) already has that name, the server returns that
+  /// exercise instead of a duplicate.
+  Future<ExerciseSummary> createCustom({
+    required String name,
+    required String muscleGroup,
+    required String equipmentType,
+    required bool isCompound,
+  }) =>
+      _client.post(
+        '/exercises',
+        ExerciseSummary.fromJson,
+        body: {
+          'name': name,
+          'muscleGroup': muscleGroup,
+          'equipmentType': equipmentType,
+          'isCompound': isCompound,
+        },
+      );
 }

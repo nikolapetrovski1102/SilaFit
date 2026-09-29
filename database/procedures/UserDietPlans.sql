@@ -174,6 +174,12 @@ BEGIN
     DELETE FROM dbo.DietPlanDays WHERE DietPlanId = @DietPlanId;
     DELETE FROM dbo.NutritionPlans WHERE DietPlanId = @DietPlanId;
 
+    -- Built-from-ingredients meals (073) no plan slot points at any more.
+    DELETE ms
+    FROM dbo.MealSuggestions ms
+    WHERE ms.OwnerUserId = @UserId
+      AND NOT EXISTS (SELECT 1 FROM dbo.DietPlanMeals m WHERE m.MealSuggestionId = ms.MealSuggestionId);
+
     COMMIT TRANSACTION;
 
     SELECT 0 AS Outcome, @DietPlanId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
@@ -299,6 +305,12 @@ BEGIN
     DELETE FROM dbo.DietPlanMeals WHERE DietPlanDayId = @DietPlanDayId;
     DELETE FROM dbo.DietPlanDays WHERE DietPlanDayId = @DietPlanDayId;
 
+    -- Built-from-ingredients meals (073) no plan slot points at any more.
+    DELETE ms
+    FROM dbo.MealSuggestions ms
+    WHERE ms.OwnerUserId = @UserId
+      AND NOT EXISTS (SELECT 1 FROM dbo.DietPlanMeals m WHERE m.MealSuggestionId = ms.MealSuggestionId);
+
     COMMIT TRANSACTION;
 
     SELECT 0 AS Outcome, @DietPlanDayId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
@@ -352,7 +364,11 @@ BEGIN
         RETURN;
     END
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.MealSuggestions WHERE MealSuggestionId = @MealSuggestionId)
+    -- The shared catalog, or a meal this user built from ingredients (073).
+    IF NOT EXISTS (SELECT 1
+                   FROM dbo.MealSuggestions
+                   WHERE MealSuggestionId = @MealSuggestionId
+                     AND (OwnerUserId IS NULL OR OwnerUserId = @UserId))
     BEGIN
         COMMIT TRANSACTION;
         SELECT 1 AS Outcome, @MealSuggestionId AS EntityId, N'That meal suggestion no longer exists.' AS Detail;
@@ -382,6 +398,127 @@ BEGIN
             RETURN;
         END
     END
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @DietPlanMealId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
+END
+GO
+
+-- A meal the user builds from ingredients in the diet-plan wizard: a private
+-- MealSuggestions row (073) whose macros are summed from dbo.FoodNutrition
+-- (per 100 g) for the chosen grams, one "150 g Chicken breast" ingredient line
+-- per food (the shape IngredientSummaryFormatter aggregates into the shopping
+-- list), and the day's slot pointing at it - all in one transaction.
+-- @ItemsJson: [{ "foodNutritionId": 123, "grams": 150 }, ...]. Only shared
+-- catalog foods and the caller's own (066) count; others are ignored.
+CREATE OR ALTER PROCEDURE dbo.usp_UserDietPlanCustomMeal_Create
+    @DietPlanDayId UNIQUEIDENTIFIER,
+    @UserId UNIQUEIDENTIFIER,
+    @MealType NVARCHAR(20),
+    @Title NVARCHAR(200),
+    @SortOrder INT = 0,
+    @ItemsJson NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @MealType = LTRIM(RTRIM(@MealType));
+    SET @Title = LTRIM(RTRIM(@Title));
+
+    BEGIN TRANSACTION;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.DietPlanDays WHERE DietPlanDayId = @DietPlanDayId)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 1 AS Outcome, @DietPlanDayId AS EntityId, N'That plan day no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1
+                   FROM dbo.DietPlanDays d
+                   INNER JOIN dbo.NutritionPlans p ON p.DietPlanId = d.DietPlanId
+                   WHERE d.DietPlanDayId = @DietPlanDayId
+                     AND p.OwnerUserId = @UserId)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 2 AS Outcome, @DietPlanDayId AS EntityId, N'You can only edit plans you built yourself.' AS Detail;
+        RETURN;
+    END
+
+    IF @MealType IS NULL OR @MealType NOT IN (N'Breakfast', N'Lunch', N'Dinner', N'Snack')
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 3 AS Outcome, @DietPlanDayId AS EntityId, N'Meal type must be Breakfast, Lunch, Dinner or Snack.' AS Detail;
+        RETURN;
+    END
+
+    IF @Title IS NULL OR @Title = N''
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 3 AS Outcome, @DietPlanDayId AS EntityId, N'Give the meal a name.' AS Detail;
+        RETURN;
+    END
+
+    DECLARE @Items TABLE
+    (
+        Ordinal  INT            NOT NULL PRIMARY KEY,
+        Name     NVARCHAR(500)  NOT NULL,
+        Grams    DECIMAL(9,1)   NOT NULL,
+        Calories DECIMAL(12,3)  NOT NULL,
+        Protein  DECIMAL(12,3)  NOT NULL,
+        Carbs    DECIMAL(12,3)  NOT NULL,
+        Fats     DECIMAL(12,3)  NOT NULL
+    );
+
+    INSERT INTO @Items (Ordinal, Name, Grams, Calories, Protein, Carbs, Fats)
+    SELECT CONVERT(INT, j.[key]),
+           f.Name,
+           i.Grams,
+           ISNULL(f.CaloriesKcal, 0) * i.Grams / 100,
+           ISNULL(f.ProteinG, 0) * i.Grams / 100,
+           ISNULL(f.CarbohydrateG, 0) * i.Grams / 100,
+           ISNULL(f.FatG, 0) * i.Grams / 100
+    FROM OPENJSON(@ItemsJson) j
+    CROSS APPLY OPENJSON(j.[value])
+    WITH (
+        FoodNutritionId BIGINT       '$.foodNutritionId',
+        Grams           DECIMAL(9,1) '$.grams'
+    ) i
+    INNER JOIN dbo.FoodNutrition f ON f.FoodNutritionId = i.FoodNutritionId
+    WHERE i.Grams > 0 AND i.Grams <= 5000
+      AND (f.CreatedByUserId IS NULL OR f.CreatedByUserId = @UserId);
+
+    IF NOT EXISTS (SELECT 1 FROM @Items)
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT 3 AS Outcome, @DietPlanDayId AS EntityId, N'Add at least one ingredient.' AS Detail;
+        RETURN;
+    END
+
+    DECLARE @MealSuggestionId UNIQUEIDENTIFIER = NEWID();
+    DECLARE @DietPlanMealId UNIQUEIDENTIFIER = NEWID();
+
+    INSERT INTO dbo.MealSuggestions
+        (MealSuggestionId, Title, MealType, CaloriesKcal, ProteinG, CarbsG, FatsG,
+         SuggestedMonth, IsSystemDefault, SortOrder, OwnerUserId)
+    SELECT @MealSuggestionId, @Title, @MealType,
+           CONVERT(SMALLINT, ROUND(SUM(Calories), 0)),
+           CONVERT(SMALLINT, ROUND(SUM(Protein), 0)),
+           CONVERT(SMALLINT, ROUND(SUM(Carbs), 0)),
+           CONVERT(SMALLINT, ROUND(SUM(Fats), 0)),
+           NULL, 0, 0, @UserId
+    FROM @Items;
+
+    INSERT INTO dbo.MealSuggestionIngredients (MealSuggestionId, SortOrder, IngredientText)
+    SELECT @MealSuggestionId,
+           CONVERT(SMALLINT, ROW_NUMBER() OVER (ORDER BY Ordinal) - 1),
+           LEFT(CONVERT(NVARCHAR(20), CONVERT(INT, ROUND(Grams, 0))) + N' g ' + Name, 1000)
+    FROM @Items;
+
+    INSERT INTO dbo.DietPlanMeals (DietPlanMealId, DietPlanDayId, MealType, MealSuggestionId, SortOrder)
+    VALUES (@DietPlanMealId, @DietPlanDayId, @MealType, @MealSuggestionId, @SortOrder);
 
     COMMIT TRANSACTION;
 
@@ -424,6 +561,12 @@ BEGIN
     END
 
     DELETE FROM dbo.DietPlanMeals WHERE DietPlanMealId = @DietPlanMealId;
+
+    -- Built-from-ingredients meals (073) no plan slot points at any more.
+    DELETE ms
+    FROM dbo.MealSuggestions ms
+    WHERE ms.OwnerUserId = @UserId
+      AND NOT EXISTS (SELECT 1 FROM dbo.DietPlanMeals m WHERE m.MealSuggestionId = ms.MealSuggestionId);
 
     COMMIT TRANSACTION;
 

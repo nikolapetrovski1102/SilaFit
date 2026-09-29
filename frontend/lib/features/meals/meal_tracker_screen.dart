@@ -3,16 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/silen_button.dart';
 import '../auth/widgets/auth_blob_background.dart';
+import '../plans/plans_screen.dart';
+import '../settings/ai_consent_gate.dart';
 import '../splits/widgets/ink_field.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
 import 'widgets/food_picker_sheet.dart';
+import 'widgets/food_scan_sheet.dart';
 
 // Line heights of the committed meal name (headlineLg) and the totals strip
 // that settles beneath it. The name may wrap to two lines, so everything
@@ -106,6 +110,11 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   final _flights = <OverlayEntry>[];
   bool _saving = false;
 
+  /// Today's AI photo-scan allowance; null until loaded (or if that failed -
+  /// the server still enforces it, so the row just shows without a count).
+  FoodScanQuota? _scanQuota;
+  bool _pickingPhoto = false;
+
   bool get _isEditing => widget.existing != null;
 
   static String _mealTypeForNow() {
@@ -122,6 +131,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     _intro = AnimationController(vsync: this, duration: _kIntro)..forward();
     _underline = AnimationController(vsync: this, duration: kInkMorph);
     _focus.addListener(_onFocusChanged);
+    _loadScanQuota();
 
     final existing = widget.existing;
     if (existing == null) {
@@ -161,7 +171,18 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     } else {
       _underline.reverse();
     }
+    // Focus decides whether the search takes over the screen.
+    if (mounted) setState(() {});
   }
+
+  /// While a search is typed the keyboard covers half the screen, so the
+  /// title, totals and ingredients fold away and the field rises to the top,
+  /// leaving the room to the results. Picking a result drops the keyboard
+  /// and everything settles back.
+  bool get _searchTakeover =>
+      _stage == _Stage.foods &&
+      _focus.hasFocus &&
+      _input.text.trim().isNotEmpty;
 
   /// Fills the field with [text] fully selected, so typing replaces it and
   /// submitting straight away keeps it.
@@ -390,6 +411,8 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   Future<void> _add(FoodItem food) async {
     final from = overlayRectOf(context, _rowKeys[food.foodNutritionId]);
     HapticFeedback.selectionClick();
+    // Drop the keyboard so the layout eases back and the food flies home.
+    _focus.unfocus();
 
     final entry = _Ingredient(
       _nextKey++,
@@ -415,6 +438,8 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       label: food.name,
       from: from,
       to: to,
+      // The card is still sliding back into place as the search folds away.
+      track: () => overlayRectOf(context, _ingredientKeys[entry.key]),
       toRadius: _kRowRadius,
       onLanded: () {
         _flights.remove(flight);
@@ -435,7 +460,110 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
         _nextKey++, MealLogItem.fromFood(food, food.defaultGrams),
         landed: true)));
     _clearSearch();
-    _focus.requestFocus();
+  }
+
+  Future<void> _loadScanQuota() async {
+    try {
+      final quota = await _controller.getScanQuota();
+      if (mounted) setState(() => _scanQuota = quota);
+    } catch (_) {
+      // Leave it unknown; tapping the row still works and the server answers.
+    }
+  }
+
+  /// Photo in, ingredients out: Advanced only, a few times a day. Below
+  /// Advanced the row opens the plans instead.
+  Future<void> _scanMeal() async {
+    if (_pickingPhoto) return;
+    final quota = _scanQuota;
+    if (quota != null && !quota.isAvailable) {
+      _focus.unfocus();
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+      if (mounted) await _loadScanQuota();
+      return;
+    }
+    if (quota != null && quota.remainingToday <= 0) {
+      _toast("You've used all ${quota.dailyLimit} scans for today. "
+          'They reset at midnight.');
+      return;
+    }
+
+    _focus.unfocus();
+    if (!await AiConsentGate.ensure(context) || !mounted) return;
+    final source = await _choosePhotoSource();
+    if (source == null || !mounted) return;
+
+    setState(() => _pickingPhoto = true);
+    Uint8List? bytes;
+    try {
+      // Downsized on the device: ~1024 px is all the model needs to judge
+      // portions, and keeps the upload (and the AI's image tokens) small.
+      final file = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
+      bytes = await file?.readAsBytes();
+    } on PlatformException {
+      if (mounted) {
+        _toast(source == ImageSource.camera
+            ? 'Allow camera access in Settings to scan a meal.'
+            : 'Allow photo access in Settings to scan a meal.');
+      }
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
+    if (bytes == null || !mounted) return;
+
+    final items = await showFoodScanSheet(
+      context,
+      controller: _controller,
+      photo: bytes,
+      mealName: _mealName,
+      onQuota: (q) {
+        if (mounted) setState(() => _scanQuota = q);
+      },
+    );
+    if (items == null || items.isEmpty || !mounted) return;
+    HapticFeedback.lightImpact();
+    setState(() {
+      for (final item in items) {
+        _ingredients.add(_Ingredient(_nextKey++, item, landed: true));
+      }
+    });
+  }
+
+  Future<ImageSource?> _choosePhotoSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Take a photo'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from library'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _remove(_Ingredient entry) {
@@ -518,7 +646,11 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     final foodsTop = totalsTop + _kTotalsHeight + AppSpacing.md;
     _heroTop = (constraints.maxHeight * 0.26)
         .clamp(titleLines * _kTitleLine + AppSpacing.xxxl, 200.0);
-    final inputTop = _stage == _Stage.foods ? foodsTop : _heroTop;
+    final inputTop = _searchTakeover
+        ? 0.0
+        : _stage == _Stage.foods
+            ? foodsTop
+            : _heroTop;
     // Ingredients get up to about a third of the room; beyond that they
     // scroll, newest kept in view.
     final listMax = (constraints.maxHeight * 0.34).clamp(76.0, 260.0);
@@ -539,8 +671,8 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
   Widget _buildTopBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xxs,
-          AppSpacing.xs, AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xs, AppSpacing.xxs, AppSpacing.xs, AppSpacing.md),
       child: Row(
         children: [
           IconButton(
@@ -579,6 +711,21 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   /// it. Drawn above the input column; only the title itself takes taps.
   Widget _buildHeaders(double totalsTop) {
     final showFoods = _stage == _Stage.foods && _mealName != null;
+    final hidden = _searchTakeover;
+    // Faded rather than removed, so the title's morph isn't replayed when
+    // the search hands the room back.
+    return IgnorePointer(
+      ignoring: hidden,
+      child: AnimatedOpacity(
+        opacity: hidden ? 0 : 1,
+        duration: kInkQuick,
+        curve: Curves.easeOutCubic,
+        child: _buildHeaderStack(showFoods, totalsTop),
+      ),
+    );
+  }
+
+  Widget _buildHeaderStack(bool showFoods, double totalsTop) {
     return Stack(
       children: [
         if (showFoods)
@@ -640,7 +787,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
           duration: kInkQuick,
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
-          child: picking && _ingredients.isNotEmpty
+          child: picking && _ingredients.isNotEmpty && !_searchTakeover
               ? Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: ConstrainedBox(
@@ -786,6 +933,23 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                         ),
                       ),
               ),
+              // The scan offer only while nothing is typed - once a search
+              // runs, the room belongs to its results.
+              AnimatedSize(
+                duration: kInkQuick,
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: query.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _ScanMealRow(
+                          quota: _scanQuota,
+                          busy: _pickingPhoto,
+                          onTap: _scanMeal,
+                        ),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
               for (final food in items)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -883,17 +1047,17 @@ class _MealTypePill extends StatelessWidget {
                 transitionBuilder: (child, animation) => FadeTransition(
                   opacity: animation,
                   child: SlideTransition(
-                    position: Tween(
-                            begin: const Offset(0, 0.4), end: Offset.zero)
-                        .animate(animation),
+                    position:
+                        Tween(begin: const Offset(0, 0.4), end: Offset.zero)
+                            .animate(animation),
                     child: child,
                   ),
                 ),
                 child: Text(
                   type.toUpperCase(),
                   key: ValueKey(type),
-                  style: AppTypography.labelCaps
-                      .copyWith(color: AppColors.accent),
+                  style:
+                      AppTypography.labelCaps.copyWith(color: AppColors.accent),
                 ),
               ),
               const SizedBox(width: 4),
@@ -1099,6 +1263,85 @@ class _FoodResultRow extends StatelessWidget {
   }
 }
 
+/// "Scan a meal photo" - AI reads the plate into ingredients. Advanced
+/// users see today's remaining scans; everyone else sees the tier it needs.
+class _ScanMealRow extends StatelessWidget {
+  final FoodScanQuota? quota;
+  final bool busy;
+  final VoidCallback onTap;
+
+  const _ScanMealRow({
+    required this.quota,
+    required this.busy,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final q = quota;
+    final locked = q != null && !q.isAvailable;
+    final spent = q != null && q.isAvailable && q.remainingToday <= 0;
+    final String? trailing = q == null
+        ? null
+        : locked
+            ? 'Advanced'
+            : '${q.remainingToday} left today';
+    final color = spent ? AppColors.onSurfaceVariant : AppColors.accent;
+    return Material(
+      color:
+          spent ? Colors.transparent : AppColors.accent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(_kRowRadius),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(_kRowRadius),
+        canRequestFocus: false,
+        onTap: busy ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              if (busy)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent),
+                )
+              else
+                Icon(Icons.photo_camera_outlined, size: 20, color: color),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  'Scan a meal photo with AI',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySm.copyWith(color: color),
+                ),
+              ),
+              if (trailing != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (locked)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(Icons.lock_outline_rounded,
+                            size: 14, color: AppColors.onSurfaceVariant),
+                      ),
+                    Text(
+                      trailing,
+                      style: AppTypography.labelSm
+                          .copyWith(color: AppColors.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// "Add "query" as a new food" - the way out when the database is missing
 /// it. Stronger when nothing matched.
 class _AddOwnFoodRow extends StatelessWidget {
@@ -1136,8 +1379,7 @@ class _AddOwnFoodRow extends StatelessWidget {
                       : 'Add "$query" from its label',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      AppTypography.bodySm.copyWith(color: AppColors.accent),
+                  style: AppTypography.bodySm.copyWith(color: AppColors.accent),
                 ),
               ),
             ],
@@ -1174,8 +1416,8 @@ class _IngredientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = AppTypography.labelSm
-        .copyWith(color: AppColors.onSurfaceVariant);
+    final muted =
+        AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant);
     return AnimatedOpacity(
       opacity: visible ? 1 : 0,
       duration: visible ? kInkQuick : Duration.zero,

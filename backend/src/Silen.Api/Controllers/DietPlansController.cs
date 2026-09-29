@@ -118,6 +118,14 @@ public sealed class DietPlansController(
         return result.ToActionResult(logger);
     }
 
+    [HttpPost("meals/custom")]
+    [Authorize]
+    public async Task<IActionResult> CreateCustomMeal([FromBody] UserDietPlanCustomMealCreateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dietPlanService.CreateMyPlanCustomMealAsync(User.GetUserId(), request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
     [HttpDelete("meals/{dietPlanMealId:guid}")]
     [Authorize]
     public async Task<IActionResult> DeleteMeal(Guid dietPlanMealId, CancellationToken cancellationToken)

@@ -12,6 +12,7 @@ import '../../diet_plans/diet_plan_detail_screen.dart';
 import '../../diet_plans/diet_plan_models.dart';
 import '../../diet_plans/diet_plan_repository.dart';
 import '../../diet_plans/diet_plans_screen.dart';
+import '../../diet_plans/my_diet_plans_screen.dart';
 import '../meal_controller.dart';
 import '../meal_models.dart';
 
@@ -43,8 +44,7 @@ class ActiveDietPlanSection extends StatelessWidget {
               children: [
                 const SectionEyebrow('Active Diet Plan'),
                 GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const DietPlansScreen())),
+                  onTap: () => _openPlans(context),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -64,6 +64,16 @@ class ActiveDietPlanSection extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// Same entry as splits: My Diet Plans (create + suggested). Free accounts
+  /// following an old plan land on the catalog's locked preview instead,
+  /// since building plans is Pro.
+  void _openPlans(BuildContext context) {
+    final locked = context.read<DietPlansController>().requiresUpgrade;
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) =>
+            locked ? const DietPlansScreen() : const MyDietPlansScreen()));
   }
 
   Widget _buildBody(BuildContext context, ActiveDietPlanController controller,
@@ -91,10 +101,9 @@ class ActiveDietPlanSection extends StatelessWidget {
     final plan = state.data!.plan;
     if (plan == null) {
       return _MessageCard(
-        message: 'No active plan yet. Pick one from the suggestions below.',
-        actionLabel: 'BROWSE PLANS',
-        onAction: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DietPlansScreen())),
+        message: 'No active plan yet. Create your own or pick a suggested one.',
+        actionLabel: 'GET STARTED',
+        onAction: () => _openPlans(context),
       );
     }
 
@@ -135,7 +144,8 @@ class _PlanDayCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repository = context.read<DietPlanRepository>();
-    final dayIndex = _dayIndexFor(mealController.selectedDate, plan.plan.durationDays);
+    final dayIndex =
+        _dayIndexFor(mealController.selectedDate, plan.plan.durationDays);
     final planDay = _findDay(dayIndex);
     final dayLogs = mealController.state.data?.meals ?? const <MealLog>[];
 
@@ -166,9 +176,9 @@ class _PlanDayCard extends StatelessWidget {
                 onPressed: () {
                   // Start the fetch immediately so it runs during the push
                   // transition instead of only after the screen has mounted.
-                  final detailController = DietPlanDetailController(
-                      repository, plan.plan.dietPlanId)
-                    ..load();
+                  final detailController =
+                      DietPlanDetailController(repository, plan.plan.dietPlanId)
+                        ..load();
                   Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => DietPlanDetailScreen(
                       controller: detailController,
@@ -212,8 +222,8 @@ class _PlanDayCard extends StatelessWidget {
                   for (final meal in planDay.meals) ...[
                     _PlanMealRow(
                       meal: meal,
-                      logged: dayLogs.any((log) =>
-                          log.isLogged && log.title == meal.title),
+                      logged: dayLogs.any(
+                          (log) => log.isLogged && log.title == meal.title),
                       onLog: () {
                         // The backend now pre-fills the week with this plan's
                         // meals as Planned logs on activation, so most taps
@@ -357,8 +367,8 @@ class _MessageCard extends StatelessWidget {
           TextButton(
             onPressed: onAction,
             child: Text(actionLabel,
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.accent)),
+                style:
+                    AppTypography.labelCaps.copyWith(color: AppColors.accent)),
           ),
         ],
       ),

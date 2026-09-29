@@ -210,7 +210,9 @@ BEGIN
             FOR XML PATH(N''), TYPE
         ).value(N'.', N'nvarchar(max)'), 1, 3, N'') AS IngredientPreview
     ) ingredientPreview
-    WHERE ms.SuggestedMonth = @Month OR ms.SuggestedMonth IS NULL
+    -- User-built meals (073) are private to their diet plans, never catalog.
+    WHERE ms.OwnerUserId IS NULL
+      AND (ms.SuggestedMonth = @Month OR ms.SuggestedMonth IS NULL)
     ORDER BY CASE WHEN ms.SuggestedMonth = @Month THEN 0 ELSE 1 END, ms.SortOrder;
 END
 GO

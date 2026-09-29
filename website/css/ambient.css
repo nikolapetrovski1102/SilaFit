@@ -1,0 +1,98 @@
+/* ============================================================
+   SilaFit ambient background — shared by the public site and the
+   admin sign-in pages. js/motion.js injects the .ambient layer and
+   writes --scroll / --mx / --my.
+   ============================================================ */
+
+/* ----------------------------------------------------------------
+   Ambient background — a fixed layer of soft light that drifts
+   with scroll and pointer (js/motion.js writes --scroll, --mx,
+   --my) and re-tints per section via [data-scene] on <html>.
+   The orb colours are registered custom properties so a scene
+   change cross-fades instead of snapping.
+   ---------------------------------------------------------------- */
+@property --orb-a { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --orb-b { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --orb-c { syntax: '<color>'; inherits: true; initial-value: transparent; }
+
+:root {
+  --scroll: 0;
+  --mx: 0;
+  --my: 0;
+  --lime: rgba(222, 251, 146, 0.16);
+  --sky: rgba(113, 194, 230, 0.15);
+  --amber: rgba(238, 175, 81, 0.14);
+  --deep: rgba(16, 38, 41, 0);
+  --orb-a: var(--lime);
+  --orb-b: var(--sky);
+  --orb-c: var(--amber);
+  --grain-opacity: 0.07;
+  transition: --orb-a 1400ms ease, --orb-b 1400ms ease, --orb-c 1400ms ease;
+}
+[data-theme="light"] {
+  --lime: rgba(128, 0, 32, 0.10);
+  --sky: rgba(46, 125, 154, 0.12);
+  --amber: rgba(245, 196, 99, 0.30);
+  --deep: rgba(245, 238, 221, 0);
+  --grain-opacity: 0.05;
+}
+:root[data-scene="lime"]  { --orb-a: var(--lime);  --orb-b: var(--sky);   --orb-c: var(--deep); }
+:root[data-scene="sky"]   { --orb-a: var(--sky);   --orb-b: var(--lime);  --orb-c: var(--deep); }
+:root[data-scene="amber"] { --orb-a: var(--amber); --orb-b: var(--lime);  --orb-c: var(--sky); }
+:root[data-scene="mix"]   { --orb-a: var(--lime);  --orb-b: var(--amber); --orb-c: var(--sky); }
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient__orb {
+  position: absolute;
+  width: 90vmax;
+  height: 90vmax;
+  border-radius: 50%;
+  will-change: transform;
+}
+.ambient__orb--a {
+  top: -45vmax;
+  right: -30vmax;
+  background: radial-gradient(closest-side, var(--orb-a), transparent);
+  transform: translate3d(calc(var(--scroll) * -38vw + var(--mx) * 3vw), calc(var(--scroll) * 70vh + var(--my) * 3vh), 0) rotate(calc(var(--scroll) * 120deg));
+}
+.ambient__orb--b {
+  bottom: -55vmax;
+  left: -35vmax;
+  background: radial-gradient(closest-side, var(--orb-b), transparent);
+  transform: translate3d(calc(var(--scroll) * 45vw - var(--mx) * 4vw), calc(var(--scroll) * -60vh - var(--my) * 4vh), 0);
+}
+.ambient__orb--c {
+  top: 20vh;
+  left: 30vw;
+  width: 60vmax;
+  height: 60vmax;
+  background: radial-gradient(closest-side, var(--orb-c), transparent);
+  transform: translate3d(calc(var(--scroll) * 30vw + var(--mx) * 6vw), calc(var(--scroll) * -40vh + var(--my) * 6vh), 0) scale(calc(0.8 + var(--scroll) * 0.6));
+}
+/* Film grain keeps the gradients from banding and gives the flat
+   surfaces a printed, tactile finish. */
+.ambient__grain {
+  position: absolute;
+  inset: -50%;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain 900ms steps(4) infinite;
+}
+@keyframes grain {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-3%, 2%); }
+  50%  { transform: translate(2%, -3%); }
+  75%  { transform: translate(-2%, -1%); }
+  100% { transform: translate(0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient__orb { transform: none !important; }
+  .ambient__grain { animation: none; }
+}

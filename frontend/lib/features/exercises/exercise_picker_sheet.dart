@@ -7,9 +7,10 @@ import '../../core/api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/silen_button.dart';
+import 'create_exercise_sheet.dart';
 import 'exercise_focus.dart';
-import 'exercise_video_sheet.dart';
-import 'exercise_web_search.dart';
+import 'exercise_form_button.dart';
 import 'exercises_models.dart';
 import 'exercises_repository.dart';
 
@@ -28,6 +29,10 @@ import 'exercises_repository.dart';
 /// generically titled day falls back to the groups of the exercises already
 /// added. Callers that pass none of these (the live-workout swap/add sheet) keep
 /// the generic "suggested for you" behaviour.
+///
+/// A search that finds nothing falls back to "did you mean" picks (names a
+/// typo or two away), and when even those miss, asks the user to add the
+/// exercise with its full details - which then comes back as the pick.
 ///
 /// Returns the picked [ExerciseSummary], or null if the sheet was dismissed.
 Future<ExerciseSummary?> showExercisePickerSheet(
@@ -92,6 +97,13 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
   String? _error;
   List<ExerciseSummary> _results = const [];
 
+  /// "Did you mean" picks, loaded only when a search returns nothing.
+  List<ExerciseSummary> _closeMatches = const [];
+
+  /// The query [_results] (and [_closeMatches]) belong to, so a slow response
+  /// for an older query never replaces the one on screen.
+  String _resultsQuery = '';
+
   /// Ranked picks for this user, loaded once and shown until they start typing.
   List<ExerciseSummary> _suggestions = const [];
   bool _loadingSuggestions = true;
@@ -151,6 +163,8 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
       // Clearing the box returns to the suggestion list.
       setState(() {
         _results = const [];
+        _closeMatches = const [];
+        _resultsQuery = '';
         _error = null;
         _isLoading = false;
       });
@@ -160,27 +174,37 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
   }
 
   Future<void> _search() async {
+    final query = _searchController.text.trim();
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final results = await context
-          .read<ExercisesRepository>()
-          .search(search: _searchController.text.trim());
-      if (!mounted) return;
+      final repository = context.read<ExercisesRepository>();
+      final results = await repository.search(search: query);
+      // Nothing matched as typed - look for names a typo away before
+      // offering to add it. Best-effort: on failure the add prompt shows.
+      var closeMatches = const <ExerciseSummary>[];
+      if (results.isEmpty) {
+        try {
+          closeMatches = await repository.closeMatches(query);
+        } catch (_) {}
+      }
+      if (!mounted || query != _searchController.text.trim()) return;
       setState(() {
         _results = results;
+        _closeMatches = closeMatches;
+        _resultsQuery = query;
         _isLoading = false;
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || query != _searchController.text.trim()) return;
       setState(() {
         _error = e.userMessage;
         _isLoading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || query != _searchController.text.trim()) return;
       setState(() {
         _error = ApiException.genericMessage;
         _isLoading = false;
@@ -247,16 +271,16 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
   /// day gives no signal at all.
   String get _suggestionHeading {
     if (_focus.fromTitle) {
-      final groups = _focus.muscleGroups.map((g) => g.toUpperCase()).join(' & ');
+      final groups =
+          _focus.muscleGroups.map((g) => g.toUpperCase()).join(' & ');
       return 'SUGGESTED FOR $groups';
     }
     if (_focus.muscleGroups.isNotEmpty) return 'MORE FOR THIS DAY';
     return 'SUGGESTED FOR YOU';
   }
 
-  String get _suggestionBadge => _focus.isEmpty || _focus.fromTitle
-      ? 'Suggested'
-      : 'For this day';
+  String get _suggestionBadge =>
+      _focus.isEmpty || _focus.fromTitle ? 'Suggested' : 'For this day';
 
   Widget _buildSuggestionList() {
     if (_suggestions.isEmpty) {
@@ -304,18 +328,89 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
         ),
       );
     }
-    if (_results.isEmpty) {
-      return Center(
-        child: Text('No exercises found.',
-            style: AppTypography.bodyMd
-                .copyWith(color: AppColors.onSurfaceVariant)),
-      );
-    }
+    if (_results.isEmpty && _closeMatches.isEmpty) return _buildAddPrompt();
+    final didYouMean = _results.isEmpty;
+    final rows = didYouMean ? _closeMatches : _results;
     return ListView.separated(
-      itemCount: _results.length,
+      itemCount: rows.length + (didYouMean ? 2 : 1),
       separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xxs),
-      itemBuilder: (context, index) => _ExerciseTile(exercise: _results[index]),
+      itemBuilder: (context, index) {
+        if (didYouMean) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxs),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('No exact match for “$_resultsQuery”.',
+                      style: AppTypography.bodyMd
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('DID YOU MEAN',
+                      style: AppTypography.labelCaps
+                          .copyWith(color: AppColors.accent)),
+                ],
+              ),
+            );
+          }
+          index -= 1;
+        }
+        if (index == rows.length) return _buildAddFooter();
+        return _ExerciseTile(exercise: rows[index]);
+      },
     );
+  }
+
+  /// Neither the search nor the "did you mean" pass found anything: the
+  /// exercise isn't in the library, so the way forward is adding it.
+  Widget _buildAddPrompt() {
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.fitness_center_rounded,
+                size: 32, color: AppColors.onSurfaceVariant),
+            const SizedBox(height: AppSpacing.sm),
+            Text('“$_resultsQuery” isn\'t in the library yet',
+                textAlign: TextAlign.center, style: AppTypography.headlineSm),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+                'Add it with its muscle group, equipment and movement type, '
+                'and it works like any other exercise in your splits and '
+                'progress.',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: AppSpacing.md),
+            PrimaryPillButton(
+              label: 'Add exercise',
+              icon: Icons.add_rounded,
+              onPressed: _addCustom,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Under a result list, for when what's listed is close but not it.
+  Widget _buildAddFooter() {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
+      child: TextButton.icon(
+        onPressed: _addCustom,
+        icon: const Icon(Icons.add_rounded, size: 18),
+        label: Text('Not listed? Add “$_resultsQuery”',
+            overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+
+  Future<void> _addCustom() async {
+    final created =
+        await showCreateExerciseSheet(context, initialName: _resultsQuery);
+    if (created != null && mounted) Navigator.of(context).pop(created);
   }
 }
 
@@ -338,7 +433,6 @@ class _ExerciseTile extends StatelessWidget {
       exercise.muscleGroup,
       if (exercise.equipmentType != null) exercise.equipmentType,
     ].whereType<String>().join(' • ');
-    final demoUrl = exercise.demoVideoUrl;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -360,80 +454,18 @@ class _ExerciseTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (demoUrl != null)
-            _ViewFormButton(url: demoUrl, exerciseName: exercise.name)
-          else
-            _SearchFormButton(exerciseName: exercise.name),
-          if (trailing != null) ...[
+          ExerciseFormButton(
+              exerciseName: exercise.name, demoUrl: exercise.demoVideoUrl),
+          if ((trailing ?? (exercise.isCustom ? 'Yours' : null))
+              case final badge?) ...[
             const SizedBox(width: AppSpacing.xxs),
-            Text(trailing!,
+            Text(badge,
                 style: AppTypography.labelCaps.copyWith(
                     color: trailingColor ?? AppColors.onSurfaceVariant)),
           ],
         ],
       ),
       onTap: () => Navigator.of(context).pop(exercise),
-    );
-  }
-}
-
-/// Icon-only button shown in place of [_ViewFormButton] when an exercise has
-/// no `demoVideoUrl` - opens an in-app web search for the exercise's form
-/// instead, so there's still a one-tap way to look it up.
-class _SearchFormButton extends StatelessWidget {
-  final String exerciseName;
-
-  const _SearchFormButton({required this.exerciseName});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Search for form',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () =>
-            openExerciseWebSearch(context, exerciseName: exerciseName),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(Icons.travel_explore_rounded,
-              size: 20, color: AppColors.onSurfaceVariant),
-        ),
-      ),
-    );
-  }
-}
-
-/// Icon-only button on a search/suggestion row that previews an exercise's
-/// form reference without picking it - tapping the row itself still selects
-/// the exercise, so this needs its own hit-testable region rather than
-/// living inside the row's own tap target.
-class _ViewFormButton extends StatelessWidget {
-  final String url;
-  final String exerciseName;
-
-  const _ViewFormButton({required this.url, required this.exerciseName});
-
-  @override
-  Widget build(BuildContext context) {
-    final isVideo = isVideoUrl(url);
-    return Tooltip(
-      message: isVideo ? 'Watch form' : 'View form',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => showExerciseVideoSheet(
-          context,
-          url: url,
-          exerciseName: exerciseName,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(
-            isVideo ? Icons.play_circle_outline_rounded : Icons.image_outlined,
-            size: 20,
-            color: AppColors.accent,
-          ),
-        ),
-      ),
     );
   }
 }

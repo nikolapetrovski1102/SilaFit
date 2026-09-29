@@ -18,7 +18,6 @@ import 'meal_tracker_screen.dart';
 import 'widgets/active_diet_plan_section.dart';
 import 'widgets/macro_bar.dart';
 import 'widgets/meal_log_card.dart';
-import 'widgets/suggested_diet_plans_section.dart';
 
 /// The Nutrition/Meal Planning screen - boxless: a calorie ring on the left
 /// with its macro bars beside it on the right, a 7-day pill strip below that
@@ -42,7 +41,7 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
   void initState() {
     super.initState();
     _controller = context.read<MealController>();
-    // App-wide controllers: the "Suggested This Month" strip and the active
+    // App-wide controllers: the Pro gate (via the plan catalog) and the active
     // plan section both need their own first load, independent of the meal day.
     final dietPlansController = context.read<DietPlansController>();
     final activePlanController = context.read<ActiveDietPlanController>();
@@ -76,11 +75,8 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
           body: SingleChildScrollView(
             // Extra room at the end so the last meal can scroll clear of
             // the FAB.
-            padding: EdgeInsets.fromLTRB(
-                AppSpacing.marginMobile,
-                AppSpacing.lg,
-                AppSpacing.marginMobile,
-                AppSpacing.sm + navReserved + 72),
+            padding: EdgeInsets.fromLTRB(AppSpacing.marginMobile, AppSpacing.lg,
+                AppSpacing.marginMobile, AppSpacing.sm + navReserved + 72),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -112,13 +108,8 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
                     dietPlans.load(force: true);
                     activePlan.load(force: true);
                   }),
-                ] else ...[
+                ] else
                   ActiveDietPlanSection(mealController: _controller),
-                  if (!dietPlans.requiresUpgrade) ...[
-                    const SizedBox(height: AppSpacing.xl),
-                    const SuggestedDietPlansSection(),
-                  ],
-                ],
                 const SizedBox(height: AppSpacing.xl),
               ],
             ),

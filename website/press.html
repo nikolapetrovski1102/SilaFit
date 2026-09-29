@@ -10,8 +10,9 @@
   <link rel="canonical" href="https://sila.fitness/press.html" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
   <link rel="stylesheet" href="css/base.css?v=20260915-teal" />
-  <link rel="stylesheet" href="css/site.css" />
-  <link rel="stylesheet" href="css/legal.css" />
+  <link rel="stylesheet" href="css/ambient.css?v=20260925" />
+  <link rel="stylesheet" href="css/site.css?v=20260925-ambient" />
+  <link rel="stylesheet" href="css/legal.css?v=20260925-motion" />
   <script>
     (function () {
       var stored = null;
@@ -23,10 +24,10 @@
     })();
   </script>
   <style>
-    .press-assets { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-top: 16px; }
-    .press-asset { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; border: 1px solid var(--surface-highest); border-radius: var(--r-card); background: var(--surface-low); text-align: center; }
-    .press-asset img { width: 64px; height: 64px; object-fit: contain; }
-    .press-asset span { font-size: 13px; color: var(--on-surface-variant); }
+    .press-assets { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 24px; margin-top: 24px; }
+    .press-asset { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px 20px; border-radius: var(--r-media); background: var(--surface-low); text-align: center; }
+    .press-asset img { width: 88px; height: 88px; object-fit: contain; }
+    .press-asset span { font-size: 15px; color: var(--on-surface-variant); }
   </style>
 </head>
 <body>
@@ -54,7 +55,7 @@
     <section class="legal-hero">
       <div class="legal-hero__content">
         <div class="eyebrow eyebrow--accent">Press kit</div>
-        <h1>Brand assets & boilerplate.</h1>
+        <h1 data-split>Brand assets & boilerplate.</h1>
         <p>Logos, icons, and a short description for anyone writing about SilaFit.</p>
       </div>
     </section>
@@ -146,5 +147,6 @@
     </div>
   </footer>
   <script src="js/theme.js"></script>
+  <script src="js/motion.js?v=20260925"></script>
 </body>
 </html>

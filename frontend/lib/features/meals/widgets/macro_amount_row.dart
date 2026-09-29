@@ -93,8 +93,8 @@ class _MacroAmountRowState extends State<MacroAmountRow> {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(AppRadius.inset),
-        border: Border.all(
-            color: tooHigh ? AppColors.error : Colors.transparent),
+        border:
+            Border.all(color: tooHigh ? AppColors.error : Colors.transparent),
       ),
       child: Row(
         children: [
@@ -111,8 +111,8 @@ class _MacroAmountRowState extends State<MacroAmountRow> {
               onChanged: _onTextChanged,
               decoration: InputDecoration(
                 hintText: '0',
-                hintStyle: AppTypography.headlineSm
-                    .copyWith(color: AppColors.onSurfaceVariant.withValues(alpha: 0.4)),
+                hintStyle: AppTypography.headlineSm.copyWith(
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.4)),
                 suffixText: kind?.unit,
                 suffixStyle: AppTypography.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant),
@@ -145,8 +145,8 @@ class _MacroAmountRowState extends State<MacroAmountRow> {
                   : ListView(
                       key: const ValueKey('kinds'),
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.xs),
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                       children: [
                         for (final k in options)
                           Padding(

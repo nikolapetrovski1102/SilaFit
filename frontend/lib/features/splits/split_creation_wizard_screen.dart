@@ -161,7 +161,18 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     } else {
       _underline.reverse();
     }
+    // Focus decides whether the search takes over the screen.
+    if (mounted) setState(() {});
   }
+
+  /// While a search is typed the keyboard covers half the screen, so the
+  /// split and day titles and the day's chips fold away and the field rises
+  /// to the top, leaving the room to the results. Picking a result drops the
+  /// keyboard and everything settles back.
+  bool get _searchTakeover =>
+      _stage == _Stage.exercises &&
+      _focus.hasFocus &&
+      _input.text.trim().isNotEmpty;
 
   /// Fills the field with [text] fully selected, so typing replaces it and
   /// submitting straight away keeps it.
@@ -389,6 +400,8 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     if (_added.any((a) => a.exercise.exerciseId == id)) return;
     final from = overlayRectOf(context, _rowKeys[id]);
     HapticFeedback.selectionClick();
+    // Drop the keyboard so the layout eases back and the chip flies home.
+    _focus.unfocus();
 
     final entry = _AddedExercise(exercise, landed: from == null);
     final sortOrder = _added.length;
@@ -419,9 +432,12 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
       setState(() => entry.landed = true);
       return;
     }
-    _fly(exercise.name, from, to, onLanded: () {
-      if (mounted) setState(() => entry.landed = true);
-    });
+    // The chip is still sliding back into place as the search folds away.
+    _fly(exercise.name, from, to,
+        track: () => overlayRectOf(context, _chipKeys[id]),
+        onLanded: () {
+          if (mounted) setState(() => entry.landed = true);
+        });
   }
 
   void _remove(_AddedExercise entry) {
@@ -436,10 +452,10 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
   }
 
   void _fly(String label, Rect from, Rect to,
-      {required VoidCallback onLanded}) {
+      {ValueGetter<Rect?>? track, required VoidCallback onLanded}) {
     late final OverlayEntry flight;
-    flight =
-        flyExercise(context, label: label, from: from, to: to, onLanded: () {
+    flight = flyExercise(context,
+        label: label, from: from, to: to, track: track, onLanded: () {
       _flights.remove(flight);
       onLanded();
     });
@@ -495,8 +511,11 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                     dayTop + dayLines * _kDayLine + AppSpacing.xl;
                 _heroTop = (constraints.maxHeight * 0.26)
                     .clamp(titleLines * _kTitleLine + AppSpacing.xxxl, 200.0);
-                final inputTop =
-                    _stage == _Stage.exercises ? exerciseTop : _heroTop;
+                final inputTop = _searchTakeover
+                    ? 0.0
+                    : _stage == _Stage.exercises
+                        ? exerciseTop
+                        : _heroTop;
                 // Tapping anywhere empty drops the keyboard (and drains the
                 // underline); tapping the field brings both back.
                 return GestureDetector(
@@ -508,8 +527,16 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                           child: _buildInputColumn(inputTop, width)),
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: _buildHeaders(
-                              dayEyebrowTop: dayEyebrowTop, dayTop: dayTop),
+                          // Faded rather than removed, so the titles' morphs
+                          // aren't replayed when the search hands the room
+                          // back.
+                          child: AnimatedOpacity(
+                            opacity: _searchTakeover ? 0 : 1,
+                            duration: kInkQuick,
+                            curve: Curves.easeOutCubic,
+                            child: _buildHeaders(
+                                dayEyebrowTop: dayEyebrowTop, dayTop: dayTop),
+                          ),
                         ),
                       ),
                     ],
@@ -650,7 +677,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
           duration: kInkQuick,
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
-          child: picking && _added.isNotEmpty
+          child: picking && _added.isNotEmpty && !_searchTakeover
               ? Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: ConstrainedBox(
@@ -667,6 +694,8 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                                   entry.exercise.exerciseId, GlobalKey.new),
                               label: entry.exercise.name,
                               visible: entry.landed,
+                              // Tapping anywhere on the chip takes it off.
+                              onTap: () => _remove(entry),
                               onRemove: () => _remove(entry),
                             ),
                         ],

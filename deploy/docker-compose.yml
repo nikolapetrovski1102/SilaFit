@@ -65,6 +65,8 @@ services:
       # OpenRouter — powers AI-narrated progress analytics text. Leave blank to disable.
       OpenRouter__ApiKey: "${OPENROUTER_API_KEY:-}"
       OpenRouter__Model: "${OPENROUTER_MODEL:-openai/gpt-4.1}"
+      # Vision model behind the meal tracker's AI photo scan (Advanced, 3/day).
+      OpenRouter__FoodScanModel: "${OPENROUTER_FOOD_SCAN_MODEL:-openai/gpt-6-sol}"
       FeatureFlags__DevTiersFree: "false"
       # Admin console sign-in (Silen.Common/Options/AdminAuthOptions.cs). Two factors:
       # a PBKDF2-hashed password in dbo.AdminUsers, then a TOTP code checked against

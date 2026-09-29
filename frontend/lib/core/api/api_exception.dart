@@ -19,6 +19,9 @@ class ApiException implements Exception {
   /// the third-party AI provider first (see `AiConsentGate`).
   bool get isAiConsentRequired => statusCode == 428;
 
+  /// 429 - a daily allowance is spent (currently: AI meal-photo scans).
+  bool get isTooManyRequests => statusCode == 429;
+
   static const String genericMessage = 'Something went wrong';
 
   @override

@@ -20,10 +20,12 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IExercisesService, ExercisesService>();
         services.AddScoped<IDietPlanService, DietPlanService>();
         services.AddScoped<IDietGuideService, DietGuideService>();
+        services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IMealPlanningService, MealPlanningService>();
         services.AddScoped<IFoodService, FoodService>();
+        services.AddScoped<IFoodScanService, FoodScanService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IMonthlyReviewService, MonthlyReviewService>();
         services.AddScoped<IWeeklyPlanGenerationService, WeeklyPlanGenerationService>();

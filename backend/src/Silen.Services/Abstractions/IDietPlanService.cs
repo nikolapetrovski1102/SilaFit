@@ -55,5 +55,9 @@ public interface IDietPlanService
 
     Task<ServiceResult<AdminWriteResultDto>> SaveMyPlanMealAsync(Guid userId, UserDietPlanMealUpsertRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>Builds a meal from catalog foods + grams and adds it to one of the caller's
+    /// plan days. Macros are computed server-side from the food catalog.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> CreateMyPlanCustomMealAsync(Guid userId, UserDietPlanCustomMealCreateRequest request, CancellationToken cancellationToken = default);
+
     Task<ServiceResult<AdminWriteResultDto>> DeleteMyPlanMealAsync(Guid userId, Guid dietPlanMealId, CancellationToken cancellationToken = default);
 }

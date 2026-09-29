@@ -17,11 +17,12 @@ public class AdminConsoleServiceTests
     private readonly Mock<IAdminContentProvider> contentProvider = new(MockBehavior.Strict);
     private readonly Mock<IMockDataSeeder> mockDataSeeder = new(MockBehavior.Strict);
     private readonly Mock<IImageUploadService> imageUploadService = new(MockBehavior.Strict);
+    private readonly Mock<IDietPlanService> dietPlanService = new(MockBehavior.Strict);
     private readonly AdminConsoleService sut;
 
     public AdminConsoleServiceTests()
     {
-        sut = new AdminConsoleService(adminProvider.Object, adminRbacProvider.Object, contentProvider.Object, mockDataSeeder.Object, imageUploadService.Object);
+        sut = new AdminConsoleService(adminProvider.Object, adminRbacProvider.Object, contentProvider.Object, mockDataSeeder.Object, imageUploadService.Object, dietPlanService.Object);
     }
 
     private (string SessionToken, Guid AdminUserId) ArrangeSession(params string[] permissions)
@@ -358,6 +359,36 @@ public class AdminConsoleServiceTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task AssignDietPlanAsync_SetActive_FillsClientsUpcomingWeek()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.DietPlansAssign);
+        var request = new AdminDietPlanAssignRequest { DietPlanId = Guid.NewGuid(), UserId = Guid.NewGuid(), SetActive = true };
+        contentProvider.Setup(p => p.AssignDietPlanAsync(request, It.IsAny<AdminActorModel>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = 0, EntityId = request.DietPlanId });
+        dietPlanService.Setup(s => s.ApplyToUpcomingWeekAsync(request.UserId, request.DietPlanId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Silen.Common.Contracts.ServiceResult<int>.Success(21));
+
+        var result = await sut.AssignDietPlanAsync(token, request, null);
+
+        Assert.True(result.IsSuccess);
+        dietPlanService.Verify(s => s.ApplyToUpcomingWeekAsync(request.UserId, request.DietPlanId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AssignDietPlanAsync_WithoutSetActive_LeavesClientsMealsAlone()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.DietPlansAssign);
+        var request = new AdminDietPlanAssignRequest { DietPlanId = Guid.NewGuid(), UserId = Guid.NewGuid(), SetActive = false };
+        contentProvider.Setup(p => p.AssignDietPlanAsync(request, It.IsAny<AdminActorModel>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = 0, EntityId = request.DietPlanId });
+
+        var result = await sut.AssignDietPlanAsync(token, request, null);
+
+        Assert.True(result.IsSuccess);
+        // Strict mock: any ApplyToUpcomingWeekAsync call would throw.
     }
 
     [Fact]

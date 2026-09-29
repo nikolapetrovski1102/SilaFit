@@ -483,7 +483,10 @@ BEGIN
 
     DECLARE @MealSuggestionTitle NVARCHAR(200);
 
-    SELECT @MealSuggestionTitle = Title FROM dbo.MealSuggestions WHERE MealSuggestionId = @MealSuggestionId;
+    SELECT @MealSuggestionTitle = Title
+    FROM dbo.MealSuggestions
+    WHERE MealSuggestionId = @MealSuggestionId
+      AND OwnerUserId IS NULL;
 
     IF @MealSuggestionTitle IS NULL
     BEGIN

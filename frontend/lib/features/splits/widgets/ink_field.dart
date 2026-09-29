@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../exercises/exercise_form_button.dart';
 import '../../exercises/exercises_models.dart';
 
 // The "ink" look shared by split creation and editing: borderless big type
@@ -384,6 +385,9 @@ class ExerciseResultRow extends StatelessWidget {
                   ],
                 ),
               ),
+              ExerciseFormButton(
+                  exerciseName: exercise.name, demoUrl: exercise.demoVideoUrl),
+              const SizedBox(width: AppSpacing.xxs),
               Icon(Icons.add_rounded, color: AppColors.accent),
             ],
           ),
@@ -468,6 +472,10 @@ Rect? overlayRectOf(BuildContext context, GlobalKey? key) {
 
 /// Flies [label] from a result row at [from] into a chip at [to], in the
 /// overlay. Returns the entry so the caller can drop it on dispose.
+///
+/// When the destination is still moving (the layout animating back as the
+/// keyboard drops), [track] re-reads its rect every frame so the flight
+/// lands on it; [to] is the fallback whenever [track] returns null.
 OverlayEntry flyExercise(
   BuildContext context, {
   required String label,
@@ -475,6 +483,7 @@ OverlayEntry flyExercise(
   required Rect to,
   required VoidCallback onLanded,
   double? toRadius,
+  ValueGetter<Rect?>? track,
 }) {
   late final OverlayEntry flight;
   flight = OverlayEntry(
@@ -482,6 +491,7 @@ OverlayEntry flyExercise(
       label: label,
       from: from,
       to: to,
+      track: track,
       toRadius: toRadius,
       onDone: () {
         if (flight.mounted) flight.remove();
@@ -499,6 +509,7 @@ class _ExerciseFlight extends StatefulWidget {
   final String label;
   final Rect from;
   final Rect to;
+  final ValueGetter<Rect?>? track;
 
   /// Corner radius on landing; defaults to a pill (half the height).
   final double? toRadius;
@@ -508,6 +519,7 @@ class _ExerciseFlight extends StatefulWidget {
     required this.label,
     required this.from,
     required this.to,
+    this.track,
     this.toRadius,
     required this.onDone,
   });
@@ -534,7 +546,8 @@ class _ExerciseFlightState extends State<_ExerciseFlight>
       animation: _controller,
       builder: (context, _) {
         final t = Curves.easeInOutCubic.transform(_controller.value);
-        final rect = Rect.lerp(widget.from, widget.to, t)!;
+        final to = widget.track?.call() ?? widget.to;
+        final rect = Rect.lerp(widget.from, to, t)!;
         // A small arc so the hop reads as a lift, not a slide.
         final lift = -18 * (1 - (2 * t - 1) * (2 * t - 1));
         return Positioned.fromRect(

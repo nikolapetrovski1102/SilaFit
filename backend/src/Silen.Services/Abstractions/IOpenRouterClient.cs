@@ -13,4 +13,12 @@ public interface IOpenRouterClient
     Task<string> GenerateJsonAsync(
         string systemPrompt, string userPrompt, JsonElement schema, string? model = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>The same structured call with one image attached to the user turn, for a
+    /// vision model. <paramref name="reasoningEffort"/> ("low"/"medium"/"high") is passed to
+    /// reasoning models; <paramref name="maxTokens"/> caps reasoning plus answer, which is
+    /// also what caps the call's cost.</summary>
+    Task<string> GenerateJsonFromImageAsync(
+        string systemPrompt, string userPrompt, byte[] image, string imageMediaType, JsonElement schema,
+        string model, string reasoningEffort, int maxTokens, CancellationToken cancellationToken = default);
 }

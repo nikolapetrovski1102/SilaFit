@@ -8,6 +8,9 @@ class ExerciseSummary {
   final bool isCompound;
   final String? demoVideoUrl;
 
+  /// True for an exercise this user added themselves (private to them).
+  final bool isCustom;
+
   /// Only set by the suggestion read (`/exercises/suggestions`): a higher score
   /// means a better fit for this user's equipment and experience. Null on plain
   /// search results, which is how the picker tells the two apart.
@@ -23,6 +26,7 @@ class ExerciseSummary {
     this.equipmentType,
     required this.isCompound,
     this.demoVideoUrl,
+    this.isCustom = false,
     this.matchScore,
     this.matchReason,
   });
@@ -36,6 +40,7 @@ class ExerciseSummary {
       equipmentType: map['equipmentType'] as String?,
       isCompound: map['isCompound'] as bool? ?? false,
       demoVideoUrl: map['demoVideoUrl'] as String?,
+      isCustom: map['isCustom'] as bool? ?? false,
       matchScore: (map['matchScore'] as num?)?.toInt(),
       matchReason: map['matchReason'] as String?,
     );

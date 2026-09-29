@@ -9,7 +9,6 @@ import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
-import 'my_diet_plans_screen.dart';
 import 'widgets/diet_plan_card.dart';
 import 'widgets/locked_diet_plans.dart';
 
@@ -49,18 +48,6 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          // Building your own plans is Pro too - no way in while locked.
-          if (!_controller.requiresUpgrade)
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const MyDietPlansScreen())),
-              icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
-              label: Text('My plans',
-                  style: AppTypography.labelSm
-                      .copyWith(color: AppColors.onSurface)),
-            ),
-        ],
       ),
       body: AnimatedBuilder(
         animation: _controller,
