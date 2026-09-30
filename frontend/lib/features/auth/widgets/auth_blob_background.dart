@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/soft_glow.dart';
 
 /// Soft blurred accent circles behind the login/register content. They're
 /// already in place at first frame - no fade/pop-in - so they read as part
@@ -59,26 +58,20 @@ class AuthBlobBackground extends StatelessWidget {
 
     return IgnorePointer(
       child: ClipRect(
-        child: ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
-          child: Stack(
-            children: [
-              for (var i = 0; i < targets.length; i++)
-                AnimatedAlign(
-                  duration: const Duration(milliseconds: 700),
-                  curve: Curves.easeInOut,
-                  alignment: targets[i],
-                  child: Container(
-                    width: sizes[i],
-                    height: sizes[i],
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colors[i].withValues(alpha: alphas[i]),
-                    ),
-                  ),
+        child: Stack(
+          children: [
+            for (var i = 0; i < targets.length; i++)
+              AnimatedAlign(
+                duration: const Duration(milliseconds: 700),
+                curve: Curves.easeInOut,
+                alignment: targets[i],
+                child: SoftGlow(
+                  diameter: sizes[i],
+                  sigma: 70,
+                  color: colors[i].withValues(alpha: alphas[i]),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );

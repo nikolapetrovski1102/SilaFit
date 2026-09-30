@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -153,10 +153,12 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   // object's memory, so it can't tell a resumed screen how much time has
   // actually passed. [_startedAtUtc] is the one thing carried over from a
   // restored `ActiveWorkoutDraft` (see [_init]); `_elapsed` is recomputed
-  // from it on every tick instead of tracked incrementally.
+  // from it on every tick instead of tracked incrementally. Held in a
+  // notifier so the per-second tick rebuilds only the clock text rather
+  // than the whole tracker.
   late DateTime _startedAtUtc;
   Timer? _ticker;
-  Duration _elapsed = Duration.zero;
+  final _elapsed = ValueNotifier(Duration.zero);
 
   // False until [_init]'s draft lookup resolves - a single fast local
   // storage read, but still async, so the set table can't be built
@@ -332,13 +334,12 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
       _startedAtUtc = draftMatchesShape
           ? draft.resumedStartedAtUtc(DateTime.now().toUtc())
           : DateTime.now().toUtc();
-      _elapsed = DateTime.now().toUtc().difference(_startedAtUtc);
+      _elapsed.value = DateTime.now().toUtc().difference(_startedAtUtc);
       _ready = true;
     });
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(
-          () => _elapsed = DateTime.now().toUtc().difference(_startedAtUtc));
+      _elapsed.value = DateTime.now().toUtc().difference(_startedAtUtc);
       // A "Log set" tap on the native surface while the app itself is open
       // has no lifecycle transition to piggyback on, so the ticker is also
       // the poll that turns those taps into logged sets. Cheap when there is
@@ -368,6 +369,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
+    _elapsed.dispose();
     // Leaving the workout room pauses it: the draft records when, and the
     // next "Continue Workout" resumes the clock without the time away. No
     // heartbeat here (unlike `_saveDraft`) - `context` is unusable in
@@ -810,7 +812,8 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     await _reconcileLoggedSets();
     if (!mounted) return;
     setState(() => _isFinishing = true);
-    final durationMinutes = _elapsed.inMinutes < 1 ? 1 : _elapsed.inMinutes;
+    final elapsedMinutes = _elapsed.value.inMinutes;
+    final durationMinutes = elapsedMinutes < 1 ? 1 : elapsedMinutes;
     final ok = await widget.controller.completeWorkout(
       workoutSessionId: sessionId,
       durationMinutes: durationMinutes,
@@ -886,13 +889,6 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     // engine and route are definitely still alive.
     await LiveWorkoutNotifier.instance.stop();
     if (mounted) Navigator.of(context).pop();
-  }
-
-  String _formatElapsed(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
   /// A scheduled day whose split day has no exercises on it - everything
@@ -986,7 +982,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                   AppSpacing.sm, AppSpacing.marginMobile, 0),
               child: _TelemetryBar(
                 onClose: _confirmExit,
-                elapsedLabel: _formatElapsed(_elapsed),
+                elapsed: _elapsed,
                 onSwap: _swapExercise,
                 onAdd: _addExercise,
                 onReorder: _reorderExercises,
@@ -1229,18 +1225,25 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
 
 class _TelemetryBar extends StatelessWidget {
   final VoidCallback onClose;
-  final String elapsedLabel;
+  final ValueListenable<Duration> elapsed;
   final VoidCallback onSwap;
   final VoidCallback onAdd;
   final VoidCallback onReorder;
 
   const _TelemetryBar({
     required this.onClose,
-    required this.elapsedLabel,
+    required this.elapsed,
     required this.onSwap,
     required this.onAdd,
     required this.onReorder,
   });
+
+  static String _formatElapsed(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1259,9 +1262,12 @@ class _TelemetryBar extends StatelessWidget {
         const Spacer(),
         Icon(Icons.timer_outlined, size: 16, color: AppColors.onSurfaceVariant),
         const SizedBox(width: 6),
-        Text(elapsedLabel,
-            style:
-                AppTypography.numericUnit.copyWith(color: AppColors.onSurface)),
+        ValueListenableBuilder(
+          valueListenable: elapsed,
+          builder: (context, value, _) => Text(_formatElapsed(value),
+              style: AppTypography.numericUnit
+                  .copyWith(color: AppColors.onSurface)),
+        ),
         const Spacer(),
         // Balances the close button's width so the elapsed time stays
         // visually centered.

@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import 'soft_glow.dart';
 
 /// Soft ambient glow used behind Home and its related detail screens.
 ///
@@ -49,16 +48,10 @@ class _GlowBlob extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 90, sigmaY: 90),
-      child: Container(
-        width: diameter,
-        height: diameter,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withValues(alpha: 0.28),
-        ),
-      ),
+    return SoftGlow(
+      diameter: diameter,
+      sigma: 90,
+      color: color.withValues(alpha: 0.28),
     );
   }
 }
