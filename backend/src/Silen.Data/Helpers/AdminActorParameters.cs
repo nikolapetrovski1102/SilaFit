@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -11,7 +11,7 @@ namespace Silen.Data.Helpers;
 /// </summary>
 public static class AdminActorParameters
 {
-    public static SqlParameter[] Build(AdminActorModel actor) =>
+    public static NpgsqlParameter[] Build(AdminActorModel actor) =>
     [
         SqlParameterBuilder.Create("@ActorAdminUserId", actor.AdminUserId),
         SqlParameterBuilder.Create("@ActorUsername", actor.Username),

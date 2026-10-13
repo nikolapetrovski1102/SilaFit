@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -13,7 +13,7 @@ public static class AnalyticsRowMapper
     /// MealLogs.CaloriesKcal are AES-256-GCM ciphertext); AnalyticsProvider fills them in
     /// afterwards from IBodyweightProvider/IMealPlanningProvider. TargetCalories IS returned by
     /// that proc, as ciphertext, so it's decrypted here with <paramref name="key"/>.</summary>
-    public static MonthlySnapshotModel MapMonthlySnapshot(SqlDataReader reader, byte[] key)
+    public static MonthlySnapshotModel MapMonthlySnapshot(NpgsqlDataReader reader, byte[] key)
     {
         var targetCalories = reader.GetNullableBytes("TargetCalories");
         return new MonthlySnapshotModel
@@ -31,7 +31,7 @@ public static class AnalyticsRowMapper
         };
     }
 
-    public static AiPromptTemplateModel MapPromptTemplate(SqlDataReader reader) => new()
+    public static AiPromptTemplateModel MapPromptTemplate(NpgsqlDataReader reader) => new()
     {
         PromptTemplateId = reader.GetGuidValue("PromptTemplateId"),
         TemplateKey = reader.GetStringValue("TemplateKey"),
@@ -42,7 +42,7 @@ public static class AnalyticsRowMapper
         UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
     };
 
-    public static MonthlyAnalyticsReportModel MapReport(SqlDataReader reader) => new()
+    public static MonthlyAnalyticsReportModel MapReport(NpgsqlDataReader reader) => new()
     {
         ReportId = reader.GetGuidValue("ReportId"),
         UserId = reader.GetGuidValue("UserId"),
@@ -53,7 +53,7 @@ public static class AnalyticsRowMapper
         GeneratedAtUtc = reader.GetDateTimeValue("GeneratedAtUtc")
     };
 
-    public static WeeklyAnalyticsReportModel MapWeeklyReport(SqlDataReader reader) => new()
+    public static WeeklyAnalyticsReportModel MapWeeklyReport(NpgsqlDataReader reader) => new()
     {
         ReportId = reader.GetGuidValue("ReportId"),
         UserId = reader.GetGuidValue("UserId"),

@@ -559,6 +559,44 @@ public sealed class AdminConsoleService(
                     $"Client overview requested for unknown user {userId}.", "That user no longer exists.");
         });
 
+    public Task<ServiceResult<AdminWriteResultDto>> SetUserPlanAsync(
+        string? sessionToken,
+        AdminUserPlanRequest request,
+        string? clientIp,
+        CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var actor = await RequireAsync(sessionToken, AdminPermissions.UsersSubscriptionWrite, clientIp, cancellationToken);
+
+            if (request.UserId == Guid.Empty)
+            {
+                throw new ValidationException("Tier change called without a user.", "Choose a user first.");
+            }
+
+            var planCode = request.PlanCode?.Trim().ToUpperInvariant() ?? string.Empty;
+            if (planCode.Length == 0)
+            {
+                throw new ValidationException("Tier change called without a plan.", "Choose a tier.");
+            }
+
+            var billingCycle = string.IsNullOrWhiteSpace(request.BillingCycle) ? "Monthly" : request.BillingCycle.Trim();
+
+            // The procedure rejects unknown plan codes and billing cycles itself -
+            // only it can see which plans exist.
+            var mutation = await contentProvider.SetUserPlanAsync(
+                new AdminUserPlanRequest
+                {
+                    UserId = request.UserId,
+                    PlanCode = planCode,
+                    BillingCycle = billingCycle,
+                    NoExpiry = request.NoExpiry
+                },
+                actor,
+                cancellationToken);
+
+            return AdminMutationOutcomeMapper.Resolve(mutation, planCode == "FREE" ? "User moved to Free." : $"User moved to {planCode}.");
+        });
+
     public Task<ServiceResult<AdminWriteResultDto>> SeedUserMockDataAsync(
         string? sessionToken,
         AdminMockDataRequest request,

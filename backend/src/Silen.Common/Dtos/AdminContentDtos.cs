@@ -187,6 +187,25 @@ public sealed class AdminMockDataRequest
     public int? Seed { get; set; }
 }
 
+/// <summary>
+/// Moves one app user onto a tier by hand (users.subscription.write). FREE removes
+/// their subscription; PRO/ADVANCED grant an active one detached from any store
+/// receipt, running one billing cycle from now unless <see cref="NoExpiry"/> is set.
+/// </summary>
+public sealed class AdminUserPlanRequest
+{
+    public Guid UserId { get; set; }
+
+    /// <summary>A SubscriptionPlans code: FREE, PRO or ADVANCED.</summary>
+    public string PlanCode { get; set; } = string.Empty;
+
+    /// <summary>"Monthly" or "Yearly". Ignored for FREE; blank defaults to Monthly.</summary>
+    public string BillingCycle { get; set; } = string.Empty;
+
+    /// <summary>Grant the paid tier with no expiry date. Ignored for FREE.</summary>
+    public bool NoExpiry { get; set; }
+}
+
 /// <summary>Result of an image upload - the URL to store back onto whatever field it's for
 /// (e.g. a split's HeroImageUrl).</summary>
 public sealed class AdminImageUploadResultDto

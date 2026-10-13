@@ -1,6 +1,6 @@
 # SilaFit deployment
 
-From-scratch deploy of the .NET API + SQL Server for a fresh Ubuntu server,
+From-scratch deploy of the .NET API + PostgreSQL for a fresh Ubuntu server,
 served at https://sila.fitness (with a dedicated https://api.sila.fitness vhost).
 
 ## Layout expected on the server
@@ -8,9 +8,10 @@ served at https://sila.fitness (with a dedicated https://api.sila.fitness vhost)
 ```
 /opt/silen/
   backend/     # app source (built into a Docker image)
-  database/    # schema/, procedures/, seed/ .sql scripts
+  database/    # migrations/, functions/, seed/ + apply.sh (PostgreSQL)
   deploy/
     deploy.sh                             # run this as root
+    migrate-to-postgres.sh                # one-time SQL Server -> PostgreSQL move
     docker-compose.yml                    # db + api services
     nginx-sila.fitness.conf
     well-known/assetlinks.json            # Android App Links verification (served statically)
@@ -23,8 +24,9 @@ served at https://sila.fitness (with a dedicated https://api.sila.fitness vhost)
 cd /opt/silen/deploy
 sudo ./deploy.sh
 ```
-Idempotent — safe to re-run, including after new files land in `database/schema`,
-`database/procedures`, or `database/seed` (every script there is safe to re-apply).
+Idempotent — safe to re-run. New files in `database/migrations` are applied once
+each (tracked in `public.schema_migrations`), `database/functions` is reloaded in
+full every run, and `database/seed` only ever runs against a brand-new database.
 To rebuild only the API after a code change:
 ```bash
 cd /opt/silen/deploy && docker compose up -d --build silen-api
@@ -32,38 +34,147 @@ cd /opt/silen/deploy && docker compose up -d --build silen-api
 
 ## What it does
 1. Swap + Docker Engine + nginx + certbot (skipped if already present — safe to
-   run alongside other sites on the same box)
-2. SQL Server 2022 container, creates the `SilenDb` database, applies
-   `database/schema`, `database/procedures`, then `database/seed`, in that order
-   (see "Column-encryption rollout" below for a caveat specific to that step)
-3. Enables Transparent Data Encryption (TDE) on `SilenDb` if not already on
-4. Builds & runs the API on `127.0.0.1:5010`
-5. nginx reverse proxy for `sila.fitness` (+ `api.sila.fitness`, `admin.sila.fitness`)
-6. Let's Encrypt HTTPS with auto HTTP->HTTPS redirect
-7. Installs a cron entry for the monthly progress-email batch (see "Monthly
+   run alongside other sites on the same box), then host hardening (see
+   "Server hardening" below)
+2. PostgreSQL 18 container (`silen-postgres`, database `silendb`), then
+   `database/apply.sh`: roles, new migrations, all functions, seed on a fresh
+   database. Refuses to run while the data still lives in SQL Server (see
+   "PostgreSQL migration" below)
+3. Builds & runs the API on `127.0.0.1:5010`
+4. nginx reverse proxy for `sila.fitness` (+ `api.sila.fitness`, `admin.sila.fitness`)
+5. Let's Encrypt HTTPS with auto HTTP->HTTPS redirect
+6. Installs a cron entry for the monthly progress-email batch (see "Monthly
    progress emails" below)
+7. Installs the nightly encrypted database backup (see "Backups" below)
 
-## ⚠️ TDE certificate backup — read this before your first deploy
+## PostgreSQL migration (one time, from SQL Server)
 
-Step 3 above generates a certificate (`SilenTdeCert`) that SQL Server needs to
-read the encrypted database at all. `deploy.sh` copies it (plus its private
-key) to `deploy/tde-cert-backup/` on the VPS the moment it's created — but
-**that is not a safe final resting place**: it's still on the same box as the
-database it protects. Move `deploy/tde-cert-backup/` to separate, offline
-secure storage (a password manager, an encrypted USB drive, a different
-machine) immediately after the first deploy that creates it, then delete it
-from the VPS.
+Until mid-October 2026 production ran on SQL Server 2022 (Developer edition, which
+is not licensed for production). `migrate-to-postgres.sh` moves it:
 
-**Losing this certificate permanently locks the entire encrypted database —
-including every backup taken after TDE was enabled. There is no recovery.**
-`deploy/tde-cert-backup/` is `.gitignore`d — it is never meant to reach the repo.
+1. **Rehearse** (safe while live): sync the new `backend/`, `database/` and
+   `deploy/` to a staging folder such as `/opt/silen/pg-staging/` and run
+   `/opt/silen/pg-staging/deploy/migrate-to-postgres.sh rehearse`. It copies the
+   live data (read-only) into a throwaway `silendb_rehearsal`, verifies every
+   table, and starts a test API on `127.0.0.1:5011` (no email, no push). Point a
+   debug build at it through `ssh -L 5011:127.0.0.1:5011 root@<server>`. Remove
+   it with `... rehearse-clean`.
+2. **Cut over** (~10 minutes offline): sync the new code into `/opt/silen`
+   (`database/` with `--delete`, so the old T-SQL `procedures/`, `schema/` and
+   `seed/` files go; never `--delete` on `deploy/`, which holds `.env`, `secrets/`,
+   `uploads/` and `certs/`):
+
+   ```bash
+   rsync -az --exclude bin --exclude obj backend/ root@<server>:/opt/silen/backend/
+   rsync -az --delete --exclude scripts database/ root@<server>:/opt/silen/database/
+   rsync -az --exclude .env --exclude secrets --exclude certs --exclude publish.sh \
+     deploy/ root@<server>:/opt/silen/deploy/
+   ```
+
+   then `cd /opt/silen/deploy && ./migrate-to-postgres.sh cutover`. It pauses the cron
+   jobs, stops the API, takes a last `SilenDb_premigration_*.bak`, copies and
+   verifies every table, applies constraints and functions, stops SQL Server
+   (kept, not deleted) and runs `deploy.sh`. A failed verification puts the old
+   API straight back.
+3. **Roll back** if needed: `./migrate-to-postgres.sh rollback` restarts SQL
+   Server and the pre-migration API image. Writes made on PostgreSQL after the
+   cutover are not carried back.
+
+Once the app has been healthy on PostgreSQL for a while: delete the
+`silen-sqlserver` and `silen-migrate-to-postgres` services from
+`docker-compose.yml`, `docker rm silen-sqlserver && docker volume rm
+silenfit_silen-sqldata`, `docker image rm silen-api:pre-postgres`, remove
+`/opt/silen/rollback-sqlserver`, `SA_PASSWORD` / `TDE_*` from `.env`,
+`deploy/tde-cert-backup/`, and `database/legacy-sqlserver/` from the repo.
+
+## Server hardening
+
+`deploy.sh` step 5 (re-applied on every run):
+
+- **SSH** — `/etc/ssh/sshd_config.d/00-silen-hardening.conf`: keys only, no
+  password or keyboard-interactive login, root by key only, no X11 forwarding.
+  fail2ban bans an IP for 1h after 5 failed attempts in 10 minutes
+  (`fail2ban-client status sshd` to see bans, `fail2ban-client unban <ip>` to lift one).
+- **Firewall (ufw)** — default deny inbound. 80/443 only from Cloudflare's ranges
+  (fetched from cloudflare.com/ips, cached in `/etc/silen/cloudflare-ips.txt`), so
+  nobody can reach the origin around Cloudflare. SSH from anywhere unless
+  `SSH_ALLOWED_IPS` (space-separated IPs/CIDRs) is set in `.env`. If you ever turn
+  the Cloudflare proxy off, set `ORIGIN_ALLOW_ALL=true` in `.env` and re-run, or
+  the site goes dark.
+- **Real client IP** — `/etc/nginx/conf.d/silen-cloudflare-realip.conf` trusts
+  `CF-Connecting-IP` from Cloudflare's ranges only, so the API's per-IP rate limits
+  and the admin audit log see the real visitor, not a Cloudflare edge.
+- **Security headers** — `nginx-security-headers.conf` / `nginx-admin-headers.conf`
+  (installed into `/etc/nginx/snippets/`): HSTS, nosniff, frame and referrer
+  policy on every static host, plus a Content-Security-Policy on the admin
+  console. `server_tokens off`. `/health/*` is not served on `api.sila.fitness`.
+- **Database login** — the API and the scheduled tools connect as `silen_app`
+  (`APP_DB_PASSWORD` in `.env`), which can only `EXECUTE` the functions in schema
+  `dbo`. Those are `SECURITY DEFINER` functions owned by the `NOLOGIN` role
+  `silen_owner`, which owns the tables, so `silen_app` never touches a table
+  directly. Only `silen-seed-mock-data` and `deploy.sh` use the `postgres`
+  superuser (`POSTGRES_PASSWORD`). PostgreSQL listens on `127.0.0.1:54320` only.
+- **Non-root API** — the `silen-api` container runs as UID 1654; `deploy.sh`
+  chowns `secrets/` and `uploads/` to it.
+
+## Backups
+
+A cron entry (`/etc/cron.d/silen-db-backup`, 03:30 UTC) runs
+`deploy/run-db-backup.sh`: a full `pg_dump` (custom format, zstd), encrypted with
+[age](https://age-encryption.org) while it is written, into
+`/opt/silen/backups/silendb_<stamp>.dump.age`, keeping `BACKUP_RETENTION_DAYS` (default 3 — the disk
+is small). Log: `/var/log/silen-db-backup.log`. Run one now with
+`/opt/silen/deploy/run-db-backup.sh`.
+
+**Off-site copy.** Set in `.env`, then re-run `deploy.sh` (or just wait for the
+next night):
+
+```
+BACKUP_REMOTE=u123456@u123456.your-storagebox.de:silen-backups
+# BACKUP_REMOTE_PORT=23   # Hetzner Storage Box SSH port (default)
+```
+
+and authorize `/root/.ssh/silen_backup_ed25519.pub` (printed by `deploy.sh`) on the
+target. Each run mirrors `/opt/silen/backups/` there; turn on the Storage Box's
+automatic snapshots for longer history.
+
+**Google Drive (personal My Drive).** On a laptop with rclone (`brew install rclone`):
+
+```
+rclone config create silen-gdrive drive scope=drive.file   # opens a Google sign-in
+rclone config show silen-gdrive | ssh root@<server> 'install -d -m 700 /etc/silen && umask 077 && cat > /etc/silen/rclone.conf'
+rclone config delete silen-gdrive                          # drop the laptop copy
+```
+
+then re-run `deploy.sh`: it installs `rclone` on the server and checks Drive is
+reachable. Each run uploads the new dump to `My Drive/silen-backups`
+(`BACKUP_GDRIVE_FOLDER`) and permanently deletes Drive copies older than
+`BACKUP_GDRIVE_RETENTION_DAYS` (default 7). The `drive.file` scope means the
+token only sees files it uploaded itself. Revoke it any time at
+myaccount.google.com → Security → Third-party apps (“rclone”). Can be combined
+with `BACKUP_REMOTE`.
+
+**Restoring needs the backup key.** The first `deploy.sh` run on PostgreSQL
+creates `/etc/silen/backup-age.key`; copy it off the server right away
+(`scp root@<server>:/etc/silen/backup-age.key ~/`) into a password manager, and
+keep it apart from both this server and the backup target. Without it no backup
+can be read; with it, anyone holding a dump can. To restore (on a new server,
+after `deploy.sh` has created the empty database and roles):
+
+```bash
+age -d -i backup-age.key silendb_<stamp>.dump.age \
+  | docker exec -i silen-postgres pg_restore -U postgres -d silendb --clean --if-exists --exit-on-error
+```
+
+Sensitive columns stay encrypted inside the dump with `ENCRYPTION_MASTER_KEY`
+(see below), so the restored server needs the same `.env` value to read them.
 
 ## Column-encryption rollout (`database/schema/024`–`025`, app-level AES-256-GCM)
 
 Several sensitive columns (bodyweight, age/height/gender/goal, meal titles +
 macros, nutrition targets) are additionally encrypted at the application
 layer (`Silen.Common.Helpers.FieldCipher`, keyed by `ENCRYPTION_MASTER_KEY` /
-`Encryption__MasterKeyBase64`) on top of TDE, independent of it. Because
+`Encryption__MasterKeyBase64`). Because
 production already holds real rows, this shipped as a safe multi-step
 migration instead of an in-place column-type change:
 
@@ -86,6 +197,10 @@ migration instead of an in-place column-type change:
 
 If you ever need to roll back after a cutover but before running 026, the
 `*_Legacy` columns still hold the original plaintext — no data is lost.
+
+This rollout finished on SQL Server; the PostgreSQL schema only has the final
+encrypted columns, and the `024`/`025`/`026` scripts and the backfill tool are
+gone (history in `database/legacy-sqlserver/`).
 
 ## Admin console (two-factor sign-in)
 
@@ -499,15 +614,16 @@ disables the bypass entirely (`AuthService.IsReviewerBypassEmail`). To use it:
    next re-review — the account itself is a normal registered user once created.
 
 ## Notes
-- DB engine is **Microsoft SQL Server** (all access goes through stored procedures,
-  no ORM/LINQ-to-SQL — see `database/procedures`).
+- DB engine is **PostgreSQL 18** (all access goes through PL/pgSQL functions
+  that return refcursors, no ORM/LINQ-to-SQL — see `database/functions`).
 - `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` in `docker-compose.yml` is required —
   without it, `app.UseHttpsRedirection()` in `Program.cs` can't tell the request
   arrived over HTTPS (nginx talks plain HTTP to Kestrel) and redirects it back to
   HTTPS, which nginx re-terminates and forwards as HTTP again: a redirect loop.
-- Ports 1433-range and 5010 are bound to `127.0.0.1` only; only 80/443 are public.
+- Ports 54320 and 5010 are bound to `127.0.0.1` only; only 80/443 are public,
+  and those only to Cloudflare (see "Server hardening").
 - Every container/port/vhost name here is namespaced (`silen-*`, `5010`,
-  `14340`), so `deploy.sh` is safe to run alongside other sites/stacks on the
+  `54320`), so `deploy.sh` is safe to run alongside other sites/stacks on the
   same box, not just on a dedicated one.
 - `well-known/assetlinks.json` is what makes `https://sila.fitness`
   Android App Links (`android:autoVerify="true"` in the app's

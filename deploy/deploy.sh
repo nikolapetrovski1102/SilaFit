@@ -7,10 +7,12 @@
 # Provisions:
 #   - Swap (memory safety on small boxes)
 #   - Docker Engine + compose plugin
-#   - SQL Server 2022 (Docker) + SilenDb database + schema/procedures/seed
+#   - PostgreSQL 18 (Docker) + silendb database + migrations/functions/seed
 #   - Silen.Api (.NET 8, Docker) on 127.0.0.1:5010
 #   - nginx reverse proxy for sila.fitness (+ api.sila.fitness, admin.sila.fitness)
 #   - Let's Encrypt HTTPS (certbot)
+#   - Host hardening: key-only SSH, fail2ban, ufw (80/443 from Cloudflare only),
+#     nginx real-client-IP from Cloudflare, nightly encrypted pg_dump backups
 #
 # Idempotent: safe to re-run. Secrets are generated once and cached in ./.env.
 #
@@ -25,7 +27,7 @@ API_DOMAIN="api.$DOMAIN"
 IMAGES_DOMAIN="images.$DOMAIN"
 ADMIN_DOMAIN="admin.$DOMAIN"
 LE_EMAIL="nikpetrovski007@gmail.com"
-DB_NAME="SilenDb"
+DB_NAME="silendb"
 SWAP_GB=4
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,11 +51,13 @@ if [ -s "$ENV_FILE" ]; then
   ok ".env found — reusing existing secrets"
 fi
 
-# SA password — SQL Server complexity: upper + lower + digit + special. Avoid shell/YAML-hostile chars.
-if [ -z "${SA_PASSWORD:-}" ]; then
-  SA_PASSWORD="Sf$(openssl rand -hex 18)#K7m"
-  printf 'SA_PASSWORD=%s\n' "$SA_PASSWORD" >> "$ENV_FILE"
-  ok "Generated new SA password -> $ENV_FILE (chmod 600)"
+# PostgreSQL superuser password (postgres). Only deploy-time tooling and the
+# one-off seed tool use it; the API and cron tools log in as silen_app. Hex only,
+# so it is safe unquoted in .env, YAML and connection strings.
+if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+  POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+  printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" >> "$ENV_FILE"
+  ok "Generated new PostgreSQL superuser password -> $ENV_FILE (chmod 600)"
 fi
 
 # JWT signing secret — used to sign/verify auth tokens (Jwt__SigningKey env override).
@@ -72,23 +76,15 @@ if [ -z "${ENCRYPTION_MASTER_KEY:-}" ]; then
   ok "Generated new column-encryption master key -> $ENV_FILE (chmod 600)"
 fi
 
-# TDE master key password — protects the server-level (master db) master key
-# used to hold the TDE certificate. SQL Server complexity rules, same shape as SA_PASSWORD.
-if [ -z "${TDE_MASTER_KEY_PASSWORD:-}" ]; then
-  TDE_MASTER_KEY_PASSWORD="Sf$(openssl rand -hex 18)#K7m"
-  printf 'TDE_MASTER_KEY_PASSWORD=%s\n' "$TDE_MASTER_KEY_PASSWORD" >> "$ENV_FILE"
-  ok "Generated new TDE master key password -> $ENV_FILE (chmod 600)"
+# Password for silen_app, the least-privilege database role the API and the
+# scheduled tools connect as (step 7) - EXECUTE on the dbo functions only.
+if [ -z "${APP_DB_PASSWORD:-}" ]; then
+  APP_DB_PASSWORD="Sa$(openssl rand -hex 18)#P4q"
+  printf 'APP_DB_PASSWORD=%s\n' "$APP_DB_PASSWORD" >> "$ENV_FILE"
+  ok "Generated new app DB login password -> $ENV_FILE (chmod 600)"
 fi
 
-# TDE certificate private-key backup password — protects the .pvk file backed
-# up to deploy/tde-cert-backup/ (see step 7b below).
-if [ -z "${TDE_CERT_BACKUP_PASSWORD:-}" ]; then
-  TDE_CERT_BACKUP_PASSWORD="Sf$(openssl rand -hex 18)#K7m"
-  printf 'TDE_CERT_BACKUP_PASSWORD=%s\n' "$TDE_CERT_BACKUP_PASSWORD" >> "$ENV_FILE"
-  ok "Generated new TDE certificate backup password -> $ENV_FILE (chmod 600)"
-fi
-
-export SA_PASSWORD JWT_SIGNING_KEY ENCRYPTION_MASTER_KEY TDE_MASTER_KEY_PASSWORD TDE_CERT_BACKUP_PASSWORD
+export POSTGRES_PASSWORD JWT_SIGNING_KEY ENCRYPTION_MASTER_KEY APP_DB_PASSWORD
 export GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}"
 export APPLE_BUNDLE_ID="${APPLE_BUNDLE_ID:-com.nikolapetrovski.silafit}"
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
@@ -119,6 +115,9 @@ fi
 # ---- 3. base packages + docker ----------------------------------------------
 log "Installing base packages"
 export DEBIAN_FRONTEND=noninteractive
+# Wait (up to 10 min) for the dpkg lock instead of failing outright: Ubuntu's
+# apt-daily / unattended-upgrades timers hold it for minutes at a time.
+echo 'DPkg::Lock::Timeout "600";' > /etc/apt/apt.conf.d/90silen-lock-timeout
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg lsb-release ufw >/dev/null
 # Some fresh Ubuntu images register curl in dpkg but ship without the binary — repair it.
@@ -161,153 +160,184 @@ apt-get install -y -qq nginx certbot python3-certbot-nginx >/dev/null
 systemctl enable --now nginx >/dev/null 2>&1 || true
 ok "nginx + certbot"
 
-# ---- 5. firewall ------------------------------------------------------------
-log "Configuring firewall (ufw)"
-if ufw status | grep -q "Status: active"; then
-  ufw allow OpenSSH >/dev/null 2>&1 || true
-  ufw allow 'Nginx Full' >/dev/null 2>&1 || true
-  ok "ufw rules ensured (active)"
+# ---- 5. host hardening -------------------------------------------------------
+# 5a. SSH: keys only. A 00- drop-in wins over everything else in sshd_config.d
+# (first value read is the one sshd keeps), including cloud-init's 50- file.
+log "Hardening SSH (key-only)"
+cat > /etc/ssh/sshd_config.d/00-silen-hardening.conf <<'SSHD'
+# Installed by deploy.sh - see deploy/README.md "Server hardening".
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+X11Forwarding no
+SSHD
+chmod 644 /etc/ssh/sshd_config.d/00-silen-hardening.conf
+if sshd -t; then
+  systemctl reload ssh 2>/dev/null || systemctl restart ssh
+  ok "sshd: password login off, root key-only, X11 forwarding off"
 else
-  warn "ufw inactive — leaving it disabled (Hetzner default). Ports 80/443/22 open."
+  rm -f /etc/ssh/sshd_config.d/00-silen-hardening.conf
+  warn "sshd -t rejected the hardening drop-in — removed it, SSH left unchanged"
 fi
 
-# ---- 6. start SQL Server -----------------------------------------------------
-log "Starting SQL Server container"
-docker compose up -d silen-sqlserver
-ok "waiting for SQL Server to become healthy..."
+# 5b. fail2ban for SSH brute force.
+log "Installing fail2ban"
+apt-get install -y -qq fail2ban >/dev/null
+cat > /etc/fail2ban/jail.d/silen-sshd.local <<'JAIL'
+# Installed by deploy.sh
+[sshd]
+enabled  = true
+backend  = systemd
+maxretry = 5
+findtime = 10m
+bantime  = 1h
+JAIL
+systemctl enable fail2ban >/dev/null 2>&1 || true
+systemctl restart fail2ban
+ok "fail2ban active (sshd jail)"
+
+# 5c. Cloudflare ranges. sila.fitness and every subdomain are proxied through
+# Cloudflare, so the origin should only ever be reached from Cloudflare's edge:
+# the same list drives both the firewall (5d) and nginx's real-client-IP (5e).
+# Cached so a failed fetch on a later run reuses the last good list.
+CF_CACHE=/etc/silen/cloudflare-ips.txt
+mkdir -p /etc/silen
+log "Fetching Cloudflare IP ranges"
+CF_RANGES=""
+if cf_v4="$(curl -fsS --max-time 15 https://www.cloudflare.com/ips-v4)" && \
+   cf_v6="$(curl -fsS --max-time 15 https://www.cloudflare.com/ips-v6)"; then
+  CF_RANGES="$(printf '%s\n%s\n' "$cf_v4" "$cf_v6" | grep -E '^[0-9a-fA-F:.]+/[0-9]+$' || true)"
+fi
+if [ "$(printf '%s' "$CF_RANGES" | grep -c /)" -ge 10 ]; then
+  printf '%s\n' "$CF_RANGES" > "$CF_CACHE"
+  ok "$(wc -l < "$CF_CACHE") Cloudflare ranges"
+elif [ -s "$CF_CACHE" ]; then
+  CF_RANGES="$(cat "$CF_CACHE")"
+  warn "could not fetch Cloudflare ranges — reusing cached list ($CF_CACHE)"
+else
+  CF_RANGES=""
+  warn "could not fetch Cloudflare ranges and no cache exists — firewall/real-IP steps skipped"
+fi
+
+# 5d. Firewall. Default deny inbound; SSH open (or limited to SSH_ALLOWED_IPS from
+# .env, space-separated); 80/443 only from Cloudflare. Docker's published ports are
+# bound to 127.0.0.1 in docker-compose.yml, so ufw never needs to cover them.
+# ORIGIN_ALLOW_ALL=true in .env opens 80/443 to everyone (e.g. with the Cloudflare
+# proxy switched off).
+log "Configuring firewall (ufw)"
+ufw default deny incoming >/dev/null
+ufw default allow outgoing >/dev/null
+if [ -n "${SSH_ALLOWED_IPS:-}" ]; then
+  for ip in $SSH_ALLOWED_IPS; do
+    ufw allow proto tcp from "$ip" to any port 22 comment 'silen-ssh' >/dev/null
+  done
+  ufw delete allow 22/tcp >/dev/null 2>&1 || true
+  ufw delete allow OpenSSH >/dev/null 2>&1 || true
+  ok "SSH allowed from: $SSH_ALLOWED_IPS"
+else
+  ufw allow 22/tcp comment 'silen-ssh' >/dev/null
+  ok "SSH allowed from anywhere (set SSH_ALLOWED_IPS in $ENV_FILE to restrict)"
+fi
+if [ "${ORIGIN_ALLOW_ALL:-false}" = "true" ]; then
+  ufw allow 80,443/tcp comment 'silen-web' >/dev/null
+  warn "ORIGIN_ALLOW_ALL=true — 80/443 open to everyone, not just Cloudflare"
+elif [ -n "$CF_RANGES" ]; then
+  for range in $CF_RANGES; do
+    ufw allow proto tcp from "$range" to any port 80,443 comment 'cloudflare' >/dev/null
+  done
+  ufw delete allow 80,443/tcp >/dev/null 2>&1 || true
+  ufw delete allow 'Nginx Full' >/dev/null 2>&1 || true
+  ufw delete allow 'Nginx HTTP' >/dev/null 2>&1 || true
+  ufw delete allow 'Nginx HTTPS' >/dev/null 2>&1 || true
+  ok "80/443 allowed from Cloudflare only"
+else
+  ufw allow 80,443/tcp comment 'silen-web' >/dev/null
+  warn "no Cloudflare list — 80/443 left open to everyone"
+fi
+ufw --force enable >/dev/null
+ok "ufw active"
+
+# 5e. nginx: real client IP from Cloudflare (otherwise every request appears to
+# come from a Cloudflare edge address, and the API's per-IP rate limits throttle
+# whole regions together), and no version number in the Server header.
+log "Configuring nginx real-IP + server_tokens"
+if [ -n "$CF_RANGES" ]; then
+  {
+    echo "# Generated by deploy.sh from https://www.cloudflare.com/ips - do not edit."
+    for range in $CF_RANGES; do echo "set_real_ip_from $range;"; done
+    echo "real_ip_header CF-Connecting-IP;"
+  } > /etc/nginx/conf.d/silen-cloudflare-realip.conf
+  ok "real client IP taken from CF-Connecting-IP"
+fi
+if grep -qE '^\s*server_tokens\s' /etc/nginx/nginx.conf; then
+  sed -i -E 's/^(\s*)server_tokens\s+[a-z]+;.*/\1server_tokens off;/' /etc/nginx/nginx.conf
+else
+  echo "server_tokens off;" > /etc/nginx/conf.d/silen-server-tokens.conf
+fi
+ok "server_tokens off"
+
+# ---- 6. start PostgreSQL -----------------------------------------------------
+# A server that still runs its data on SQL Server must move it with
+# migrate-to-postgres.sh first: applying the schema here would leave the API on
+# an empty database, and the data copy only loads into empty tables.
+pg_value() { docker exec -i silen-postgres psql -U postgres -d "$DB_NAME" -X -q -At -v ON_ERROR_STOP=1 -c "$1"; }
+if docker ps -a --format '{{.Names}}' | grep -qx silen-sqlserver; then
+  migrated=""
+  if docker ps --format '{{.Names}}' | grep -qx silen-postgres; then
+    migrated="$(pg_value "SELECT to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations)" 2>/dev/null || true)"
+  fi
+  if [ "$migrated" != "t" ]; then
+    echo "This server still has its data in SQL Server (silen-sqlserver). Run ./migrate-to-postgres.sh cutover instead (see deploy/README.md \"PostgreSQL migration\")."
+    exit 1
+  fi
+fi
+
+log "Starting PostgreSQL container"
+docker compose up -d silen-postgres
+ok "waiting for PostgreSQL to become healthy..."
 for i in $(seq 1 40); do
-  status="$(docker inspect -f '{{.State.Health.Status}}' silen-sqlserver 2>/dev/null || echo starting)"
+  status="$(docker inspect -f '{{.State.Health.Status}}' silen-postgres 2>/dev/null || echo starting)"
   [ "$status" = "healthy" ] && break
-  sleep 5
+  sleep 3
 done
-[ "$status" = "healthy" ] || { echo "SQL Server did not become healthy"; docker logs --tail 40 silen-sqlserver; exit 1; }
-ok "SQL Server healthy"
-
-# sqlcmd helpers (tools path differs across image versions; env vars avoid quoting issues)
-run_sql() {   # run_sql <db> <query> — headers off (-h -1) since callers often
-              # compare the trimmed result numerically (e.g. is_encrypted below)
-  docker exec -e SAPW="$SA_PASSWORD" -e DBN="$1" -e QRY="$2" silen-sqlserver /bin/bash -c '
-    if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then BIN=/opt/mssql-tools18/bin/sqlcmd; C=-C;
-    else BIN=/opt/mssql-tools/bin/sqlcmd; C=; fi
-    "$BIN" -S localhost -U sa -P "$SAPW" $C -b -h -1 -d "$DBN" -Q "$QRY"'
-}
-run_sql_file() {  # run_sql_file <db> <container_path>
-  docker exec -e SAPW="$SA_PASSWORD" -e DBN="$1" -e FIL="$2" silen-sqlserver /bin/bash -c '
-    if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then BIN=/opt/mssql-tools18/bin/sqlcmd; C=-C;
-    else BIN=/opt/mssql-tools/bin/sqlcmd; C=; fi
-    "$BIN" -S localhost -U sa -P "$SAPW" $C -b -d "$DBN" -i "$FIL"'
-}
-
-# One-time backfill for the column-encryption rollout (see step 7's hook
-# below) — builds and runs Silen.Tools.EncryptExistingData in a throwaway
-# container on the compose network, resumable/idempotent by design (only
-# rows whose *Enc column is still NULL get processed).
-run_encryption_backfill() {
-  log "Backfilling AES-256-GCM ciphertext into *Enc columns before cutover"
-  # --build: `run` alone reuses an already-built image even when the Dockerfile
-  # changed on disk (bit us once - fixed image, stale container, same crash).
-  docker compose --profile tools run --build --rm silen-encrypt-backfill
-  ok "backfill complete"
-}
+[ "$status" = "healthy" ] || { echo "PostgreSQL did not become healthy"; docker logs --tail 40 silen-postgres; exit 1; }
+ok "PostgreSQL healthy"
 
 # ---- 6b. push secrets dir ---------------------------------------------------
 # The API/tool containers mount ./secrets read-only for the Firebase service
 # account. Creating it here (owned by root, 700) keeps `docker compose` from
 # creating it lazily as a root-owned directory mid-run.
+# Owned by UID 1654 - the non-root "app" user silen-api runs as (backend/Dockerfile).
+# The tool containers still run as root, which can read it regardless.
+API_UID=1654
 mkdir -p "$SCRIPT_DIR/secrets"
+chown -R "$API_UID:$API_UID" "$SCRIPT_DIR/secrets"
 chmod 700 "$SCRIPT_DIR/secrets"
+find "$SCRIPT_DIR/secrets" -type f -exec chmod 600 {} +
 if [ ! -s "$SCRIPT_DIR/secrets/fcm-service-account.json" ]; then
   warn "No deploy/secrets/fcm-service-account.json yet — push reminders will be composed but not delivered (log-only sender). Drop the Firebase service account there and set PUSH_ENABLED=true in $ENV_FILE to enable delivery."
 fi
 
 # ---- 6c. uploaded-image storage ---------------------------------------------
 # Bind-mounted into silen-api at /app/uploads (see docker-compose.yml) and read
-# straight off disk by nginx's images.sila.fitness vhost - world-readable so the
-# nginx worker (www-data) can serve files the API container (running as root)
-# writes into it.
+# straight off disk by nginx's images.sila.fitness vhost - owned by the API
+# container's non-root UID so it can write, world-readable so the nginx worker
+# (www-data) can serve what it writes.
 mkdir -p "$SCRIPT_DIR/uploads"
+chown -R "$API_UID:$API_UID" "$SCRIPT_DIR/uploads"
 chmod 755 "$SCRIPT_DIR/uploads"
 
-# ---- 7. create database + apply schema/procedures/seed ----------------------
-# Same three directories, same order, as database/scripts/deploy.sh (local dev) —
-# every file is a plain idempotent .sql script (CREATE ... IF NOT EXISTS, or
-# CREATE OR ALTER for procedures), so re-running this after new migrations land
-# only applies what's new.
-log "Creating database [$DB_NAME]"
-run_sql master "IF DB_ID('$DB_NAME') IS NULL CREATE DATABASE [$DB_NAME];"
-# SIMPLE recovery: backups here are full-only (/var/opt/mssql/backup), never
-# log backups, so FULL recovery only let the log grow without bound - the
-# food catalog import alone left a 7.5 GB log that could never be reused.
-run_sql master "IF (SELECT recovery_model_desc FROM sys.databases WHERE name = N'$DB_NAME') <> N'SIMPLE' ALTER DATABASE [$DB_NAME] SET RECOVERY SIMPLE;"
-ok "database ensured"
-
-# database/manual-migrations/ is intentionally NOT one of these directories —
-# it holds migrations (e.g. 026_ColumnEncryptionCleanup.sql) that must only
-# ever run when a human explicitly invokes them, never swept up here.
-for stage in schema procedures seed; do
-  log "Applying database/$stage"
-  for f in "$REPO_ROOT/database/$stage"/*.sql; do
-    fname="$(basename "$f")"
-
-    # The column-encryption rollout (024/025) needs real data encrypted into
-    # the new *Enc columns BEFORE 025 renames them into place — otherwise the
-    # cutover promotes empty/NULL ciphertext columns over live plaintext data.
-    # Run the backfill tool here, once, right before 025 is applied.
-    if [ "$fname" = "025_ColumnEncryptionCutover.sql" ]; then
-      run_encryption_backfill
-    fi
-
-    docker cp "$f" "silen-sqlserver:/tmp/$fname"
-    run_sql_file "$DB_NAME" "/tmp/$fname"
-    ok "$fname"
-  done
-done
-tbl_count="$(run_sql "$DB_NAME" "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables;" | tr -d '[:space:]')"
-ok "tables in $DB_NAME: $tbl_count"
-
-# ---- 7b. Transparent Data Encryption (TDE) ----------------------------------
-log "Ensuring Transparent Data Encryption (TDE) for [$DB_NAME]"
-# DATABASEPROPERTYEX('IsEncrypted') is not a reliable signal here - it can
-# read back NULL/0 even once a database encryption key already exists and
-# ALTER DATABASE ... SET ENCRYPTION ON has already completed (observed on
-# production: PropEx read NULL while sys.dm_database_encryption_keys already
-# showed encryption_state = 3/Encrypted), which made this script re-issue
-# SET ENCRYPTION ON against an already-encrypted database and fail with
-# "Msg 33107 ... Cannot enable database encryption because it is already
-# enabled." sys.dm_database_encryption_keys is the authoritative source (it's
-# already trusted below for the CREATE DATABASE ENCRYPTION KEY guard) - encryption_state
-# 2/3/4/6 (in progress / encrypted / key change in progress / protection
-# change in progress) all mean SET ENCRYPTION ON must not be re-run; state
-# 1 (key exists but database was explicitly decrypted) and no row at all
-# (0) are the only cases where it's safe to (re)enable.
-is_encrypted="$(run_sql master "SET NOCOUNT ON; SELECT ISNULL((SELECT CASE WHEN encryption_state IN (2,3,4,6) THEN 1 ELSE 0 END FROM sys.dm_database_encryption_keys WHERE database_id = DB_ID('$DB_NAME')), 0);" | tr -d '[:space:]')"
-if [ "$is_encrypted" = "1" ]; then
-  ok "TDE already enabled"
-else
-  cert_exists="$(run_sql master "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.certificates WHERE name = 'SilenTdeCert';" | tr -d '[:space:]')"
-  if [ "$cert_exists" = "0" ]; then
-    log "Creating TDE certificate (one-time)"
-    run_sql master "IF NOT EXISTS (SELECT 1 FROM sys.symmetric_keys WHERE name = '##MS_DatabaseMasterKey##') CREATE MASTER KEY ENCRYPTION BY PASSWORD = N'$TDE_MASTER_KEY_PASSWORD';"
-    run_sql master "CREATE CERTIFICATE SilenTdeCert WITH SUBJECT = N'SilenDb TDE certificate';"
-    docker exec silen-sqlserver mkdir -p /var/opt/mssql/tde-backup
-    run_sql master "BACKUP CERTIFICATE SilenTdeCert TO FILE = N'/var/opt/mssql/tde-backup/SilenTdeCert.cer' WITH PRIVATE KEY (FILE = N'/var/opt/mssql/tde-backup/SilenTdeCert.pvk', ENCRYPTION BY PASSWORD = N'$TDE_CERT_BACKUP_PASSWORD');"
-
-    # Copy the certificate + private key OUT of the container/volume onto the
-    # host immediately - they otherwise live only inside silen-sqldata, so a
-    # lost/corrupted volume would take the only copy down with it.
-    mkdir -p "$SCRIPT_DIR/tde-cert-backup"
-    docker cp "silen-sqlserver:/var/opt/mssql/tde-backup/SilenTdeCert.cer" "$SCRIPT_DIR/tde-cert-backup/SilenTdeCert.cer"
-    docker cp "silen-sqlserver:/var/opt/mssql/tde-backup/SilenTdeCert.pvk" "$SCRIPT_DIR/tde-cert-backup/SilenTdeCert.pvk"
-    chmod 600 "$SCRIPT_DIR/tde-cert-backup/"*
-    warn "TDE certificate backed up to $SCRIPT_DIR/tde-cert-backup/ — MOVE THIS TO SEPARATE SECURE STORAGE NOW. Losing it permanently locks the encrypted database (see deploy/README.md)."
-  else
-    ok "SilenTdeCert already exists — reusing"
-  fi
-
-  run_sql "$DB_NAME" "IF NOT EXISTS (SELECT 1 FROM sys.dm_database_encryption_keys WHERE database_id = DB_ID()) CREATE DATABASE ENCRYPTION KEY WITH ALGORITHM = AES_256 ENCRYPTION BY SERVER CERTIFICATE SilenTdeCert;"
-  run_sql "$DB_NAME" "ALTER DATABASE [$DB_NAME] SET ENCRYPTION ON;"
-  ok "TDE enabled on $DB_NAME"
-fi
+# ---- 7. migrations, functions, seed + app role -------------------------------
+# database/apply.sh applies each new migration once, reloads every function, and
+# seeds reference data on a brand-new database only. It also (re)creates the
+# silen_owner / silen_app roles: silen_app can call the SECURITY DEFINER
+# functions in dbo and nothing else. Re-running resets its password to .env's.
+log "Applying database/ to $DB_NAME"
+PSQL="docker exec -i silen-postgres psql -U postgres -d $DB_NAME" "$REPO_ROOT/database/apply.sh"
+echo "ALTER ROLE silen_app WITH LOGIN PASSWORD :'pw';" \
+  | docker exec -i silen-postgres psql -U postgres -d "$DB_NAME" -X -q -v ON_ERROR_STOP=1 -v pw="$APP_DB_PASSWORD"
+ok "silen_app: EXECUTE on dbo functions only"
+ok "tables in $DB_NAME: $(pg_value "SELECT count(*) FROM pg_tables WHERE schemaname = 'dbo'")"
 
 # ---- 8. build + start API ---------------------------------------------------
 log "Building + starting API container (this compiles the .NET app — may take a few minutes)"
@@ -338,6 +368,9 @@ else
   warn "website/ has no index.html yet — run deploy/publish.sh from your machine to upload the site"
 fi
 
+mkdir -p /etc/nginx/snippets
+cp "$SCRIPT_DIR/nginx-security-headers.conf" /etc/nginx/snippets/silen-security-headers.conf
+cp "$SCRIPT_DIR/nginx-admin-headers.conf" /etc/nginx/snippets/silen-admin-headers.conf
 cp "$SCRIPT_DIR/nginx-sila.fitness.conf" /etc/nginx/sites-available/$DOMAIN.conf
 ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/$DOMAIN.conf
 nginx -t
@@ -520,8 +553,118 @@ CRON
 chmod 644 /etc/cron.d/silen-weekly-plan-generation
 ok "cron installed: /etc/cron.d/silen-weekly-plan-generation -> $SCRIPT_DIR/run-weekly-plan-generation.sh"
 
+# ---- 14. nightly database backup --------------------------------------------
+# Full pg_dump (custom format, zstd) of $DB_NAME every night, encrypted with age
+# as it is written to $BACKUP_DIR (outside deploy/, so publish.sh's rsync --delete
+# never touches it) and kept for BACKUP_RETENTION_DAYS (default 3 - the disk is
+# small). With BACKUP_REMOTE set in .env (e.g.
+# u123456@u123456.your-storagebox.de:silen-backups) each run also mirrors the
+# directory off the box over SSH (port BACKUP_REMOTE_PORT, default 23 for a
+# Hetzner Storage Box) with the key below; the Storage Box's own snapshots
+# provide longer history.
+#
+# Dumps are encrypted to the public half of an age key generated here once
+# (/etc/silen/backup-age.key). Restoring one needs that key's private half: copy
+# it off the server to a password manager - a backup is useless without it, and
+# anyone holding it plus a dump can read the database. See README.md "Backups".
+BACKUP_DIR=/opt/silen/backups
+BACKUP_KEY=/root/.ssh/silen_backup_ed25519
+AGE_KEY=/etc/silen/backup-age.key
+log "Installing nightly database backup cron (03:30)"
+mkdir -p "$BACKUP_DIR" /etc/silen
+chmod 700 "$BACKUP_DIR" /etc/silen
+command -v age >/dev/null || apt-get install -y -qq age
+if [ ! -s "$AGE_KEY" ]; then
+  age-keygen -o "$AGE_KEY" 2>/dev/null
+  chmod 600 "$AGE_KEY"
+  warn "New backup encryption key $AGE_KEY - COPY IT OFF THIS SERVER NOW (password manager). Without it no backup can be restored:"
+  warn "  scp root@<server>:$AGE_KEY ~/silen-backup-age.key"
+fi
+age-keygen -y "$AGE_KEY" > /etc/silen/backup-age.pub
+if [ ! -f "$BACKUP_KEY" ]; then
+  ssh-keygen -q -t ed25519 -N "" -C "silen-backup@$(hostname)" -f "$BACKUP_KEY"
+fi
+
+# Google Drive target: /etc/silen/rclone.conf holds a [silen-gdrive] remote (an
+# OAuth token limited to the drive.file scope - it only sees files it uploaded),
+# created on a laptop with `rclone config create` and piped here; see README.md.
+GDRIVE_CONF=/etc/silen/rclone.conf
+if [ -f "$GDRIVE_CONF" ]; then
+  chown root:root "$GDRIVE_CONF"
+  chmod 600 "$GDRIVE_CONF"
+  command -v rclone >/dev/null || apt-get install -y -qq rclone
+  rclone --config "$GDRIVE_CONF" lsd silen-gdrive: >/dev/null \
+    || { echo "rclone cannot reach Google Drive with $GDRIVE_CONF (token revoked? re-create it, see README.md)"; exit 1; }
+  ok "Google Drive reachable (backups go to My Drive/${BACKUP_GDRIVE_FOLDER:-silen-backups})"
+fi
+
+cat > "$SCRIPT_DIR/run-db-backup.sh" <<'WRAPPER'
+#!/usr/bin/env bash
+# Installed by deploy.sh - nightly full backup of silendb, see deploy.sh step 14.
+# Output is captured to /var/log/silen-db-backup.log by the cron entry.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+set -a; source ./.env; set +a
+
+DB=silendb
+BACKUP_DIR=/opt/silen/backups
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-3}"
+STAMP="$(date -u +%Y%m%d_%H%M%S)"
+FILE="${DB}_${STAMP}.dump.age"
+
+echo "[$(date -u +%FT%TZ)] backup $FILE"
+# Streamed straight into age, so no unencrypted copy ever touches the disk.
+# pipefail turns a pg_dump failure into a failed run instead of a short file.
+docker exec silen-postgres pg_dump -U postgres -d "$DB" -Fc -Z zstd:6 \
+  | age -R /etc/silen/backup-age.pub -o "$BACKUP_DIR/$FILE.partial"
+mv "$BACKUP_DIR/$FILE.partial" "$BACKUP_DIR/$FILE"
+chmod 600 "$BACKUP_DIR/$FILE"
+echo "  saved $(du -h "$BACKUP_DIR/$FILE" | cut -f1) -> $BACKUP_DIR/$FILE"
+
+rm -f "$BACKUP_DIR"/*.partial
+# SilenDb_*.bak: the SQL Server backups from before the PostgreSQL move age out the same way.
+find "$BACKUP_DIR" \( -name "${DB}_*.dump.age" -o -name "SilenDb_*.bak" \) -type f -mtime +"$RETENTION_DAYS" -print -delete
+
+if [ -n "${BACKUP_REMOTE:-}" ]; then
+  rsync -a --delete -e "ssh -p ${BACKUP_REMOTE_PORT:-23} -i /root/.ssh/silen_backup_ed25519 -o StrictHostKeyChecking=accept-new -o BatchMode=yes" \
+    "$BACKUP_DIR/" "$BACKUP_REMOTE/"
+  echo "  synced to $BACKUP_REMOTE"
+fi
+
+GDRIVE_CONF=/etc/silen/rclone.conf
+if [ -f "$GDRIVE_CONF" ]; then
+  GDRIVE="silen-gdrive:${BACKUP_GDRIVE_FOLDER:-silen-backups}"
+  rclone --config "$GDRIVE_CONF" copy "$BACKUP_DIR/$FILE" "$GDRIVE" --retries 5
+  echo "  uploaded to Google Drive ($GDRIVE)"
+  # Delete permanently: trashed files still count against the account's 15 GB.
+  rclone --config "$GDRIVE_CONF" delete "$GDRIVE" --include "${DB}_*.dump.age" --include "SilenDb_*.bak" \
+    --min-age "${BACKUP_GDRIVE_RETENTION_DAYS:-7}d" --drive-use-trash=false
+fi
+
+if [ -z "${BACKUP_REMOTE:-}" ] && [ ! -f "$GDRIVE_CONF" ]; then
+  echo "  WARNING: no BACKUP_REMOTE or Google Drive configured - this backup exists only on this server"
+fi
+
+used="$(df --output=pcent / | tail -1 | tr -dc 0-9)"
+[ "$used" -lt 90 ] || echo "  WARNING: root filesystem ${used}% full"
+WRAPPER
+chmod 750 "$SCRIPT_DIR/run-db-backup.sh"
+
+cat > /etc/cron.d/silen-db-backup <<CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# m h dom mon dow user command
+30 3 * * * root $SCRIPT_DIR/run-db-backup.sh >> /var/log/silen-db-backup.log 2>&1
+CRON
+chmod 644 /etc/cron.d/silen-db-backup
+ok "cron installed: /etc/cron.d/silen-db-backup -> $SCRIPT_DIR/run-db-backup.sh"
+if [ -z "${BACKUP_REMOTE:-}" ] && [ ! -f "$GDRIVE_CONF" ]; then
+  warn "No BACKUP_REMOTE or Google Drive configured — backups stay on this server only (see deploy/README.md \"Backups\"). Public key to authorize on the backup target:"
+  cat "$BACKUP_KEY.pub"
+fi
+
 log "DONE"
-echo "  DB      : SQL Server 2022 (container silen-sqlserver), database $DB_NAME"
+echo "  DB      : PostgreSQL 18 (container silen-postgres), database $DB_NAME"
 echo "  API     : container silen-api on 127.0.0.1:5010"
 echo "  Public  : https://$DOMAIN"
 echo "  Secrets : $ENV_FILE"

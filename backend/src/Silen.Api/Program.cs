@@ -37,6 +37,14 @@ builder.Services.AddSilenData();
 builder.Services.AddSilenServices();
 builder.Services.AddHostedService<NotificationPublishBackgroundService>();
 
+// One year, subdomains included: every *.sila.fitness host is HTTPS-only behind
+// Cloudflare. The framework default (30 days, no subdomains) is too weak to count.
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = true;
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

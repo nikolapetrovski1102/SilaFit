@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -6,7 +6,7 @@ namespace Silen.Data.Helpers;
 /// <summary>Outside helper mapping the monthly review run/delivery rows.</summary>
 public static class MonthlyReviewRowMapper
 {
-    public static MonthlyReviewRunModel MapRun(SqlDataReader reader) => new()
+    public static MonthlyReviewRunModel MapRun(NpgsqlDataReader reader) => new()
     {
         RunId = reader.GetGuidValue("RunId"),
         PeriodYear = reader.GetInt16Value("PeriodYear"),

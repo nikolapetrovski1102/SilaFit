@@ -1,11 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\Silen.Common\Silen.Common.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="Npgsql" Version="9.0.4" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -17,5 +14,11 @@
          invariant mode throws NotSupportedException on TryOpen. -->
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Store DateTime/DateOnly.MinValue as 0001-01-01, the way SQL Server did,
+         instead of Npgsql's default mapping to -infinity. -->
+    <RuntimeHostConfigurationOption Include="Npgsql.DisableDateTimeInfinityConversions" Value="true" />
+  </ItemGroup>
 
 </Project>

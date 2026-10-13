@@ -1,11 +1,11 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
 
 public static class SettingsRowMapper
 {
-    public static UserSettingsModel MapSettings(SqlDataReader reader) => new()
+    public static UserSettingsModel MapSettings(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         TargetWaterMl = reader.GetInt32Value("TargetWaterMl"),

@@ -176,6 +176,16 @@ public interface IAdminConsoleService
         string? sessionToken, Guid userId, int days, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves one user onto FREE, PRO or ADVANCED without a store purchase. Requires
+    /// users.subscription.write (granted to super-admin only).
+    /// </summary>
+    Task<ServiceResult<AdminWriteResultDto>> SetUserPlanAsync(
+        string? sessionToken,
+        AdminUserPlanRequest request,
+        string? clientIp,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Regenerates one user's logs with a month of mock history and puts them on the
     /// chosen tier profile, so the monthly overview can be exercised on demand.
     /// Requires users.mock_data (granted to super-admin only) and is destructive to

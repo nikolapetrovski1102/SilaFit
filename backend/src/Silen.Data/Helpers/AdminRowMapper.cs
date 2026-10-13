@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -10,7 +10,7 @@ namespace Silen.Data.Helpers;
 /// </summary>
 public static class AdminRowMapper
 {
-    public static AdminAccountModel MapAccount(SqlDataReader reader) => new()
+    public static AdminAccountModel MapAccount(NpgsqlDataReader reader) => new()
     {
         AdminUserId = reader.GetGuidValue("AdminUserId"),
         Username = reader.GetStringValue("Username"),
@@ -33,13 +33,13 @@ public static class AdminRowMapper
         EmailOtpLastSentAtUtc = reader.GetNullableDateTime("EmailOtpLastSentAtUtc")
     };
 
-    public static AdminLockoutStateModel MapLockoutState(SqlDataReader reader) => new()
+    public static AdminLockoutStateModel MapLockoutState(NpgsqlDataReader reader) => new()
     {
         FailedAttemptCount = reader.GetInt32Value("FailedAttemptCount"),
         LockedUntilUtc = reader.GetNullableDateTime("LockedUntilUtc")
     };
 
-    public static AdminSessionModel MapSession(SqlDataReader reader) => new()
+    public static AdminSessionModel MapSession(NpgsqlDataReader reader) => new()
     {
         AdminSessionId = reader.GetGuidValue("AdminSessionId"),
         AdminUserId = reader.GetGuidValue("AdminUserId"),

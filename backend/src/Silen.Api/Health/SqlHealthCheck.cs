@@ -1,10 +1,10 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Silen.Api.Health;
 
 /// <summary>
-/// Readiness probe: open a pooled connection and run a trivial query. If SQL Server
+/// Readiness probe: open a pooled connection and run a trivial query. If PostgreSQL
 /// is unreachable the API is technically alive but cannot serve any data, so an
 /// orchestrator / nginx should stop routing to it until it recovers.
 /// </summary>
@@ -21,10 +21,10 @@ public sealed class SqlHealthCheck(IConfiguration configuration) : IHealthCheck
 
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var command = new SqlCommand("SELECT 1", connection);
+            await using var command = new NpgsqlCommand("SELECT 1", connection);
             await command.ExecuteScalarAsync(cancellationToken);
 
             return HealthCheckResult.Healthy();

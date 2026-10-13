@@ -227,6 +227,11 @@ public sealed class AdminContentController(
         (await consoleService.GetClientOverviewAsync(SessionToken, userId, days <= 0 ? 30 : days, cancellationToken))
             .ToActionResult(logger);
 
+    /// <summary>Move one user onto FREE, PRO or ADVANCED by hand. Requires users.subscription.write.</summary>
+    [HttpPost("users/plan")]
+    public async Task<IActionResult> SetUserPlan([FromBody] AdminUserPlanRequest request, CancellationToken cancellationToken) =>
+        (await consoleService.SetUserPlanAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+
     /// <summary>Super-admin only: replace one user's logs with generated mock history.</summary>
     [HttpPost("users/mock-data")]
     public async Task<IActionResult> SeedUserMockData([FromBody] AdminMockDataRequest request, CancellationToken cancellationToken) =>

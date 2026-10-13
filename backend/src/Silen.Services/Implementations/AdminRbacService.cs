@@ -104,6 +104,15 @@ public sealed class AdminRbacService(
                 throw new ValidationException($"Unknown permission '{request.Permission}' in role permission request.", "That permission does not exist.");
             }
 
+            if (request.Granted
+                && AdminPermissions.SuperAdminOnly.Contains(request.Permission)
+                && !string.Equals(request.RoleName?.Trim(), AdminPermissions.SuperAdminRole, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException(
+                    $"Refused to grant super-admin-only permission '{request.Permission}' to role '{request.RoleName}'.",
+                    "Only the super-admin role can hold that permission.");
+            }
+
             var mutation = await adminRbacProvider.SetRolePermissionAsync(request.RoleName, request.Permission, request.Granted, actor, cancellationToken);
             var verb = request.Granted ? "granted to" : "revoked from";
             return AdminMutationOutcomeMapper.Resolve(mutation, $"'{request.Permission}' {verb} '{request.RoleName.Trim()}'.");

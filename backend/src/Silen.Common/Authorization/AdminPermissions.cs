@@ -68,6 +68,13 @@ public static class AdminPermissions
     /// </summary>
     public const string UsersMockData = "users.mock_data";
 
+    /// <summary>
+    /// Move one app user onto a different subscription tier (Free/Pro/Advanced) by
+    /// hand - comps, support fixes and testing. It bypasses the stores entirely, so
+    /// it ships granted only to super-admin.
+    /// </summary>
+    public const string UsersSubscriptionWrite = "users.subscription.write";
+
     /// <summary>Invite, re-role, deactivate and reactivate other console operators.</summary>
     public const string OperatorsManage = "operators.manage";
 
@@ -101,10 +108,21 @@ public static class AdminPermissions
         new(UsersDataRead, "Users", "View client logs", "One user's onboarding profile and the workouts/sets, meals, bodyweight and hydration they logged."),
         new(UsersDataReadAll, "Users", "View any client's logs", "Open a user who is not one of your assigned clients."),
         new(UsersMockData, "Users", "Generate mock data", "Replace one user's logs with a generated month of workouts, meals, hydration and bodyweight for testing."),
+        new(UsersSubscriptionWrite, "Users", "Change user tier", "Move a user onto Free, Pro or Advanced without a store purchase."),
         new(OperatorsManage, "Operators", "Manage operators", "Move operators between roles and deactivate them."),
         new(RolesManage, "Roles", "Manage custom roles", "Create custom roles and choose what each may do."),
         new(AuditRead, "Audit", "Read the audit log", "Every change an operator has made, with who, what and from where.")
     ];
+
+    /// <summary>The shipped role that holds every permission, including the reserved ones below.</summary>
+    public const string SuperAdminRole = "super-admin";
+
+    /// <summary>
+    /// Permissions only <see cref="SuperAdminRole"/> may hold. The role editor refuses to
+    /// grant these to any other role, and 074_AdminUserTier.sql strips them from any
+    /// other role on deploy.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SuperAdminOnly = new HashSet<string> { UsersSubscriptionWrite };
 
     private static readonly HashSet<string> Known = [.. Catalog.Select(item => item.Permission)];
 

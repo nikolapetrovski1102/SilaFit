@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -8,26 +8,26 @@ namespace Silen.Data.Helpers;
 public static class WorkoutRowMapper
 {
     /// <summary>WeightKg is AES-256-GCM ciphertext (see BodyweightProvider) - decrypted here with <paramref name="key"/>.</summary>
-    public static BodyweightEntryModel MapBodyweightEntry(SqlDataReader reader, byte[] key) => new()
+    public static BodyweightEntryModel MapBodyweightEntry(NpgsqlDataReader reader, byte[] key) => new()
     {
         BodyweightLogId = reader.GetGuidValue("BodyweightLogId"),
         WeightKg = FieldCipher.DecryptDecimal(reader.GetBytesValue("WeightKg"), key),
         LoggedAtUtc = reader.GetDateTimeValue("LoggedAtUtc")
     };
 
-    public static StreakStatusModel MapStreakStatus(SqlDataReader reader) => new()
+    public static StreakStatusModel MapStreakStatus(NpgsqlDataReader reader) => new()
     {
         CurrentStreakDays = reader.GetInt32Value("CurrentStreakDays"),
         WeeklyCompliancePercent = reader.GetInt32Value("WeeklyCompliancePercent")
     };
 
-    public static WeekDayStatusModel MapWeekDayStatus(SqlDataReader reader) => new()
+    public static WeekDayStatusModel MapWeekDayStatus(NpgsqlDataReader reader) => new()
     {
         SessionDate = reader.GetDateTimeValue("SessionDate"),
         SessionStatus = reader.GetNullableString("SessionStatus")
     };
 
-    public static TodaySessionModel MapTodaySession(SqlDataReader reader) => new()
+    public static TodaySessionModel MapTodaySession(NpgsqlDataReader reader) => new()
     {
         WorkoutSessionId = reader.GetGuidValue("WorkoutSessionId"),
         Status = reader.GetStringValue("Status"),
@@ -39,7 +39,7 @@ public static class WorkoutRowMapper
         IsRestDay = reader.GetNullableBool("IsRestDay")
     };
 
-    public static TargetExerciseModel MapTargetExercise(SqlDataReader reader) => new()
+    public static TargetExerciseModel MapTargetExercise(NpgsqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         Name = reader.GetStringValue("Name"),
@@ -52,7 +52,7 @@ public static class WorkoutRowMapper
         TargetRepsHigh = reader.GetByteValue("TargetRepsHigh")
     };
 
-    public static WorkoutSessionCompletionModel MapCompletion(SqlDataReader reader) => new()
+    public static WorkoutSessionCompletionModel MapCompletion(NpgsqlDataReader reader) => new()
     {
         WorkoutSessionId = reader.GetGuidValue("WorkoutSessionId"),
         Status = reader.GetStringValue("Status"),
@@ -63,7 +63,7 @@ public static class WorkoutRowMapper
         TonnageKg = reader.GetNullableDecimal("TonnageKg")
     };
 
-    public static RangeSummaryModel MapRangeSummary(SqlDataReader reader) => new()
+    public static RangeSummaryModel MapRangeSummary(NpgsqlDataReader reader) => new()
     {
         CompletedSessions = reader.GetInt32Value("CompletedSessions"),
         ScheduledSessions = reader.GetInt32Value("ScheduledSessions"),
@@ -71,7 +71,7 @@ public static class WorkoutRowMapper
         AvgRpe = reader.GetDecimalValue("AvgRpe")
     };
 
-    public static DaySessionStatusModel MapDaySessionStatus(SqlDataReader reader) => new()
+    public static DaySessionStatusModel MapDaySessionStatus(NpgsqlDataReader reader) => new()
     {
         ScheduledDateUtc = reader.GetDateTimeValue("ScheduledDateUtc"),
         Status = reader.GetStringValue("Status"),
@@ -79,7 +79,7 @@ public static class WorkoutRowMapper
         RpeScore = HasColumn(reader, "RpeScore") ? reader.GetNullableDecimal("RpeScore") : null
     };
 
-    public static SetLogModel MapSetLog(SqlDataReader reader) => new()
+    public static SetLogModel MapSetLog(NpgsqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         ExerciseName = reader.GetStringValue("ExerciseName"),
@@ -89,7 +89,7 @@ public static class WorkoutRowMapper
         CompletedAtUtc = reader.GetDateTimeValue("CompletedAtUtc")
     };
 
-    public static PersonalRecordModel MapPersonalRecord(SqlDataReader reader) => new()
+    public static PersonalRecordModel MapPersonalRecord(NpgsqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         ExerciseName = reader.GetStringValue("ExerciseName"),
@@ -99,7 +99,7 @@ public static class WorkoutRowMapper
         PreviousBestWeightKg = reader.GetNullableDecimal("PreviousBestWeightKg")
     };
 
-    public static TrackedExerciseModel MapTrackedExercise(SqlDataReader reader) => new()
+    public static TrackedExerciseModel MapTrackedExercise(NpgsqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         ExerciseName = reader.GetStringValue("ExerciseName"),
@@ -107,7 +107,7 @@ public static class WorkoutRowMapper
         LastTrainedAtUtc = reader.GetDateTimeValue("LastTrainedAtUtc")
     };
 
-    public static ExerciseProgressPointModel MapExerciseProgressPoint(SqlDataReader reader) => new()
+    public static ExerciseProgressPointModel MapExerciseProgressPoint(NpgsqlDataReader reader) => new()
     {
         ScheduledDateUtc = reader.GetDateTimeValue("ScheduledDateUtc"),
         TopWeightKg = reader.GetDecimalValue("TopWeightKg"),
@@ -118,7 +118,7 @@ public static class WorkoutRowMapper
         SetCount = reader.GetInt32Value("SetCount")
     };
 
-    public static WorkoutSplitModel MapSplit(SqlDataReader reader) => new()
+    public static WorkoutSplitModel MapSplit(NpgsqlDataReader reader) => new()
     {
         SplitId = reader.GetGuidValue("SplitId"),
         Name = reader.GetStringValue("Name"),
@@ -145,7 +145,7 @@ public static class WorkoutRowMapper
         AiKeptAtUtc = HasColumn(reader, "AiKeptAtUtc") ? reader.GetNullableDateTime("AiKeptAtUtc") : null
     };
 
-    public static SplitDayModel MapSplitDay(SqlDataReader reader) => new()
+    public static SplitDayModel MapSplitDay(NpgsqlDataReader reader) => new()
     {
         SplitDayId = reader.GetGuidValue("SplitDayId"),
         DayIndex = reader.GetByteValue("DayIndex"),
@@ -155,7 +155,7 @@ public static class WorkoutRowMapper
         IsRestDay = reader.GetBoolValue("IsRestDay")
     };
 
-    public static SplitDayExerciseModel MapSplitDayExercise(SqlDataReader reader) => new()
+    public static SplitDayExerciseModel MapSplitDayExercise(NpgsqlDataReader reader) => new()
     {
         SplitDayId = reader.GetGuidValue("SplitDayId"),
         SplitDayExerciseId = reader.GetGuidValue("SplitDayExerciseId"),
@@ -168,7 +168,7 @@ public static class WorkoutRowMapper
         TargetRepsHigh = reader.GetByteValue("TargetRepsHigh")
     };
 
-    public static ActiveSplitModel MapActiveSplit(SqlDataReader reader) => new()
+    public static ActiveSplitModel MapActiveSplit(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         SplitId = reader.GetGuidValue("SplitId"),
@@ -178,7 +178,7 @@ public static class WorkoutRowMapper
         IsAutoAssigned = HasColumn(reader, "IsAutoAssigned") && reader.GetBoolValue("IsAutoAssigned")
     };
 
-    public static ExerciseModel MapExercise(SqlDataReader reader) => new()
+    public static ExerciseModel MapExercise(NpgsqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         Name = reader.GetStringValue("Name"),
@@ -189,7 +189,7 @@ public static class WorkoutRowMapper
         IsCustom = reader.GetBoolValue("IsCustom")
     };
 
-    public static SubscriptionPlanModel MapPlan(SqlDataReader reader) => new()
+    public static SubscriptionPlanModel MapPlan(NpgsqlDataReader reader) => new()
     {
         PlanId = reader.GetGuidValue("PlanId"),
         Code = reader.GetStringValue("Code"),
@@ -205,7 +205,7 @@ public static class WorkoutRowMapper
         PlayStoreYearlyProductId = HasColumn(reader, "PlayStoreYearlyProductId") ? reader.GetNullableString("PlayStoreYearlyProductId") : null
     };
 
-    public static PlanFeatureModel MapPlanFeature(SqlDataReader reader) => new()
+    public static PlanFeatureModel MapPlanFeature(NpgsqlDataReader reader) => new()
     {
         PlanId = reader.GetGuidValue("PlanId"),
         FeatureText = reader.GetStringValue("FeatureText"),
@@ -213,7 +213,7 @@ public static class WorkoutRowMapper
         IsHighlighted = reader.GetBoolValue("IsHighlighted")
     };
 
-    public static PlanSubscriberModel MapPlanSubscriber(SqlDataReader reader) => new()
+    public static PlanSubscriberModel MapPlanSubscriber(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         DisplayName = reader.GetNullableString("DisplayName"),
@@ -222,7 +222,7 @@ public static class WorkoutRowMapper
         ExpiresAtUtc = reader.GetNullableDateTime("ExpiresAtUtc")
     };
 
-    public static UserSubscriptionModel MapSubscription(SqlDataReader reader) => new()
+    public static UserSubscriptionModel MapSubscription(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         PlanId = reader.GetGuidValue("PlanId"),
@@ -236,7 +236,7 @@ public static class WorkoutRowMapper
         AutoRenewing = HasColumn(reader, "AutoRenewing") && reader.GetBoolValue("AutoRenewing")
     };
 
-    public static SubscriptionReceiptModel MapReceipt(SqlDataReader reader) => new()
+    public static SubscriptionReceiptModel MapReceipt(NpgsqlDataReader reader) => new()
     {
         ReceiptId = reader.GetGuidValue("ReceiptId"),
         UserId = reader.GetGuidValue("UserId"),
@@ -254,14 +254,14 @@ public static class WorkoutRowMapper
         CreatedAtUtc = HasColumn(reader, "CreatedAtUtc") ? reader.GetDateTimeValue("CreatedAtUtc") : default
     };
 
-    public static PlanEntitlementsModel MapPlanEntitlements(SqlDataReader reader) => new()
+    public static PlanEntitlementsModel MapPlanEntitlements(NpgsqlDataReader reader) => new()
     {
         MaxActiveSplits = reader.GetNullableInt32("MaxActiveSplits"),
         MaxActiveDietPlans = reader.GetNullableInt32("MaxActiveDietPlans"),
         AllowAiGeneration = reader.GetBoolValue("AllowAiGeneration")
     };
 
-    private static bool HasColumn(SqlDataReader reader, string column)
+    private static bool HasColumn(NpgsqlDataReader reader, string column)
     {
         for (var i = 0; i < reader.FieldCount; i++)
         {

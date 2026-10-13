@@ -83,6 +83,10 @@ public interface IAdminContentProvider
 
     Task<List<AdminUserSummaryModel>> GetUsersAsync(string? search, int limit, CancellationToken cancellationToken = default);
 
+    /// <summary>Moves the user onto a tier: FREE deletes their subscription row, a paid
+    /// code upserts an active one. NotFound for an unknown user, Rejected for an unknown plan.</summary>
+    Task<AdminMutationResultModel> SetUserPlanAsync(AdminUserPlanRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
     /// <summary>True when this operator assigned the user a split or diet plan -
     /// i.e. the user is one of their clients, which is what lets a trainer
     /// (holder of users.data.read without users.data.read_all) open the overview.</summary>

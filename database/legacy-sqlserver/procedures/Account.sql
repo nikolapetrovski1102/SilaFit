@@ -110,6 +110,64 @@ BEGIN
 END
 GO
 
+-- Removes abandoned guest accounts: an app install that never signed up, never
+-- logged anything and has not been back for @IdleDays. Concretely: AccountTier
+-- 'Guest', no email, no sign-in identity other than its Device one, no workouts,
+-- meals, hydration or bodyweight, no subscription or store receipt, and a last
+-- login (or creation) older than @IdleDays. These show up as "Unnamed user" in
+-- the console's user list. If that device opens the app again it simply starts
+-- over as a new guest - there was nothing to lose.
+--
+-- Each one goes through usp_Account_Delete so every dependent row is cleared in
+-- the same order a real account deletion uses. @DryRun = 1 only lists what would
+-- be deleted. See database/manual-migrations/029_DeleteOrphanGuestUsers.sql.
+CREATE OR ALTER PROCEDURE dbo.usp_Account_PruneOrphanGuests
+    @IdleDays INT = 7,
+    @DryRun BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @Cutoff DATETIME2(3) = DATEADD(DAY, -@IdleDays, SYSUTCDATETIME());
+    DECLARE @Orphans TABLE (UserId UNIQUEIDENTIFIER PRIMARY KEY, CreatedAtUtc DATETIME2(3), LastLoginAtUtc DATETIME2(3));
+
+    INSERT INTO @Orphans (UserId, CreatedAtUtc, LastLoginAtUtc)
+    SELECT u.UserId, u.CreatedAtUtc, u.LastLoginAtUtc
+    FROM dbo.Users u
+    WHERE u.AccountTier = N'Guest'
+      AND u.Email IS NULL
+      AND COALESCE(u.LastLoginAtUtc, u.CreatedAtUtc) < @Cutoff
+      AND NOT EXISTS (SELECT 1 FROM dbo.UserAuthIdentities i WHERE i.UserId = u.UserId AND i.Provider <> N'Device')
+      AND NOT EXISTS (SELECT 1 FROM dbo.WorkoutSessions w WHERE w.UserId = u.UserId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.MealLogs m WHERE m.UserId = u.UserId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.HydrationLogs h WHERE h.UserId = u.UserId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.BodyweightLogs b WHERE b.UserId = u.UserId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.UserSubscriptions s WHERE s.UserId = u.UserId)
+      AND NOT EXISTS (SELECT 1 FROM dbo.SubscriptionReceipts r WHERE r.UserId = u.UserId);
+
+    IF @DryRun = 1
+    BEGIN
+        SELECT UserId, CreatedAtUtc, LastLoginAtUtc FROM @Orphans ORDER BY CreatedAtUtc;
+        RETURN;
+    END
+
+    DECLARE @UserId UNIQUEIDENTIFIER;
+    DECLARE @Deleted INT = 0;
+
+    WHILE 1 = 1
+    BEGIN
+        SELECT TOP (1) @UserId = UserId FROM @Orphans;
+        IF @@ROWCOUNT = 0 BREAK;
+
+        EXEC dbo.usp_Account_Delete @UserId = @UserId;
+        DELETE FROM @Orphans WHERE UserId = @UserId;
+        SET @Deleted += 1;
+    END
+
+    SELECT @Deleted AS DeletedUsers;
+END
+GO
+
 -- Atomically checks and, if allowed, stamps dbo.Users.LastExportRequestedAtUtc
 -- so at most one export can be requested per @CooldownDays - a "download my
 -- data" export decrypts and emails a user's entire history, so it needs the

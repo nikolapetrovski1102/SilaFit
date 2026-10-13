@@ -1,20 +1,19 @@
 services:
-  silen-sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: silen-sqlserver
+  silen-postgres:
+    image: postgres:18
+    container_name: silen-postgres
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
-      MSSQL_PID: "Developer"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-devpass}"
+      POSTGRES_DB: "silendb"
     ports:
-      - "14330:1433"
+      - "54320:5432"
     volumes:
-      - silen-sqldata:/var/opt/mssql
+      - silen-pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d silendb"]
+      interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   silen-api:
     build:
@@ -22,16 +21,16 @@ services:
       dockerfile: Dockerfile
     container_name: silen-api
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
-      # This compose file is the local dev stack (see the dev SA password
+      # This compose file is the local dev stack (see the dev database password
       # above, and the local-only secrets note below) - without this, the
       # API defaults to the Production environment and silently never loads
       # appsettings.Development.json, which is where FeatureFlags:DevTiersFree
       # and the real AppleAuth bundle-id client id live.
       ASPNETCORE_ENVIRONMENT: "Development"
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__SilenDb: "Host=silen-postgres;Port=5432;Database=silendb;Username=postgres;Password=${POSTGRES_PASSWORD:-devpass}"
       # Jwt:Issuer/Audience/SigningKey are intentionally not overridden here -
       # they're picked up from appsettings.Development.json (loaded above via
       # ASPNETCORE_ENVIRONMENT) so dotnet run and docker compose up always
@@ -59,4 +58,4 @@ services:
       - "5080:8080"
 
 volumes:
-  silen-sqldata:
+  silen-pgdata:

@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -6,7 +6,7 @@ namespace Silen.Data.Helpers;
 /// <summary>dbo.FoodNutrition rows (FoodNutrition.sql). Nutrients are per 100 g.</summary>
 public static class FoodNutritionRowMapper
 {
-    public static FoodNutritionModel MapFood(SqlDataReader reader) => new()
+    public static FoodNutritionModel MapFood(NpgsqlDataReader reader) => new()
     {
         FoodNutritionId = reader.GetInt64(reader.GetOrdinal("FoodNutritionId")),
         Name = reader.GetStringValue("Name"),

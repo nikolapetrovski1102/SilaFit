@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -8,7 +8,7 @@ namespace Silen.Data.Helpers;
 public static class DietGuideRowMapper
 {
     /// <summary>List projection: header fields plus the section count.</summary>
-    public static DietGuideModel MapGuide(SqlDataReader reader) => new()
+    public static DietGuideModel MapGuide(NpgsqlDataReader reader) => new()
     {
         DietGuideId = reader.GetGuidValue("DietPlanId"),
         Title = reader.GetStringValue("Title"),
@@ -22,7 +22,7 @@ public static class DietGuideRowMapper
 
     /// <summary>Detail projection: the same header plus the flattened ContentText.
     /// SectionCount is not selected here, so it stays 0.</summary>
-    public static DietGuideModel MapGuideDetail(SqlDataReader reader) => new()
+    public static DietGuideModel MapGuideDetail(NpgsqlDataReader reader) => new()
     {
         DietGuideId = reader.GetGuidValue("DietPlanId"),
         Title = reader.GetStringValue("Title"),
@@ -34,7 +34,7 @@ public static class DietGuideRowMapper
         SortOrder = reader.GetInt32Value("SortOrder")
     };
 
-    public static DietGuideSectionModel MapSection(SqlDataReader reader) => new()
+    public static DietGuideSectionModel MapSection(NpgsqlDataReader reader) => new()
     {
         DietGuideSectionId = reader.GetGuidValue("DietPlanSectionId"),
         SortOrder = reader.GetInt16Value("SortOrder"),

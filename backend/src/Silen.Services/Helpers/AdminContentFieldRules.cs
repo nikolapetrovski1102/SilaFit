@@ -7,7 +7,7 @@ namespace Silen.Services.Helpers;
 /// in database/schema (004, 012, 020, 022).
 ///
 /// They are repeated here - rather than left to the constraint - because a
-/// constraint violation surfaces as a SqlException and therefore a 500, whereas an
+/// constraint violation surfaces as a database exception and therefore a 500, whereas an
 /// operator typing "arnold" into the category box deserves a 400 that says which
 /// values exist. The constraints stay in place as the real guarantee; this is the
 /// friendly side of the same rule. If one of these lists ever drifts, the database

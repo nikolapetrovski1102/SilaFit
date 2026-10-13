@@ -5,43 +5,43 @@ subscription plans. Guests are usable instantly via a per-device identity; creat
 account (email, Google, or Apple) is required only to link progress across devices, buy a
 plan, or otherwise persist anything long-term.
 
-- **Backend** — ASP.NET Core Web API, SQL Server via stored procedures only (no ORM/LINQ-to-SQL).
+- **Backend** — ASP.NET Core Web API, PostgreSQL via database functions only (no ORM/LINQ-to-SQL).
 - **Frontend** — Flutter (single codebase, iOS + Android + web-capable).
-- **Database** — SQL Server 2022, schema + procedures + seed data as plain `.sql` scripts.
+- **Database** — PostgreSQL 18; versioned migrations + PL/pgSQL functions as plain `.sql` files, applied by `database/apply.sh`.
 
 ## Repo layout
 
 ```
 backend/    ASP.NET Core API (Silen.Api, Silen.Services, Silen.Common, ...)
-database/   schema/, procedures/, seed/ .sql scripts + deploy.sh
+database/   PostgreSQL migrations/, functions/ + apply.sh (legacy-sqlserver/ is the pre-migration T-SQL, kept for reference)
 frontend/   Flutter app
 deploy/     production deploy to Hetzner (sila.fitness) — see deploy/README.md
 docs/       (reserved for design/architecture notes)
-docker-compose.yml   SQL Server + API, wired together for local dev
+docker-compose.yml   PostgreSQL + API, wired together for local dev
 ```
 
 ## Running the backend + database
 
-1. Start SQL Server and the API:
+1. Start PostgreSQL and the API:
    ```bash
    docker compose up -d
    ```
-2. Apply schema, stored procedures, and seed data (safe to re-run):
+2. Apply migrations, functions and (on a fresh database) seed data (safe to re-run):
    ```bash
-   ./database/scripts/deploy.sh
+   ./database/apply.sh
    ```
 3. The API is now reachable at `http://localhost:5080`.
 
 To run the API outside Docker instead (e.g. for debugging in an IDE), start only the
-database service (`docker compose up -d silen-sqlserver`) then:
+database service (`docker compose up -d silen-postgres`) then:
 ```bash
 cd backend/src/Silen.Api
 dotnet run
 ```
-It picks up `appsettings.Development.json`, which already points at the Dockerized SQL
-Server on `localhost,14330`.
+It picks up `appsettings.Development.json`, which already points at the Dockerized
+PostgreSQL on `localhost:54320` (user `postgres`, password `devpass`).
 
-**Before going anywhere near production:** the committed `Jwt:SigningKey` and SQL `sa`
+**Before going anywhere near production:** the committed `Jwt:SigningKey` and dev database
 password are dev-only placeholders checked in for convenience — replace both, and fill in
 `GoogleAuth:ClientIds` / `AppleAuth:ClientIds` with real OAuth client IDs, before this leaves
 a local machine.

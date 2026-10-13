@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -8,7 +8,7 @@ namespace Silen.Data.Helpers;
 /// the meal-planning equivalent of the split mappers in <see cref="WorkoutRowMapper"/>.</summary>
 public static class DietPlanRowMapper
 {
-    public static DietPlanModel MapDietPlan(SqlDataReader reader) => new()
+    public static DietPlanModel MapDietPlan(NpgsqlDataReader reader) => new()
     {
         DietPlanId = reader.GetGuidValue("DietPlanId"),
         Name = reader.GetStringValue("Name"),
@@ -24,7 +24,7 @@ public static class DietPlanRowMapper
         AiKeptAtUtc = HasColumn(reader, "AiKeptAtUtc") ? reader.GetNullableDateTime("AiKeptAtUtc") : null
     };
 
-    public static ActiveDietPlanModel MapActiveDietPlan(SqlDataReader reader) => new()
+    public static ActiveDietPlanModel MapActiveDietPlan(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         DietPlanId = reader.GetGuidValue("DietPlanId"),
@@ -33,14 +33,14 @@ public static class DietPlanRowMapper
         DurationDays = reader.GetByteValue("DurationDays")
     };
 
-    public static DietPlanDayModel MapDietPlanDay(SqlDataReader reader) => new()
+    public static DietPlanDayModel MapDietPlanDay(NpgsqlDataReader reader) => new()
     {
         DietPlanDayId = reader.GetGuidValue("DietPlanDayId"),
         DayIndex = reader.GetByteValue("DayIndex"),
         Title = reader.GetNullableString("Title")
     };
 
-    public static DietPlanMealModel MapDietPlanMeal(SqlDataReader reader) => new()
+    public static DietPlanMealModel MapDietPlanMeal(NpgsqlDataReader reader) => new()
     {
         DietPlanDayId = reader.GetGuidValue("DietPlanDayId"),
         DietPlanMealId = reader.GetGuidValue("DietPlanMealId"),
@@ -57,9 +57,9 @@ public static class DietPlanRowMapper
 
     /// <summary>One dbo.MealSuggestionIngredients.IngredientText line from the
     /// shopping-list result set of usp_DietPlans_GetDetail.</summary>
-    public static string MapIngredientText(SqlDataReader reader) => reader.GetStringValue("IngredientText");
+    public static string MapIngredientText(NpgsqlDataReader reader) => reader.GetStringValue("IngredientText");
 
-    private static bool HasColumn(SqlDataReader reader, string column)
+    private static bool HasColumn(NpgsqlDataReader reader, string column)
     {
         for (var i = 0; i < reader.FieldCount; i++)
         {

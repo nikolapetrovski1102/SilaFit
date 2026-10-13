@@ -16,10 +16,10 @@ equivalent generic records can collapse without merging distinct packaged foods.
 
 ## Refreshing the catalog
 
-Apply the database scripts first, then run:
+Apply the database first (`database/apply.sh`), then run:
 
 ```bash
-SILEN_CONNECTION_STRING="Server=localhost,14330;Database=SilenDb;User Id=sa;Password=<password>;TrustServerCertificate=True;" \
+SILEN_CONNECTION_STRING="Host=localhost;Port=54320;Database=silendb;Username=postgres;Password=<password>" \
   dotnet run --project backend/src/Silen.Tools.ImportFoodNutrition -- \
   --sources=usda,cnf,cofid,off
 ```
@@ -34,14 +34,23 @@ USDA families can be narrowed with
 Branded rows (USDA Branded, Open Food Facts) are filtered on import: all four
 macros required, calories consistent with them, Open Food Facts products must
 have a brand. Duplicates (same name and same rounded macros) need the whole
-table, so they are removed by `dbo.FoodNutrition_Prune` - check with
-`EXEC dbo.FoodNutrition_Prune @DryRun = 1;` and apply with
-`database/manual-migrations/027_FoodNutritionPrune.sql` after an import.
+table, so they are removed by `dbo.foodnutrition_prune` after an import. It
+returns its report as a cursor, so call it inside a transaction:
+
+```sql
+BEGIN;
+SELECT dbo.foodnutrition_prune(p_dryrun => true);   -- false to delete
+FETCH ALL FROM "<unnamed portal 1>";
+COMMIT;
+```
 
 Search from SQL with:
 
 ```sql
-EXEC dbo.FoodNutrition_Search @Query = N'egg', @Take = 25;
+BEGIN;
+SELECT dbo.foodnutrition_search(p_query => 'egg', p_take => 25);
+FETCH ALL FROM "<unnamed portal 1>";
+COMMIT;
 ```
 
 ## Licensing and attribution

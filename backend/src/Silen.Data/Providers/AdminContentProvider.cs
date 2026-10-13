@@ -336,6 +336,19 @@ public sealed class AdminContentProvider(
             reader => SqlResultSetReader.ReadListAsync(reader, AdminContentRowMapper.MapUserSummary, cancellationToken),
             cancellationToken);
 
+    public Task<AdminMutationResultModel> SetUserPlanAsync(AdminUserPlanRequest request, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_User_SetPlan",
+            [
+                SqlParameterBuilder.Create("@UserId", request.UserId),
+                SqlParameterBuilder.Create("@PlanCode", request.PlanCode),
+                SqlParameterBuilder.Create("@BillingCycle", request.BillingCycle),
+                SqlParameterBuilder.Create("@NoExpiry", request.NoExpiry),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
     public Task<bool> IsClientAssignedToAsync(Guid adminUserId, Guid userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_Admin_Client_IsAssignedTo",

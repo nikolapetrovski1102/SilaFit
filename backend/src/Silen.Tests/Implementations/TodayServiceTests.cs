@@ -360,4 +360,53 @@ public class TodayServiceTests
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Data!);
     }
+
+    [Fact]
+    public async Task GetWorkoutHistoryAsync_FreeUserWithinWindow_ReturnsSets()
+    {
+        var userId = Guid.NewGuid();
+        var date = DateTime.UtcNow.Date.AddDays(-TodayService.FreeWorkoutHistoryDays);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        workoutSessionProvider
+            .Setup(p => p.GetSetLogsByDateAsync(userId, date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SetLogModel>
+            {
+                new() { ExerciseId = Guid.NewGuid(), ExerciseName = "Squat", SetNumber = 1, WeightKg = 120m, Reps = 5, CompletedAtUtc = date }
+            });
+
+        var result = await sut.GetWorkoutHistoryAsync(userId, date);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Data!);
+    }
+
+    [Fact]
+    public async Task GetWorkoutHistoryAsync_FreeUserOlderThanWindow_ReturnsProUpgradeRequiredFailure()
+    {
+        var userId = Guid.NewGuid();
+        var date = DateTime.UtcNow.Date.AddDays(-30);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await sut.GetWorkoutHistoryAsync(userId, date);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        workoutSessionProvider.Verify(
+            p => p.GetSetLogsByDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetWorkoutHistoryAsync_ProUserOlderThanFreeWindow_ReturnsSets()
+    {
+        var userId = Guid.NewGuid();
+        var date = DateTime.UtcNow.Date.AddDays(-30);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        workoutSessionProvider
+            .Setup(p => p.GetSetLogsByDateAsync(userId, date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SetLogModel>());
+
+        var result = await sut.GetWorkoutHistoryAsync(userId, date);
+
+        Assert.True(result.IsSuccess);
+    }
 }

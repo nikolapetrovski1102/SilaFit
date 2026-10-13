@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -8,21 +8,21 @@ namespace Silen.Data.Helpers;
 /// other section of the export reuses an existing feature's row mapper.</summary>
 public static class AccountRowMapper
 {
-    public static LinkedIdentityModel MapLinkedIdentity(SqlDataReader reader) => new()
+    public static LinkedIdentityModel MapLinkedIdentity(NpgsqlDataReader reader) => new()
     {
         Provider = reader.GetStringValue("Provider"),
         ExternalId = reader.GetStringValue("ExternalId"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };
 
-    public static HydrationEntryModel MapHydrationEntry(SqlDataReader reader) => new()
+    public static HydrationEntryModel MapHydrationEntry(NpgsqlDataReader reader) => new()
     {
         HydrationLogId = reader.GetGuidValue("HydrationLogId"),
         AmountMl = reader.GetInt16Value("AmountMl"),
         LoggedAtUtc = reader.GetDateTimeValue("LoggedAtUtc")
     };
 
-    public static WorkoutSessionHistoryModel MapWorkoutSessionHistory(SqlDataReader reader) => new()
+    public static WorkoutSessionHistoryModel MapWorkoutSessionHistory(NpgsqlDataReader reader) => new()
     {
         WorkoutSessionId = reader.GetGuidValue("WorkoutSessionId"),
         ScheduledDateUtc = reader.GetDateTimeValue("ScheduledDateUtc"),
@@ -36,7 +36,7 @@ public static class AccountRowMapper
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };
 
-    public static WorkoutSetLogEntryModel MapWorkoutSetLogEntry(SqlDataReader reader) => new()
+    public static WorkoutSetLogEntryModel MapWorkoutSetLogEntry(NpgsqlDataReader reader) => new()
     {
         WorkoutSetLogId = reader.GetGuidValue("WorkoutSetLogId"),
         WorkoutSessionId = reader.GetGuidValue("WorkoutSessionId"),

@@ -1,11 +1,11 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
 
 public static class NotificationRowMapper
 {
-    public static UserDeviceTokenModel MapDeviceToken(SqlDataReader reader) => new()
+    public static UserDeviceTokenModel MapDeviceToken(NpgsqlDataReader reader) => new()
     {
         DeviceTokenId = reader.GetGuidValue("DeviceTokenId"),
         UserId = reader.GetGuidValue("UserId"),
@@ -18,7 +18,7 @@ public static class NotificationRowMapper
         LastSeenAtUtc = reader.GetDateTimeValue("LastSeenAtUtc")
     };
 
-    public static NotificationCandidateModel MapCandidate(SqlDataReader reader) => new()
+    public static NotificationCandidateModel MapCandidate(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         DisplayName = reader.GetNullableString("DisplayName"),
@@ -41,7 +41,7 @@ public static class NotificationRowMapper
         ActiveTokenCount = reader.GetInt32Value("ActiveTokenCount")
     };
 
-    public static UserNotificationModel MapNotification(SqlDataReader reader) => new()
+    public static UserNotificationModel MapNotification(NpgsqlDataReader reader) => new()
     {
         NotificationId = reader.GetGuidValue("NotificationId"),
         UserId = reader.GetGuidValue("UserId"),

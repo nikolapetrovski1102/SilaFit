@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Data.Providers;
@@ -141,11 +141,11 @@ static void PrintUserResult(Guid userId, MockDataSeedResult? result)
 
 static async Task<Guid?> FindUserIdByEmailAsync(string connectionString, string email)
 {
-    await using var connection = new SqlConnection(connectionString);
+    await using var connection = new NpgsqlConnection(connectionString);
     await connection.OpenAsync();
 
     await using var command = connection.CreateCommand();
-    command.CommandText = "SELECT TOP (1) UserId FROM dbo.Users WHERE Email = @Email AND IsActive = 1;";
+    command.CommandText = "SELECT UserId FROM dbo.Users WHERE Email = @Email AND IsActive LIMIT 1;";
     command.Parameters.AddWithValue("@Email", email);
 
     return await command.ExecuteScalarAsync() is Guid userId ? userId : null;

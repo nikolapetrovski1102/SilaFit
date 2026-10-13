@@ -1,5 +1,5 @@
-using System.Data;
-using Microsoft.Data.SqlClient;
+using Silen.Data;
+using Silen.Data.Helpers;
 using QRCoder;
 using Silen.Common.Helpers;
 
@@ -13,8 +13,8 @@ using Silen.Common.Helpers;
 // Rotating also drops every live session for that operator, so a leaked password
 // can be shut out immediately rather than waiting for a cookie to expire.
 //
-// Runs against the *stored procedures* (database/procedures/Admin.sql), exactly
-// like the API does, so provisioning can never write a credential shape the runtime
+// Runs against the database functions (database/procedures/Admin.sql) through the
+// same SqlExecutor the API uses, so provisioning can never write a credential shape the runtime
 // wouldn't understand.
 //
 // Usage:
@@ -61,8 +61,7 @@ var username = ResolveUsername(args);
 // a rotation: the password hash is left alone and no sessions are signed out.
 if (showTotp)
 {
-    await using var readOnlyConnection = new SqlConnection(connectionString);
-    await readOnlyConnection.OpenAsync();
+    var readOnlyConnection = new SqlExecutor(connectionString);
 
     var enrolledSecret = await ReadEnrolledSecretAsync(readOnlyConnection, username, masterKey);
     var enrolledUri = TotpHelper.BuildOtpAuthUri(issuer, username, enrolledSecret, digits, stepSeconds);
@@ -83,8 +82,7 @@ if (setEmailArg is not null)
 {
     var newEmail = setEmailArg["--set-email=".Length..].Trim();
 
-    await using var emailConnection = new SqlConnection(connectionString);
-    await emailConnection.OpenAsync();
+    var emailConnection = new SqlExecutor(connectionString);
 
     var accountId = await GetAccountIdAsync(emailConnection, username)
         ?? throw new InvalidOperationException($"No admin account named '{username}' exists.");
@@ -103,8 +101,7 @@ if (setEmailArg is not null)
 var password = ResolvePassword();
 var email = ResolveEmail(args);
 
-await using var connection = new SqlConnection(connectionString);
-await connection.OpenAsync();
+var connection = new SqlExecutor(connectionString);
 
 var existing = await GetAccountIdAsync(connection, username);
 var isNewAccount = existing is null;
@@ -291,53 +288,48 @@ static void PrintTerminalQr(string otpAuthUri)
     }
 }
 
-static async Task<Guid?> GetAccountIdAsync(SqlConnection connection, string username)
+static Task<Guid?> GetAccountIdAsync(SqlExecutor connection, string username) =>
+    connection.QueryAsync(
+        "dbo.usp_Admin_GetAccountByUsername",
+        [SqlParameterBuilder.Create("@Username", username)],
+        async reader => await reader.ReadAsync() ? reader.GetGuidValue("AdminUserId") : (Guid?)null);
+
+static async Task<string> ReadEnrolledSecretAsync(SqlExecutor connection, string username, byte[] masterKey)
 {
-    await using var command = new SqlCommand("dbo.usp_Admin_GetAccountByUsername", connection) { CommandType = CommandType.StoredProcedure };
-    command.Parameters.AddWithValue("@Username", username);
+    var cipher = await connection.QueryAsync(
+        "dbo.usp_Admin_GetAccountByUsername",
+        [SqlParameterBuilder.Create("@Username", username)],
+        async reader => await reader.ReadAsync() ? reader.GetBytesValue("TotpSecretCipher") : null);
 
-    await using var reader = await command.ExecuteReaderAsync();
-    return await reader.ReadAsync() ? reader.GetGuid(0) : null;
-}
-
-static async Task<string> ReadEnrolledSecretAsync(SqlConnection connection, string username, byte[] masterKey)
-{
-    await using var command = new SqlCommand("dbo.usp_Admin_GetAccountByUsername", connection) { CommandType = CommandType.StoredProcedure };
-    command.Parameters.AddWithValue("@Username", username);
-
-    await using var reader = await command.ExecuteReaderAsync();
-    if (!await reader.ReadAsync())
+    if (cipher is null)
     {
         throw new InvalidOperationException($"No admin account named '{username}' exists, so there is no enrolled authenticator secret to read.");
     }
 
-    var cipher = (byte[])reader["TotpSecretCipher"];
     return AdminTotpSecretCipher.Decrypt(cipher, masterKey);
 }
 
-static async Task UpsertAccountAsync(
-    SqlConnection connection,
+static Task UpsertAccountAsync(
+    SqlExecutor connection,
     string username,
     byte[] passwordHash,
     byte[] passwordSalt,
     byte[] totpSecretCipher,
-    string? email)
-{
-    await using var command = new SqlCommand("dbo.usp_Admin_UpsertAccount", connection) { CommandType = CommandType.StoredProcedure };
-    command.Parameters.AddWithValue("@Username", username);
-    command.Parameters.AddWithValue("@PasswordHash", passwordHash);
-    command.Parameters.AddWithValue("@PasswordSalt", passwordSalt);
-    command.Parameters.AddWithValue("@TotpSecretCipher", totpSecretCipher);
-    command.Parameters.AddWithValue("@Email", (object?)email ?? DBNull.Value);
+    string? email) =>
+    connection.ExecuteAsync(
+        "dbo.usp_Admin_UpsertAccount",
+        [
+            SqlParameterBuilder.Create("@Username", username),
+            SqlParameterBuilder.Create("@PasswordHash", passwordHash),
+            SqlParameterBuilder.Create("@PasswordSalt", passwordSalt),
+            SqlParameterBuilder.Create("@TotpSecretCipher", totpSecretCipher),
+            SqlParameterBuilder.Create("@Email", email)
+        ]);
 
-    await command.ExecuteNonQueryAsync();
-}
-
-static async Task SetEmailAsync(SqlConnection connection, Guid adminUserId, string email)
-{
-    await using var command = new SqlCommand("dbo.usp_Admin_SetEmail", connection) { CommandType = CommandType.StoredProcedure };
-    command.Parameters.AddWithValue("@AdminUserId", adminUserId);
-    command.Parameters.AddWithValue("@Email", email.Length == 0 ? DBNull.Value : email);
-
-    await command.ExecuteNonQueryAsync();
-}
+static Task SetEmailAsync(SqlExecutor connection, Guid adminUserId, string email) =>
+    connection.ExecuteAsync(
+        "dbo.usp_Admin_SetEmail",
+        [
+            SqlParameterBuilder.Create("@AdminUserId", adminUserId),
+            SqlParameterBuilder.Create("@Email", email.Length == 0 ? null : email)
+        ]);

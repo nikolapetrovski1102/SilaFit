@@ -631,4 +631,58 @@ public class AdminConsoleServiceTests
         Assert.False(result.IsSuccess);
         Assert.Equal(404, result.StatusCode);
     }
+
+    /* -------------------------------- users / tier -------------------------------- */
+
+    [Fact]
+    public async Task SetUserPlanAsync_WithoutPermission_ReturnsForbidden()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersRead);
+        var request = new AdminUserPlanRequest { UserId = Guid.NewGuid(), PlanCode = "PRO" };
+
+        var result = await sut.SetUserPlanAsync(token, request, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetUserPlanAsync_EmptyUserId_ReturnsValidationFailure()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersSubscriptionWrite);
+        var request = new AdminUserPlanRequest { UserId = Guid.Empty, PlanCode = "PRO" };
+
+        var result = await sut.SetUserPlanAsync(token, request, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetUserPlanAsync_NormalizesCodeAndDefaultsToMonthly()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersSubscriptionWrite);
+        var userId = Guid.NewGuid();
+        contentProvider.Setup(p => p.SetUserPlanAsync(
+                It.Is<AdminUserPlanRequest>(r => r.UserId == userId && r.PlanCode == "ADVANCED" && r.BillingCycle == "Monthly"),
+                It.IsAny<AdminActorModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Success(userId));
+
+        var result = await sut.SetUserPlanAsync(token, new AdminUserPlanRequest { UserId = userId, PlanCode = " advanced " }, null);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task SetUserPlanAsync_UnknownPlan_ReturnsValidationFailure()
+    {
+        var (token, _) = ArrangeSession(AdminPermissions.UsersSubscriptionWrite);
+        contentProvider.Setup(p => p.SetUserPlanAsync(It.IsAny<AdminUserPlanRequest>(), It.IsAny<AdminActorModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.Rejected, Detail = "That plan does not exist." });
+
+        var result = await sut.SetUserPlanAsync(token, new AdminUserPlanRequest { UserId = Guid.NewGuid(), PlanCode = "ELITE" }, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
 }

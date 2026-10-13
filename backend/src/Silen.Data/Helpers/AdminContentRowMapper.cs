@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -15,14 +15,14 @@ public static class AdminContentRowMapper
     /// Every admin mutation procedure returns the same three columns, so they all
     /// map through here and the service layer sees one shape.
     /// </summary>
-    public static AdminMutationResultModel MapMutation(SqlDataReader reader) => new()
+    public static AdminMutationResultModel MapMutation(NpgsqlDataReader reader) => new()
     {
         Outcome = reader.GetInt32Value("Outcome"),
         EntityId = reader.GetNullableGuid("EntityId"),
         Detail = reader.GetNullableString("Detail")
     };
 
-    public static AdminRoleModel MapRole(SqlDataReader reader) => new()
+    public static AdminRoleModel MapRole(NpgsqlDataReader reader) => new()
     {
         RoleId = reader.GetGuidValue("RoleId"),
         Name = reader.GetStringValue("Name"),
@@ -32,7 +32,7 @@ public static class AdminContentRowMapper
         OperatorCount = reader.GetInt32Value("OperatorCount")
     };
 
-    public static AdminOperatorModel MapOperator(SqlDataReader reader) => new()
+    public static AdminOperatorModel MapOperator(NpgsqlDataReader reader) => new()
     {
         AdminUserId = reader.GetGuidValue("AdminUserId"),
         Username = reader.GetStringValue("Username"),
@@ -46,7 +46,7 @@ public static class AdminContentRowMapper
         EmailConfirmedAtUtc = reader.GetNullableDateTime("EmailConfirmedAtUtc")
     };
 
-    public static AdminAuditEntryModel MapAuditEntry(SqlDataReader reader) => new()
+    public static AdminAuditEntryModel MapAuditEntry(NpgsqlDataReader reader) => new()
     {
         AuditId = reader.GetGuidValue("AuditId"),
         AdminUserId = reader.GetNullableGuid("AdminUserId"),
@@ -59,7 +59,7 @@ public static class AdminContentRowMapper
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };
 
-    public static AdminExerciseModel MapExercise(SqlDataReader reader) => new()
+    public static AdminExerciseModel MapExercise(NpgsqlDataReader reader) => new()
     {
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         Name = reader.GetStringValue("Name"),
@@ -71,7 +71,7 @@ public static class AdminContentRowMapper
         UsageCount = reader.GetInt32Value("UsageCount")
     };
 
-    public static AdminMealSuggestionModel MapMealSuggestion(SqlDataReader reader) => new()
+    public static AdminMealSuggestionModel MapMealSuggestion(NpgsqlDataReader reader) => new()
     {
         MealSuggestionId = reader.GetGuidValue("MealSuggestionId"),
         Title = reader.GetStringValue("Title"),
@@ -87,7 +87,7 @@ public static class AdminContentRowMapper
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };
 
-    public static AdminPlanModel MapPlan(SqlDataReader reader) => new()
+    public static AdminPlanModel MapPlan(NpgsqlDataReader reader) => new()
     {
         PlanId = reader.GetGuidValue("PlanId"),
         Code = reader.GetStringValue("Code"),
@@ -101,7 +101,7 @@ public static class AdminContentRowMapper
         ActiveSubscriberCount = reader.GetInt32Value("ActiveSubscriberCount")
     };
 
-    public static AdminPlanFeatureModel MapPlanFeature(SqlDataReader reader) => new()
+    public static AdminPlanFeatureModel MapPlanFeature(NpgsqlDataReader reader) => new()
     {
         PlanFeatureId = reader.GetGuidValue("PlanFeatureId"),
         PlanId = reader.GetGuidValue("PlanId"),
@@ -110,7 +110,7 @@ public static class AdminContentRowMapper
         IsHighlighted = reader.GetBoolValue("IsHighlighted")
     };
 
-    public static AdminPlanEntitlementsModel MapPlanEntitlements(SqlDataReader reader) => new()
+    public static AdminPlanEntitlementsModel MapPlanEntitlements(NpgsqlDataReader reader) => new()
     {
         PlanId = reader.GetGuidValue("PlanId"),
         MaxActiveSplits = reader.GetNullableInt32("MaxActiveSplits"),
@@ -118,7 +118,7 @@ public static class AdminContentRowMapper
         AllowAiGeneration = reader.GetBoolValue("AllowAiGeneration")
     };
 
-    public static AdminSplitModel MapSplit(SqlDataReader reader) => new()
+    public static AdminSplitModel MapSplit(NpgsqlDataReader reader) => new()
     {
         SplitId = reader.GetGuidValue("SplitId"),
         Name = reader.GetStringValue("Name"),
@@ -140,7 +140,7 @@ public static class AdminContentRowMapper
         AssignedUserCount = reader.GetInt32Value("AssignedUserCount")
     };
 
-    public static AdminSplitAssignmentModel MapSplitAssignment(SqlDataReader reader) => new()
+    public static AdminSplitAssignmentModel MapSplitAssignment(NpgsqlDataReader reader) => new()
     {
         SplitId = reader.GetGuidValue("SplitId"),
         UserId = reader.GetGuidValue("UserId"),
@@ -155,7 +155,7 @@ public static class AdminContentRowMapper
         SubscriptionStatus = reader.GetNullableString("SubscriptionStatus")
     };
 
-    public static AdminSplitDayModel MapSplitDay(SqlDataReader reader) => new()
+    public static AdminSplitDayModel MapSplitDay(NpgsqlDataReader reader) => new()
     {
         SplitDayId = reader.GetGuidValue("SplitDayId"),
         SplitId = reader.GetGuidValue("SplitId"),
@@ -167,7 +167,7 @@ public static class AdminContentRowMapper
         ExerciseCount = reader.GetInt32Value("ExerciseCount")
     };
 
-    public static AdminSplitDayExerciseModel MapSplitDayExercise(SqlDataReader reader) => new()
+    public static AdminSplitDayExerciseModel MapSplitDayExercise(NpgsqlDataReader reader) => new()
     {
         SplitDayExerciseId = reader.GetGuidValue("SplitDayExerciseId"),
         SplitDayId = reader.GetGuidValue("SplitDayId"),
@@ -181,7 +181,7 @@ public static class AdminContentRowMapper
         TargetRepsHigh = reader.GetByteValue("TargetRepsHigh")
     };
 
-    public static AdminDietPlanModel MapDietPlan(SqlDataReader reader) => new()
+    public static AdminDietPlanModel MapDietPlan(NpgsqlDataReader reader) => new()
     {
         DietPlanId = reader.GetGuidValue("DietPlanId"),
         Name = reader.GetStringValue("Name"),
@@ -201,7 +201,7 @@ public static class AdminContentRowMapper
         AssignedUserCount = reader.GetInt32Value("AssignedUserCount")
     };
 
-    public static AdminDietPlanAssignmentModel MapDietPlanAssignment(SqlDataReader reader) => new()
+    public static AdminDietPlanAssignmentModel MapDietPlanAssignment(NpgsqlDataReader reader) => new()
     {
         DietPlanId = reader.GetGuidValue("DietPlanId"),
         UserId = reader.GetGuidValue("UserId"),
@@ -216,7 +216,7 @@ public static class AdminContentRowMapper
         SubscriptionStatus = reader.GetNullableString("SubscriptionStatus")
     };
 
-    public static AdminDietPlanDayModel MapDietPlanDay(SqlDataReader reader) => new()
+    public static AdminDietPlanDayModel MapDietPlanDay(NpgsqlDataReader reader) => new()
     {
         DietPlanDayId = reader.GetGuidValue("DietPlanDayId"),
         DietPlanId = reader.GetGuidValue("DietPlanId"),
@@ -225,7 +225,7 @@ public static class AdminContentRowMapper
         MealCount = reader.GetInt32Value("MealCount")
     };
 
-    public static AdminDietPlanMealModel MapDietPlanMeal(SqlDataReader reader) => new()
+    public static AdminDietPlanMealModel MapDietPlanMeal(NpgsqlDataReader reader) => new()
     {
         DietPlanMealId = reader.GetGuidValue("DietPlanMealId"),
         DietPlanDayId = reader.GetGuidValue("DietPlanDayId"),
@@ -240,7 +240,7 @@ public static class AdminContentRowMapper
         SortOrder = reader.GetInt32Value("SortOrder")
     };
 
-    public static AdminUserSummaryModel MapUserSummary(SqlDataReader reader) => new()
+    public static AdminUserSummaryModel MapUserSummary(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         DisplayName = reader.GetNullableString("DisplayName"),
@@ -259,7 +259,7 @@ public static class AdminContentRowMapper
 
     /// <summary>Onboarding answers, all AES-256-GCM ciphertext in UserProfiles
     /// (see UserProfileRowMapper). Null when the user never onboarded.</summary>
-    public static AdminClientProfileModel? MapClientProfile(SqlDataReader reader, byte[] key)
+    public static AdminClientProfileModel? MapClientProfile(NpgsqlDataReader reader, byte[] key)
     {
         var gender = reader.GetNullableBytes("Gender");
         var ageYears = reader.GetNullableBytes("AgeYears");
@@ -295,7 +295,7 @@ public static class AdminContentRowMapper
     }
 
     /// <summary>Nutrition targets (ciphertext, see MealPlanningRowMapper). Null when the user has none.</summary>
-    public static AdminClientTargetsModel? MapClientTargets(SqlDataReader reader, byte[] key)
+    public static AdminClientTargetsModel? MapClientTargets(NpgsqlDataReader reader, byte[] key)
     {
         var calories = reader.GetNullableBytes("TargetCalories");
         if (calories is null)
@@ -312,7 +312,7 @@ public static class AdminContentRowMapper
         };
     }
 
-    public static AdminClientSessionModel MapClientSession(SqlDataReader reader) => new()
+    public static AdminClientSessionModel MapClientSession(NpgsqlDataReader reader) => new()
     {
         WorkoutSessionId = reader.GetGuidValue("WorkoutSessionId"),
         ScheduledDateUtc = reader.GetDateTimeValue("ScheduledDateUtc"),
@@ -326,7 +326,7 @@ public static class AdminContentRowMapper
         SetCount = reader.GetInt32Value("SetCount")
     };
 
-    public static AdminClientSetModel MapClientSet(SqlDataReader reader) => new()
+    public static AdminClientSetModel MapClientSet(NpgsqlDataReader reader) => new()
     {
         WorkoutSetLogId = reader.GetGuidValue("WorkoutSetLogId"),
         WorkoutSessionId = reader.GetGuidValue("WorkoutSessionId"),
@@ -338,7 +338,7 @@ public static class AdminContentRowMapper
         CompletedAtUtc = reader.GetDateTimeValue("CompletedAtUtc")
     };
 
-    public static AdminClientMealModel MapClientMeal(SqlDataReader reader, byte[] key) => new()
+    public static AdminClientMealModel MapClientMeal(NpgsqlDataReader reader, byte[] key) => new()
     {
         MealLogId = reader.GetGuidValue("MealLogId"),
         LogDateUtc = reader.GetDateTimeValue("LogDateUtc"),
@@ -352,13 +352,13 @@ public static class AdminContentRowMapper
         LoggedAtUtc = reader.GetNullableDateTime("LoggedAtUtc")
     };
 
-    public static AdminClientBodyweightModel MapClientBodyweight(SqlDataReader reader, byte[] key) => new()
+    public static AdminClientBodyweightModel MapClientBodyweight(NpgsqlDataReader reader, byte[] key) => new()
     {
         LoggedAtUtc = reader.GetDateTimeValue("LoggedAtUtc"),
         WeightKg = FieldCipher.DecryptDecimal(reader.GetBytesValue("WeightKg"), key)
     };
 
-    public static AdminClientHydrationModel MapClientHydration(SqlDataReader reader) => new()
+    public static AdminClientHydrationModel MapClientHydration(NpgsqlDataReader reader) => new()
     {
         LogDateUtc = reader.GetDateTimeValue("LogDateUtc"),
         TotalMl = reader.GetInt32Value("TotalMl")

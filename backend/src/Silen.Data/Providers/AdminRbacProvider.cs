@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Data.Helpers;

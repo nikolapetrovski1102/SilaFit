@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Enums;
 using Silen.Common.Models;
 
@@ -11,7 +11,7 @@ namespace Silen.Data.Helpers;
 /// </summary>
 public static class AuthRowMapper
 {
-    public static UserAccountModel MapAccount(SqlDataReader reader) => new()
+    public static UserAccountModel MapAccount(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         DeviceId = reader.GetNullableString("DeviceId"),
@@ -23,7 +23,7 @@ public static class AuthRowMapper
         IsActive = reader.GetBoolValue("IsActive")
     };
 
-    public static UserAccountModel MapAccountWithCredentials(SqlDataReader reader)
+    public static UserAccountModel MapAccountWithCredentials(NpgsqlDataReader reader)
     {
         var account = MapAccount(reader);
         account.PasswordHash = reader.GetNullableBytes("PasswordHash");
@@ -31,7 +31,7 @@ public static class AuthRowMapper
         return account;
     }
 
-    public static PendingEmailVerificationModel MapPendingVerification(SqlDataReader reader) => new()
+    public static PendingEmailVerificationModel MapPendingVerification(NpgsqlDataReader reader) => new()
     {
         PendingId = reader.GetGuidValue("PendingId"),
         ExistingUserId = reader.GetNullableGuid("ExistingUserId"),

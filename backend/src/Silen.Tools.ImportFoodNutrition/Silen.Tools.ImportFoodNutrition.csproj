@@ -3,7 +3,7 @@
   <ItemGroup>
     <PackageReference Include="ExcelDataReader" Version="3.7.0" />
     <PackageReference Include="ExcelDataReader.DataSet" Version="3.7.0" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="Npgsql" Version="9.0.4" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0" />
   </ItemGroup>
 
@@ -14,5 +14,11 @@
     <Nullable>enable</Nullable>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Store DateTime/DateOnly.MinValue as 0001-01-01, the way SQL Server did,
+         instead of Npgsql's default mapping to -infinity. -->
+    <RuntimeHostConfigurationOption Include="Npgsql.DisableDateTimeInfinityConversions" Value="true" />
+  </ItemGroup>
 
 </Project>

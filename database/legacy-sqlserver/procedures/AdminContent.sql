@@ -711,7 +711,7 @@ END
 GO
 
 -- =============================================================================
--- Users (read-only: no operator needs to edit an app user from here)
+-- Users (read-only apart from the manual tier change below)
 -- =============================================================================
 
 CREATE OR ALTER PROCEDURE dbo.usp_Admin_Users_GetAll
@@ -748,5 +748,95 @@ BEGIN
            OR u.Email LIKE N'%' + @Search + N'%'
            OR u.DisplayName LIKE N'%' + @Search + N'%')
     ORDER BY u.CreatedAtUtc DESC;
+END
+GO
+
+-- Moves one app user onto a tier by hand (users.subscription.write). FREE has no
+-- UserSubscriptions row anywhere else in the app (see SubscriptionGate), so going
+-- to Free deletes the row rather than leaving a cancelled paid one behind. A paid
+-- tier is written the same way usp_Subscription_Purchase does, but detached from
+-- any store receipt (LatestReceiptId NULL, AutoRenewing 0) so the row reads as a
+-- manual grant. @NoExpiry = 1 makes the grant open-ended.
+CREATE OR ALTER PROCEDURE dbo.usp_Admin_User_SetPlan
+    @UserId UNIQUEIDENTIFIER,
+    @PlanCode NVARCHAR(50),
+    @BillingCycle NVARCHAR(10),
+    @NoExpiry BIT = 0,
+    @ActorAdminUserId UNIQUEIDENTIFIER = NULL,
+    @ActorUsername NVARCHAR(100),
+    @ActorIp NVARCHAR(64) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @UserLabel NVARCHAR(256);
+    DECLARE @PlanId UNIQUEIDENTIFIER;
+    DECLARE @PlanName NVARCHAR(100);
+    DECLARE @ExpiresAtUtc DATETIME2(3);
+
+    SELECT @UserLabel = COALESCE(Email, DisplayName, CONVERT(NVARCHAR(64), UserId))
+    FROM dbo.Users
+    WHERE UserId = @UserId;
+
+    IF @UserLabel IS NULL
+    BEGIN
+        SELECT 1 AS Outcome, @UserId AS EntityId, N'That user no longer exists.' AS Detail;
+        RETURN;
+    END
+
+    IF @PlanCode <> N'FREE'
+    BEGIN
+        SELECT @PlanId = PlanId, @PlanName = Name FROM dbo.SubscriptionPlans WHERE Code = @PlanCode;
+
+        IF @PlanId IS NULL
+        BEGIN
+            SELECT 3 AS Outcome, @UserId AS EntityId, N'That plan does not exist.' AS Detail;
+            RETURN;
+        END
+
+        IF @BillingCycle NOT IN (N'Monthly', N'Yearly')
+        BEGIN
+            SELECT 3 AS Outcome, @UserId AS EntityId, N'Billing cycle must be Monthly or Yearly.' AS Detail;
+            RETURN;
+        END
+
+        SET @ExpiresAtUtc = CASE
+            WHEN @NoExpiry = 1 THEN NULL
+            WHEN @BillingCycle = N'Yearly' THEN DATEADD(YEAR, 1, SYSUTCDATETIME())
+            ELSE DATEADD(MONTH, 1, SYSUTCDATETIME()) END;
+    END
+
+    BEGIN TRANSACTION;
+
+    IF @PlanId IS NULL
+    BEGIN
+        DELETE FROM dbo.UserSubscriptions WHERE UserId = @UserId;
+    END
+    ELSE
+    BEGIN
+        MERGE dbo.UserSubscriptions AS target
+        USING (SELECT @UserId AS UserId) AS source
+        ON target.UserId = source.UserId
+        WHEN MATCHED THEN
+            UPDATE SET PlanId = @PlanId, BillingCycle = @BillingCycle, Status = 'Active',
+                       StartedAtUtc = SYSUTCDATETIME(), ExpiresAtUtc = @ExpiresAtUtc,
+                       LatestReceiptId = NULL, AutoRenewing = 0
+        WHEN NOT MATCHED THEN
+            INSERT (UserId, PlanId, BillingCycle, Status, StartedAtUtc, ExpiresAtUtc, LatestReceiptId, AutoRenewing)
+            VALUES (@UserId, @PlanId, @BillingCycle, 'Active', SYSUTCDATETIME(), @ExpiresAtUtc, NULL, 0);
+    END
+
+    INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
+    VALUES (@ActorAdminUserId, @ActorUsername, N'Update', N'UserSubscription', CONVERT(NVARCHAR(64), @UserId),
+            CASE WHEN @PlanId IS NULL
+                 THEN N'Moved ''' + @UserLabel + N''' to Free'
+                 ELSE N'Moved ''' + @UserLabel + N''' to ' + @PlanName + N' (' + @BillingCycle
+                      + CASE WHEN @NoExpiry = 1 THEN N', no expiry' ELSE N'' END + N')' END,
+            @ActorIp);
+
+    COMMIT TRANSACTION;
+
+    SELECT 0 AS Outcome, @UserId AS EntityId, CAST(NULL AS NVARCHAR(200)) AS Detail;
 END
 GO

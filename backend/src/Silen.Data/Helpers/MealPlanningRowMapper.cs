@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -9,7 +9,7 @@ public static class MealPlanningRowMapper
 {
     /// <summary>TargetCalories/TargetProteinG/TargetCarbsG/TargetFatsG are AES-256-GCM
     /// ciphertext (see MealPlanningProvider) - decrypted here with <paramref name="key"/>.</summary>
-    public static UserNutritionTargetsModel MapNutritionTargets(SqlDataReader reader, byte[] key) => new()
+    public static UserNutritionTargetsModel MapNutritionTargets(NpgsqlDataReader reader, byte[] key) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         TargetCalories = (short)FieldCipher.DecryptInt(reader.GetBytesValue("TargetCalories"), key),
@@ -22,7 +22,7 @@ public static class MealPlanningRowMapper
 
     /// <summary>Title/CaloriesKcal/ProteinG/CarbsG/FatsG are AES-256-GCM ciphertext
     /// (see MealPlanningProvider) - decrypted here with <paramref name="key"/>.</summary>
-    public static MealLogModel MapMealLog(SqlDataReader reader, byte[] key) => new()
+    public static MealLogModel MapMealLog(NpgsqlDataReader reader, byte[] key) => new()
     {
         MealLogId = reader.GetGuidValue("MealLogId"),
         UserId = reader.GetGuidValue("UserId"),
@@ -51,7 +51,7 @@ public static class MealPlanningRowMapper
             : JsonSerializer.Deserialize<List<MealLogItemModel>>(FieldCipher.DecryptString(ciphertext, key)) ?? [];
 
     /// <summary>System-authored content (not user data) - stays plaintext.</summary>
-    public static MealSuggestionModel MapMealSuggestion(SqlDataReader reader) => new()
+    public static MealSuggestionModel MapMealSuggestion(NpgsqlDataReader reader) => new()
     {
         MealSuggestionId = reader.GetGuidValue("MealSuggestionId"),
         Title = reader.GetStringValue("Title"),

@@ -173,9 +173,22 @@ public sealed class TodayService(
                 ?? throw new NotFoundException($"Workout session '{request.WorkoutSessionId}' not found for user '{userId}'.", "That workout session couldn't be found.");
         });
 
+    /// <summary>How far back a Free account can open a day's set history (the streak sheet
+    /// and Home both link there); Pro/Advanced have no server-side limit.</summary>
+    public const int FreeWorkoutHistoryDays = 14;
+
     public Task<ServiceResult<List<SetLogDto>>> GetWorkoutHistoryAsync(Guid userId, DateTime date, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
+            // `date` is the client's local calendar day, which can be a day behind UTC - one
+            // extra day of slack keeps a Free user from being refused their own 14th day.
+            var freeCutoff = DateTime.UtcNow.Date.AddDays(-(FreeWorkoutHistoryDays + 1));
+            if (date.Date < freeCutoff
+                && !await subscriptionGate.HasActiveProAsync(userId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new ProUpgradeRequiredException($"User {userId} requested workout history older than {FreeWorkoutHistoryDays} days without an active Pro/Advanced subscription.");
+            }
+
             var setLogs = await workoutSessionProvider.GetSetLogsByDateAsync(userId, date, cancellationToken);
 
             return setLogs.Select(s => new SetLogDto

@@ -1,36 +1,58 @@
 name: silenfit
 
 services:
-  silen-sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: silen-sqlserver
+  silen-postgres:
+    image: postgres:18
+    container_name: silen-postgres
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
-      MSSQL_PID: "Developer"
-      # Cap SQL Server's buffer pool. Without this, `max server memory` defaults to
-      # effectively unlimited: on a small box mssql commits nearly all RAM, the OS +
-      # API get pushed into swap, and the resulting paging shows up as pinned CPU +
-      # thousands of disk IOPS even with zero users. Override per box via .env.
-      MSSQL_MEMORY_LIMIT_MB: "${MSSQL_MEMORY_LIMIT_MB:-2048}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "silendb"
+      # scram for every TCP login (the image default for new clusters, set explicitly).
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+    # Sized for the 4 GB / 2 vCPU box next to a 1 GB API: ~25% of RAM as shared
+    # buffers, the planner told how much the OS page cache can hold, SSD costs.
+    # Override per box through .env.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-1536MB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-8MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-100}
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_wal_size=2GB
+      - -c
+      - wal_compression=on
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - log_min_duration_statement=${PG_LOG_SLOW_MS:-1000}
+      - -c
+      - log_lock_waits=on
     ports:
-      - "127.0.0.1:${DB_PORT:-14340}:1433"   # localhost only — not exposed publicly
+      - "127.0.0.1:${PG_PORT:-54320}:5432"   # localhost only — not exposed publicly
     volumes:
-      - silen-sqldata:/var/opt/mssql
+      # postgres:18 keeps PGDATA in a major-version subdirectory of this path.
+      - silen-pgdata:/var/lib/postgresql
+    shm_size: 256m
     restart: unless-stopped
-    # Hard ceiling as a backstop to the SQL-level cap above. Keep it a little above
-    # MSSQL_MEMORY_LIMIT_MB so SQL Server (cgroup-aware) has headroom for the CLR /
-    # connections / plan cache that live outside the buffer pool.
-    mem_limit: "${DB_MEM_LIMIT:-2560m}"
-    memswap_limit: "${DB_MEM_LIMIT:-2560m}"   # = mem_limit ⇒ the container itself never swaps
+    mem_limit: "${PG_MEM_LIMIT:-1536m}"
+    memswap_limit: "${PG_MEM_LIMIT:-1536m}"
     healthcheck:
-      test: >
-        /bin/bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" ||
-                      /opt/mssql-tools/bin/sqlcmd  -S localhost -U sa -P "$$MSSQL_SA_PASSWORD"    -Q "SELECT 1"'
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d silendb"]
+      interval: 5s
       timeout: 5s
       retries: 24
-      start_period: 45s
+      start_period: 20s
 
   silen-api:
     build:
@@ -38,7 +60,7 @@ services:
       dockerfile: Dockerfile
     container_name: silen-api
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
       ASPNETCORE_URLS: "http://+:8080"
@@ -49,13 +71,18 @@ services:
       # see every request as plain http (nginx talks http to Kestrel) and redirect it
       # back to https, which nginx re-terminates and forwards as http again: a loop.
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
-      # Overrides ConnectionStrings:SilenDb from appsettings.json
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      # Overrides ConnectionStrings:SilenDb from appsettings.json. silen_app (created by
+      # database/apply.sh) holds nothing but USAGE on schema dbo + EXECUTE on its
+      # functions, which are SECURITY DEFINER - the app only ever calls them, so it
+      # never needs the postgres superuser. Only the one-off tools that run inline
+      # SQL (seed-mock-data) still connect as postgres. Pool capped below
+      # max_connections so the cron tools always find a free slot.
+      ConnectionStrings__SilenDb: "Host=silen-postgres;Port=5432;Database=silendb;Username=silen_app;Password=${APP_DB_PASSWORD};Maximum Pool Size=40"
       # Overrides Jwt:SigningKey from appsettings.json (kept out of source control — see deploy/.env)
       Jwt__Issuer: "SilenApi"
       Jwt__Audience: "SilenApp"
       Jwt__SigningKey: "${JWT_SIGNING_KEY}"
-      Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-10080}"
+      Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-1440}"
       # AES-256-GCM key for application-level column encryption (FieldCipher) -
       # kept out of source control the same way as Jwt__SigningKey, see deploy/.env
       Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
@@ -122,30 +149,13 @@ services:
       - ./uploads:/app/uploads
     restart: unless-stopped
     # Backstop like the db service's mem_limit above: without a ceiling, a leak can
-    # let the API eat all host RAM and push everything (including SQL Server) into
+    # let the API eat all host RAM and push everything (including PostgreSQL) into
     # swap. Docker OOM-kills the container at the limit and `restart: unless-stopped`
     # brings it back, which is a much faster recovery than a wedged, swap-thrashing host.
     mem_limit: "${API_MEM_LIMIT:-1024m}"
 
-  # One-shot backfill tool for the column-encryption rollout (see
-  # database/schema/024_ColumnEncryptionAdd.sql / 025_ColumnEncryptionCutover.sql).
-  # Never started by a plain `docker compose up` (profile-gated) - deploy.sh
-  # invokes it explicitly, once, between applying 024 and 025.
-  silen-encrypt-backfill:
-    build:
-      context: ../backend
-      dockerfile: src/Silen.Tools.EncryptExistingData/Dockerfile
-    container_name: silen-encrypt-backfill
-    profiles: ["tools"]
-    depends_on:
-      silen-sqlserver:
-        condition: service_healthy
-    environment:
-      SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
-      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
-
-  # Admin console enrollment / credential rotation. Profile-gated like the backfill
-  # tool above: a plain `docker compose up` never starts it. Run it explicitly, from
+  # Admin console enrollment / credential rotation. Profile-gated like the other
+  # tools: a plain `docker compose up` never starts it. Run it explicitly, from
   # the deploy dir on the server:
   #
   #   docker compose --profile tools run --rm silen-admin-provision
@@ -162,10 +172,10 @@ services:
     container_name: silen-admin-provision
     profiles: ["tools"]
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
-      SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      SILEN_CONNECTION_STRING: "Host=silen-postgres;Port=5432;Database=silendb;Username=silen_app;Password=${APP_DB_PASSWORD}"
       ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
       SILEN_ADMIN_USERNAME: "${SILEN_ADMIN_USERNAME:-}"
       SILEN_ADMIN_PASSWORD: "${SILEN_ADMIN_PASSWORD:-}"
@@ -193,11 +203,11 @@ services:
     container_name: silen-monthly-review
     profiles: ["tools"]
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: "Production"
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__SilenDb: "Host=silen-postgres;Port=5432;Database=silendb;Username=silen_app;Password=${APP_DB_PASSWORD}"
       # AES-256-GCM key: the report snapshot decrypts bodyweight/meal columns
       # the same way the API does, so it must match ENCRYPTION_MASTER_KEY.
       Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
@@ -237,11 +247,11 @@ services:
     container_name: silen-notification-publish
     profiles: ["tools"]
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: "Production"
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__SilenDb: "Host=silen-postgres;Port=5432;Database=silendb;Username=silen_app;Password=${APP_DB_PASSWORD}"
       NotificationPublish__Enabled: "${NOTIFICATION_PUBLISH_ENABLED:-true}"
       NotificationPublish__RunInApi: "false"
       # Monthly "unlock your review" push to non-paying users, on the 1st at
@@ -276,11 +286,11 @@ services:
     container_name: silen-weekly-plan-generation
     profiles: ["tools"]
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: "Production"
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__SilenDb: "Host=silen-postgres;Port=5432;Database=silendb;Username=silen_app;Password=${APP_DB_PASSWORD}"
       # AES-256-GCM key: reads decrypted bodyweight/meal columns the same way
       # the API does, so it must match ENCRYPTION_MASTER_KEY.
       Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
@@ -326,11 +336,11 @@ services:
     container_name: silen-subscription-sync
     profiles: ["tools"]
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: "Production"
-      ConnectionStrings__SilenDb: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__SilenDb: "Host=silen-postgres;Port=5432;Database=silendb;Username=silen_app;Password=${APP_DB_PASSWORD}"
       AppStoreServer__KeyId: "${APP_STORE_SERVER_KEY_ID:-}"
       AppStoreServer__IssuerId: "${APP_STORE_SERVER_ISSUER_ID:-}"
       AppStoreServer__BundleId: "${APP_STORE_SERVER_BUNDLE_ID:-com.nikolapetrovski.silafit}"
@@ -340,6 +350,20 @@ services:
       GooglePlay__ServiceAccountJsonPath: "${GOOGLE_PLAY_SERVICE_ACCOUNT_PATH:-/secrets/play-service-account.json}"
     volumes:
       - ./secrets:/secrets:ro
+
+  # One-off SQL Server -> PostgreSQL data copy (Silen.Tools.MigrateToPostgres),
+  # driven by migrate-to-postgres.sh. Reads the legacy database as sa, writes the
+  # target database as postgres. TARGET_DB picks the database (the rehearsal uses
+  # a throwaway one). Remove together with silen-sqlserver after the cutover.
+  silen-migrate-to-postgres:
+    build:
+      context: ../backend
+      dockerfile: src/Silen.Tools.MigrateToPostgres/Dockerfile
+    container_name: silen-migrate-to-postgres
+    profiles: ["legacy"]
+    environment:
+      SOURCE_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      TARGET_CONNECTION_STRING: "Host=silen-postgres;Port=5432;Database=${TARGET_DB:-silendb};Username=postgres;Password=${POSTGRES_PASSWORD};Command Timeout=0"
 
   # Mock-data seeder (Silen.Tools.SeedMockData). Fills one existing user's
   # workouts/meals/hydration/bodyweight with a generated month of realistic
@@ -360,11 +384,48 @@ services:
     container_name: silen-seed-mock-data
     profiles: ["tools"]
     depends_on:
-      silen-sqlserver:
+      silen-postgres:
         condition: service_healthy
     environment:
-      SILEN_CONNECTION_STRING: "Server=silen-sqlserver,1433;Database=SilenDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      SILEN_CONNECTION_STRING: "Host=silen-postgres;Port=5432;Database=silendb;Username=postgres;Password=${POSTGRES_PASSWORD}"
       ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
 
+  # The pre-PostgreSQL database, kept only so a rollback (or a re-run of the
+  # data copy in migrate-to-postgres.sh) stays possible. Profile-gated: nothing
+  # starts it unless asked for by name with --profile legacy. Remove this service
+  # and the silen-sqldata volume once the PostgreSQL cutover is confirmed.
+  silen-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: silen-sqlserver
+    profiles: ["legacy"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
+      MSSQL_PID: "Developer"
+      # Cap SQL Server's buffer pool. Without this, `max server memory` defaults to
+      # effectively unlimited: on a small box mssql commits nearly all RAM, the OS +
+      # API get pushed into swap, and the resulting paging shows up as pinned CPU +
+      # thousands of disk IOPS even with zero users. Override per box via .env.
+      MSSQL_MEMORY_LIMIT_MB: "${MSSQL_MEMORY_LIMIT_MB:-2048}"
+    ports:
+      - "127.0.0.1:${DB_PORT:-14340}:1433"   # localhost only — not exposed publicly
+    volumes:
+      - silen-sqldata:/var/opt/mssql
+    restart: unless-stopped
+    # Hard ceiling as a backstop to the SQL-level cap above. Keep it a little above
+    # MSSQL_MEMORY_LIMIT_MB so SQL Server (cgroup-aware) has headroom for the CLR /
+    # connections / plan cache that live outside the buffer pool.
+    mem_limit: "${DB_MEM_LIMIT:-2560m}"
+    memswap_limit: "${DB_MEM_LIMIT:-2560m}"   # = mem_limit ⇒ the container itself never swaps
+    healthcheck:
+      test: >
+        /bin/bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" ||
+                      /opt/mssql-tools/bin/sqlcmd  -S localhost -U sa -P "$$MSSQL_SA_PASSWORD"    -Q "SELECT 1"'
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 45s
+
 volumes:
+  silen-pgdata:
   silen-sqldata:

@@ -22,4 +22,10 @@
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Store DateTime/DateOnly.MinValue as 0001-01-01, the way SQL Server did,
+         instead of Npgsql's default mapping to -infinity. -->
+    <RuntimeHostConfigurationOption Include="Npgsql.DisableDateTimeInfinityConversions" Value="true" />
+  </ItemGroup>
+
 </Project>

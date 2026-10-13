@@ -205,6 +205,32 @@ public class AdminRbacServiceTests
         Assert.Equal($"'{AdminPermissions.PlansWrite}' granted to 'Editor'.", result.Data!.Message);
     }
 
+    [Fact]
+    public async Task SetRolePermissionAsync_SuperAdminOnlyPermissionToOtherRole_ReturnsValidationFailure()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.RolesManage);
+        var request = new AdminRolePermissionRequest { RoleName = "trainer", Permission = AdminPermissions.UsersSubscriptionWrite, Granted = true };
+
+        var result = await sut.SetRolePermissionAsync(token, request, null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+        adminRbacProvider.Verify(p => p.SetRolePermissionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<AdminActorModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetRolePermissionAsync_SuperAdminOnlyPermissionToSuperAdmin_Succeeds()
+    {
+        var (token, _, _) = ArrangeSession(AdminPermissions.RolesManage);
+        var request = new AdminRolePermissionRequest { RoleName = "super-admin", Permission = AdminPermissions.UsersSubscriptionWrite, Granted = true };
+        adminRbacProvider.Setup(p => p.SetRolePermissionAsync("super-admin", AdminPermissions.UsersSubscriptionWrite, true, It.IsAny<AdminActorModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = (int)AdminWriteOutcome.Success, EntityId = Guid.NewGuid(), Detail = null });
+
+        var result = await sut.SetRolePermissionAsync(token, request, null);
+
+        Assert.True(result.IsSuccess);
+    }
+
     /* ------------------------------- CreateOperatorAsync validation + happy path ------------------------------ */
 
     [Fact]

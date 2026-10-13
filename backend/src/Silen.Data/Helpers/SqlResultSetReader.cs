@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 
 namespace Silen.Data.Helpers;
 
@@ -10,8 +10,8 @@ namespace Silen.Data.Helpers;
 public static class SqlResultSetReader
 {
     public static async Task<List<T>> ReadListAsync<T>(
-        SqlDataReader reader,
-        Func<SqlDataReader, T> map,
+        NpgsqlDataReader reader,
+        Func<NpgsqlDataReader, T> map,
         CancellationToken cancellationToken = default)
     {
         var results = new List<T>();
@@ -24,8 +24,8 @@ public static class SqlResultSetReader
     }
 
     public static async Task<T?> ReadSingleOrDefaultAsync<T>(
-        SqlDataReader reader,
-        Func<SqlDataReader, T> map,
+        NpgsqlDataReader reader,
+        Func<NpgsqlDataReader, T> map,
         CancellationToken cancellationToken = default)
         where T : class
     {
@@ -34,8 +34,8 @@ public static class SqlResultSetReader
 
     /// <summary>Reads exactly one row and projects a single value from it (e.g. an output Guid/count).</summary>
     public static async Task<T> ReadScalarRowAsync<T>(
-        SqlDataReader reader,
-        Func<SqlDataReader, T> map,
+        NpgsqlDataReader reader,
+        Func<NpgsqlDataReader, T> map,
         CancellationToken cancellationToken = default)
     {
         await reader.ReadAsync(cancellationToken);

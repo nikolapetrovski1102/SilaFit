@@ -18,4 +18,9 @@ COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
+# Run as the image's built-in non-root "app" user (UID 1654). deploy.sh chowns the
+# bind-mounted uploads/ and secrets/ directories to that UID so it can still write
+# images and read the store/Firebase credentials.
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "Silen.Api.dll"]

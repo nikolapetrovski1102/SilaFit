@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 
@@ -8,7 +8,7 @@ public static class UserProfileRowMapper
 {
     /// <summary>Maps a row whose Gender/AgeYears/HeightCm/WeightKg/Goal columns are
     /// AES-256-GCM ciphertext (see UserProfileProvider), decrypting each with <paramref name="key"/>.</summary>
-    public static UserProfileModel MapUserProfile(SqlDataReader reader, byte[] key)
+    public static UserProfileModel MapUserProfile(NpgsqlDataReader reader, byte[] key)
     {
         var gender = reader.GetNullableBytes("Gender");
         var ageYears = reader.GetNullableBytes("AgeYears");

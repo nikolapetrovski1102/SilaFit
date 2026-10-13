@@ -2,10 +2,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Silen.Common\Silen.Common.csproj" />
+    <ProjectReference Include="..\Silen.Data\Silen.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
     <!-- Renders the authenticator enrollment URI as a terminal QR in the read-only
          reveal mode. Local-only, in-process: the URI carries the raw TOTP secret,
          so it must never be handed to a remote QR service (same reason the console
@@ -22,5 +22,11 @@
          invariant mode throws NotSupportedException on TryOpen. -->
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Store DateTime/DateOnly.MinValue as 0001-01-01, the way SQL Server did,
+         instead of Npgsql's default mapping to -infinity. -->
+    <RuntimeHostConfigurationOption Include="Npgsql.DisableDateTimeInfinityConversions" Value="true" />
+  </ItemGroup>
 
 </Project>

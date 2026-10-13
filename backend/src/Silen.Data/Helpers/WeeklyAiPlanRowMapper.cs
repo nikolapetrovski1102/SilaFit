@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -6,7 +6,7 @@ namespace Silen.Data.Helpers;
 /// <summary>Outside helper mapping the weekly AI plan run/delivery/candidate rows.</summary>
 public static class WeeklyAiPlanRowMapper
 {
-    public static WeeklyAiPlanRunModel MapRun(SqlDataReader reader) => new()
+    public static WeeklyAiPlanRunModel MapRun(NpgsqlDataReader reader) => new()
     {
         RunId = reader.GetGuidValue("RunId"),
         WeekStartUtc = reader.GetDateTimeValue("WeekStartUtc"),
@@ -19,7 +19,7 @@ public static class WeeklyAiPlanRowMapper
         CompletedAtUtc = reader.GetNullableDateTime("CompletedAtUtc")
     };
 
-    public static PlanSubscriberModel MapCandidateUser(SqlDataReader reader) => new()
+    public static PlanSubscriberModel MapCandidateUser(NpgsqlDataReader reader) => new()
     {
         UserId = reader.GetGuidValue("UserId"),
         DisplayName = reader.GetNullableString("DisplayName"),

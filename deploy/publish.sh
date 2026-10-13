@@ -16,14 +16,16 @@
 #   ./deploy/publish.sh
 #
 # Overridable via env vars:
-#   SILEN_SSH    SSH target      (default: root@sila.fitness)
+#   SILEN_SSH    SSH target      (default: root@46.224.235.167)
 #   REMOTE_DIR   path on server  (default: /opt/silen)
 #   DOMAIN       public host     (default: sila.fitness)
 ###############################################################################
 set -euo pipefail
 
 # ---- config -----------------------------------------------------------------
-SILEN_SSH="${SILEN_SSH:-root@sila.fitness}"
+# The server IP, not root@sila.fitness: the domain is proxied through
+# Cloudflare, which does not pass SSH (port 22 times out).
+SILEN_SSH="${SILEN_SSH:-root@46.224.235.167}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/silen}"
 DOMAIN="${DOMAIN:-sila.fitness}"
 
