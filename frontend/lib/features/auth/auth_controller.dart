@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -138,7 +139,12 @@ class AuthController extends ChangeNotifier {
       });
 
   Future<bool> loginWithGoogle() => _run(() async {
-        final account = await _googleSignIn.signIn();
+        final GoogleSignInAccount? account;
+        try {
+          account = await _googleSignIn.signIn();
+        } on PlatformException catch (e) {
+          throw ApiException(_googleSignInFailure(e));
+        }
         if (account == null)
           throw const ApiException('Google sign-in was cancelled.');
         final auth = await account.authentication;
@@ -192,6 +198,24 @@ class AuthController extends ChangeNotifier {
     // Clears the persisted per-user caches and rebuilds the app from a cold
     // start, so it comes back as a fresh guest even if sign-out failed.
     await _onReload();
+  }
+
+  /// Turns the plugin's PlatformException into something a user (and a bug
+  /// report) can act on, instead of the generic catch-all message. On Android
+  /// the message carries the Play services status code, e.g.
+  /// "com.google.android.gms.common.api.ApiException: 10: ".
+  static String _googleSignInFailure(PlatformException e) {
+    if (e.code == GoogleSignIn.kSignInCanceledError) {
+      return 'Google sign-in was cancelled.';
+    }
+    if (e.code == GoogleSignIn.kNetworkError) {
+      return 'Google sign-in needs an internet connection. Please try again.';
+    }
+    final status = RegExp(r'ApiException: (\d+)').firstMatch(e.message ?? '');
+    final code = status?.group(1) ?? e.code;
+    // 10 = DEVELOPER_ERROR: this build's signing certificate SHA-1 has no
+    // Android OAuth client (see frontend/env/README.md).
+    return 'Google sign-in failed (code $code). Please try again or use another sign-in option.';
   }
 
   Future<void> _applySession(AuthResult result) =>
