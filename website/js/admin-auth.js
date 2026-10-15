@@ -99,6 +99,9 @@
   }
 
   global.SilaAdminAuth = {
+    /* Where the API lives - '' (same origin) in production. */
+    apiBase: API_BASE,
+
     /* Step 1 — password. Resolves to a challenge, not to a session. */
     login: function (username, password) {
       return request('/api/admin/auth/login', 'POST', { username: username, password: password });
@@ -398,6 +401,15 @@
       var body = { userId: userId, profile: profile, days: days };
       if (seed !== null && seed !== undefined && seed !== '') body.seed = parseInt(seed, 10);
       return request('/api/admin/content/users/mock-data', 'POST', body);
+    },
+
+    /* users.subscription.write: move one user onto FREE, PRO or ADVANCED without a
+       store purchase. FREE removes their subscription; a paid tier runs one billing
+       cycle from now unless noExpiry is set. */
+    setUserPlan: function (userId, planCode, billingCycle, noExpiry) {
+      return request('/api/admin/content/users/plan', 'POST', {
+        userId: userId, planCode: planCode, billingCycle: billingCycle, noExpiry: !!noExpiry
+      });
     }
   };
 })(window);

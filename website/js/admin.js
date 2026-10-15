@@ -23,6 +23,15 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /* A split's hero value is either a URL or an auto-assigned theme-neutral key
+     ('asset:splits/push_pull_legs', see SplitHeroImages.cs) that the API serves
+     as /api/static/splits/{dark|light}/{key}.jpg - same as split_hero_image.dart. */
+  function heroSrc(value) {
+    var prefix = 'asset:splits/';
+    if (!value || value.indexOf(prefix) !== 0) return value;
+    return auth.apiBase + '/api/static/splits/dark/' + value.slice(prefix.length) + '.jpg';
+  }
+
   function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
 
   function fmtDate(iso) {
@@ -451,7 +460,7 @@
         '<article class="card mp-card">' +
           '<div class="mp-card__thumb">' +
             (s.heroImageUrl
-              ? '<img src="' + esc(s.heroImageUrl) + '" alt="" loading="lazy" />'
+              ? '<img src="' + esc(heroSrc(s.heroImageUrl)) + '" alt="" loading="lazy" />'
               : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>') +
           '</div>' +
           '<div class="mp-card__head">' +
@@ -547,7 +556,7 @@
             '<span class="label-sm" id="spHeroUploadStatus" style="color:var(--on-surface-variant)"></span>' +
           '</div>' +
           (s.heroImageUrl
-            ? '<img id="spHeroPreview" src="' + esc(s.heroImageUrl) + '" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:block" />'
+            ? '<img id="spHeroPreview" src="' + esc(heroSrc(s.heroImageUrl)) + '" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:block" />'
             : '<img id="spHeroPreview" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:none" />') +
         '</div>' +
       '</div>' +
@@ -2204,7 +2213,10 @@
        open the clients they have assigned a split or diet plan to - the API
        returns 403 for anyone else, this button just surfaces the entry point. */
     var canViewClient = has('users.data.read');
-    var hasActions = canViewClient || canSeed;
+    /* Manual tier changes hand out paid features for free, so they are gated on
+       users.subscription.write (super-admin only). The API enforces the same. */
+    var canSetPlan = has('users.subscription.write');
+    var hasActions = canViewClient || canSeed || canSetPlan;
 
     var head = '<thead><tr><th>User</th><th>Plan</th><th>Billing</th><th>Joined</th><th>Status</th>' +
       (hasActions ? '<th></th>' : '') + '</tr></thead>';
@@ -2228,7 +2240,8 @@
           (hasActions
             ? '<td style="text-align:right;white-space:nowrap;">' +
                 (canViewClient ? '<button class="btn btn--secondary btn--sm" data-view-client="' + esc(u.userId) + '">View</button>' : '') +
-                (canSeed ? '<button class="btn btn--secondary btn--sm" data-mock-user="' + esc(u.userId) + '"' + (canViewClient ? ' style="margin-left:6px;"' : '') + '>Mock data</button>' : '') +
+                (canSetPlan ? '<button class="btn btn--secondary btn--sm" data-plan-user="' + esc(u.userId) + '"' + (canViewClient ? ' style="margin-left:6px;"' : '') + '>Change tier</button>' : '') +
+                (canSeed ? '<button class="btn btn--secondary btn--sm" data-mock-user="' + esc(u.userId) + '"' + (canViewClient || canSetPlan ? ' style="margin-left:6px;"' : '') + '>Mock data</button>' : '') +
               '</td>'
             : '') +
         '</tr>'
@@ -2245,6 +2258,16 @@
           var userId = btn.getAttribute('data-view-client');
           var user = allUsers.find(function (u) { return u.userId === userId; });
           if (user) openClientOverview(user);
+        });
+      });
+    }
+
+    if (canSetPlan) {
+      $$('#usersTable [data-plan-user]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var userId = btn.getAttribute('data-plan-user');
+          var user = allUsers.find(function (u) { return u.userId === userId; });
+          if (user) openUserPlanModal(user);
         });
       });
     }
@@ -2419,6 +2442,70 @@
   /* Super-admin only: generate a month of history for one user so the monthly
      overview can be exercised. Warns first - it replaces their logs and grants a
      yearly subscription. */
+  /* Manual tier change (users.subscription.write). The current plan is preselected;
+     an active-but-expired or cancelled row counts as Free, matching the app's gate. */
+  function openUserPlanModal(user) {
+    var label = user.displayName || user.email || 'this user';
+    var current = user.activePlanCode && user.subscriptionStatus === 'Active' ? user.activePlanCode : 'FREE';
+    var tiers = [
+      { code: 'FREE', label: 'Free' },
+      { code: 'PRO', label: 'Pro' },
+      { code: 'ADVANCED', label: 'Advanced' }
+    ];
+    var backdrop = openModal(
+      modalHead('Change tier') +
+      '<p class="body-sm">Moves <b>' + esc(label) + '</b> onto a tier without a store purchase. ' +
+        'Free removes their subscription; a paid tier is granted as an active, non-renewing subscription.</p>' +
+      '<div class="form-grid" style="margin-top:14px;">' +
+        '<div class="field field--full"><label>Tier</label>' +
+          '<select class="select" id="userPlanCode">' +
+            tiers.map(function (t) {
+              return '<option value="' + t.code + '"' + (t.code === current ? ' selected' : '') + '>' + t.label + '</option>';
+            }).join('') +
+          '</select>' +
+        '</div>' +
+        '<div class="field" id="userPlanCycleField"><label>Duration</label>' +
+          '<select class="select" id="userPlanCycle">' +
+            '<option value="Monthly"' + (user.billingCycle === 'Yearly' ? '' : ' selected') + '>1 month</option>' +
+            '<option value="Yearly"' + (user.billingCycle === 'Yearly' ? ' selected' : '') + '>1 year</option>' +
+            '<option value="Unlimited">No expiry</option>' +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
+        '<button class="btn btn--primary" id="userPlanSaveBtn">Save</button>' +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    function syncCycle() {
+      $('#userPlanCycleField').style.display = $('#userPlanCode').value === 'FREE' ? 'none' : '';
+    }
+    $('#userPlanCode').addEventListener('change', syncCycle);
+    syncCycle();
+
+    $('#userPlanSaveBtn').addEventListener('click', function () {
+      var planCode = $('#userPlanCode').value;
+      var cycle = $('#userPlanCycle').value;
+      var noExpiry = cycle === 'Unlimited';
+      var btn = $('#userPlanSaveBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      auth.setUserPlan(user.userId, planCode, noExpiry ? 'Yearly' : cycle, noExpiry).then(function (result) {
+        if (!toastOnFailure(result, 'Could not change the tier.')) {
+          btn.disabled = false;
+          btn.textContent = 'Save';
+          return;
+        }
+        toast((result.data && result.data.message) || 'Tier changed.');
+        closeModal();
+        loadUsers();
+      });
+    });
+  }
+
   function openMockDataModal(user) {
     var label = user.displayName || user.email || 'this user';
     var backdrop = openModal(

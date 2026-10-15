@@ -65,23 +65,26 @@
   var SEED_PLANS = [
     {
       code: 'FREE', name: 'Free Tier',
-      tagline: 'Essential hardware tracking and routine logging for self-guided lifters.',
+      tagline: 'Workout logging, ready-made splits and streak tracking for self-guided lifters.',
       monthlyPrice: 0, yearlyPrice: 0, isFeatured: false,
       features: [
-        { text: 'Workout split library & session logging', highlighted: false },
-        { text: 'Hydration & bodyweight tracking', highlighted: false },
-        { text: 'Basic streak & progress stats', highlighted: false },
-        { text: 'Monthly meal suggestions', highlighted: false }
+        { text: 'Routine logging & workout telemetry', highlighted: false },
+        { text: 'Standard split templates (PPL, Upper/Lower)', highlighted: false },
+        { text: 'Basic streak & calendar volume view', highlighted: false },
+        { text: 'Push notifications for daily gym attendance', highlighted: false }
       ]
     },
     {
       code: 'PRO', name: 'Pro Tier',
-      tagline: 'Advanced volume telemetry, predictive PR curves, and automated deload signals.',
-      monthlyPrice: 2.49, yearlyPrice: 20.99, isFeatured: true,
+      tagline: 'Per-exercise 1RM charts, AI monthly overviews, and automated deload signals.',
+      monthlyPrice: 2.99, yearlyPrice: 24.99, isFeatured: true,
       features: [
         { text: 'Everything included in Free tier', highlighted: false },
-        { text: 'AI-powered monthly analytics report', highlighted: true },
-        { text: 'Advanced 1RM progression & PR prediction', highlighted: false },
+        { text: 'AI Monthly Overview & Volume Synthesis', highlighted: true },
+        { text: 'Per-exercise progress charts: estimated 1RM, top set & volume', highlighted: true },
+        { text: 'Full Progress screen with personal records & 1M-6M timeframes', highlighted: false },
+        { text: 'Suggested splits ranked for your goal, level & schedule', highlighted: false },
+        { text: '"Last time" weights & reps on every exercise while you train', highlighted: false },
         { text: 'Intelligent recovery & deload detection', highlighted: false },
         { text: 'Custom split builder with infinite routines', highlighted: false }
       ]
@@ -89,11 +92,11 @@
     {
       code: 'ADVANCED', name: 'Advanced Tier',
       tagline: 'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.',
-      monthlyPrice: 4.99, yearlyPrice: 41.99, isFeatured: false,
+      monthlyPrice: 5.99, yearlyPrice: 49.99, isFeatured: false,
       features: [
         { text: 'Everything included in Pro tier', highlighted: false },
+        { text: 'Weekly AI Overview with meal & split suggestions', highlighted: true },
         { text: 'Adaptive meal planner calibrated to load', highlighted: true },
-        { text: 'Weekly AI check-ins with prioritized recommendations', highlighted: false },
         { text: 'AI-generated workout splits & diet plans on request', highlighted: false },
         { text: 'Unlimited saved splits & diet plans', highlighted: false }
       ]
