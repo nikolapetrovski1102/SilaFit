@@ -4,7 +4,7 @@ using Silen.Common.Models;
 namespace Silen.Data.Helpers;
 
 /// <summary>Outside helper mapping the export-only rows usp_Account_Export introduces
-/// (identities/hydration-history/workout-session-history/set-log-history) - every
+/// (identities/settings/workout-session-history/set-log-history) - every
 /// other section of the export reuses an existing feature's row mapper.</summary>
 public static class AccountRowMapper
 {
@@ -15,11 +15,19 @@ public static class AccountRowMapper
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };
 
-    public static HydrationEntryModel MapHydrationEntry(NpgsqlDataReader reader) => new()
+    public static ExportSettingsModel MapExportSettings(NpgsqlDataReader reader) => new()
     {
-        HydrationLogId = reader.GetGuidValue("HydrationLogId"),
-        AmountMl = reader.GetInt16Value("AmountMl"),
-        LoggedAtUtc = reader.GetDateTimeValue("LoggedAtUtc")
+        NotificationsEnabled = reader.GetBoolValue("NotificationsEnabled"),
+        NotificationLocalTime = reader.GetTimeSpanValue("NotificationLocalTime"),
+        TimeZoneId = reader.GetStringValue("TimeZoneId"),
+        WeightUnit = reader.GetStringValue("WeightUnit"),
+        DistanceUnit = reader.GetStringValue("DistanceUnit"),
+        RestTimerSoundEnabled = reader.GetBoolValue("RestTimerSoundEnabled"),
+        BarbellStandardKg = reader.GetDecimalValue("BarbellStandardKg"),
+        AppearanceMode = reader.GetStringValue("AppearanceMode"),
+        AvatarChoice = reader.GetStringValue("AvatarChoice"),
+        AiDataConsentAtUtc = reader.GetNullableDateTime("AiDataConsentAtUtc"),
+        UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
     };
 
     public static WorkoutSessionHistoryModel MapWorkoutSessionHistory(NpgsqlDataReader reader) => new()
@@ -30,8 +38,6 @@ public static class AccountRowMapper
         StartedAtUtc = reader.GetNullableDateTime("StartedAtUtc"),
         CompletedAtUtc = reader.GetNullableDateTime("CompletedAtUtc"),
         DurationMinutes = reader.GetNullableInt16("DurationMinutes"),
-        CaloriesEstimate = reader.GetNullableInt16("CaloriesEstimate"),
-        RpeScore = reader.GetNullableDecimal("RpeScore"),
         TonnageKg = reader.GetNullableDecimal("TonnageKg"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
     };

@@ -8,13 +8,22 @@ public sealed class LinkedIdentityModel
     public DateTime CreatedAtUtc { get; set; }
 }
 
-/// <summary>One dbo.HydrationLogs row - no "get everything" procedure existed
-/// before usp_Account_Export needed one (only today's total did).</summary>
-public sealed class HydrationEntryModel
+/// <summary>The dbo.UserSettings row as exported - the settings the app still
+/// exposes, without the retired water target that UserSettingsModel keeps for
+/// older app builds.</summary>
+public sealed class ExportSettingsModel
 {
-    public Guid HydrationLogId { get; set; }
-    public short AmountMl { get; set; }
-    public DateTime LoggedAtUtc { get; set; }
+    public bool NotificationsEnabled { get; set; }
+    public TimeSpan NotificationLocalTime { get; set; }
+    public string TimeZoneId { get; set; } = "UTC";
+    public string WeightUnit { get; set; } = "kg";
+    public string DistanceUnit { get; set; } = "km";
+    public bool RestTimerSoundEnabled { get; set; }
+    public decimal BarbellStandardKg { get; set; }
+    public string AppearanceMode { get; set; } = "Device";
+    public string AvatarChoice { get; set; } = "Male";
+    public DateTime? AiDataConsentAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
 }
 
 /// <summary>One dbo.WorkoutSessions row, full history (existing models only ever
@@ -28,8 +37,6 @@ public sealed class WorkoutSessionHistoryModel
     public DateTime? StartedAtUtc { get; set; }
     public DateTime? CompletedAtUtc { get; set; }
     public short? DurationMinutes { get; set; }
-    public short? CaloriesEstimate { get; set; }
-    public decimal? RpeScore { get; set; }
     public decimal? TonnageKg { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
@@ -53,10 +60,9 @@ public sealed class AccountExportModel
     public UserAccountModel Account { get; set; } = new();
     public List<LinkedIdentityModel> LinkedIdentities { get; set; } = [];
     public UserProfileModel? Profile { get; set; }
-    public UserSettingsModel? Settings { get; set; }
+    public ExportSettingsModel? Settings { get; set; }
     public UserNutritionTargetsModel? NutritionTargets { get; set; }
     public List<BodyweightEntryModel> BodyweightHistory { get; set; } = [];
-    public List<HydrationEntryModel> HydrationHistory { get; set; } = [];
     public List<MealLogModel> MealLogs { get; set; } = [];
     public List<WorkoutSessionHistoryModel> WorkoutSessions { get; set; } = [];
     public List<WorkoutSetLogEntryModel> WorkoutSetLogs { get; set; } = [];

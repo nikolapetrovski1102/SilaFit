@@ -182,14 +182,15 @@ END $$;
 -- lists mirror each feature's own Get function so the existing row mappers
 -- (UserProfileRowMapper/SettingsRowMapper/MealPlanningRowMapper/
 -- WorkoutRowMapper) can be reused as-is; only the sections with no prior
--- "get everything for this user" function (identities, hydration history,
--- workout-session history, set-log history) are new SELECTs.
+-- "get everything for this user" function (identities, settings, workout-session
+-- history, set-log history) are new SELECTs. Hydration, the water target and the
+-- per-session calorie estimate / RPE are left out - the app no longer records them.
 CREATE OR REPLACE FUNCTION dbo.usp_account_export(
     p_userid uuid
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 DECLARE
     c1 refcursor; c2 refcursor; c3 refcursor; c4 refcursor; c5 refcursor; c6 refcursor;
-    c7 refcursor; c8 refcursor; c9 refcursor; c10 refcursor; c11 refcursor;
+    c7 refcursor; c8 refcursor; c9 refcursor; c10 refcursor;
 BEGIN
     -- 1: Account
     OPEN c1 FOR
@@ -217,7 +218,7 @@ BEGIN
 
     -- 4: Settings
     OPEN c4 FOR
-    SELECT userid, targetwaterml, notificationsenabled, notificationlocaltime, timezoneid,
+    SELECT userid, notificationsenabled, notificationlocaltime, timezoneid,
            weightunit, distanceunit, resttimersoundenabled, barbellstandardkg, appearancemode,
            avatarchoice, aidataconsentatutc, updatedatutc
     FROM dbo.usersettings
@@ -239,46 +240,38 @@ BEGIN
     ORDER BY loggedatutc ASC;
     RETURN NEXT c6;
 
-    -- 7: Hydration history
+    -- 7: Meal logs
     OPEN c7 FOR
-    SELECT hydrationlogid, amountml, loggedatutc
-    FROM dbo.hydrationlogs
-    WHERE userid = p_userid
-    ORDER BY loggedatutc ASC;
-    RETURN NEXT c7;
-
-    -- 8: Meal logs
-    OPEN c8 FOR
     SELECT meallogid, userid, logdateutc, mealtype, title, calorieskcal, proteing, carbsg, fatsg, items,
            status, plannedlocaltime, loggedatutc, createdatutc
     FROM dbo.meallogs
     WHERE userid = p_userid
     ORDER BY logdateutc ASC, createdatutc ASC;
-    RETURN NEXT c8;
+    RETURN NEXT c7;
 
-    -- 9: Workout session history
-    OPEN c9 FOR
+    -- 8: Workout session history
+    OPEN c8 FOR
     SELECT workoutsessionid, scheduleddateutc, status, startedatutc, completedatutc,
-           durationminutes, caloriesestimate, rpescore, tonnagekg, createdatutc
+           durationminutes, tonnagekg, createdatutc
     FROM dbo.workoutsessions
     WHERE userid = p_userid
     ORDER BY scheduleddateutc ASC;
-    RETURN NEXT c9;
+    RETURN NEXT c8;
 
-    -- 10: Workout set-log history
-    OPEN c10 FOR
+    -- 9: Workout set-log history
+    OPEN c9 FOR
     SELECT workoutsetlogid, workoutsessionid, exerciseid, setnumber, weightkg, reps, completedatutc
     FROM dbo.workoutsetlogs
     WHERE userid = p_userid
     ORDER BY completedatutc ASC;
-    RETURN NEXT c10;
+    RETURN NEXT c9;
 
-    -- 11: Active subscription
-    OPEN c11 FOR
+    -- 10: Active subscription
+    OPEN c10 FOR
     SELECT userid, planid, billingcycle, status, startedatutc, expiresatutc
     FROM dbo.usersubscriptions
     WHERE userid = p_userid;
-    RETURN NEXT c11;
+    RETURN NEXT c10;
 END $$;
 
 -- Stores the (encrypted) Sign in with Apple refresh token on the user's

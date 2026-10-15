@@ -1,4 +1,3 @@
-using Npgsql;
 using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
@@ -18,13 +17,13 @@ namespace Silen.Data.Providers;
 /// </remarks>
 public sealed class MockDataSeeder(string connectionString, string masterKeyBase64) : IMockDataSeeder
 {
-    // Seeding is hundreds of small inserts over a month; a remote database can
+    // Seeding is hundreds of small function calls over a month; a remote database can
     // take longer than the driver's 30s default for a single connection's run.
     private const int CommandTimeoutSeconds = 120;
 
-    // The dbo functions (profile/targets upserts, meal logs...) go through the same
-    // executor the API uses; the plain table inserts below run on the seeder's own
-    // connection.
+    // Every read and write goes through dbo functions (database/functions/MockData.sql
+    // plus the app's own upserts): the API logs in as silen_app, which can EXECUTE
+    // those but has no direct access to the tables.
     private readonly SqlExecutor executor = new(connectionString, CommandTimeoutSeconds);
 
     // Parsed on first use rather than in the constructor: DI builds one of these to
@@ -44,20 +43,17 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
         AdminActorModel? actor = null,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-        if (!await UserExistsAsync(connection, userId, cancellationToken).ConfigureAwait(false))
+        if (!await UserExistsAsync(userId, cancellationToken).ConfigureAwait(false))
         {
             return null;
         }
 
-        var result = await SeedCoreAsync(connection, userId, userId.ToString(), profile, days, seed, setDisplayName: false, cancellationToken)
+        var result = await SeedCoreAsync(userId, userId.ToString(), profile, days, seed, setDisplayName: false, cancellationToken)
             .ConfigureAwait(false);
 
         if (actor is not null)
         {
-            await WriteAuditAsync(connection, actor, userId, result, cancellationToken).ConfigureAwait(false);
+            await WriteAuditAsync(actor, userId, result, cancellationToken).ConfigureAwait(false);
         }
 
         return result;
@@ -70,11 +66,8 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
         int? seed,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
         var userId = await GetOrCreateDeviceUserAsync(deviceId, cancellationToken).ConfigureAwait(false);
-        return await SeedCoreAsync(connection, userId, deviceId, profile, days, seed, setDisplayName: true, cancellationToken)
+        return await SeedCoreAsync(userId, deviceId, profile, days, seed, setDisplayName: true, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -83,7 +76,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
     // ---------------------------------------------------------------------
 
     private async Task<MockDataSeedResult> SeedCoreAsync(
-        NpgsqlConnection connection, Guid userId, string rngKey, string profile, int days, int? seed,
+        Guid userId, string rngKey, string profile, int days, int? seed,
         bool setDisplayName, CancellationToken cancellationToken)
     {
         if (days <= 0)
@@ -92,12 +85,12 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
         }
 
         var spec = ResolveTierSpec(profile);
-        var tier = await BuildTierProfileAsync(connection, spec, cancellationToken).ConfigureAwait(false);
+        var tier = await BuildTierProfileAsync(spec, cancellationToken).ConfigureAwait(false);
         var random = new Random((seed ?? Environment.TickCount) ^ StableHash(rngKey));
 
         if (setDisplayName)
         {
-            await SetDisplayNameAsync(connection, userId, "Mock Test User", cancellationToken).ConfigureAwait(false);
+            await SetDisplayNameAsync(userId, "Mock Test User", cancellationToken).ConfigureAwait(false);
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -121,7 +114,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
         // math (see usp_WorkoutSession_GetTodayScheduled) lines up for every date we write,
         // and keeps lining up for "today" after this tool has finished running.
         var activatedAtUtc = today.AddDays(-(days + 14)).ToDateTime(TimeOnly.MinValue);
-        await ActivateSplitAsync(connection, userId, tier.Split.SplitId, activatedAtUtc, cancellationToken).ConfigureAwait(false);
+        await ActivateSplitAsync(userId, tier.Split.SplitId, activatedAtUtc, cancellationToken).ConfigureAwait(false);
 
         // The rotation is anchored to the Monday of the activation week, not the
         // activation day itself - see @AnchorDate in usp_WorkoutSession_GetTodayScheduled.
@@ -131,7 +124,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
         var cycleSpan = Math.Max(Math.Max((int)tier.Split.DurationDays, 1), tier.Split.Days.Select(d => (int)d.DayIndex).DefaultIfEmpty(0).Max());
         var cycleLength = (cycleSpan + 6) / 7 * 7;
 
-        await WipeExistingMockDataAsync(connection, userId, cancellationToken).ConfigureAwait(false);
+        await WipeExistingMockDataAsync(userId, cancellationToken).ConfigureAwait(false);
 
         var startDate = today.AddDays(-(days - 1));
         var sessionsCompleted = 0;
@@ -162,7 +155,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
 
                 if (splitDay.IsRestDay)
                 {
-                    await InsertWorkoutSessionAsync(connection, userId, splitDay.SplitDayId, date, "ActiveRest", null, null, null, null, null, null, cancellationToken)
+                    await InsertWorkoutAsync(userId, splitDay.SplitDayId, date, "ActiveRest", null, null, null, null, null, null, [], cancellationToken)
                         .ConfigureAwait(false);
                 }
                 else if (completed == true)
@@ -170,24 +163,22 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
                     var (durationMinutes, caloriesEstimate, rpeScore, tonnageKg, setLogs) =
                         BuildCompletedWorkout(splitDay, offsetFromStart, tier.ProgressionScale, random);
 
-                    var sessionId = await InsertWorkoutSessionAsync(
-                        connection, userId, splitDay.SplitDayId, date, "Completed",
+                    await InsertWorkoutAsync(
+                        userId, splitDay.SplitDayId, date, "Completed",
                         date.ToDateTime(new TimeOnly(7, 0)), date.ToDateTime(new TimeOnly(7, 0)).AddMinutes(durationMinutes),
-                        durationMinutes, caloriesEstimate, rpeScore, tonnageKg, cancellationToken).ConfigureAwait(false);
-                    await InsertSetLogsAsync(connection, sessionId, userId, setLogs, date.ToDateTime(new TimeOnly(7, 0)).AddMinutes(durationMinutes), cancellationToken)
-                        .ConfigureAwait(false);
+                        durationMinutes, caloriesEstimate, rpeScore, tonnageKg, setLogs, cancellationToken).ConfigureAwait(false);
                     sessionsCompleted++;
                 }
                 else
                 {
-                    await InsertWorkoutSessionAsync(connection, userId, splitDay.SplitDayId, date, "Missed", null, null, null, null, null, null, cancellationToken)
+                    await InsertWorkoutAsync(userId, splitDay.SplitDayId, date, "Missed", null, null, null, null, null, null, [], cancellationToken)
                         .ConfigureAwait(false);
                     sessionsMissed++;
                 }
             }
 
-            mealsLogged += await SeedMealsAsync(connection, userId, date, targetCalories, targetProtein, targetCarbs, targetFats, tier, random, cancellationToken).ConfigureAwait(false);
-            hydrationEntries += await SeedHydrationAsync(connection, userId, date, tier, random, cancellationToken).ConfigureAwait(false);
+            mealsLogged += await SeedMealsAsync(userId, date, targetCalories, targetProtein, targetCarbs, targetFats, tier, random, cancellationToken).ConfigureAwait(false);
+            hydrationEntries += await SeedHydrationAsync(userId, date, tier, random, cancellationToken).ConfigureAwait(false);
 
             // Not every day - a bodyweight log every 2-3 days reads far more like a real
             // user than one at exactly the same time every morning. Always log the very
@@ -196,7 +187,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             if (logsBodyweight)
             {
                 currentWeightKg += weightTrendPerDay * (offsetFromStart == 0 ? 0 : 2.5m) + (decimal)(random.NextDouble() * 0.6 - 0.3);
-                await InsertBodyweightAsync(connection, userId, date, Math.Round(currentWeightKg, 1), cancellationToken).ConfigureAwait(false);
+                await InsertBodyweightAsync(userId, date, Math.Round(currentWeightKg, 1), cancellationToken).ConfigureAwait(false);
                 bodyweightEntries++;
             }
         }
@@ -248,7 +239,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
     // ---------------------------------------------------------------------
 
     private async Task<int> SeedMealsAsync(
-        NpgsqlConnection connection, Guid userId, DateOnly date,
+        Guid userId, DateOnly date,
         int targetCalories, int targetProtein, int targetCarbs, int targetFats, TierProfile tier, Random random,
         CancellationToken cancellationToken)
     {
@@ -282,7 +273,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             var mealTitles = titles[mealType];
             var title = mealTitles[random.Next(mealTitles.Length)];
 
-            await UpsertMealLogAsync(connection, userId, date, mealType, title, calories, protein, carbs, fats,
+            await UpsertMealLogAsync(userId, date, mealType, title, calories, protein, carbs, fats,
                 isLogged ? "Logged" : "Planned", plannedTime, cancellationToken).ConfigureAwait(false);
 
             if (isLogged)
@@ -299,7 +290,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
     // ---------------------------------------------------------------------
 
     private async Task<int> SeedHydrationAsync(
-        NpgsqlConnection connection, Guid userId, DateOnly date, TierProfile tier, Random random, CancellationToken cancellationToken)
+        Guid userId, DateOnly date, TierProfile tier, Random random, CancellationToken cancellationToken)
     {
         var entryCount = random.Next(tier.HydrationMin, tier.HydrationMax);
         var hour = 7;
@@ -309,7 +300,7 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             hour = Math.Min(22, hour + random.Next(1, 4));
             var amountMl = (short)(random.Next(4, 11) * 50); // 200-500ml, rounded to a real bottle/glass size
             var loggedAtUtc = date.ToDateTime(new TimeOnly(hour, random.Next(0, 60)));
-            await InsertHydrationAsync(connection, userId, loggedAtUtc, amountMl, cancellationToken).ConfigureAwait(false);
+            await InsertHydrationAsync(userId, loggedAtUtc, amountMl, cancellationToken).ConfigureAwait(false);
         }
 
         return entryCount;
@@ -319,12 +310,12 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
     // Data access
     // ---------------------------------------------------------------------
 
-    private static async Task<bool> UserExistsAsync(NpgsqlConnection connection, Guid userId, CancellationToken cancellationToken)
-    {
-        await using var command = NewCommand(connection, "SELECT COUNT(1) FROM dbo.Users WHERE UserId = @UserId");
-        command.Parameters.AddWithValue("@UserId", userId);
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) > 0;
-    }
+    private Task<bool> UserExistsAsync(Guid userId, CancellationToken cancellationToken) =>
+        executor.QueryAsync(
+            "dbo.usp_MockData_UserExists",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, row => row.GetBoolValue("UserExists"), cancellationToken),
+            cancellationToken);
 
     private Task<Guid> GetOrCreateDeviceUserAsync(string deviceId, CancellationToken cancellationToken) =>
         executor.QueryAsync(
@@ -333,13 +324,14 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, row => row.GetGuidValue("UserId"), cancellationToken),
             cancellationToken);
 
-    private static async Task SetDisplayNameAsync(NpgsqlConnection connection, Guid userId, string displayName, CancellationToken cancellationToken)
-    {
-        await using var command = NewCommand(connection, "UPDATE dbo.Users SET DisplayName = @DisplayName WHERE UserId = @UserId");
-        command.Parameters.AddWithValue("@DisplayName", displayName);
-        command.Parameters.AddWithValue("@UserId", userId);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task SetDisplayNameAsync(Guid userId, string displayName, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_SetDisplayName",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@DisplayName", displayName)
+            ],
+            cancellationToken);
 
     private Task UpsertProfileAsync(
         Guid userId, string gender, int ageYears, decimal heightCm, decimal weightKg, string goal,
@@ -374,14 +366,14 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             cancellationToken);
     }
 
-    private static async Task<Guid> GetPlanIdAsync(NpgsqlConnection connection, string code, CancellationToken cancellationToken)
-    {
-        await using var command = NewCommand(connection, "SELECT PlanId FROM dbo.SubscriptionPlans WHERE Code = @Code");
-        command.Parameters.AddWithValue("@Code", code);
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException($"Subscription plan '{code}' not found - run database/seed/001_SeedReferenceData.sql first.");
-        return (Guid)result;
-    }
+    private Task<Guid> GetPlanIdAsync(string code, CancellationToken cancellationToken) =>
+        executor.QueryAsync(
+            "dbo.usp_MockData_GetPlanId",
+            [SqlParameterBuilder.Create("@Code", code)],
+            async reader => await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+                ? reader.GetGuidValue("PlanId")
+                : throw new InvalidOperationException($"Subscription plan '{code}' not found - run database/seed/001_reference_data.sql first."),
+            cancellationToken);
 
     private Task GrantSubscriptionAsync(Guid userId, Guid planId, CancellationToken cancellationToken) =>
         // Yearly so it stays active for the whole time someone will spend poking at this
@@ -396,91 +388,49 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             ],
             cancellationToken);
 
-    private static async Task ActivateSplitAsync(NpgsqlConnection connection, Guid userId, Guid splitId, DateTime activatedAtUtc, CancellationToken cancellationToken)
-    {
-        const string sql = """
-            INSERT INTO dbo.UserActiveSplits (UserId, SplitId, ActivatedAtUtc) VALUES (@UserId, @SplitId, @ActivatedAtUtc)
-            ON CONFLICT (UserId) DO UPDATE SET SplitId = EXCLUDED.SplitId, ActivatedAtUtc = EXCLUDED.ActivatedAtUtc;
-            """;
-        await using var command = NewCommand(connection, sql);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@SplitId", splitId);
-        command.Parameters.AddWithValue("@ActivatedAtUtc", activatedAtUtc);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task ActivateSplitAsync(Guid userId, Guid splitId, DateTime activatedAtUtc, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_ActivateSplit",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@SplitId", splitId),
+                SqlParameterBuilder.Create("@ActivatedAtUtc", activatedAtUtc)
+            ],
+            cancellationToken);
 
-    private static async Task WipeExistingMockDataAsync(NpgsqlConnection connection, Guid userId, CancellationToken cancellationToken)
-    {
-        const string sql = """
-            -- Cached recaps contain snapshots of the logs below. They must be
-            -- invalidated in the same seed operation or a test account can keep
-            -- showing a pre-seed weekly/monthly report until its cache expires.
-            DELETE FROM dbo.WeeklyAnalyticsReports WHERE UserId = @UserId;
-            DELETE FROM dbo.MonthlyAnalyticsReports WHERE UserId = @UserId;
-            DELETE FROM dbo.WorkoutSetLogs WHERE UserId = @UserId;
-            DELETE FROM dbo.WorkoutSessions WHERE UserId = @UserId;
-            DELETE FROM dbo.MealLogs WHERE UserId = @UserId;
-            DELETE FROM dbo.HydrationLogs WHERE UserId = @UserId;
-            DELETE FROM dbo.BodyweightLogs WHERE UserId = @UserId;
-            """;
-        await using var command = NewCommand(connection, sql);
-        command.Parameters.AddWithValue("@UserId", userId);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task WipeExistingMockDataAsync(Guid userId, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_Wipe",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            cancellationToken);
 
-    private static async Task<Guid> InsertWorkoutSessionAsync(
-        NpgsqlConnection connection, Guid userId, Guid splitDayId, DateOnly scheduledDateUtc, string status,
+    // The session and all of its sets go in one call, the sets as parallel arrays.
+    private Task InsertWorkoutAsync(
+        Guid userId, Guid splitDayId, DateOnly scheduledDateUtc, string status,
         DateTime? startedAtUtc, DateTime? completedAtUtc, short? durationMinutes, short? caloriesEstimate,
-        decimal? rpeScore, decimal? tonnageKg, CancellationToken cancellationToken)
-    {
-        var sessionId = Guid.NewGuid();
-        const string sql = """
-            INSERT INTO dbo.WorkoutSessions
-                (WorkoutSessionId, UserId, SplitDayId, ScheduledDateUtc, Status, StartedAtUtc, CompletedAtUtc,
-                 DurationMinutes, CaloriesEstimate, RpeScore, TonnageKg)
-            VALUES
-                (@WorkoutSessionId, @UserId, @SplitDayId, @ScheduledDateUtc, @Status, @StartedAtUtc, @CompletedAtUtc,
-                 @DurationMinutes, @CaloriesEstimate, @RpeScore, @TonnageKg);
-            """;
-        await using var command = NewCommand(connection, sql);
-        command.Parameters.AddWithValue("@WorkoutSessionId", sessionId);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@SplitDayId", splitDayId);
-        command.Parameters.AddWithValue("@ScheduledDateUtc", scheduledDateUtc);
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@StartedAtUtc", (object?)startedAtUtc ?? DBNull.Value);
-        command.Parameters.AddWithValue("@CompletedAtUtc", (object?)completedAtUtc ?? DBNull.Value);
-        command.Parameters.AddWithValue("@DurationMinutes", (object?)durationMinutes ?? DBNull.Value);
-        command.Parameters.AddWithValue("@CaloriesEstimate", (object?)caloriesEstimate ?? DBNull.Value);
-        command.Parameters.AddWithValue("@RpeScore", (object?)rpeScore ?? DBNull.Value);
-        command.Parameters.AddWithValue("@TonnageKg", (object?)tonnageKg ?? DBNull.Value);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        return sessionId;
-    }
-
-    private static async Task InsertSetLogsAsync(
-        NpgsqlConnection connection, Guid sessionId, Guid userId, List<MockSetLog> setLogs, DateTime completedAtUtc, CancellationToken cancellationToken)
-    {
-        const string sql = """
-            INSERT INTO dbo.WorkoutSetLogs (WorkoutSessionId, UserId, ExerciseId, SetNumber, WeightKg, Reps, CompletedAtUtc)
-            VALUES (@WorkoutSessionId, @UserId, @ExerciseId, @SetNumber, @WeightKg, @Reps, @CompletedAtUtc);
-            """;
-        foreach (var setLog in setLogs)
-        {
-            await using var command = NewCommand(connection, sql);
-            command.Parameters.AddWithValue("@WorkoutSessionId", sessionId);
-            command.Parameters.AddWithValue("@UserId", userId);
-            command.Parameters.AddWithValue("@ExerciseId", setLog.ExerciseId);
-            command.Parameters.AddWithValue("@SetNumber", setLog.SetNumber);
-            command.Parameters.AddWithValue("@WeightKg", setLog.WeightKg);
-            command.Parameters.AddWithValue("@Reps", setLog.Reps);
-            command.Parameters.AddWithValue("@CompletedAtUtc", completedAtUtc);
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-    }
+        decimal? rpeScore, decimal? tonnageKg, List<MockSetLog> setLogs, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_InsertWorkout",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@SplitDayId", splitDayId),
+                SqlParameterBuilder.Create("@ScheduledDateUtc", scheduledDateUtc),
+                SqlParameterBuilder.Create("@Status", status),
+                SqlParameterBuilder.Create("@StartedAtUtc", (object?)startedAtUtc ?? DBNull.Value),
+                SqlParameterBuilder.Create("@CompletedAtUtc", (object?)completedAtUtc ?? DBNull.Value),
+                SqlParameterBuilder.Create("@DurationMinutes", (object?)durationMinutes ?? DBNull.Value),
+                SqlParameterBuilder.Create("@CaloriesEstimate", (object?)caloriesEstimate ?? DBNull.Value),
+                SqlParameterBuilder.Create("@RpeScore", (object?)rpeScore ?? DBNull.Value),
+                SqlParameterBuilder.Create("@TonnageKg", (object?)tonnageKg ?? DBNull.Value),
+                SqlParameterBuilder.Create("@ExerciseIds", setLogs.Select(s => s.ExerciseId).ToArray()),
+                SqlParameterBuilder.Create("@SetNumbers", setLogs.Select(s => (short)s.SetNumber).ToArray()),
+                SqlParameterBuilder.Create("@WeightsKg", setLogs.Select(s => s.WeightKg).ToArray()),
+                SqlParameterBuilder.Create("@Reps", setLogs.Select(s => s.Reps).ToArray())
+            ],
+            cancellationToken);
 
     private Task UpsertMealLogAsync(
-        NpgsqlConnection connection, Guid userId, DateOnly logDateUtc, string mealType, string title,
+        Guid userId, DateOnly logDateUtc, string mealType, string title,
         int calories, int protein, int carbs, int fats, string status, TimeOnly plannedLocalTime, CancellationToken cancellationToken)
     {
         return executor.ExecuteAsync(
@@ -501,113 +451,85 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
             cancellationToken);
     }
 
-    private static async Task InsertHydrationAsync(NpgsqlConnection connection, Guid userId, DateTime loggedAtUtc, short amountMl, CancellationToken cancellationToken)
-    {
-        const string sql = "INSERT INTO dbo.HydrationLogs (UserId, LoggedAtUtc, AmountMl) VALUES (@UserId, @LoggedAtUtc, @AmountMl);";
-        await using var command = NewCommand(connection, sql);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@LoggedAtUtc", loggedAtUtc);
-        command.Parameters.AddWithValue("@AmountMl", amountMl);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task InsertHydrationAsync(Guid userId, DateTime loggedAtUtc, short amountMl, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_InsertHydration",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@LoggedAtUtc", loggedAtUtc),
+                SqlParameterBuilder.Create("@AmountMl", amountMl)
+            ],
+            cancellationToken);
 
-    private async Task InsertBodyweightAsync(NpgsqlConnection connection, Guid userId, DateOnly date, decimal weightKg, CancellationToken cancellationToken)
-    {
-        const string sql = "INSERT INTO dbo.BodyweightLogs (UserId, LoggedAtUtc, WeightKg) VALUES (@UserId, @LoggedAtUtc, @WeightKg);";
-        await using var command = NewCommand(connection, sql);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@LoggedAtUtc", date.ToDateTime(new TimeOnly(6, 30)));
-        command.Parameters.AddWithValue("@WeightKg", FieldCipher.EncryptDecimal(weightKg, Key));
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task InsertBodyweightAsync(Guid userId, DateOnly date, decimal weightKg, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_InsertBodyweight",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@LoggedAtUtc", date.ToDateTime(new TimeOnly(6, 30))),
+                SqlParameterBuilder.Create("@WeightKg", FieldCipher.EncryptDecimal(weightKg, Key))
+            ],
+            cancellationToken);
 
-    private static async Task WriteAuditAsync(
-        NpgsqlConnection connection, AdminActorModel actor, Guid userId, MockDataSeedResult result, CancellationToken cancellationToken)
-    {
-        const string sql = """
-            INSERT INTO dbo.AdminAuditLog (AdminUserId, Username, Action, EntityType, EntityId, Summary, CreatedFromIp)
-            VALUES (@AdminUserId, @Username, 'Seed mock data', 'User', @EntityId, @Summary, @Ip);
-            """;
-        await using var command = NewCommand(connection, sql);
-        command.Parameters.AddWithValue("@AdminUserId", (object?)actor.AdminUserId ?? DBNull.Value);
-        command.Parameters.AddWithValue("@Username", actor.Username);
-        command.Parameters.AddWithValue("@EntityId", userId.ToString());
-        command.Parameters.AddWithValue(
-            "@Summary",
-            $"Generated {result.Days} day(s) of {result.Profile} mock data ({result.WorkoutsCompleted} workouts, {result.MealsLogged} meals logged).");
-        command.Parameters.AddWithValue("@Ip", (object?)actor.Ip ?? DBNull.Value);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task WriteAuditAsync(
+        AdminActorModel actor, Guid userId, MockDataSeedResult result, CancellationToken cancellationToken) =>
+        executor.ExecuteAsync(
+            "dbo.usp_MockData_WriteAudit",
+            [
+                SqlParameterBuilder.Create("@AdminUserId", (object?)actor.AdminUserId ?? DBNull.Value),
+                SqlParameterBuilder.Create("@Username", actor.Username),
+                SqlParameterBuilder.Create("@EntityId", userId.ToString()),
+                SqlParameterBuilder.Create(
+                    "@Summary",
+                    $"Generated {result.Days} day(s) of {result.Profile} mock data ({result.WorkoutsCompleted} workouts, {result.MealsLogged} meals logged)."),
+                SqlParameterBuilder.Create("@Ip", (object?)actor.Ip ?? DBNull.Value)
+            ],
+            cancellationToken);
 
-    private async Task<TierProfile> BuildTierProfileAsync(NpgsqlConnection connection, TierSpec spec, CancellationToken cancellationToken)
+    private async Task<TierProfile> BuildTierProfileAsync(TierSpec spec, CancellationToken cancellationToken)
     {
-        var planId = await GetPlanIdAsync(connection, spec.PlanCode, cancellationToken).ConfigureAwait(false);
-        var split = await LoadSplitAsync(connection, spec.SplitCategory, cancellationToken).ConfigureAwait(false);
+        var planId = await GetPlanIdAsync(spec.PlanCode, cancellationToken).ConfigureAwait(false);
+        var split = await LoadSplitAsync(spec.SplitCategory, cancellationToken).ConfigureAwait(false);
         return new TierProfile(spec, planId, split);
     }
 
-    private static async Task<MockSplit> LoadSplitAsync(NpgsqlConnection connection, string category, CancellationToken cancellationToken)
-    {
-        Guid splitId;
-        string name;
-        byte durationDays;
-
-        const string splitSql = """
-            SELECT SplitId, Name, DurationDays
-            FROM dbo.WorkoutSplits
-            WHERE IsSystemDefault AND Category = @Category
-            ORDER BY SortOrder
-            LIMIT 1;
-            """;
-        await using (var command = NewCommand(connection, splitSql))
-        {
-            command.Parameters.AddWithValue("@Category", category);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+    // Three result sets: the split row, its days, then every exercise on those days.
+    private Task<MockSplit> LoadSplitAsync(string category, CancellationToken cancellationToken) =>
+        executor.QueryAsync(
+            "dbo.usp_MockData_GetSplit",
+            [SqlParameterBuilder.Create("@Category", category)],
+            async reader =>
             {
-                throw new InvalidOperationException($"No system-default '{category}' split found - run database/seed/001_SeedReferenceData.sql first.");
-            }
+                if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException($"No system-default '{category}' split found - run database/seed/001_reference_data.sql first.");
+                }
 
-            splitId = reader.GetGuid(0);
-            name = reader.GetString(1);
-            durationDays = (byte)reader.GetInt16(2);
-        }
+                var splitId = reader.GetGuidValue("SplitId");
+                var name = reader.GetStringValue("Name");
+                var durationDays = reader.GetByteValue("DurationDays");
 
-        var days = new List<MockSplitDay>();
-        const string daysSql = "SELECT SplitDayId, DayIndex, EstimatedMinutes, IsRestDay FROM dbo.SplitDays WHERE SplitId = @SplitId ORDER BY DayIndex;";
-        await using (var command = NewCommand(connection, daysSql))
-        {
-            command.Parameters.AddWithValue("@SplitId", splitId);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                days.Add(new MockSplitDay(
-                    reader.GetGuid(0), (byte)reader.GetInt16(1), reader.GetInt16(2), reader.GetBoolean(3), []));
-            }
-        }
+                await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                var days = await SqlResultSetReader.ReadListAsync(
+                    reader,
+                    row => new MockSplitDay(
+                        row.GetGuidValue("SplitDayId"), row.GetByteValue("DayIndex"), row.GetInt16Value("EstimatedMinutes"),
+                        row.GetBoolValue("IsRestDay"), []),
+                    cancellationToken).ConfigureAwait(false);
 
-        const string exercisesSql = """
-            SELECT sde.SplitDayId, sde.ExerciseId, e.IsCompound, sde.TargetSets, sde.TargetRepsLow, sde.TargetRepsHigh
-            FROM dbo.SplitDayExercises sde
-            INNER JOIN dbo.Exercises e ON e.ExerciseId = sde.ExerciseId
-            WHERE sde.SplitDayId IN (SELECT SplitDayId FROM dbo.SplitDays WHERE SplitId = @SplitId)
-            ORDER BY sde.SplitDayId, sde.SortOrder;
-            """;
-        await using (var command = NewCommand(connection, exercisesSql))
-        {
-            command.Parameters.AddWithValue("@SplitId", splitId);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var splitDayId = reader.GetGuid(0);
-                var day = days.First(d => d.SplitDayId == splitDayId);
-                day.Exercises.Add(new MockSplitExercise(
-                    reader.GetGuid(1), reader.GetBoolean(2), (byte)reader.GetInt16(3), (byte)reader.GetInt16(4), (byte)reader.GetInt16(5)));
-            }
-        }
+                await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var splitDayId = reader.GetGuidValue("SplitDayId");
+                    var day = days.First(d => d.SplitDayId == splitDayId);
+                    day.Exercises.Add(new MockSplitExercise(
+                        reader.GetGuidValue("ExerciseId"), reader.GetBoolValue("IsCompound"), reader.GetByteValue("TargetSets"),
+                        reader.GetByteValue("TargetRepsLow"), reader.GetByteValue("TargetRepsHigh")));
+                }
 
-        return new MockSplit(splitId, name, durationDays, days);
-    }
+                return new MockSplit(splitId, name, durationDays, days);
+            },
+            cancellationToken);
 
     // ---------------------------------------------------------------------
     // Helpers
@@ -630,9 +552,6 @@ public sealed class MockDataSeeder(string connectionString, string masterKeyBase
 
         return resolved;
     }
-
-    private static NpgsqlCommand NewCommand(NpgsqlConnection connection, string commandText) =>
-        new(commandText, connection) { CommandTimeout = CommandTimeoutSeconds };
 
     private static TierSpec ResolveTierSpec(string profile) =>
         profile switch

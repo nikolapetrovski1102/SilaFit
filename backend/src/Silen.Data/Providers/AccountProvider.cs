@@ -73,7 +73,7 @@ public sealed class AccountProvider : IAccountProvider
                 var profile = await SqlResultSetReader.ReadSingleOrDefaultAsync(reader, r => UserProfileRowMapper.MapUserProfile(r, _key), cancellationToken);
 
                 await reader.NextResultAsync(cancellationToken);
-                var settings = await SqlResultSetReader.ReadSingleOrDefaultAsync(reader, SettingsRowMapper.MapSettings, cancellationToken);
+                var settings = await SqlResultSetReader.ReadSingleOrDefaultAsync(reader, AccountRowMapper.MapExportSettings, cancellationToken);
 
                 await reader.NextResultAsync(cancellationToken);
                 var nutritionTargets = await SqlResultSetReader.ReadSingleOrDefaultAsync(reader, r => MealPlanningRowMapper.MapNutritionTargets(r, _key), cancellationToken);
@@ -81,8 +81,6 @@ public sealed class AccountProvider : IAccountProvider
                 await reader.NextResultAsync(cancellationToken);
                 var bodyweightHistory = await SqlResultSetReader.ReadListAsync(reader, r => WorkoutRowMapper.MapBodyweightEntry(r, _key), cancellationToken);
 
-                await reader.NextResultAsync(cancellationToken);
-                var hydrationHistory = await SqlResultSetReader.ReadListAsync(reader, AccountRowMapper.MapHydrationEntry, cancellationToken);
 
                 await reader.NextResultAsync(cancellationToken);
                 var mealLogs = await SqlResultSetReader.ReadListAsync(reader, r => MealPlanningRowMapper.MapMealLog(r, _key), cancellationToken);
@@ -104,7 +102,6 @@ public sealed class AccountProvider : IAccountProvider
                     Settings = settings,
                     NutritionTargets = nutritionTargets,
                     BodyweightHistory = bodyweightHistory,
-                    HydrationHistory = hydrationHistory,
                     MealLogs = mealLogs,
                     WorkoutSessions = workoutSessions,
                     WorkoutSetLogs = workoutSetLogs,
