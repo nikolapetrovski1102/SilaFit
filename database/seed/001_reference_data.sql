@@ -1,11 +1,14 @@
 -- Catalog data for a brand-new install (database/apply.sh loads it only when the
--- database had no migrations yet). Generated from production's catalog tables;
--- holds no user rows.
+-- database had no migrations yet, right after the SEED_AFTER baseline migration).
+-- Generated from production's catalog tables; holds no user rows. Catalog changes
+-- made after that baseline live in later migrations, which run on top of this -
+-- so if this file is ever regenerated from production, move SEED_AFTER up to the
+-- last migration it already contains.
 
 COPY dbo.subscriptionplans (planid, code, name, tagline, monthlyprice, yearlyprice, isfeatured, sortorder, appstoremonthlyproductid, appstoreyearlyproductid, playstoremonthlyproductid, playstoreyearlyproductid) FROM stdin;
-0499433e-f36b-1410-88db-0092085e5b62	PRO	Pro Tier	Advanced volume telemetry, predictive PR curves, and automated deload signals.	2.99	24.99	t	2	com.nikolapetrovski.silafit.pro.monthly	com.nikolapetrovski.silafit.pro.yearly	silafit_pro_monthly	silafit_pro_yearly
+0499433e-f36b-1410-88db-0092085e5b62	PRO	Pro Tier	Per-exercise 1RM charts, AI monthly overviews, and automated deload signals.	2.99	24.99	t	2	com.nikolapetrovski.silafit.pro.monthly	com.nikolapetrovski.silafit.pro.yearly	silafit_pro_monthly	silafit_pro_yearly
 0b99433e-f36b-1410-88db-0092085e5b62	ADVANCED	Advanced Tier	Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.	5.99	49.99	f	3	com.nikolapetrovski.silafit.advanced.monthly	com.nikolapetrovski.silafit.advanced.yearly	silafit_advanced_monthly	silafit_advanced_yearly
-fd98433e-f36b-1410-88db-0092085e5b62	FREE	Free Tier	Essential hardware tracking and routine logging for self-guided lifters.	0.00	0.00	f	1	\N	\N	\N	\N
+fd98433e-f36b-1410-88db-0092085e5b62	FREE	Free Tier	Workout logging, ready-made splits and streak tracking for self-guided lifters.	0.00	0.00	f	1	\N	\N	\N	\N
 \.
 
 COPY dbo.planfeatures (planfeatureid, planid, featuretext, sortorder, ishighlighted) FROM stdin;

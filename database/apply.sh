@@ -10,11 +10,15 @@
 #                 Server login had (EXECUTE on dbo, ownership chaining).
 #   2. migrations database/migrations/*.sql, each applied once, in order, in its
 #                 own transaction, recorded in public.schema_migrations.
+#      seed       database/seed/*.sql, only when the database had no migrations
+#                 yet (a brand-new install), loaded right after migration
+#                 $SEED_AFTER. The seed is the catalog as of that baseline, so the
+#                 later catalog migrations (new splits, meals, fixes) run on top of
+#                 it exactly as they did in production. Production data never
+#                 gets re-seeded.
 #   3. functions  every dbo function except the 0001 helpers is dropped and
 #                 database/functions/*.sql recreated in one transaction, so a
 #                 removed or re-signatured function never lingers as an overload.
-#   4. seed       database/seed/*.sql, only when the database had no migrations
-#                 yet (a brand-new install). Production data never gets re-seeded.
 #
 # Runs psql through $PSQL, which must connect as a superuser to the target
 # database and read SQL from stdin. Defaults to the local/production container:
@@ -29,6 +33,8 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PSQL="${PSQL:-docker exec -i silen-postgres psql -U postgres -d silendb}"
+# The migration the seed snapshot sits on: schema up to here, catalog data after.
+SEED_AFTER=0002
 UNTIL=""
 for arg in "$@"; do
   case "$arg" in
@@ -82,6 +88,15 @@ for f in "$DIR"/migrations/*.sql; do
     echo "INSERT INTO public.schema_migrations (filename) VALUES ('$name');"
     echo "COMMIT;"
   } | psql_run
+
+  # ---- seed (brand-new install only) ----
+  if [ "$fresh" = "t" ] && (( 10#${name%%_*} == 10#$SEED_AFTER )) \
+     && compgen -G "$DIR/seed/*.sql" >/dev/null; then
+    for s in "$DIR"/seed/*.sql; do
+      echo "-> seed $(basename "$s")"
+      { echo "BEGIN;"; echo "SET LOCAL ROLE silen_owner;"; cat "$s"; echo; echo "COMMIT;"; } | psql_run
+    done
+  fi
 done
 
 [ -n "$UNTIL" ] && { echo "Stopped after migrations up to $UNTIL."; exit 0; }
@@ -121,13 +136,5 @@ COMMIT;
 SQL
 } | psql_run
 echo "   $(psql_value "SELECT count(*) FROM pg_proc WHERE pronamespace = 'dbo'::regnamespace AND proname NOT IN ('outcome_cursor', 'sysutcdatetime')") functions"
-
-# ---- 4. seed -----------------------------------------------------------------
-if [ "$fresh" = "t" ] && compgen -G "$DIR/seed/*.sql" >/dev/null; then
-  for f in "$DIR"/seed/*.sql; do
-    echo "-> seed $(basename "$f")"
-    { echo "BEGIN;"; echo "SET LOCAL ROLE silen_owner;"; cat "$f"; echo; echo "COMMIT;"; } | psql_run
-  done
-fi
 
 echo "Database up to date."
