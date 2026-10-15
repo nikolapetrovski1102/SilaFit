@@ -7,6 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/section_eyebrow.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../diet_plans/diet_plan_controller.dart';
 import '../../diet_plans/diet_plan_detail_screen.dart';
 import '../../diet_plans/diet_plan_models.dart';
@@ -86,16 +87,7 @@ class ActiveDietPlanSection extends StatelessWidget {
           onAction: () => controller.load(force: true),
         );
       }
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-        ),
-      );
+      return const SkeletonBlock(height: 132);
     }
 
     final plan = state.data!.plan;

@@ -6,6 +6,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_day_editor_screen.dart';
 import 'diet_plan_models.dart';
@@ -220,10 +221,7 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
   Widget _buildDayList() {
     final days = widget.controller.detail?.days ?? const [];
     if (widget.controller.loadState != null && !widget.controller.loadState!.hasData) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-      );
+      return const SkeletonList(count: 4);
     }
     if (days.isEmpty) {
       return Padding(

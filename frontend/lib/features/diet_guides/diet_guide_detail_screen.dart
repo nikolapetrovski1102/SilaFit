@@ -6,6 +6,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/skeleton.dart';
 import 'diet_guide_controller.dart';
 import 'diet_guide_models.dart';
 
@@ -50,6 +51,11 @@ class _DietGuideDetailScreenState extends State<DietGuideDetailScreen> {
           return ResourceBuilder<DietGuideDetail>(
             state: widget.controller.state,
             onRetry: widget.controller.load,
+            skeleton: const Padding(
+              padding:
+                  EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
+              child: SkeletonDetail(),
+            ),
             builder: (context, detail) => _buildDetail(detail),
           );
         },

@@ -6,18 +6,33 @@ import '../../../core/state/resource_state.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/section_card.dart';
+import '../../../core/widgets/container_transform.dart';
+import '../../../core/widgets/hero_container_transform.dart';
+import '../../../core/widgets/silen_button.dart';
 import '../../../core/widgets/section_eyebrow.dart';
+import '../../../core/widgets/silen_ambient_backdrop.dart';
+import '../../../core/widgets/skeleton.dart';
+import '../../onboarding/widgets/age_wheel_picker.dart';
 import '../exercise_progress_controller.dart';
 import '../progress_models.dart';
 import 'personal_record_tile.dart' show formatPrWeight;
 
+/// Hairline used in place of card edges - the tracker sits straight on the
+/// screen's ambient backdrop, so separation comes from type and spacing.
+Color get _hairline => AppColors.onSurface.withValues(alpha: 0.06);
+
+const _motion = Duration(milliseconds: 260);
+
 /// PRO/Advanced per-exercise tracker: pick any exercise that has logged sets,
-/// then chart one metric per session over the Progress screen's timeframe.
+/// then chart one metric per session over the section's own timeframe.
 ///
-/// When [controller] reports [ExerciseProgressAccess.locked] the card renders
-/// [_Sample] instead - the gated endpoints return nothing for a Free caller,
-/// and the Progress screen blurs the card anyway, so this only has to look
+/// Deliberately not a [SectionCard]: it blends into the backdrop as the
+/// screen's hero section, with a large exercise title that morphs into a
+/// search screen, and a borderless chart running edge to edge.
+///
+/// When [controller] reports [ExerciseProgressAccess.locked] the section
+/// renders [_Sample] instead - the gated endpoints return nothing for a Free
+/// caller, and the Progress screen blurs it anyway, so this only has to look
 /// plausible behind the blur.
 class ExerciseProgressCard extends StatelessWidget {
   final ExerciseProgressController controller;
@@ -30,51 +45,83 @@ class ExerciseProgressCard extends StatelessWidget {
     final exercisesState = locked
         ? ResourceState.data(_Sample.exercises)
         : controller.exercisesState;
-    final progressState =
-        locked ? ResourceState.data(_Sample.progress) : controller.progressState;
-    final selectedId =
-        locked ? _Sample.exercises.first.exerciseId : controller.selectedExerciseId;
+    final progressState = locked
+        ? ResourceState.data(_Sample.progress)
+        : controller.progressState;
+    final selectedId = locked
+        ? _Sample.exercises.first.exerciseId
+        : controller.selectedExerciseId;
+    final hasExercises =
+        exercisesState.data != null && exercisesState.data!.isNotEmpty;
 
-    return SectionCard(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Row(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(child: SectionEyebrow('Exercise Progress')),
-              _TierBadge(),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: SectionEyebrow('Exercise Progress',
+                    color: AppColors.accent),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: _TierBadge(),
+              ),
+              const Spacer(),
+              if (hasExercises)
+                _TimeframeValue(
+                  amount: controller.timeframeAmount,
+                  unit: controller.timeframeUnit,
+                  onChanged: locked ? null : controller.setTimeframe,
+                ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.sm),
           if (exercisesState.isLoading)
-            const _CardSpinner()
+            const SkeletonChart()
           else if (exercisesState.error != null)
             _RetryMessage(
                 message: exercisesState.error!,
                 onRetry: () => controller.load(force: true))
-          else if (exercisesState.data!.isEmpty)
+          else if (!hasExercises)
             Text('Log sets during a workout to track each exercise over time.',
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant))
           else ...[
-            _ExercisePicker(
+            _ExerciseSelector(
               exercises: exercisesState.data!,
               selectedId: selectedId,
-              onSelected: locked ? (_) {} : controller.select,
+              onSelected: locked ? null : controller.select,
             ),
-            const SizedBox(height: AppSpacing.md),
-            if (progressState.isLoading)
-              const _CardSpinner()
-            else if (progressState.error != null)
-              _RetryMessage(
-                  message: progressState.error!,
-                  onRetry: controller.retryProgress)
-            else
-              _ProgressBody(
-                progress: progressState.data!,
-                metric: controller.metric,
-                onMetricChanged: controller.setMetric,
+            const SizedBox(height: AppSpacing.lg),
+            AnimatedSwitcher(
+              duration: _motion,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: KeyedSubtree(
+                key: ValueKey(progressState.isLoading
+                    ? 'loading'
+                    : progressState.error != null
+                        ? 'error'
+                        : 'data'),
+                child: progressState.isLoading
+                    ? const SkeletonChart()
+                    : progressState.error != null
+                        ? _RetryMessage(
+                            message: progressState.error!,
+                            onRetry: controller.retryProgress)
+                        : _ProgressBody(
+                            progress: progressState.data!,
+                            metric: controller.metric,
+                            onMetricChanged: controller.setMetric,
+                          ),
               ),
+            ),
           ],
         ],
       ),
@@ -88,24 +135,270 @@ class _TierBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: AppColors.secondary,
         borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(
+            color: AppColors.secondary.withValues(alpha: 0.55), width: 1),
       ),
       child: Text('PRO',
           style: AppTypography.labelCaps
-              .copyWith(color: AppColors.onAccent, fontSize: 9)),
+              .copyWith(color: AppColors.secondary, fontSize: 9)),
     );
   }
 }
 
-class _ExercisePicker extends StatelessWidget {
+const _amountHeroTag = 'exercise-progress-timeframe-amount';
+const _unitHeroTag = 'exercise-progress-timeframe-unit';
+
+/// "Last 3 M" as one big number plus its unit. Tapping either grows both,
+/// each as its own shared element, into the matching wheel's selection pill
+/// on [_TimeframePickerScreen].
+class _TimeframeValue extends StatelessWidget {
+  final int amount;
+  final ProgressTimeframeUnit unit;
+
+  /// Null while locked - the value renders but doesn't open.
+  final void Function(int amount, ProgressTimeframeUnit unit)? onChanged;
+
+  const _TimeframeValue({
+    required this.amount,
+    required this.unit,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final onChanged = this.onChanged;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onChanged == null
+          ? null
+          : () => Navigator.of(context).push(heroExpandRoute<void>(
+                builder: (_) => _TimeframePickerScreen(
+                  amount: amount,
+                  unit: unit,
+                  onChanged: onChanged,
+                ),
+              )),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text('LAST', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Hero(
+                tag: _amountHeroTag,
+                createRectTween: straightHeroRectTween,
+                flightShuttleBuilder: _pillShuttle,
+                child: Text('$amount',
+                    style: AppTypography.displayStat.copyWith(height: 1)),
+              ),
+              const SizedBox(width: 4),
+              Hero(
+                tag: _unitHeroTag,
+                createRectTween: straightHeroRectTween,
+                flightShuttleBuilder: _pillShuttle,
+                child: Text(unit.short,
+                    style: AppTypography.headlineLg
+                        .copyWith(color: AppColors.accent, height: 1)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Grows the section's plain number/unit into the wheel's accent pill (and
+/// back), crossfading between the two. [animation] reads 0 at the Progress
+/// screen and 1 at the picker for both push and pop, so the picker-side
+/// child is always the one weighted by its value.
+Widget _pillShuttle(
+  BuildContext flightContext,
+  Animation<double> animation,
+  HeroFlightDirection direction,
+  BuildContext fromHeroContext,
+  BuildContext toHeroContext,
+) {
+  final push = direction == HeroFlightDirection.push;
+  final pill = ((push ? toHeroContext : fromHeroContext).widget as Hero).child;
+  final value = ((push ? fromHeroContext : toHeroContext).widget as Hero).child;
+  return Material(
+    type: MaterialType.transparency,
+    child: AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final t = Curves.easeOutCubic.transform(animation.value);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Opacity(opacity: t, child: pill),
+            Opacity(
+              opacity: (1 - t * 1.6).clamp(0.0, 1.0),
+              child: Center(
+                child: FittedBox(fit: BoxFit.scaleDown, child: value),
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// Picks the tracker's timeframe with the onboarding age wheel, twice: one
+/// wheel for the amount, one for the unit. Applied when the screen closes,
+/// however it closes, so the chart refetches once rather than per tick.
+class _TimeframePickerScreen extends StatefulWidget {
+  final int amount;
+  final ProgressTimeframeUnit unit;
+  final void Function(int amount, ProgressTimeframeUnit unit) onChanged;
+
+  const _TimeframePickerScreen({
+    required this.amount,
+    required this.unit,
+    required this.onChanged,
+  });
+
+  @override
+  State<_TimeframePickerScreen> createState() => _TimeframePickerScreenState();
+}
+
+class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
+  late int _amount = widget.amount;
+  late ProgressTimeframeUnit _unit = widget.unit;
+
+  void _setUnit(int index) {
+    final unit = ProgressTimeframeUnit.values[index];
+    setState(() {
+      _unit = unit;
+      _amount = _amount.clamp(1, unit.maxAmount);
+    });
+  }
+
+  Widget _hero(String tag, Widget pill) => Hero(
+        tag: tag,
+        createRectTween: straightHeroRectTween,
+        flightShuttleBuilder: _pillShuttle,
+        child: pill,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) widget.onChanged(_amount, _unit);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
+          children: [
+            const Positioned.fill(child: SilenAmbientBackdrop()),
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                        AppSpacing.sm, AppSpacing.xs, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SectionEyebrow('Timeframe',
+                                  color: AppColors.accent),
+                              const SizedBox(height: 4),
+                              Text('Show progress for',
+                                  style: AppTypography.headlineLg),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: Icon(Icons.close_rounded,
+                              color: AppColors.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: AgeWheelPicker(
+                          value: _amount,
+                          min: 1,
+                          max: _unit.maxAmount,
+                          onChanged: (v) => setState(() => _amount = v),
+                          selectionBuilder: (pill) =>
+                              _hero(_amountHeroTag, pill),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: AgeWheelPicker(
+                          value: _unit.index,
+                          min: 0,
+                          max: ProgressTimeframeUnit.values.length - 1,
+                          labelBuilder: (i) =>
+                              ProgressTimeframeUnit.values[i].short,
+                          onChanged: _setUnit,
+                          selectionBuilder: (pill) => _hero(_unitHeroTag, pill),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  HeroExpandReveal(
+                    child: AnimatedSwitcher(
+                      duration: _motion,
+                      child: Text(
+                        'Last ${_unit.describe(_amount)}',
+                        key: ValueKey((_amount, _unit)),
+                        textAlign: TextAlign.center,
+                        style: AppTypography.headlineSm,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                        0, AppSpacing.marginMobile, AppSpacing.md),
+                    child: HeroExpandReveal(
+                      child: PrimaryPillButton(
+                        label: 'Done',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The selected exercise as the section's title - tapping it morphs into
+/// [_ExerciseSearchScreen], a quick filter over the tracked exercises.
+class _ExerciseSelector extends StatelessWidget {
   final List<TrackedExercise> exercises;
   final String? selectedId;
-  final ValueChanged<String> onSelected;
 
-  const _ExercisePicker({
+  /// Null while locked - the title renders but doesn't open.
+  final ValueChanged<String>? onSelected;
+
+  const _ExerciseSelector({
     required this.exercises,
     required this.selectedId,
     required this.onSelected,
@@ -113,19 +406,304 @@ class _ExercisePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
+    TrackedExercise? selected;
+    for (final e in exercises) {
+      if (e.exerciseId == selectedId) selected = e;
+    }
+    final onSelected = this.onSelected;
+
+    return ContainerTransform(
+      radius: AppRadius.inset,
+      // Transparent so the closed state is just type on the backdrop - the
+      // morph still grows from this exact rect into the search screen.
+      closedColor: Colors.transparent,
+      openBuilder: (_) => _ExerciseSearchScreen(
+        exercises: exercises,
+        selectedId: selectedId,
+        onSelected: onSelected ?? (_) {},
+      ),
+      closedBuilder: (context, open) => InkWell(
+        onTap: onSelected == null ? null : open,
+        borderRadius: BorderRadius.circular(AppRadius.inset),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Long names shrink to fit on one line rather than wrap
+                  // or ellipsize - the full name always stays readable.
+                  Flexible(
+                    child: AnimatedSwitcher(
+                      duration: _motion,
+                      layoutBuilder: (current, previous) => Stack(
+                        alignment: Alignment.centerLeft,
+                        children: [...previous, if (current != null) current],
+                      ),
+                      child: FittedBox(
+                        key: ValueKey(selected?.exerciseId),
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          selected?.exerciseName ?? 'Choose an exercise',
+                          maxLines: 1,
+                          softWrap: false,
+                          style: AppTypography.headlineLg,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.accent.withValues(alpha: 0.14),
+                    ),
+                    child: Icon(Icons.unfold_more_rounded,
+                        size: 16, color: AppColors.accent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${exercises.length} tracked '
+                '${exercises.length == 1 ? 'exercise' : 'exercises'} · tap to search',
+                style: AppTypography.bodySm,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen destination of [_ExerciseSelector]'s container transform: a
+/// search field over the already-loaded tracked exercises, filtered locally
+/// as the user types - the list is the caller's own logged exercises, so
+/// there's nothing to ask the server.
+class _ExerciseSearchScreen extends StatefulWidget {
+  final List<TrackedExercise> exercises;
+  final String? selectedId;
+  final ValueChanged<String> onSelected;
+
+  const _ExerciseSearchScreen({
+    required this.exercises,
+    required this.selectedId,
+    required this.onSelected,
+  });
+
+  @override
+  State<_ExerciseSearchScreen> createState() => _ExerciseSearchScreenState();
+}
+
+class _ExerciseSearchScreenState extends State<_ExerciseSearchScreen> {
+  final _queryController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  List<TrackedExercise> get _filtered {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return widget.exercises;
+    return [
+      for (final e in widget.exercises)
+        if (e.exerciseName.toLowerCase().contains(query)) e,
+    ];
+  }
+
+  void _select(TrackedExercise exercise) {
+    widget.onSelected(exercise.exerciseId);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = _filtered;
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Stack(
         children: [
-          for (final exercise in exercises) ...[
-            PillChip(
-              label: exercise.exerciseName,
-              selected: exercise.exerciseId == selectedId,
-              onTap: () => onSelected(exercise.exerciseId),
+          const Positioned.fill(child: SilenAmbientBackdrop()),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.marginMobile, AppSpacing.sm, AppSpacing.xs, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionEyebrow('Exercise Progress',
+                                color: AppColors.accent),
+                            const SizedBox(height: 4),
+                            Text('Track an exercise',
+                                style: AppTypography.headlineLg),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: Icon(Icons.close_rounded,
+                            color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.marginMobile),
+                  child: TextField(
+                    controller: _queryController,
+                    autofocus: true,
+                    textInputAction: TextInputAction.search,
+                    cursorColor: AppColors.accent,
+                    style: AppTypography.bodyLg,
+                    onChanged: (value) => setState(() => _query = value),
+                    onSubmitted: (_) {
+                      if (results.length == 1) _select(results.first);
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search your exercises',
+                      fillColor: AppColors.onSurface.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                        borderSide: BorderSide(
+                            color: AppColors.accent.withValues(alpha: 0.5)),
+                      ),
+                      prefixIcon: Icon(Icons.search_rounded,
+                          color: AppColors.onSurfaceVariant),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _queryController.clear();
+                                setState(() => _query = '');
+                              },
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Expanded(
+                  child: results.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xl),
+                          child: Text('No tracked exercise matches "$_query".',
+                              textAlign: TextAlign.center,
+                              style: AppTypography.bodyMd
+                                  .copyWith(color: AppColors.onSurfaceVariant)),
+                        )
+                      : ListView.separated(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: EdgeInsets.only(
+                              bottom: MediaQuery.paddingOf(context).bottom +
+                                  AppSpacing.lg),
+                          itemCount: results.length,
+                          separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              thickness: 1,
+                              indent: AppSpacing.marginMobile,
+                              endIndent: AppSpacing.marginMobile,
+                              color: _hairline),
+                          itemBuilder: (context, index) => _ExerciseResultRow(
+                            exercise: results[index],
+                            selected:
+                                results[index].exerciseId == widget.selectedId,
+                            onTap: () => _select(results[index]),
+                          ),
+                        ),
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.xs),
-          ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ExerciseResultRow extends StatelessWidget {
+  final TrackedExercise exercise;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ExerciseResultRow({
+    required this.exercise,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = exercise.sessionCount;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.marginMobile, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            // Accent rail marks the current pick without boxing the row.
+            AnimatedContainer(
+              duration: _motion,
+              width: 3,
+              height: 32,
+              margin: const EdgeInsets.only(right: AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.accent : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(exercise.exerciseName,
+                      style: AppTypography.headlineSm.copyWith(
+                          fontSize: 16,
+                          color: selected
+                              ? AppColors.accent
+                              : AppColors.highEmphasis)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$sessions session${sessions == 1 ? '' : 's'} · last '
+                    '${DateFormat('MMM d').format(exercise.lastTrainedAtUtc.toLocal())}',
+                    style: AppTypography.bodySm,
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_rounded, size: 20, color: AppColors.accent)
+            else
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 14, color: AppColors.outline),
+          ],
+        ),
       ),
     );
   }
@@ -184,33 +762,25 @@ class _ProgressBody extends StatelessWidget {
     final latest = values.last;
     final best = values.reduce((a, b) => a > b ? a : b);
     final first = values.first;
-    final pct = values.length >= 2 && first > 0
-        ? (latest - first) / first * 100
-        : null;
+    final pct =
+        values.length >= 2 && first > 0 ? (latest - first) / first * 100 : null;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: AppSpacing.xs,
-          runSpacing: AppSpacing.xs,
-          children: [
-            for (final m in metrics)
-              _MetricChip(
-                label: m.label,
-                selected: m == effective,
-                onTap: () => onMetricChanged(m),
-              ),
-          ],
+        _MetricTabs(
+          metrics: metrics,
+          selected: effective,
+          onChanged: onMetricChanged,
         ),
         const SizedBox(height: AppSpacing.md),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(formatPrWeight(latest), style: AppTypography.displayStatMobile),
-            const SizedBox(width: 4),
+            _CountUpValue(value: latest),
+            const SizedBox(width: 6),
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Text(effective.unit,
                   style: AppTypography.numericUnit
                       .copyWith(color: AppColors.onSurfaceVariant)),
@@ -218,75 +788,152 @@ class _ProgressBody extends StatelessWidget {
             const Spacer(),
             if (pct != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
-                  style: AppTypography.labelSm.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: pct >= 0 ? AppColors.accent : AppColors.error),
-                ),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _DeltaBadge(pct: pct),
               ),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
           'Best ${formatPrWeight(best)} ${effective.unit} · '
           '${points.length} session${points.length == 1 ? '' : 's'}',
-          style:
-              AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant),
+          style: AppTypography.bodySm,
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.lg),
         if (points.length < 2)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Center(
                 child: Text('Train it again to see your trend.',
                     style: AppTypography.bodySm)),
           )
         else
           SizedBox(
-            height: 150,
+            height: 180,
             child: _MetricChart(
                 points: points, values: values, unit: effective.unit),
           ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.xl),
         const SectionEyebrow('Recent sessions'),
-        const SizedBox(height: AppSpacing.sm),
-        for (final p in points.reversed.take(3)) _SessionRow(point: p),
+        const SizedBox(height: AppSpacing.xs),
+        for (final (i, p) in points.reversed.take(3).indexed) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: _hairline),
+          _SessionRow(point: p),
+        ],
       ],
     );
   }
 }
 
-class _MetricChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+/// Underlined text tabs - lighter than a row of outlined chips.
+class _MetricTabs extends StatelessWidget {
+  final List<ExerciseProgressMetric> metrics;
+  final ExerciseProgressMetric selected;
+  final ValueChanged<ExerciseProgressMetric> onChanged;
 
-  const _MetricChip({
-    required this.label,
+  const _MetricTabs({
+    required this.metrics,
     required this.selected,
-    required this.onTap,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.accent.withValues(alpha: 0.16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(
-              color: selected ? AppColors.accent : AppColors.outlineVariant),
-        ),
-        child: Text(label,
-            style: AppTypography.labelSm.copyWith(
-                color:
-                    selected ? AppColors.accent : AppColors.onSurfaceVariant)),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final m in metrics)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(m),
+              child: Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedDefaultTextStyle(
+                      duration: _motion,
+                      style: AppTypography.labelSm.copyWith(
+                        fontSize: 13,
+                        fontWeight:
+                            m == selected ? FontWeight.w600 : FontWeight.w500,
+                        color: m == selected
+                            ? AppColors.highEmphasis
+                            : AppColors.onSurfaceVariant,
+                      ),
+                      child: Text(m.label),
+                    ),
+                    const SizedBox(height: 6),
+                    AnimatedContainer(
+                      duration: _motion,
+                      curve: Curves.easeOutCubic,
+                      height: 2,
+                      width: m == selected ? 16 : 0,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The headline readout, counting from its previous value to the new one
+/// when the metric, exercise or timeframe changes.
+class _CountUpValue extends StatelessWidget {
+  final double value;
+
+  const _CountUpValue({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final whole = value % 1 == 0;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: value),
+      duration: const Duration(milliseconds: 520),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, _) => Text(
+        whole ? v.round().toString() : v.toStringAsFixed(1),
+        style: AppTypography.displayStat,
+      ),
+    );
+  }
+}
+
+class _DeltaBadge extends StatelessWidget {
+  final double pct;
+
+  const _DeltaBadge({required this.pct});
+
+  @override
+  Widget build(BuildContext context) {
+    final up = pct >= 0;
+    final color = up ? AppColors.accent : AppColors.error;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(up ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+              size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '${up ? '+' : ''}${pct.toStringAsFixed(1)}%',
+            style: AppTypography.labelSm
+                .copyWith(fontWeight: FontWeight.w600, color: color),
+          ),
+        ],
       ),
     );
   }
@@ -318,6 +965,8 @@ class _MetricChart extends StatelessWidget {
     final maxY = maxValue + pad;
 
     return LineChart(
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
       LineChartData(
         minY: minY,
         maxY: maxY,
@@ -326,8 +975,9 @@ class _MetricChart extends StatelessWidget {
           drawVerticalLine: false,
           horizontalInterval: (maxY - minY) / 3,
           getDrawingHorizontalLine: (_) => FlLine(
-              color: AppColors.onSurface.withValues(alpha: 0.06),
-              strokeWidth: 1),
+              color: AppColors.onSurface.withValues(alpha: 0.05),
+              strokeWidth: 1,
+              dashArray: const [3, 5]),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -340,7 +990,7 @@ class _MetricChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 22,
+              reservedSize: 24,
               interval: 1,
               getTitlesWidget: (value, meta) {
                 final i = value.round();
@@ -349,7 +999,7 @@ class _MetricChart extends StatelessWidget {
                 }
                 final isLast = i == points.length - 1;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     DateFormat('MMM d').format(points[i].date),
                     style: AppTypography.labelCaps.copyWith(
@@ -362,8 +1012,27 @@ class _MetricChart extends StatelessWidget {
           ),
         ),
         lineTouchData: LineTouchData(
+          getTouchedSpotIndicator: (bar, indexes) => [
+            for (final _ in indexes)
+              TouchedSpotIndicatorData(
+                FlLine(
+                    color: AppColors.accent.withValues(alpha: 0.35),
+                    strokeWidth: 1,
+                    dashArray: const [3, 3]),
+                FlDotData(
+                  getDotPainter: (spot, percent, bar, index) =>
+                      FlDotCirclePainter(
+                    radius: 5,
+                    color: AppColors.accent,
+                    strokeColor: AppColors.background,
+                    strokeWidth: 2,
+                  ),
+                ),
+              ),
+          ],
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => AppColors.surfaceContainerHighest,
+            tooltipRoundedRadius: AppRadius.inset,
             getTooltipItems: (touchedSpots) => [
               for (final spot in touchedSpots)
                 LineTooltipItem(
@@ -379,20 +1048,25 @@ class _MetricChart extends StatelessWidget {
             isCurved: true,
             curveSmoothness: 0.3,
             preventCurveOverShooting: true,
-            color: AppColors.accent,
-            barWidth: 2.5,
+            gradient: LinearGradient(
+              colors: [
+                AppColors.accent.withValues(alpha: 0.35),
+                AppColors.accent,
+              ],
+            ),
+            barWidth: 3,
             isStrokeCapRound: true,
+            // Only the latest session is marked - every other point stays
+            // part of the line rather than a row of dots.
             dotData: FlDotData(
               show: true,
-              getDotPainter: (spot, percent, bar, index) {
-                final isLast = index == spots.length - 1;
-                return FlDotCirclePainter(
-                  radius: isLast ? 5 : 3,
-                  color: isLast ? AppColors.accent : AppColors.surfaceContainer,
-                  strokeColor: isLast ? AppColors.accent : AppColors.outline,
-                  strokeWidth: 1.5,
-                );
-              },
+              checkToShowDot: (spot, bar) => spot.x == spots.last.x,
+              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                radius: 5,
+                color: AppColors.accent,
+                strokeColor: AppColors.background,
+                strokeWidth: 2.5,
+              ),
             ),
             belowBarData: BarAreaData(
               show: true,
@@ -400,7 +1074,7 @@ class _MetricChart extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppColors.accent.withValues(alpha: 0.16),
+                  AppColors.accent.withValues(alpha: 0.22),
                   AppColors.accent.withValues(alpha: 0),
                 ],
               ),
@@ -423,11 +1097,11 @@ class _SessionRow extends StatelessWidget {
         ? '${formatPrWeight(point.topWeightKg)} kg × ${point.topSetReps}'
         : '${point.totalReps} reps';
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       child: Row(
         children: [
           SizedBox(
-            width: 56,
+            width: 64,
             child: Text(DateFormat('MMM d').format(point.date),
                 style: AppTypography.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant)),
@@ -435,32 +1109,12 @@ class _SessionRow extends StatelessWidget {
           Expanded(
             child: Text(
                 '${point.setCount} set${point.setCount == 1 ? '' : 's'}',
-                style: AppTypography.bodySm
-                    .copyWith(color: AppColors.onSurfaceVariant)),
+                style: AppTypography.bodySm),
           ),
           Text(topSet,
-              style: AppTypography.numericUnit
-                  .copyWith(fontWeight: FontWeight.w600)),
+              style: AppTypography.numericUnit.copyWith(
+                  fontWeight: FontWeight.w600, color: AppColors.highEmphasis)),
         ],
-      ),
-    );
-  }
-}
-
-class _CardSpinner extends StatelessWidget {
-  const _CardSpinner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-              strokeWidth: 2.5, color: AppColors.accent),
-        ),
       ),
     );
   }

@@ -11,6 +11,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/fit_height.dart';
+import '../../core/widgets/skeleton.dart';
 import '../splits/splits_models.dart';
 import '../splits/splits_repository.dart';
 import 'active_workout_draft_store.dart';
@@ -222,6 +223,7 @@ class _TodayScreenState extends State<TodayScreen> {
                 state: _controller.state,
                 onRetry: _controller.load,
                 minHeight: viewportHeight,
+                skeleton: const _TodaySkeleton(),
                 builder: (context, dashboard) {
                   unawaited(_ensureSplitDetail(dashboard));
                   unawaited(_ensureDraftCheck(dashboard));
@@ -265,6 +267,76 @@ class _TodayScreenState extends State<TodayScreen> {
           },
         );
       },
+    );
+  }
+}
+
+/// Home's loading placeholder - greeting + streak badge, the day strip, the
+/// session card and the two cards pinned to the bottom, in the same order
+/// [_TodayContent] lays them out.
+class _TodaySkeleton extends StatelessWidget {
+  const _TodaySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeleton(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+            AppSpacing.md, AppSpacing.marginMobile, AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Bone.text(width: 210, fontSize: 28),
+                      SizedBox(height: AppSpacing.xs),
+                      Bone.text(width: 120),
+                    ],
+                  ),
+                ),
+                Bone(width: 64, height: 36, radius: AppRadius.full),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xxxl),
+            LayoutBuilder(builder: (context, c) {
+              const gap = AppSpacing.xs;
+              final cell = (c.maxWidth - gap * 6) / 7;
+              return Row(
+                children: [
+                  for (var i = 0; i < 7; i++) ...[
+                    if (i > 0) const SizedBox(width: gap),
+                    Bone(width: cell, height: 64, radius: AppRadius.inset),
+                  ],
+                ],
+              );
+            }),
+            const SizedBox(height: AppSpacing.lg),
+            const SkeletonCard(
+              height: 220,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Bone.text(width: 96, fontSize: 11),
+                  SizedBox(height: AppSpacing.md),
+                  Bone.text(width: 190, fontSize: 24),
+                  SizedBox(height: AppSpacing.xs),
+                  Bone.text(width: 130),
+                  Spacer(),
+                  Bone(height: 48, radius: AppRadius.full),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            const SkeletonListRow(),
+            const SizedBox(height: AppSpacing.md),
+            const SkeletonListRow(seed: 1),
+          ],
+        ),
+      ),
     );
   }
 }

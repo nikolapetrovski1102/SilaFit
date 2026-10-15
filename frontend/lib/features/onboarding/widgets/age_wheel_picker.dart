@@ -18,12 +18,22 @@ class AgeWheelPicker extends StatefulWidget {
   final int max;
   final ValueChanged<int> onChanged;
 
+  /// Text for each value - defaults to the number itself. Lets the same
+  /// wheel pick non-numeric options (e.g. a timeframe's M / Y unit).
+  final String Function(int value)? labelBuilder;
+
+  /// Wraps the accent selection pill, e.g. in a [Hero] so a value elsewhere
+  /// can grow into it. The pill fills whatever box it's given.
+  final Widget Function(Widget selection)? selectionBuilder;
+
   const AgeWheelPicker({
     super.key,
     required this.value,
     required this.min,
     required this.max,
     required this.onChanged,
+    this.labelBuilder,
+    this.selectionBuilder,
   });
 
   @override
@@ -106,22 +116,27 @@ class _AgeWheelPickerState extends State<AgeWheelPicker> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-            child: Container(
+            child: SizedBox(
               height: _selectionHeight,
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(34),
-                border: Border.all(
-                  color: AppColors.onAccent.withValues(alpha: 0.12),
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.accent.withValues(alpha: 0.16),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
+              width: double.infinity,
+              child: (widget.selectionBuilder ?? (pill) => pill)(
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(34),
+                    border: Border.all(
+                      color: AppColors.onAccent.withValues(alpha: 0.12),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent.withValues(alpha: 0.16),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -170,7 +185,8 @@ class _AgeWheelPickerState extends State<AgeWheelPicker> {
                           .withValues(alpha: neighborOpacity);
                   return Center(
                     child: Text(
-                      '${widget.min + index}',
+                      widget.labelBuilder?.call(widget.min + index) ??
+                          '${widget.min + index}',
                       style: AppTypography.displayStatMobile.copyWith(
                         fontSize: fontSize,
                         height: 1,

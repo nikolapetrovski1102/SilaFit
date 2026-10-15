@@ -332,10 +332,13 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     _searching = false;
   }
 
+  /// Pops with the new split's id (null if it never got saved), so a
+  /// caller like Home can activate it straight away.
   Future<void> _done() async {
     setState(() => _finishing = true);
     await Future.wait(_pending);
-    if (mounted) Navigator.of(context).pop();
+    final splitId = await _splitId?.catchError((Object _) => null);
+    if (mounted) Navigator.of(context).pop(splitId);
   }
 
   /* ------------------------------- exercises ------------------------------- */

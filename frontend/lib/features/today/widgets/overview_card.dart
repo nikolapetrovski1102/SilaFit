@@ -2,6 +2,7 @@ import '../../../core/widgets/container_transform.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -10,7 +11,12 @@ import '../../../core/utils/duration_format.dart';
 import '../../../core/widgets/mascot/mascot_pose.dart';
 import '../../../core/widgets/progress_ring.dart';
 import '../../../core/widgets/silen_button.dart';
+import '../../splits/split_builder_screen.dart';
+import '../../splits/split_creation_wizard_screen.dart';
+import '../../splits/splits_controller.dart';
 import '../../splits/splits_models.dart';
+import '../../splits/splits_repository.dart';
+import '../today_controller.dart';
 import '../today_models.dart';
 import '../workout_preview_screen.dart';
 import 'day_preview.dart';
@@ -125,6 +131,7 @@ class TodayOverviewCard extends StatelessWidget {
               isResumingWorkout: isResumingWorkout,
               workoutProgress: workoutProgress,
               splitName: dashboard.activeSplit?.name,
+              activeSplit: dashboard.activeSplit,
             ),
           ),
         ),
@@ -146,6 +153,7 @@ class _SessionSection extends StatelessWidget {
   final bool isResumingWorkout;
   final double workoutProgress;
   final String? splitName;
+  final ActiveSplit? activeSplit;
 
   const _SessionSection({
     required this.preview,
@@ -155,6 +163,7 @@ class _SessionSection extends StatelessWidget {
     this.isResumingWorkout = false,
     this.workoutProgress = 0,
     this.splitName,
+    this.activeSplit,
   });
 
   @override
@@ -162,9 +171,71 @@ class _SessionSection extends StatelessWidget {
     if (preview.isRestDay) return _buildRestDay();
     if (preview.status == 'Completed') return _buildCompleted(context);
     if (preview.status == 'Missed') return _buildMissed();
-    return preview.isToday
-        ? _buildScheduledToday()
-        : _buildUpcomingPreview(context);
+    if (!preview.isToday) return _buildUpcomingPreview(context);
+    // Nothing to train - no active split, or today's split day has no
+    // exercises. Starting a workout here would only open an empty tracker,
+    // so point at the split that needs filling in instead.
+    if (preview.targetExercises.isEmpty) return _buildNoExercises(context);
+    return _buildScheduledToday();
+  }
+
+  Widget _buildNoExercises(BuildContext context) {
+    final split = activeSplit;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(split == null ? 'NO ACTIVE SPLIT' : 'NOTHING SCHEDULED',
+            style: AppTypography.labelCaps.copyWith(
+                color: AppColors.accent, fontSize: 12 * scale)),
+        SizedBox(height: AppSpacing.xxs * scale),
+        Text(split == null ? 'Plan your training' : 'No exercises today',
+            style: AppTypography.headlineLg.copyWith(fontSize: 32 * scale)),
+        SizedBox(height: AppSpacing.xs * scale),
+        Text(
+            split == null
+                ? 'Create a split to get a workout scheduled for each day.'
+                : 'Add exercises to today\'s day in ${split.name ?? 'your split'} to start a workout.',
+            style: AppTypography.bodyLg
+                .copyWith(color: AppColors.onSurfaceVariant)),
+        SizedBox(height: AppSpacing.lg * scale),
+        PrimaryPillButton(
+          label: split == null ? 'Create a Split' : 'Edit Split',
+          icon: split == null ? Icons.add_rounded : Icons.edit_rounded,
+          height: (48 * scale).clamp(48, 72),
+          onPressed: () => split == null
+              ? _openSplitWizard(context)
+              : _openSplitBuilder(context, split.splitId),
+        ),
+      ],
+    );
+  }
+
+  /// The user has no active split, so the one they just built becomes it -
+  /// otherwise Home would still have nothing to start.
+  Future<void> _openSplitWizard(BuildContext context) async {
+    final today = context.read<TodayController>();
+    final repository = context.read<SplitsRepository>();
+    final splitId = await Navigator.of(context).push<String?>(
+        MaterialPageRoute(builder: (_) => const SplitCreationWizardScreen()));
+    if (splitId != null) {
+      try {
+        await repository.activate(splitId);
+      } catch (_) {
+        // Still listed under My Splits to activate by hand.
+      }
+    }
+    today.load(force: true);
+  }
+
+  Future<void> _openSplitBuilder(BuildContext context, String splitId) async {
+    final today = context.read<TodayController>();
+    final repository = context.read<SplitsRepository>();
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SplitBuilderScreen(
+        controller: SplitBuilderController(repository, splitId: splitId),
+      ),
+    ));
+    today.load(force: true);
   }
 
   String get _dateLabel => DateFormat('EEE, MMM d').format(preview.date);

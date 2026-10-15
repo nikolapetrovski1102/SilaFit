@@ -10,6 +10,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/skeleton.dart';
 import '../../core/widgets/upgrade_lock_card.dart';
 import '../plans/plans_controller.dart';
 import '../plans/plans_screen.dart';
@@ -123,8 +124,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
               AppSpacing.lg,
               AppSpacing.marginMobile,
               AppSpacing.sm + SilenBottomNavBar.reservedHeight(context)),
-          // Header, timeframe pills, and the PR / AI review entry
-          // points don't need `overview` - only `_YourInsightCard`
+          // Header and the PR / AI review entry points don't need `overview` - only `_YourInsightCard`
           // does. Gating all of that behind one ResourceBuilder used to
           // blank the whole screen (title included) whenever the overview
           // call alone was slow or failed; now a stalled/errored overview
@@ -187,12 +187,6 @@ class _ProgressContent extends StatelessWidget {
     this.spotlightKey,
   });
 
-  static const _timeframes = [
-    (30, '1M'),
-    (90, '3M'),
-    (180, '6M'),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -201,23 +195,7 @@ class _ProgressContent extends StatelessWidget {
         SectionEyebrow('Performance', color: AppColors.accent),
         const SizedBox(height: 4),
         Text('Your progress', style: AppTypography.headlineLg),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            for (final (days, label) in _timeframes) ...[
-              PillChip(
-                label: label,
-                selected: controller.days == days,
-                onTap: () {
-                  controller.setDays(days);
-                  exerciseController.setDays(days);
-                },
-              ),
-              const SizedBox(width: AppSpacing.xs),
-            ],
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.xl),
         if (spotlightKey != null)
           KeyedSubtree(
             key: spotlightKey!,
@@ -225,14 +203,15 @@ class _ProgressContent extends StatelessWidget {
           )
         else
           ExerciseProgressCard(controller: exerciseController),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.xxl),
         // Only the insight card depends on `controller.state` (the overview
         // call) - scoping the ResourceBuilder to just it means a slow or
-        // failed overview fetch no longer blanks the header/pills above or
-        // the PR / AI review entry points below.
+        // failed overview fetch no longer blanks the header above or the PR
+        // / AI review entry points below.
         ResourceBuilder<ProgressOverview>(
           state: controller.state,
           onRetry: controller.load,
+          skeleton: const SkeletonBlock(height: 120),
           builder: (context, overview) => _YourInsightCard(
               insight: overview.insights.isNotEmpty
                   ? overview.insights.first
@@ -289,17 +268,7 @@ class _PersonalRecordsCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             if (state.isLoading)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: AppColors.accent),
-                  ),
-                ),
-              )
+              const SkeletonRows()
             else if (state.error != null)
               Text(state.error!, style: AppTypography.bodySm)
             else if (!hasRecords)

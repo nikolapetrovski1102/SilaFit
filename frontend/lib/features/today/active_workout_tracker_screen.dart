@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/live_workout/live_workout_notifier.dart';
 import '../../core/live_workout/live_workout_snapshot.dart';
 import '../../core/theme/app_colors.dart';
@@ -17,6 +18,8 @@ import '../../core/widgets/mascot/mascot_pose.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
+import '../../core/widgets/upgrade_lock_card.dart';
 import '../exercises/exercise_picker_sheet.dart';
 import '../exercises/exercise_video_sheet.dart';
 import '../exercises/exercise_web_search.dart';
@@ -24,6 +27,7 @@ import '../exercises/exercises_models.dart';
 import '../notifications/notifications_repository.dart';
 import '../plans/plans_controller.dart';
 import '../plans/plans_repository.dart';
+import '../plans/plans_screen.dart';
 import '../settings/settings_controller.dart';
 import 'active_workout_draft_store.dart';
 import 'exercise_memory_store.dart';
@@ -961,13 +965,15 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   Widget build(BuildContext context) {
     if (!_ready) {
       // Draft lookup (see `_init`) hasn't resolved yet - a single fast
-      // local read, so this shows for at most a frame or two, never long
-      // enough to warrant its own skeleton/shimmer state.
+      // local read, so this usually shows for only a frame or two.
       return Scaffold(
         backgroundColor: AppColors.background,
-        body: Center(
-          child: CircularProgressIndicator(
-              strokeWidth: 2.5, color: AppColors.accent),
+        body: const SafeArea(
+          child: SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
+            child: SkeletonDetail(rows: 4),
+          ),
         ),
       );
     }
@@ -986,6 +992,13 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                 onSwap: _swapExercise,
                 onAdd: _addExercise,
                 onReorder: _reorderExercises,
+                onHistory: () => _showExerciseHistorySheet(
+                  context,
+                  exerciseId: _currentExercise.exerciseId,
+                  exerciseName: _currentExercise.name,
+                  weightUnit: _weightUnit,
+                  cache: _exerciseHistoryCache,
+                ),
               ),
             ),
             Expanded(
@@ -1175,6 +1188,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                       'history-${_currentExercise.exerciseId}'),
                                   exerciseId: _currentExercise.exerciseId,
                                   exerciseName: _currentExercise.name,
+                                  weightUnit: _weightUnit,
                                   cache: _exerciseHistoryCache,
                                 ),
                             ],
@@ -1229,6 +1243,7 @@ class _TelemetryBar extends StatelessWidget {
   final VoidCallback onSwap;
   final VoidCallback onAdd;
   final VoidCallback onReorder;
+  final VoidCallback onHistory;
 
   const _TelemetryBar({
     required this.onClose,
@@ -1236,6 +1251,7 @@ class _TelemetryBar extends StatelessWidget {
     required this.onSwap,
     required this.onAdd,
     required this.onReorder,
+    required this.onHistory,
   });
 
   static String _formatElapsed(Duration d) {
@@ -1259,6 +1275,9 @@ class _TelemetryBar extends StatelessWidget {
                 Icon(Icons.close_rounded, size: 20, color: AppColors.onSurface),
           ),
         ),
+        // Balances the history button on the right so the elapsed time
+        // stays visually centered.
+        const SizedBox(width: 40),
         const Spacer(),
         Icon(Icons.timer_outlined, size: 16, color: AppColors.onSurfaceVariant),
         const SizedBox(width: 6),
@@ -1269,8 +1288,21 @@ class _TelemetryBar extends StatelessWidget {
                   .copyWith(color: AppColors.onSurface)),
         ),
         const Spacer(),
-        // Balances the close button's width so the elapsed time stays
-        // visually centered.
+        // Always here, every tier - the sheet itself handles loading, an
+        // empty history and the Free-tier upgrade prompt.
+        Tooltip(
+          message: 'Exercise history',
+          child: GestureDetector(
+            onTap: onHistory,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(Icons.history_rounded,
+                  size: 22, color: AppColors.onSurface),
+            ),
+          ),
+        ),
         SizedBox(
           width: 40,
           height: 40,
@@ -1771,24 +1803,222 @@ class _ExerciseCompleteCard extends StatelessWidget {
   }
 }
 
-/// PRO/Advanced-only "what did I do last time" row for the exercise
-/// currently on screen. Silent by design: renders nothing while the fetch is
-/// in flight, on any failure (including a 403 for a Free-tier account), and
-/// once loaded, if there's simply no history yet for this exercise - only a
-/// tappable row with a real number to show ever appears. Keyed on the
-/// exercise id by the caller, so a fresh instance is mounted per exercise;
-/// [cache] (owned by the tracker screen's State, outliving any one instance)
-/// is checked first so revisiting an exercise already fetched this session
-/// never re-hits the network.
+/// Fetches [exerciseId]'s history through [cache] (owned by the tracker
+/// screen's State, outliving any one row or sheet), so revisiting an
+/// exercise already fetched this session never re-hits the network. Throws
+/// [ApiException] - a 403 for a Free-tier account.
+Future<List<SetLogHistoryEntry>> _loadExerciseHistory(BuildContext context,
+    String exerciseId, Map<String, List<SetLogHistoryEntry>> cache) async {
+  final cached = cache[exerciseId];
+  if (cached != null) return cached;
+  final entries =
+      await context.read<TodayRepository>().getExerciseHistory(exerciseId);
+  cache[exerciseId] = entries;
+  return entries;
+}
+
+/// The history endpoint includes the session being logged right now, so a
+/// set ticked off a minute ago would otherwise read as "last time". Workout
+/// sessions are one per day, so anything completed today is this one.
+List<SetLogHistoryEntry> _previousSessionsOnly(
+    List<SetLogHistoryEntry> entries) {
+  final today = DateUtils.dateOnly(DateTime.now());
+  return entries
+      .where((e) => DateUtils.dateOnly(e.completedAtUtc.toLocal()) != today)
+      .toList();
+}
+
+void _showExerciseHistorySheet(
+  BuildContext context, {
+  required String exerciseId,
+  required String exerciseName,
+  required String weightUnit,
+  required Map<String, List<SetLogHistoryEntry>> cache,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surfaceContainer,
+    shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+    builder: (_) => _ExerciseHistorySheet(
+      exerciseId: exerciseId,
+      exerciseName: exerciseName,
+      weightUnit: weightUnit,
+      cache: cache,
+    ),
+  );
+}
+
+/// Every logged session of one exercise, most recent first. Opened from the
+/// tracker's top bar (always there, for every tier) and from the "Last time"
+/// row. Loads with a skeleton, says so plainly when there's nothing yet, and
+/// shows Free accounts what they'd unlock instead of an empty sheet.
+class _ExerciseHistorySheet extends StatefulWidget {
+  final String exerciseId;
+  final String exerciseName;
+  final String weightUnit;
+  final Map<String, List<SetLogHistoryEntry>> cache;
+
+  const _ExerciseHistorySheet({
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.weightUnit,
+    required this.cache,
+  });
+
+  @override
+  State<_ExerciseHistorySheet> createState() => _ExerciseHistorySheetState();
+}
+
+class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
+  List<SetLogHistoryEntry>? _entries;
+  bool _locked = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = widget.cache[widget.exerciseId];
+    if (_entries == null) unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    setState(() => _error = null);
+    try {
+      final entries =
+          await _loadExerciseHistory(context, widget.exerciseId, widget.cache);
+      if (!mounted) return;
+      setState(() => _entries = entries);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => e.isForbidden ? _locked = true : _error = e.userMessage);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = "Couldn't load your history. Please try again.");
+    }
+  }
+
+  void _openPlans() {
+    Navigator.of(context)
+      ..pop()
+      ..push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+  }
+
+  List<Widget> _buildBody() {
+    if (_locked) {
+      return [
+        UpgradeLockCard(
+          title: 'See every set you\'ve logged',
+          message: 'Pro and Advanced show your past sessions for each '
+              'exercise right inside your workout.',
+          actionLabel: 'See plans',
+          onUnlock: _openPlans,
+        ),
+      ];
+    }
+    if (_error != null) {
+      return [
+        const SizedBox(height: AppSpacing.xl),
+        Text(_error!,
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMd
+                .copyWith(color: AppColors.onSurfaceVariant)),
+        const SizedBox(height: AppSpacing.sm),
+        Center(
+          child: TextButton(
+            onPressed: _load,
+            child: Text('RETRY',
+                style: AppTypography.labelCaps
+                    .copyWith(color: AppColors.accent)),
+          ),
+        ),
+      ];
+    }
+    final entries = _entries;
+    if (entries == null) {
+      return const [SkeletonList(count: 3, leading: false)];
+    }
+
+    final previous = _previousSessionsOnly(entries);
+    if (previous.isEmpty) {
+      return [
+        const SizedBox(height: AppSpacing.xl),
+        Icon(Icons.history_rounded,
+            size: 40, color: AppColors.onSurfaceVariant),
+        const SizedBox(height: AppSpacing.sm),
+        Text('No history yet',
+            textAlign: TextAlign.center, style: AppTypography.headlineSm),
+        const SizedBox(height: AppSpacing.xxs),
+        Text(
+            'Finish a set of this exercise and it will show up here next time.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMd
+                .copyWith(color: AppColors.onSurfaceVariant)),
+      ];
+    }
+
+    final grouped = <DateTime, List<SetLogHistoryEntry>>{};
+    for (final entry in previous) {
+      grouped
+          .putIfAbsent(
+              DateUtils.dateOnly(entry.completedAtUtc.toLocal()), () => [])
+          .add(entry);
+    }
+    return [
+      for (final day in grouped.entries) ...[
+        _HistorySessionCard(
+          dateLabel: DateFormat('EEEE, MMM d').format(day.key),
+          sets: day.value,
+          weightUnit: widget.weightUnit,
+        ),
+        const SizedBox(height: AppSpacing.md),
+      ],
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) => ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+            AppSpacing.lg, AppSpacing.marginMobile, AppSpacing.xl),
+        children: [
+          Text(widget.exerciseName, style: AppTypography.headlineSm),
+          const SizedBox(height: AppSpacing.xxs),
+          Text('Your recent sessions for this exercise',
+              style: AppTypography.bodySm
+                  .copyWith(color: AppColors.onSurfaceVariant)),
+          const SizedBox(height: AppSpacing.lg),
+          ..._buildBody(),
+        ],
+      ),
+    );
+  }
+}
+
+/// PRO/Advanced-only "what did I do last time" row under the set controls -
+/// a glanceable shortcut into [_ExerciseHistorySheet]. A short bone stands
+/// in while it loads; it stays hidden on failure or when there's no earlier
+/// session (the top-bar history button still says so explicitly). Keyed on
+/// the exercise id by the caller, so a fresh instance mounts per exercise.
 class _LastTimeRow extends StatefulWidget {
   final String exerciseId;
   final String exerciseName;
+  final String weightUnit;
   final Map<String, List<SetLogHistoryEntry>> cache;
 
   const _LastTimeRow({
     super.key,
     required this.exerciseId,
     required this.exerciseName,
+    required this.weightUnit,
     required this.cache,
   });
 
@@ -1798,98 +2028,54 @@ class _LastTimeRow extends StatefulWidget {
 
 class _LastTimeRowState extends State<_LastTimeRow> {
   List<SetLogHistoryEntry>? _entries;
+  bool _failed = false;
 
   @override
   void initState() {
     super.initState();
-    final cached = widget.cache[widget.exerciseId];
-    if (cached != null) {
-      _entries = cached;
-    } else {
-      unawaited(_load());
-    }
+    _entries = widget.cache[widget.exerciseId];
+    if (_entries == null) unawaited(_load());
   }
 
   Future<void> _load() async {
     try {
-      final entries = await context
-          .read<TodayRepository>()
-          .getExerciseHistory(widget.exerciseId);
-      widget.cache[widget.exerciseId] = entries;
+      final entries =
+          await _loadExerciseHistory(context, widget.exerciseId, widget.cache);
       if (!mounted) return;
       setState(() => _entries = entries);
     } catch (_) {
-      // Best-effort - the row simply never appears.
+      if (!mounted) return;
+      setState(() => _failed = true);
     }
-  }
-
-  String _formatWeight(double weightKg) => weightKg == weightKg.roundToDouble()
-      ? weightKg.toStringAsFixed(0)
-      : weightKg.toStringAsFixed(1);
-
-  void _openHistorySheet(
-      BuildContext context, List<SetLogHistoryEntry> entries) {
-    final grouped = <String, List<SetLogHistoryEntry>>{};
-    final order = <String>[];
-    for (final entry in entries) {
-      final key =
-          DateFormat('yyyy-MM-dd').format(entry.completedAtUtc.toLocal());
-      if (!grouped.containsKey(key)) {
-        grouped[key] = [];
-        order.add(key);
-      }
-      grouped[key]!.add(entry);
-    }
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surfaceContainer,
-      shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
-      builder: (sheetContext) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-              AppSpacing.lg, AppSpacing.marginMobile, AppSpacing.xl),
-          children: [
-            Text(widget.exerciseName, style: AppTypography.headlineSm),
-            const SizedBox(height: AppSpacing.xxs),
-            Text('Your history for this exercise',
-                style: AppTypography.bodySm
-                    .copyWith(color: AppColors.onSurfaceVariant)),
-            const SizedBox(height: AppSpacing.lg),
-            for (final key in order) ...[
-              _HistorySessionCard(
-                dateLabel:
-                    DateFormat('EEEE, MMM d').format(DateTime.parse(key)),
-                sets: grouped[key]!,
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_failed) return const SizedBox.shrink();
     final entries = _entries;
-    if (entries == null || entries.isEmpty) return const SizedBox.shrink();
-    final mostRecent = entries.first;
+    if (entries == null) {
+      return const Padding(
+        padding: EdgeInsets.only(top: AppSpacing.md + AppSpacing.xs),
+        child: Skeleton(child: Bone.text(width: 150)),
+      );
+    }
+    final previous = _previousSessionsOnly(entries);
+    if (previous.isEmpty) return const SizedBox.shrink();
+    final mostRecent = previous.first;
+    final unit = widget.weightUnit;
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.card),
-          onTap: () => _openHistorySheet(context, entries),
+          onTap: () => _showExerciseHistorySheet(
+            context,
+            exerciseId: widget.exerciseId,
+            exerciseName: widget.exerciseName,
+            weightUnit: unit,
+            cache: widget.cache,
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(
                 vertical: AppSpacing.xs, horizontal: AppSpacing.xxs),
@@ -1899,7 +2085,7 @@ class _LastTimeRowState extends State<_LastTimeRow> {
                     size: 18, color: AppColors.onSurfaceVariant),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
-                  'Last time: ${_formatWeight(mostRecent.weightKg)} kg × ${mostRecent.reps}',
+                  'Last time: ${_formatWeight(mostRecent.weightKg, unit)} $unit × ${mostRecent.reps}',
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant),
                 ),
@@ -1918,8 +2104,10 @@ class _LastTimeRowState extends State<_LastTimeRow> {
 class _HistorySessionCard extends StatelessWidget {
   final String dateLabel;
   final List<SetLogHistoryEntry> sets;
+  final String weightUnit;
 
-  const _HistorySessionCard({required this.dateLabel, required this.sets});
+  const _HistorySessionCard(
+      {required this.dateLabel, required this.sets, required this.weightUnit});
 
   @override
   Widget build(BuildContext context) {
@@ -1942,7 +2130,7 @@ class _HistorySessionCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: Text(
-                        '${_formatWeight(set.weightKg)} kg × ${set.reps}',
+                        '${_formatWeight(set.weightKg, weightUnit)} $weightUnit × ${set.reps}',
                         style: AppTypography.numericUnit
                             .copyWith(fontWeight: FontWeight.w600)),
                   ),
@@ -1953,10 +2141,6 @@ class _HistorySessionCard extends StatelessWidget {
       ),
     );
   }
-
-  String _formatWeight(double weightKg) => weightKg == weightKg.roundToDouble()
-      ? weightKg.toStringAsFixed(0)
-      : weightKg.toStringAsFixed(1);
 }
 
 /// One big, centered, tap-to-edit stat (weight or reps) for the current

@@ -12,6 +12,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
 import '../../core/widgets/container_transform.dart';
+import '../../core/widgets/skeleton.dart';
 import '../meals/meal_controller.dart';
 import '../meals/meal_models.dart';
 import '../meals/meal_repository.dart';
@@ -221,9 +222,13 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                   stats: const [],
                   footer: Column(children: [
                     if (_loadingWeight)
-                      const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: CircularProgressIndicator())
+                      const Skeleton(
+                        child: Column(children: [
+                          Bone.text(width: 180),
+                          SizedBox(height: AppSpacing.md),
+                          Bone(height: 120, radius: AppRadius.card),
+                        ]),
+                      )
                     else ...[
                       Text(
                           _latestWeight == null
@@ -923,11 +928,7 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
   }
 
   Widget _buildList() {
-    if (_loading) {
-      return const Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: CircularProgressIndicator()));
-    }
+    if (_loading) return const SkeletonList(count: 3, padding: EdgeInsets.zero);
     if (_failed) {
       return Text('Could not load meal ideas right now.',
           style: AppTypography.bodySm);
@@ -1144,11 +1145,7 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
   }
 
   Widget _buildPlan() {
-    if (_loading) {
-      return const Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: CircularProgressIndicator()));
-    }
+    if (_loading) return const SkeletonList(count: 4, padding: EdgeInsets.zero);
     if (_failed) {
       return Text('Could not load your training plan right now.',
           style: AppTypography.bodySm);

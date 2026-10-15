@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/api/api_exception.dart';
 import '../../../core/state/resource_state.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/section_eyebrow.dart';
+import '../../../core/widgets/skeleton.dart';
+import '../../../core/widgets/upgrade_lock_card.dart';
+import '../../plans/plans_screen.dart';
 import '../today_models.dart';
 import '../today_repository.dart';
 
@@ -16,11 +20,18 @@ import '../today_repository.dart';
 /// history" link on `_buildCompleted()` (see `overview_card.dart`) - only
 /// ever pushed for a day that's already been completed, so an empty result
 /// here means the day predates per-set logging rather than nothing to show.
+/// Also opened from the streak sheet's day dots; Free accounts only see the
+/// last 14 days, so an older day (or a 403) shows the upgrade card instead.
 class SetHistoryScreen extends StatefulWidget {
   final DateTime date;
   final String? sessionTitle;
 
-  const SetHistoryScreen({super.key, required this.date, this.sessionTitle});
+  /// Skip the fetch and go straight to the upgrade card - the caller already
+  /// knows the day is outside the account's history window.
+  final bool locked;
+
+  const SetHistoryScreen(
+      {super.key, required this.date, this.sessionTitle, this.locked = false});
 
   @override
   State<SetHistoryScreen> createState() => _SetHistoryScreenState();
@@ -29,11 +40,12 @@ class SetHistoryScreen extends StatefulWidget {
 class _SetHistoryScreenState extends State<SetHistoryScreen> {
   ResourceState<List<SetLogHistoryEntry>> _state =
       const ResourceState.loading();
+  late bool _locked = widget.locked;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    if (!_locked) _load();
   }
 
   Future<void> _load() async {
@@ -43,6 +55,11 @@ class _SetHistoryScreenState extends State<SetHistoryScreen> {
           await context.read<TodayRepository>().getWorkoutHistory(widget.date);
       if (!mounted) return;
       setState(() => _state = ResourceState.data(entries));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => e.isForbidden
+          ? _locked = true
+          : _state = ResourceState.error(e.userMessage));
     } catch (_) {
       if (!mounted) return;
       setState(() => _state = const ResourceState.error(
@@ -60,17 +77,40 @@ class _SetHistoryScreenState extends State<SetHistoryScreen> {
         title: Text('Set History', style: AppTypography.headlineSm),
       ),
       body: SafeArea(
-        child: ResourceBuilder(
-          state: _state,
-          onRetry: _load,
-          minHeight: 320,
-          builder: (context, entries) => _SetHistoryList(
-            date: widget.date,
-            sessionTitle: widget.sessionTitle,
-            entries: entries,
-          ),
-        ),
+        child: _locked
+            ? _buildLocked()
+            : ResourceBuilder(
+                state: _state,
+                onRetry: _load,
+                minHeight: 320,
+                skeleton: const SkeletonList(
+                    count: 5, padding: EdgeInsets.all(AppSpacing.gutterMobile)),
+                builder: (context, entries) => _SetHistoryList(
+                  date: widget.date,
+                  sessionTitle: widget.sessionTitle,
+                  entries: entries,
+                ),
+              ),
       ),
+    );
+  }
+
+  Widget _buildLocked() {
+    return ListView(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.gutterMobile, vertical: AppSpacing.lg),
+      children: [
+        SectionEyebrow(DateFormat('EEEE, MMM d').format(widget.date)),
+        const SizedBox(height: AppSpacing.sm),
+        UpgradeLockCard(
+          title: 'See your full month of training',
+          message: 'Free shows the sets from your last 14 days. Pro and '
+              'Advanced open every workout from the past month.',
+          actionLabel: 'See plans',
+          onUnlock: () => Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const PlansScreen())),
+        ),
+      ],
     );
   }
 }

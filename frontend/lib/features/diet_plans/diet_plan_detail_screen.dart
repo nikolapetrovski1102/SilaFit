@@ -8,6 +8,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
 import 'diet_plan_builder_screen.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
@@ -103,6 +104,7 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
             child: ResourceBuilder<DietPlanDetail>(
               state: widget.controller.state,
               onRetry: widget.controller.load,
+              skeleton: const SkeletonDetail(),
               builder: (context, detail) => _DetailBody(
                   detail: detail,
                   controller: widget.controller,

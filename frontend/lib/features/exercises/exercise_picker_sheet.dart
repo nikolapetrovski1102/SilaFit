@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
 import 'create_exercise_sheet.dart';
 import 'exercise_focus.dart';
 import 'exercise_form_button.dart';
@@ -252,17 +253,14 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
 
   Widget _buildResults() {
     if (_isSearching) return _buildSearchResults();
-    if (_loadingSuggestions) return _buildSpinner();
+    if (_loadingSuggestions) return _buildSkeleton();
     return _buildSuggestionList();
   }
 
-  Widget _buildSpinner() {
-    return const Center(
-      child: SizedBox(
-        width: 28,
-        height: 28,
-        child: CircularProgressIndicator(strokeWidth: 2.5),
-      ),
+  Widget _buildSkeleton() {
+    return const SingleChildScrollView(
+      physics: NeverScrollableScrollPhysics(),
+      child: SkeletonList(count: 6, padding: EdgeInsets.zero),
     );
   }
 
@@ -312,7 +310,7 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
   }
 
   Widget _buildSearchResults() {
-    if (_isLoading) return _buildSpinner();
+    if (_isLoading) return _buildSkeleton();
     if (_error != null) {
       return Center(
         child: Column(

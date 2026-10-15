@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api/api_exception.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/slim_action_row.dart';
 import '../../auth/auth_controller.dart';
 import '../../plans/plans_controller.dart';
@@ -172,10 +174,8 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
       scale: widget.scale,
       borderColor: AppColors.secondary.withValues(alpha: 0.3),
       trailing: _loading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2))
+          ? const Skeleton(
+              child: Bone(width: 44, height: 14, radius: AppRadius.full))
           : Text(
               paid
                   ? _plan!

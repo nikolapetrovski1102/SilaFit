@@ -49,7 +49,11 @@ Google Cloud project, all three registered against `applicationId`/bundle id
 - **Android** client → registered against the app's package name + debug/release
   signing SHA-1 in Google Cloud Console. Nothing to configure app-side: the
   `google_sign_in` plugin picks it up automatically from the app's signature,
-  not from a client ID passed in code.
+  not from a client ID passed in code. Builds installed from Google Play are
+  re-signed by Play App Signing, so the **app signing key** SHA-1 (Play Console →
+  App integrity → App signing → "App signing key certificate", not the upload
+  key) needs its own Android client too - without it, sign-in fails only on Play
+  installs with `ApiException: 10` (DEVELOPER_ERROR).
 - **Web application** client → the one the backend actually validates ID tokens
   against (Google calls it the "server client ID" / `serverClientId` on the
   Flutter side, and it's also what an Android build's idToken is issued for).

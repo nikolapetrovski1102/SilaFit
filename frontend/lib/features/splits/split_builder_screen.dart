@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/skeleton.dart';
 import 'widgets/ink_field.dart';
 import 'widgets/reorder_sheet.dart';
 import '../auth/widgets/auth_blob_background.dart';
@@ -401,10 +402,7 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
         child: error == null
-            ? const Center(
-                child: SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2)))
+            ? const SkeletonList(count: 4, padding: EdgeInsets.zero)
             : GestureDetector(
                 onTap: _controller.load,
                 child: Text('$error  Tap to retry.',

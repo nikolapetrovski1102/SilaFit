@@ -13,6 +13,27 @@ enum ExerciseProgressAccess { unknown, granted, locked }
 
 enum ExerciseProgressMetric { estimatedOneRm, topSet, volume, reps }
 
+/// Unit of the tracker's "last N months / years" timeframe. [maxAmount]
+/// keeps every pick within the server's two-year cap (730 days).
+enum ProgressTimeframeUnit {
+  month(days: 30, maxAmount: 12, short: 'M', singular: 'month'),
+  year(days: 365, maxAmount: 2, short: 'Y', singular: 'year');
+
+  final int days;
+  final int maxAmount;
+  final String short;
+  final String singular;
+
+  const ProgressTimeframeUnit({
+    required this.days,
+    required this.maxAmount,
+    required this.short,
+    required this.singular,
+  });
+
+  String describe(int amount) => '$amount $singular${amount == 1 ? '' : 's'}';
+}
+
 /// App-wide controller for the PRO/Advanced per-exercise tracker on the
 /// Progress screen. Kept apart from [ProgressController] because its requests
 /// are entitlement-gated while the overview's are not (Home's day strip and
@@ -27,9 +48,12 @@ class ExerciseProgressController extends ChangeNotifier {
   String? selectedExerciseId;
   ExerciseProgressMetric metric = ExerciseProgressMetric.estimatedOneRm;
 
-  /// Mirrors the Progress screen's timeframe pills, which drive both this
-  /// and [ProgressController.days].
-  int days = 30;
+  /// The tracker's own "last N months / years" window, picked inside
+  /// [ExerciseProgressCard] - independent of [ProgressController.days].
+  int timeframeAmount = 1;
+  ProgressTimeframeUnit timeframeUnit = ProgressTimeframeUnit.month;
+
+  int get days => timeframeAmount * timeframeUnit.days;
 
   bool _exercisesLoading = false;
 
@@ -84,10 +108,15 @@ class ExerciseProgressController extends ChangeNotifier {
     return _loadProgress();
   }
 
-  Future<void> setDays(int value) {
-    if (value == days) return Future.value();
-    days = value;
+  Future<void> setTimeframe(int amount, ProgressTimeframeUnit unit) {
+    final clamped = amount.clamp(1, unit.maxAmount);
+    if (clamped == timeframeAmount && unit == timeframeUnit) {
+      return Future.value();
+    }
+    timeframeAmount = clamped;
+    timeframeUnit = unit;
     if (access != ExerciseProgressAccess.granted || selectedExerciseId == null) {
+      notifyListeners();
       return Future.value();
     }
     return _loadProgress();

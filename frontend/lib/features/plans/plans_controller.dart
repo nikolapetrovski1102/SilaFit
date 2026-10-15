@@ -282,8 +282,14 @@ class PlansController extends ChangeNotifier {
     var verified = 0;
     final errors = <String>[];
     for (final purchase in purchases) {
-      final isTracked =
-          _pendingPurchase != null && purchase.productID == _pendingProductId;
+      // Play reports a dismissed or failed purchase sheet with an empty
+      // productID, so a terminal non-purchase event without one belongs to
+      // whichever purchase is in flight - otherwise the button spins forever.
+      final isAnonymousFailure = purchase.productID.isEmpty &&
+          (purchase.status == PurchaseStatus.canceled ||
+              purchase.status == PurchaseStatus.error);
+      final isTracked = _pendingPurchase != null &&
+          (purchase.productID == _pendingProductId || isAnonymousFailure);
       switch (purchase.status) {
         case PurchaseStatus.pending:
           continue;

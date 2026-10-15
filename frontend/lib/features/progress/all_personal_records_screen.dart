@@ -6,6 +6,7 @@ import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/skeleton.dart';
 import 'progress_models.dart';
 import 'progress_repository.dart';
 import 'widgets/personal_record_tile.dart';
@@ -66,6 +67,7 @@ class _AllPersonalRecordsScreenState extends State<AllPersonalRecordsScreen> {
           child: ResourceBuilder<List<PersonalRecord>>(
             state: _state,
             onRetry: _load,
+            skeleton: const SkeletonList(count: 6),
             builder: (context, records) {
               if (records.isEmpty) {
                 return Padding(

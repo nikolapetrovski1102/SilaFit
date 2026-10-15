@@ -10,6 +10,7 @@ import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
 import '../today/today_controller.dart';
 import 'split_builder_screen.dart';
 import 'split_recommendation.dart';
@@ -106,6 +107,7 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
             child: ResourceBuilder<SplitDetail>(
               state: widget.controller.state,
               onRetry: widget.controller.load,
+              skeleton: const SkeletonDetail(rows: 4),
               builder: (context, detail) => _DetailBody(
                   detail: detail,
                   controller: widget.controller,

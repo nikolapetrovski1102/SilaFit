@@ -12,6 +12,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/utils/legal_links.dart';
 import '../../core/widgets/silen_ambient_backdrop.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
 import '../auth/account_gate.dart';
 import '../progress/analytics_controller.dart';
 import '../progress/weekly_analytics_controller.dart';
@@ -255,6 +256,8 @@ class _PlansScreenState extends State<PlansScreen> {
                             ResourceBuilder<List<PlanCatalogEntry>>(
                               state: _controller.state,
                               onRetry: _controller.load,
+                              skeleton: const SkeletonList(
+                                  count: 3, leading: false),
                               builder: (context, catalog) => _PlanList(
                                 controller: _controller,
                                 catalog: catalog,

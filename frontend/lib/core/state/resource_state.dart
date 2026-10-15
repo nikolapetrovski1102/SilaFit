@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/skeleton.dart';
 
 /// A tiny loading/error/data union used by every feature controller that
 /// fetches something from the API, so screens don't each reinvent
@@ -23,7 +24,7 @@ class ResourceState<T> {
 }
 
 /// Renders a [ResourceState] with the right builder for its case. Centralizes
-/// the loading spinner / error card so every feature screen looks the same.
+/// the loading skeleton / error card so every feature screen looks the same.
 class ResourceBuilder<T> extends StatelessWidget {
   final ResourceState<T> state;
   final Widget Function(BuildContext context, T data) builder;
@@ -36,39 +37,34 @@ class ResourceBuilder<T> extends StatelessWidget {
   /// inline uses (sheets, cards) where top-alignment is already fine.
   final double? minHeight;
 
+  /// Placeholder shaped like the loaded content (see `skeleton.dart`).
+  /// Defaults to a generic [SkeletonList].
+  final Widget? skeleton;
+
   const ResourceBuilder(
       {super.key,
       required this.state,
       required this.builder,
       this.onRetry,
-      this.minHeight});
+      this.minHeight,
+      this.skeleton});
 
   @override
   Widget build(BuildContext context) {
     if (state.hasData) return builder(context, state.data as T);
-    final content = state.error != null
-        ? _ErrorCard(message: state.error!, onRetry: onRetry)
-        : const _LoadingCard();
-    if (minHeight == null) return content;
-    return SizedBox(height: minHeight, child: Center(child: content));
-  }
-}
-
-class _LoadingCard extends StatelessWidget {
-  const _LoadingCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 96),
-      child: Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-              strokeWidth: 2.5, color: AppColors.accent),
-        ),
-      ),
+    if (state.error != null) {
+      final content = _ErrorCard(message: state.error!, onRetry: onRetry);
+      if (minHeight == null) return content;
+      return SizedBox(height: minHeight, child: Center(child: content));
+    }
+    final loading = skeleton ?? const SkeletonList();
+    if (minHeight == null) return loading;
+    // Top-aligned like the real content; clipped rather than overflowing
+    // when the skeleton runs taller than the box.
+    return SizedBox(
+      height: minHeight,
+      child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(), child: loading),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/skeleton.dart';
 import '../meals/meal_controller.dart';
 import '../meals/meal_models.dart';
 import '../meals/meal_recommendation.dart';
@@ -178,12 +179,9 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
 
   Widget _buildResults() {
     if (_isLoading) {
-      return const Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(strokeWidth: 2.5),
-        ),
+      return const SingleChildScrollView(
+        physics: NeverScrollableScrollPhysics(),
+        child: SkeletonList(count: 5, padding: EdgeInsets.zero),
       );
     }
     if (_error != null) {

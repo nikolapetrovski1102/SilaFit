@@ -15,6 +15,7 @@ import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../core/widgets/skeleton.dart';
 import '../../root_shell.dart';
 import '../account/account_repository.dart';
 import '../auth/auth_controller.dart';
@@ -191,6 +192,7 @@ class _SettingsContent extends StatelessWidget {
         ResourceBuilder<UserSettings>(
           state: controller.state,
           onRetry: controller.load,
+          skeleton: const SkeletonSections(),
           builder: (context, settings) => _PreferencesSections(
             controller: controller,
             settings: settings,
