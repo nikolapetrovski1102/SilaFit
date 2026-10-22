@@ -25,13 +25,42 @@ class PlansController extends ChangeNotifier {
   bool isYearly = true;
   bool isPurchasing = false;
   bool isRestoring = false;
+
+  /// Bumped whenever the user's entitlement changes - a verified purchase or
+  /// restore, or [refreshCurrent] noticing the plan moved (renewed or lapsed
+  /// outside the app). Every surface that gates on the plan watches this.
   int purchaseRevision = 0;
   String? actionError;
+
+  /// The caller's plan - the one copy every screen reads, so a purchase
+  /// shows up everywhere at once instead of wherever happened to refetch.
+  /// Null while the first check is in flight or after it failed (see
+  /// [currentFailed]), so nothing claims "Free" for a paying user it just
+  /// couldn't reach.
+  CurrentSubscription? current;
+  bool currentFailed = false;
+  int _currentRequest = 0;
+
+  // Purchases the store says went through but the server couldn't be reached
+  // to confirm, keyed by transaction. Left unfinished with the store (which
+  // redelivers them on the next launch) and retried here on resume, so a
+  // dropped connection mid-purchase never leaves a paying user locked out.
+  final Map<String, PurchaseDetails> _unconfirmed = {};
+
+  // A plan unlocked by something other than the paywall's own buy button -
+  // a redeemed code, an Ask to Buy approval, a purchase that was pending -
+  // waiting for RootShell to celebrate it (see [takeCelebration]).
+  CurrentSubscription? _celebration;
+  bool _explicitRestore = false;
 
   // Store-side quotes (localized price + eligible intro offer) keyed by
   // product id. Prices on the paywall come from here, never from the
   // catalogue's USD figures, so what's shown is what the store charges.
   Map<String, StoreQuote> _quotes = const {};
+
+  /// The Silen promo code applied this session (Google Play only) - its
+  /// offer replaces the intro offer on every product that carries it.
+  PromoCode? promoCode;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
   Completer<bool>? _pendingPurchase;
@@ -83,6 +112,113 @@ class PlansController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-reads the caller's plan from the server. [quiet] keeps the last
+  /// known plan on screen while it loads (and if it fails) instead of
+  /// dropping to the "checking" state - for refreshes the user didn't ask
+  /// for. Returns the fresh plan, or null when it couldn't be fetched.
+  Future<CurrentSubscription?> refreshCurrent({bool quiet = false}) async {
+    final request = ++_currentRequest;
+    final previous = current;
+    if (!quiet) {
+      current = null;
+      currentFailed = false;
+      notifyListeners();
+    }
+    CurrentSubscription? fresh;
+    try {
+      fresh = await _repository.getCurrent();
+    } catch (_) {}
+    // A newer refresh, or a purchase landing meanwhile, owns the answer now.
+    if (request != _currentRequest) return fresh;
+    if (fresh == null) {
+      if (!quiet) currentFailed = true;
+    } else {
+      current = fresh;
+      currentFailed = false;
+      if (previous != null && !_samePlan(previous, fresh)) purchaseRevision++;
+    }
+    notifyListeners();
+    return fresh;
+  }
+
+  static bool _samePlan(CurrentSubscription a, CurrentSubscription b) =>
+      a.planCode == b.planCode && a.billingCycle == b.billingCycle;
+
+  /// Hands over (once) a plan that was just unlocked outside the paywall's
+  /// purchase flow, which celebrates its own purchases.
+  CurrentSubscription? takeCelebration() {
+    final celebration = _celebration;
+    _celebration = null;
+    return celebration;
+  }
+
+  /// [planCode]'s catalogue perks, highlighted ones first - empty until the
+  /// catalogue has loaded.
+  List<String> perksFor(String planCode) {
+    final features = [
+      for (final entry in state.data ?? const <PlanCatalogEntry>[])
+        if (entry.plan.code.toUpperCase() == planCode.toUpperCase())
+          ...entry.features,
+    ];
+    // Two passes rather than sort(): List.sort isn't stable, and the
+    // catalogue order within each group is deliberate.
+    return [
+      for (final f in features)
+        if (f.isHighlighted) f.featureText,
+      for (final f in features)
+        if (!f.isHighlighted) f.featureText,
+    ];
+  }
+
+  /// Opens the store's own code redemption (see [IapService.presentRedeemCode])
+  /// - Apple offer codes on iOS, Play's free-time promo codes on Android.
+  Future<void> redeemCode() async {
+    // Whatever the store grants, look for it on the very next resume rather
+    // than after the usual throttle.
+    _lastSilentSync = null;
+    await _iapService.presentRedeemCode();
+  }
+
+  /// Claims a Silen promo code and re-prices the paywall with the Play offer
+  /// it unlocks. Returns the reason it can't be used, or null once applied.
+  Future<String?> applyPromoCode(String code) async {
+    final PromoCode promo;
+    try {
+      promo = await _repository.redeemPromoCode(code.trim());
+    } on ApiException catch (e) {
+      return e.userMessage;
+    } catch (_) {
+      return ApiException.genericMessage;
+    }
+
+    if (state.data == null) await load(force: true);
+    final catalog = state.data;
+    if (catalog == null) return ApiException.genericMessage;
+    try {
+      if (!await _iapService.isAvailable()) {
+        return 'In-app purchases are not available on this device.';
+      }
+      final quotes = await _iapService.loadQuotes(_productIds(catalog),
+          promoOfferId: promo.playOfferId);
+      // The server knows the code; only Play knows which products carry the
+      // offer - a code whose offer isn't live on any of them is no discount.
+      if (!quotes.values.any((q) => q.isPromoCode)) {
+        return 'This code doesn\'t apply to any plan right now.';
+      }
+      promoCode = promo;
+      _quotes = quotes;
+    } catch (_) {
+      return ApiException.genericMessage;
+    }
+
+    // Land on a billing cycle the discount actually covers.
+    bool discounted(bool yearly) => catalog
+        .any((e) => quoteFor(e.plan, yearly: yearly)?.isPromoCode == true);
+    if (!discounted(isYearly) && discounted(!isYearly)) isYearly = !isYearly;
+    notifyListeners();
+    return null;
+  }
+
   void setBillingCycle({required bool yearly}) {
     isYearly = yearly;
     notifyListeners();
@@ -124,16 +260,19 @@ class PlansController extends ChangeNotifier {
     return pct > 0 ? pct : null;
   }
 
+  Set<String> _productIds(List<PlanCatalogEntry> catalog) => {
+        for (final entry in catalog)
+          for (final yearly in const [true, false])
+            if (_productIdFor(entry.plan, yearly: yearly) case final id?) id,
+      };
+
   Future<void> _loadQuotes(List<PlanCatalogEntry> catalog) async {
-    final ids = <String>{
-      for (final entry in catalog)
-        for (final yearly in const [true, false])
-          if (_productIdFor(entry.plan, yearly: yearly) case final id?) id,
-    };
+    final ids = _productIds(catalog);
     if (ids.isEmpty) return;
     try {
       if (!await _iapService.isAvailable()) return;
-      _quotes = await _iapService.loadQuotes(ids);
+      _quotes = await _iapService.loadQuotes(ids,
+          promoOfferId: promoCode?.playOfferId);
       notifyListeners();
     } catch (_) {
       // The paywall falls back to the catalogue price; purchase() re-queries.
@@ -163,7 +302,8 @@ class PlansController extends ChangeNotifier {
       }
 
       final quote = _quotes[productId] ??
-          (await _iapService.loadQuotes({productId}))[productId];
+          (await _iapService.loadQuotes({productId},
+              promoOfferId: promoCode?.playOfferId))[productId];
       if (quote == null) {
         actionError = ApiException.genericMessage;
         isPurchasing = false;
@@ -205,9 +345,11 @@ class PlansController extends ChangeNotifier {
   Future<RestoreOutcome?> restorePurchases() async {
     if (isRestoring) return null;
     isRestoring = true;
+    _explicitRestore = true;
     actionError = null;
     notifyListeners();
     final outcome = await _runRestore(syncWithStore: true);
+    _explicitRestore = false;
     if (outcome == RestoreOutcome.failed) {
       actionError ??= ApiException.genericMessage;
     }
@@ -221,6 +363,8 @@ class PlansController extends ChangeNotifier {
   /// plan; errors are swallowed so nothing surfaces in the UI.
   Future<void> syncEntitlements() async {
     if (isRestoring || isPurchasing) return;
+    // Not throttled: these are purchases the user already paid for.
+    await _retryUnconfirmed();
     final now = DateTime.now();
     if (_lastSilentSync != null &&
         now.difference(_lastSilentSync!) < _silentSyncMinGap) {
@@ -230,7 +374,8 @@ class PlansController extends ChangeNotifier {
     isRestoring = true;
     final previousError = actionError;
     try {
-      if (await _repository.getActivePlanCode() != 'FREE') return;
+      final plan = await refreshCurrent(quiet: true);
+      if (plan == null || plan.isPaid) return;
       if (!await _iapService.isAvailable()) return;
       await _runRestore();
     } catch (_) {
@@ -295,9 +440,23 @@ class PlansController extends ChangeNotifier {
           continue;
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
+          // Known to be on Free beforehand - not merely unknown, or every
+          // renewal StoreKit redelivers at launch would look like an unlock.
+          final wasFree = current != null && !current!.isPaid;
           final error = await _verifyAndComplete(purchase);
           if (error == null) {
             verified++;
+            // Only a fresh purchase that really moved Free -> paid is an
+            // unlock. A `restored` one is the quiet launch sync redelivering
+            // history (expired transactions included, which leave the user on
+            // Free) - celebrating those meant a "welcome" on every login.
+            final isUnlock = purchase.status == PurchaseStatus.purchased &&
+                wasFree &&
+                current != null &&
+                current!.isPaid;
+            if (!isTracked && !_explicitRestore && isUnlock) {
+              _celebration = current;
+            }
           } else {
             errors.add(error);
             actionError = error;
@@ -325,28 +484,60 @@ class PlansController extends ChangeNotifier {
     return (verified: verified, errors: errors);
   }
 
+  static const _unconfirmedMessage =
+      'Your purchase went through, but we couldn\'t confirm it with our '
+      'server yet. It will unlock automatically once you\'re back online.';
+
   /// Sends a purchased/restored transaction to the server for receipt
-  /// validation, then always completes it on the platform side regardless
-  /// of whether verification succeeded - otherwise StoreKit/Play Billing
-  /// keeps redelivering a transaction the store already recorded. Returns
-  /// the user-facing error, or null once the server has verified it.
+  /// validation, then completes it on the platform side once the server has
+  /// given a verdict - verified or refused. Completing a refused one matters:
+  /// otherwise StoreKit/Play Billing keeps redelivering it forever. But one
+  /// the server never got to see (offline, timed out, 5xx) is left open and
+  /// queued in [_unconfirmed], because a completed transaction is never
+  /// redelivered and the user would have paid for nothing. Returns the
+  /// user-facing error, or null once the server has verified it.
   Future<String?> _verifyAndComplete(PurchaseDetails purchase) async {
-    String? error;
+    final key = purchase.purchaseID ??
+        purchase.verificationData.serverVerificationData;
     try {
-      await _repository.verifyPurchase(
+      current = await _repository.verifyPurchase(
         store: Platform.isIOS ? 'AppStore' : 'PlayStore',
         productId: purchase.productID,
         receiptData: purchase.verificationData.serverVerificationData,
         transactionId: purchase.purchaseID,
       );
+      currentFailed = false;
+      // Supersede any /plans/current read already in flight - it may have
+      // been answered before the server activated this purchase.
+      _currentRequest++;
       purchaseRevision++;
+      _unconfirmed.remove(key);
+      await _iapService.completePurchase(purchase);
+      return null;
     } on ApiException catch (e) {
-      error = e.userMessage;
+      if (e.isRetryable) {
+        _unconfirmed[key] = purchase;
+        return _unconfirmedMessage;
+      }
+      _unconfirmed.remove(key);
+      await _iapService.completePurchase(purchase);
+      return e.userMessage;
     } catch (_) {
-      error = ApiException.genericMessage;
+      _unconfirmed.remove(key);
+      await _iapService.completePurchase(purchase);
+      return ApiException.genericMessage;
     }
-    await _iapService.completePurchase(purchase);
-    return error;
+  }
+
+  /// Gives every purchase stuck in [_unconfirmed] another go at the server.
+  Future<void> _retryUnconfirmed() async {
+    if (_unconfirmed.isEmpty) return;
+    final pending = _unconfirmed.values.toList();
+    var verified = 0;
+    for (final purchase in pending) {
+      if (await _verifyAndComplete(purchase) == null) verified++;
+    }
+    if (verified > 0) notifyListeners();
   }
 
   void _resolvePending(bool result) {

@@ -89,6 +89,13 @@ public static class NpgsqlDataReaderExtensions
     public static TimeSpan GetTimeSpanValue(this NpgsqlDataReader reader, string column) =>
         reader.GetTimeSpan(reader.GetOrdinal(column));
 
+    /// <summary>A timestamp[] column; NULL (e.g. an empty array_agg) reads as an empty list.</summary>
+    public static IReadOnlyList<DateTime> GetDateTimeArray(this NpgsqlDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? [] : reader.GetFieldValue<DateTime[]>(ordinal);
+    }
+
     public static byte[]? GetNullableBytes(this NpgsqlDataReader reader, string column)
     {
         var ordinal = reader.GetOrdinal(column);

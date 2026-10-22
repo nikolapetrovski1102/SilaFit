@@ -330,7 +330,9 @@ void main() {
 class _WeightApi implements ApiClient {
   @override
   Future<T> get<T>(String path, T Function(dynamic) parse,
-      {Map<String, String>? query}) async {
+      {Map<String, String>? query,
+      bool cache = false,
+      bool sameDayOnly = false}) async {
     return parse(<String, dynamic>{
       'latestWeightKg': 83.4,
       'session': <String, dynamic>{}
@@ -346,7 +348,9 @@ class _OverviewApi implements ApiClient {
 
   @override
   Future<T> get<T>(String path, T Function(dynamic) parse,
-      {Map<String, String>? query}) async {
+      {Map<String, String>? query,
+      bool cache = false,
+      bool sameDayOnly = false}) async {
     if (path == '/splits/split-ppl') splitDetailRequests++;
     final Object payload = switch (path) {
       '/today' => <String, dynamic>{

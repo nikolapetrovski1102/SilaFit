@@ -25,33 +25,60 @@ class ProgressRepository {
     }
 
     final overview = await _client
-        .get('/progress', ProgressOverview.fromJson, query: {'days': '$days'});
+        .get('/progress', ProgressOverview.fromJson,
+            query: {'days': '$days'}, cache: true);
     _overviewCache[key] = _CachedOverview(overview);
     return overview;
   }
 
+  /// [getOverview]'s saved copy, for painting before it answers.
+  Future<ProgressOverview?> getCachedOverview({int days = 28}) async =>
+      (await _client.cached('/progress', ProgressOverview.fromJson,
+              query: {'days': '$days'}))
+          ?.value;
+
+  static List<PersonalRecord> _parseRecords(dynamic json) =>
+      (json as List<dynamic>).map((e) => PersonalRecord.fromJson(e)).toList();
+
   Future<List<PersonalRecord>> getPersonalRecords({int top = 5}) => _client.get(
         '/progress/personal-records',
-        (json) => (json as List<dynamic>)
-            .map((e) => PersonalRecord.fromJson(e))
-            .toList(),
+        _parseRecords,
         query: {'top': '$top'},
+        cache: true,
       );
 
+  /// [getPersonalRecords]' saved copy, for painting before it answers.
+  Future<List<PersonalRecord>?> getCachedPersonalRecords({int top = 5}) async =>
+      (await _client.cached('/progress/personal-records', _parseRecords,
+              query: {'top': '$top'}))
+          ?.value;
+
   /// PRO/Advanced only - a Free caller gets a 403, which is how the Progress
-  /// screen learns it should render locked.
-  Future<List<TrackedExercise>> getTrackedExercises() => _client.get(
+  /// screen learns it should render locked. [cache] is off while viewing on
+  /// an ad pass, so the offline copy can't keep the screen open after it.
+  Future<List<TrackedExercise>> getTrackedExercises({bool cache = true}) =>
+      _client.get(
         '/progress/exercises',
         (json) => (json as List<dynamic>)
             .map((e) => TrackedExercise.fromJson(e))
             .toList(),
+        cache: cache,
       );
 
-  /// PRO/Advanced only - 403 otherwise.
+  /// PRO/Advanced only - 403 otherwise. [cache] as on [getTrackedExercises].
   Future<ExerciseProgress> getExerciseProgress(String exerciseId,
-          {required int days}) =>
+          {required int days, bool cache = true}) =>
       _client.get('/progress/exercises/$exerciseId', ExerciseProgress.fromJson,
-          query: {'days': '$days'});
+          query: {'days': '$days'}, cache: cache);
+
+  /// Opens the per-exercise Progress endpoints for a Free account that just
+  /// watched a rewarded video. 429 once the day's passes are used up. True
+  /// when a pass was granted; false for a Pro account, which needs none.
+  Future<bool> grantAdPass() => _client.post('/progress/ad-pass',
+      (json) => json is Map && json['expiresAtUtc'] != null);
+
+  /// Ends the ad pass - the user left the Progress screen.
+  Future<void> endAdPass() => _client.delete('/progress/ad-pass', (_) {});
 }
 
 class _CachedOverview {

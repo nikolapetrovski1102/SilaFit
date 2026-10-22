@@ -34,7 +34,8 @@ class _IapService implements IapService {
   Future<bool> isAvailable() async => true;
 
   @override
-  Future<Map<String, StoreQuote>> loadQuotes(Set<String> productIds) async =>
+  Future<Map<String, StoreQuote>> loadQuotes(Set<String> productIds,
+          {String? promoOfferId}) async =>
       {for (final id in productIds) id: StoreQuote(product: _FakeProduct(id))};
 
   @override

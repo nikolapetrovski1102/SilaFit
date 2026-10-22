@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -7,112 +8,191 @@ import '../../../core/widgets/dumbbell_icon.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 
-/// One of the 2 intro carousel slides: Skip top-right, an icon mark in a
-/// circle, headline/subhead, a dot indicator for the slide position, the
-/// CTA, and the "Already have an account? Log in" link.
-class IntroSlide extends StatelessWidget {
+/// One page of the intro carousel: an icon mark plus headline/subhead.
+class IntroSlideData {
   final Widget iconMark;
   final String headline;
   final String subhead;
-  final int dotIndex; // 0-based, out of [dotCount]
-  final int dotCount;
-  final String ctaLabel;
-  final VoidCallback onCta;
-  final VoidCallback onSkip;
-  final VoidCallback onLogin;
-  final VoidCallback? onBack;
 
-  const IntroSlide({
-    super.key,
+  const IntroSlideData({
     required this.iconMark,
     required this.headline,
     required this.subhead,
-    required this.dotIndex,
-    required this.dotCount,
-    required this.ctaLabel,
-    required this.onCta,
+  });
+}
+
+/// The swipeable intro carousel: Skip top-right on every slide, a
+/// [PageView] of [slides], a dot indicator, the CTA, and the "Already have
+/// an account? Log in" link. There's deliberately no back arrow - swiping
+/// right is the way back - so the only step-level navigation out of here is
+/// [onDone] (the CTA on the last slide) or [onSkip].
+class IntroCarousel extends StatefulWidget {
+  final List<IntroSlideData> slides;
+  final int initialPage;
+  final ValueChanged<int> onPageChanged;
+  final VoidCallback onDone;
+  final VoidCallback onSkip;
+  final VoidCallback onLogin;
+
+  const IntroCarousel({
+    super.key,
+    required this.slides,
+    required this.initialPage,
+    required this.onPageChanged,
+    required this.onDone,
     required this.onSkip,
     required this.onLogin,
-    this.onBack,
   });
+
+  @override
+  State<IntroCarousel> createState() => _IntroCarouselState();
+}
+
+class _IntroCarouselState extends State<IntroCarousel> {
+  late final PageController _pageController =
+      PageController(initialPage: widget.initialPage);
+  late int _page = widget.initialPage;
+
+  bool get _isLast => _page == widget.slides.length - 1;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onCta() {
+    if (_isLast) {
+      widget.onDone();
+      return;
+    }
+    _pageController.nextPage(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? const Duration(milliseconds: 1)
+          : const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.sm),
-              child: Row(
-                children: [
-                  if (onBack != null)
-                    IconButton(
-                      tooltip: 'Back',
-                      onPressed: onBack,
-                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                      color: AppColors.onSurfaceVariant,
-                    )
-                  else
-                    const SizedBox(width: 48, height: 48),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: onSkip,
-                    child: Text('Skip',
-                        style: AppTypography.bodyMd
-                            .copyWith(color: AppColors.onSurfaceVariant)),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(flex: 3),
-            OnboardingStepContentTransition(child: iconMark),
-            const Spacer(flex: 2),
-            OnboardingStepContentTransition(
-              incomingOffset: 14,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(headline,
-                      textAlign: TextAlign.center,
-                      style: AppTypography.headlineLg),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    subhead,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMd.copyWith(
-                        color: AppColors.onSurfaceVariant, height: 1.4),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(flex: 2),
-            _SlideDots(dotIndex: dotIndex, dotCount: dotCount),
-            const SizedBox(height: AppSpacing.xl),
-            PrimaryPillButton(label: ctaLabel, onPressed: onCta),
-            const SizedBox(height: AppSpacing.sm),
-            GestureDetector(
-              onTap: onLogin,
-              child: RichText(
-                text: TextSpan(
-                  style: AppTypography.bodyMd
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                  children: [
-                    const TextSpan(text: 'Already have an account? '),
-                    TextSpan(
-                        text: 'Log in',
-                        style: TextStyle(
-                            color: AppColors.secondary,
-                            fontWeight: FontWeight.w600)),
-                  ],
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+                AppSpacing.sm, AppSpacing.marginMobile, 0),
+            child: SizedBox(
+              height: 48,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: widget.onSkip,
+                  child: Text('Skip',
+                      style: AppTypography.bodyMd
+                          .copyWith(color: AppColors.onSurfaceVariant)),
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-        ),
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.slides.length,
+              onPageChanged: (page) {
+                HapticFeedback.selectionClick();
+                setState(() => _page = page);
+                widget.onPageChanged(page);
+              },
+              itemBuilder: (context, i) =>
+                  _IntroSlidePage(data: widget.slides[i]),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.marginMobile),
+            child: Column(
+              children: [
+                // Driven by the live scroll offset, so the indicator tracks
+                // the finger mid-swipe instead of jumping once it settles.
+                AnimatedBuilder(
+                  animation: _pageController,
+                  builder: (context, _) {
+                    final position = _pageController.hasClients &&
+                            _pageController.position.haveDimensions
+                        ? _pageController.page ?? _page.toDouble()
+                        : _page.toDouble();
+                    return _SlideDots(
+                        position: position, dotCount: widget.slides.length);
+                  },
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                PrimaryPillButton(
+                  label: _isLast ? 'Continue' : 'Get started',
+                  onPressed: _onCta,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                GestureDetector(
+                  onTap: widget.onLogin,
+                  child: RichText(
+                    text: TextSpan(
+                      style: AppTypography.bodyMd
+                          .copyWith(color: AppColors.onSurfaceVariant),
+                      children: [
+                        const TextSpan(text: 'Already have an account? '),
+                        TextSpan(
+                            text: 'Log in',
+                            style: TextStyle(
+                                color: AppColors.secondary,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IntroSlidePage extends StatelessWidget {
+  final IntroSlideData data;
+  const _IntroSlidePage({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
+      child: Column(
+        children: [
+          const Spacer(flex: 2),
+          OnboardingStepContentTransition(child: data.iconMark),
+          const Spacer(flex: 2),
+          OnboardingStepContentTransition(
+            incomingOffset: 14,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(data.headline,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.headlineLg),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  data.subhead,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyMd.copyWith(
+                      color: AppColors.onSurfaceVariant, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(flex: 2),
+        ],
       ),
     );
   }
@@ -123,10 +203,10 @@ class IntroSlide extends StatelessWidget {
 /// resizing in place - reads as a single continuous shape sliding along a
 /// rail instead of two shapes independently swelling and shrinking.
 class _SlideDots extends StatelessWidget {
-  final int dotIndex;
+  final double position; // fractional page, straight from the PageView
   final int dotCount;
 
-  const _SlideDots({required this.dotIndex, required this.dotCount});
+  const _SlideDots({required this.position, required this.dotCount});
 
   static const _dotSize = 9.0;
   static const _activeWidth = 32.0;
@@ -136,7 +216,17 @@ class _SlideDots extends StatelessWidget {
   Widget build(BuildContext context) {
     const pitch = _dotSize + _spacing;
     final totalWidth = dotCount * _dotSize + (dotCount - 1) * _spacing;
-    final activeCenterX = dotIndex * pitch + _dotSize / 2;
+
+    // Worm effect: over the first half of a swipe the pill's leading edge
+    // stretches to the next dot, over the second half the trailing edge
+    // catches up - so it reads as the pill crawling between dots.
+    final clamped = position.clamp(0.0, (dotCount - 1).toDouble());
+    final from = clamped.floorToDouble();
+    final t = clamped - from;
+    final head = from + (t * 2).clamp(0.0, 1.0);
+    final tail = from + (t * 2 - 1).clamp(0.0, 1.0);
+    final left = tail * pitch + _dotSize / 2 - _activeWidth / 2;
+    final right = head * pitch + _dotSize / 2 + _activeWidth / 2;
 
     return SizedBox(
       width: totalWidth,
@@ -159,15 +249,11 @@ class _SlideDots extends StatelessWidget {
               ],
             ],
           ),
-          AnimatedPositioned(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            left: activeCenterX - _activeWidth / 2,
+          Positioned(
+            left: left,
             top: 0,
             child: Container(
-              width: _activeWidth,
+              width: right - left,
               height: _dotSize,
               decoration: BoxDecoration(
                 color: AppColors.accent,

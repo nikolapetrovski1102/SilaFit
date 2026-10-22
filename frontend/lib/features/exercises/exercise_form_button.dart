@@ -5,11 +5,10 @@ import 'exercise_video_sheet.dart';
 import 'exercise_web_search.dart';
 
 /// Icon-only button on a search/suggestion row that previews an exercise's
-/// form without picking it - its demo video or image when there is one,
-/// otherwise an in-app web search, so there's always a one-tap way to look
-/// it up. Tapping the row itself still selects the exercise, so this needs
-/// its own hit-testable region rather than living inside the row's own tap
-/// target.
+/// form without picking it - its demo video when there is one, otherwise an
+/// in-app web search, so there's always a one-tap way to look it up. Tapping
+/// the row itself still selects the exercise, so this needs its own
+/// hit-testable region rather than living inside the row's own tap target.
 class ExerciseFormButton extends StatelessWidget {
   final String exerciseName;
   final String? demoUrl;
@@ -23,29 +22,25 @@ class ExerciseFormButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = demoUrl;
-    final isVideo = url != null && isVideoUrl(url);
+    final videoUrl = url != null && isVideoUrl(url) ? url : null;
     return Tooltip(
-      message: url == null
-          ? 'Search for form'
-          : isVideo
-              ? 'Watch form'
-              : 'View form',
+      message: videoUrl == null ? 'Search for form' : 'Watch form',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => url == null
+        onTap: () => videoUrl == null
             ? openExerciseWebSearch(context, exerciseName: exerciseName)
             : showExerciseVideoSheet(context,
-                url: url, exerciseName: exerciseName),
+                url: videoUrl, exerciseName: exerciseName),
         child: Padding(
           padding: const EdgeInsets.all(6),
           child: Icon(
-            url == null
+            videoUrl == null
                 ? Icons.travel_explore_rounded
-                : isVideo
-                    ? Icons.play_circle_outline_rounded
-                    : Icons.image_outlined,
+                : Icons.play_circle_outline_rounded,
             size: 20,
-            color: url == null ? AppColors.onSurfaceVariant : AppColors.accent,
+            color: videoUrl == null
+                ? AppColors.onSurfaceVariant
+                : AppColors.accent,
           ),
         ),
       ),

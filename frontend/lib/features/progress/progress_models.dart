@@ -69,6 +69,7 @@ class HeatmapDay {
 /// `Silen.Common.Dtos.PersonalRecordDto`. [previousBestWeightKg] is null
 /// when this is the only set ever logged for the exercise - callers show no
 /// delta badge in that case rather than a misleading "+0".
+/// [isPerDumbbell] marks a two-dumbbell exercise: the weight is per hand.
 class PersonalRecord {
   final String exerciseId;
   final String exerciseName;
@@ -76,6 +77,7 @@ class PersonalRecord {
   final int reps;
   final DateTime achievedAtUtc;
   final double? previousBestWeightKg;
+  final bool isPerDumbbell;
 
   const PersonalRecord({
     required this.exerciseId,
@@ -84,6 +86,7 @@ class PersonalRecord {
     required this.reps,
     required this.achievedAtUtc,
     this.previousBestWeightKg,
+    this.isPerDumbbell = false,
   });
 
   double? get deltaKg =>
@@ -98,23 +101,28 @@ class PersonalRecord {
       reps: map['reps'] as int? ?? 0,
       achievedAtUtc: DateTime.parse(map['achievedAtUtc'] as String),
       previousBestWeightKg: (map['previousBestWeightKg'] as num?)?.toDouble(),
+      isPerDumbbell: map['isPerDumbbell'] as bool? ?? false,
     );
   }
 }
 
 /// An exercise the account has logged at least one set for. Mirrors
-/// `Silen.Common.Dtos.TrackedExerciseDto`.
+/// `Silen.Common.Dtos.TrackedExerciseDto`. [isPerDumbbell] marks a
+/// two-dumbbell exercise: its top set and 1RM are per hand, while its
+/// volume already counts both dumbbells.
 class TrackedExercise {
   final String exerciseId;
   final String exerciseName;
   final int sessionCount;
   final DateTime lastTrainedAtUtc;
+  final bool isPerDumbbell;
 
   const TrackedExercise({
     required this.exerciseId,
     required this.exerciseName,
     required this.sessionCount,
     required this.lastTrainedAtUtc,
+    this.isPerDumbbell = false,
   });
 
   factory TrackedExercise.fromJson(dynamic json) {
@@ -124,6 +132,7 @@ class TrackedExercise {
       exerciseName: map['exerciseName'] as String? ?? '',
       sessionCount: map['sessionCount'] as int? ?? 0,
       lastTrainedAtUtc: DateTime.parse(map['lastTrainedAtUtc'] as String),
+      isPerDumbbell: map['isPerDumbbell'] as bool? ?? false,
     );
   }
 }

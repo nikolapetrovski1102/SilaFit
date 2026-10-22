@@ -103,13 +103,13 @@ BEGIN
         u.userid,
         u.displayname,
         u.email,
-        sp.code AS plancode,
+        COALESCE(sp.entitlementcode, sp.code) AS plancode,
         us.expiresatutc
     FROM dbo.usersubscriptions us
     INNER JOIN dbo.subscriptionplans sp ON sp.planid = us.planid
     INNER JOIN dbo.users u ON u.userid = us.userid
     INNER JOIN dbo.usersettings st ON st.userid = u.userid
-    WHERE sp.code = 'ADVANCED'
+    WHERE COALESCE(sp.entitlementcode, sp.code) = 'ADVANCED'
       AND st.aidataconsentatutc IS NOT NULL
       AND us.status = 'Active'
       AND u.isactive

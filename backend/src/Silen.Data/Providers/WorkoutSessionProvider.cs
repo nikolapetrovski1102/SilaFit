@@ -36,6 +36,9 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
         decimal? rpeScore,
         decimal? tonnageKg,
         IReadOnlyList<SetLogEntryModel>? setLogs,
+        DateTime? completedAtUtc = null,
+        Guid? splitDayId = null,
+        DateTime? scheduledDateUtc = null,
         CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_WorkoutSession_Complete",
@@ -47,7 +50,10 @@ public sealed class WorkoutSessionProvider(ISqlExecutor sqlExecutor) : IWorkoutS
                 SqlParameterBuilder.Create("@RpeScore", rpeScore),
                 SqlParameterBuilder.Create("@TonnageKg", tonnageKg),
                 SqlParameterBuilder.Create("@SetLogsJson",
-                    setLogs is { Count: > 0 } ? JsonSerializer.Serialize(setLogs, SetLogsJsonOptions) : null)
+                    setLogs is { Count: > 0 } ? JsonSerializer.Serialize(setLogs, SetLogsJsonOptions) : null),
+                SqlParameterBuilder.Create("@CompletedAtUtc", completedAtUtc),
+                SqlParameterBuilder.Create("@SplitDayId", splitDayId),
+                SqlParameterBuilder.Create("@ScheduledDateUtc", scheduledDateUtc?.Date)
             ],
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapCompletion, cancellationToken),
             cancellationToken);

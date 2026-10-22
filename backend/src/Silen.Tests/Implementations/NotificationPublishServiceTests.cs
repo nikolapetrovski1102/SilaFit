@@ -722,4 +722,138 @@ public class NotificationPublishServiceTests
         Assert.Equal(1, result.Data!.Suppressed);
         Assert.Equal(0, result.Data.Created);
     }
+
+    // -------------------------------------------------------------------------
+    // Gym reminder time: auto-detected vs. picked by the user
+    // -------------------------------------------------------------------------
+
+    /// <summary>Wires the create -> deliver path and returns a getter for what was enqueued.</summary>
+    private Func<NewNotificationModel?> ExpectOneReminder(NotificationPublishOptions options, NotificationCandidateModel candidate)
+    {
+        var notification = new UserNotificationModel
+        {
+            NotificationId = Guid.NewGuid(),
+            UserId = candidate.UserId,
+            Category = NotificationCategories.GymReminder
+        };
+        NewNotificationModel? created = null;
+
+        pushSender.SetupGet(p => p.IsConfigured).Returns(true);
+        notificationProvider
+            .Setup(p => p.GetCandidatesAsync(options.MaxUsersPerRun, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([candidate]);
+        notificationProvider
+            .Setup(p => p.TryCreateNotificationAsync(It.IsAny<NewNotificationModel>(), It.IsAny<CancellationToken>()))
+            .Callback<NewNotificationModel, CancellationToken>((n, _) => created = n)
+            .ReturnsAsync(notification);
+        notificationProvider
+            .Setup(p => p.GetActiveDeviceTokensAsync(candidate.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UserDeviceTokenModel { PushToken = "tok1", Platform = "ios" }]);
+        pushSender
+            .Setup(p => p.SendAsync(It.IsAny<PushNotificationMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PushSendResult.Sent("provider-msg"));
+        notificationProvider
+            .Setup(p => p.MarkSentAsync(notification.NotificationId, notification.Category, "provider-msg", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        return () => created;
+    }
+
+    [Fact]
+    public async Task RunAsync_AutoMode_RemindsAheadOfDetectedTrainingTime()
+    {
+        var options = BuildOptions(o =>
+        {
+            o.MealReminderLocalTimes = [];
+            o.DetectedReminderOffsetMinutes = 30;
+        });
+        var utcNow = DateTime.UtcNow;
+        // Usual start is 30 min from now (whole minutes on the 5-minute grid), so
+        // the reminder is due right now, while the stored time is half a day away.
+        var usual = utcNow.AddMinutes(30);
+        usual = usual.Date.AddHours(usual.Hour).AddMinutes(usual.Minute / 5 * 5);
+        var candidate = Candidate(lastInteractionAtUtc: utcNow);
+        candidate.NotificationLocalTime = TimeSpan.FromHours((utcNow.Hour + 12) % 24);
+        candidate.NotificationTimeIsUserSet = false;
+        candidate.RecentWorkoutStartsUtc = [usual.AddDays(-1), usual.AddDays(-2), usual.AddDays(-3)];
+        var created = ExpectOneReminder(options, candidate);
+
+        var result = await Sut(options).RunAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(created());
+        Assert.Equal(NotificationCategories.GymReminder, created()!.Category);
+        Assert.Equal(usual.AddMinutes(-30).TimeOfDay, created()!.ScheduledLocalAt!.Value.TimeOfDay);
+    }
+
+    [Fact]
+    public async Task RunAsync_UserSetTime_IgnoresDetectedHabit()
+    {
+        var options = BuildOptions(o => o.MealReminderLocalTimes = []);
+        var utcNow = DateTime.UtcNow;
+        var candidate = Candidate(lastInteractionAtUtc: utcNow);
+        // The habit says "now", but the user picked a time half a day away.
+        candidate.NotificationLocalTime = TimeSpan.FromHours((utcNow.Hour + 12) % 24);
+        candidate.NotificationTimeIsUserSet = true;
+        var habit = utcNow.AddMinutes(30);
+        candidate.RecentWorkoutStartsUtc = [habit.AddDays(-1), habit.AddDays(-2), habit.AddDays(-3)];
+
+        pushSender.SetupGet(p => p.IsConfigured).Returns(true);
+        notificationProvider
+            .Setup(p => p.GetCandidatesAsync(options.MaxUsersPerRun, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([candidate]);
+
+        var result = await Sut(options).RunAsync();
+
+        Assert.Equal(1, result.Data!.Suppressed);
+        notificationProvider.Verify(
+            p => p.TryCreateNotificationAsync(It.IsAny<NewNotificationModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RunAsync_UserSetTimeInsideQuietHours_StillFires()
+    {
+        var utcNow = DateTime.UtcNow;
+        // Quiet hours cover the whole day, so only the strict user-set rule can fire.
+        var options = BuildOptions(o =>
+        {
+            o.MealReminderLocalTimes = [];
+            o.QuietHoursStart = 24;
+            o.QuietHoursEnd = 24;
+        });
+        var candidate = Candidate(lastInteractionAtUtc: utcNow);
+        candidate.NotificationLocalTime = new TimeSpan(utcNow.Hour, utcNow.Minute, 0);
+        candidate.NotificationTimeIsUserSet = true;
+        var created = ExpectOneReminder(options, candidate);
+
+        var result = await Sut(options).RunAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(NotificationCategories.GymReminder, created()!.Category);
+        Assert.Equal(candidate.NotificationLocalTime, created()!.ScheduledLocalAt!.Value.TimeOfDay);
+    }
+
+    [Fact]
+    public async Task RunAsync_AutoTimeInsideQuietHours_DoesNotFire()
+    {
+        var utcNow = DateTime.UtcNow;
+        var options = BuildOptions(o =>
+        {
+            o.MealReminderLocalTimes = [];
+            o.QuietHoursStart = 24;
+            o.QuietHoursEnd = 24;
+        });
+        var candidate = Candidate(lastInteractionAtUtc: utcNow);
+        candidate.NotificationLocalTime = new TimeSpan(utcNow.Hour, utcNow.Minute, 0);
+        candidate.NotificationTimeIsUserSet = false;
+
+        pushSender.SetupGet(p => p.IsConfigured).Returns(true);
+        notificationProvider
+            .Setup(p => p.GetCandidatesAsync(options.MaxUsersPerRun, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([candidate]);
+
+        var result = await Sut(options).RunAsync();
+
+        Assert.Equal(1, result.Data!.Suppressed);
+    }
 }

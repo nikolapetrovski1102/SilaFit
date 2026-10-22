@@ -5,13 +5,10 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 
-/// Whether [url] points at a real video file rather than a static image.
-/// `Exercise.DemoVideoUrl` is typed for video, but the free, legally-clear
-/// seed source ([free-exercise-db](https://github.com/yuhonas/free-exercise-db),
-/// public domain) only has step-position JPEGs - so this same column also
-/// carries plain image URLs today, and the sheet below renders accordingly
-/// instead of feeding a `.jpg` into `video_player` (which would just sit in
-/// its error state for every exercise).
+/// Whether [url] points at a real video file. Only a video gets the in-app
+/// sheet below - anything else in `Exercise.DemoVideoUrl` (the catalog used to
+/// carry step-position JPEGs there) is ignored, and the form button falls back
+/// to a web search instead.
 bool isVideoUrl(String url) {
   final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
   return path.endsWith('.mp4') ||
@@ -20,9 +17,8 @@ bool isVideoUrl(String url) {
       path.endsWith('.m3u8');
 }
 
-/// Opens a bottom sheet showing an exercise's form reference - a looping
-/// muted video when [url] is one, or a static photo when it isn't (see
-/// [isVideoUrl]). Shared by the active-workout tracker (demo chip on the
+/// Opens a bottom sheet playing an exercise's form video - looping and muted
+/// to start. Only call it with a [url] that passes [isVideoUrl]. Shared by the active-workout tracker (demo chip on the
 /// current exercise) and the exercise picker sheet (preview while searching).
 Future<void> showExerciseVideoSheet(
   BuildContext context, {
@@ -51,7 +47,6 @@ class _ExerciseVideoSheet extends StatefulWidget {
 }
 
 class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
-  late final bool _isVideo = isVideoUrl(widget.url);
   VideoPlayerController? _controller;
   bool _muted = true;
   bool _failed = false;
@@ -59,9 +54,6 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
   @override
   void initState() {
     super.initState();
-    if (!_isVideo) {
-      return; // Image case is handled entirely by Image.network in build().
-    }
     final uri = Uri.tryParse(widget.url);
     if (uri == null) {
       _failed = true;
@@ -130,77 +122,54 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
                 aspectRatio: ready ? controller.value.aspectRatio : 4 / 3,
                 child: Container(
                   color: AppColors.surfaceContainerLowest,
-                  child: !_isVideo
-                      ? Image.network(
-                          widget.url,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) =>
-                              progress == null
-                                  ? child
-                                  : Center(
-                                      child: SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            color: AppColors.accent),
-                                      ),
-                                    ),
-                          errorBuilder: (context, error, stack) => Center(
-                            child: Text('Couldn\'t load the form photo.',
-                                style: AppTypography.bodySm),
-                          ),
+                  child: _failed
+                      ? Center(
+                          child: Text('Couldn\'t load the form video.',
+                              style: AppTypography.bodySm),
                         )
-                      : _failed
+                      : !ready
                           ? Center(
-                              child: Text('Couldn\'t load the form video.',
-                                  style: AppTypography.bodySm),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2.5, color: AppColors.accent),
+                              ),
                             )
-                          : !ready
-                              ? Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: AppColors.accent),
-                                  ),
-                                )
-                              : GestureDetector(
-                                  onTap: () => setState(() =>
-                                      controller.value.isPlaying
-                                          ? controller.pause()
-                                          : controller.play()),
-                                  child: Stack(
-                                    alignment: Alignment.bottomRight,
-                                    children: [
-                                      VideoPlayer(controller),
-                                      Padding(
-                                        padding: const EdgeInsets.all(8),
-                                        child: GestureDetector(
-                                          onTap: _toggleMute,
-                                          child: Container(
-                                            width: 32,
-                                            height: 32,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Colors.black
-                                                  .withOpacity(0.45),
-                                            ),
-                                            child: Icon(
-                                              _muted
-                                                  ? Icons.volume_off_rounded
-                                                  : Icons.volume_up_rounded,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                          ),
+                          : GestureDetector(
+                              onTap: () => setState(() =>
+                                  controller.value.isPlaying
+                                      ? controller.pause()
+                                      : controller.play()),
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  VideoPlayer(controller),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: GestureDetector(
+                                      onTap: _toggleMute,
+                                      child: Container(
+                                        width: 32,
+                                        height: 32,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.black.withOpacity(0.45),
+                                        ),
+                                        child: Icon(
+                                          _muted
+                                              ? Icons.volume_off_rounded
+                                              : Icons.volume_up_rounded,
+                                          size: 16,
+                                          color: Colors.white,
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                ],
+                              ),
+                            ),
                 ),
               ),
             ),

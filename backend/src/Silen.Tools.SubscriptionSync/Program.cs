@@ -86,7 +86,8 @@ try
 
         try
         {
-            await subscriptionReceiptService.ApplyStoreNotificationAsync(receipt.Store, receipt.TransactionId, cancellation.Token);
+            await subscriptionReceiptService.ApplyStoreNotificationAsync(
+                receipt.Store, receipt.TransactionId, receipt.OriginalTransactionId, cancellation.Token);
             processed++;
             Console.WriteLine($"  OK {receipt.Store}/{receipt.TransactionId} (user {receipt.UserId}).");
         }

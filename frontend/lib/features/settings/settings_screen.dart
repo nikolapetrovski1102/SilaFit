@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/platform/app_icon_service.dart';
 import '../../core/session/session_store.dart';
 import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
@@ -19,14 +20,15 @@ import '../../core/widgets/skeleton.dart';
 import '../../root_shell.dart';
 import '../account/account_repository.dart';
 import '../auth/auth_controller.dart';
+import '../auth/complete_profile_flow.dart';
 import '../notifications/push_messaging_service.dart';
 import '../onboarding/onboarding_flow_screen.dart';
 import '../onboarding/onboarding_models.dart';
 import '../onboarding/onboarding_repository.dart';
 import '../plans/plans_controller.dart';
 import '../plans/plans_models.dart';
-import '../plans/plans_repository.dart';
 import '../plans/plans_screen.dart';
+import '../plans/redeem_code_action.dart';
 import '../plans/restore_purchases_action.dart';
 import 'ai_consent_gate.dart';
 import 'settings_controller.dart';
@@ -58,15 +60,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // back to the neutral silhouette and the details sheet shows "Not set".
   UserProfile? _profile;
 
-  // The caller's plan from `/plans/current` - null while loading or after a
-  // failed check, so the card never claims "Free" for a paying user it just
-  // couldn't reach. Re-fetched whenever the session changes or a purchase /
-  // restore anywhere in the app bumps [PlansController.purchaseRevision].
-  CurrentSubscription? _subscription;
-  bool _subscriptionFailed = false;
+  // The plan itself lives on [PlansController.current], which a purchase or
+  // restore updates directly - this only asks it to re-check when the
+  // signed-in account changes.
   Object? _session;
-  int? _purchaseRevision;
-  int _subscriptionRequest = 0;
 
   @override
   void initState() {
@@ -75,6 +72,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!_controller.state.hasData) {
       Future.microtask(_controller.load);
     }
+    _loadProfile();
+  }
+
+  void _loadProfile() {
     OnboardingRepository(context.read<ApiClient>())
         .getProfile()
         .then((profile) {
@@ -82,38 +83,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }).catchError((_) {});
   }
 
+  /// Re-asks the onboarding questions, pre-filled with whatever is already on
+  /// file - the only way back in for someone who skipped onboarding, since
+  /// that flow never shows again on this device once exited.
+  Future<void> _editProfile() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+          builder: (_) => CompleteProfileFlow(initialProfile: _profile)),
+    );
+    if (saved == true && mounted) _loadProfile();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final session = context.watch<AuthController>().session;
-    final revision = context.watch<PlansController>().purchaseRevision;
-    if (_session != session || _purchaseRevision != revision) {
+    if (_session != session) {
       _session = session;
-      _purchaseRevision = revision;
-      _loadSubscription();
+      final plans = context.read<PlansController>();
+      Future.microtask(plans.refreshCurrent);
     }
-  }
-
-  Future<void> _loadSubscription() async {
-    final request = ++_subscriptionRequest;
-    final plans = context.read<PlansRepository>();
-    setState(() {
-      _subscription = null;
-      _subscriptionFailed = false;
-    });
-    CurrentSubscription? subscription;
-    try {
-      subscription = await plans.getCurrent();
-    } catch (_) {}
-    if (!mounted || request != _subscriptionRequest) return;
-    setState(() {
-      _subscription = subscription;
-      _subscriptionFailed = subscription == null;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final plans = context.watch<PlansController>();
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -131,9 +125,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             controller: _controller,
             spotlightKey: widget.spotlightKey,
             profile: _profile,
-            subscription: _subscription,
-            subscriptionFailed: _subscriptionFailed,
-            onReloadSubscription: _loadSubscription,
+            onEditProfile: _editProfile,
+            subscription: plans.current,
+            subscriptionFailed: plans.currentFailed,
+            onReloadSubscription: plans.refreshCurrent,
           ),
         );
       },
@@ -145,6 +140,7 @@ class _SettingsContent extends StatelessWidget {
   final SettingsController controller;
   final GlobalKey? spotlightKey;
   final UserProfile? profile;
+  final VoidCallback onEditProfile;
   final CurrentSubscription? subscription;
   final bool subscriptionFailed;
   final Future<void> Function() onReloadSubscription;
@@ -153,6 +149,7 @@ class _SettingsContent extends StatelessWidget {
     required this.controller,
     this.spotlightKey,
     this.profile,
+    required this.onEditProfile,
     this.subscription,
     required this.subscriptionFailed,
     required this.onReloadSubscription,
@@ -173,8 +170,8 @@ class _SettingsContent extends StatelessWidget {
         // The profile row only needs auth/session state, not `settings` -
         // it (and everything below it that's equally independent of
         // `settings`) stays visible even while that fetch is slow or
-        // failed. Only the three preference sections below, which read
-        // straight off `settings`, sit behind the ResourceBuilder.
+        // failed. Only the preference sections below, which read straight
+        // off `settings`, sit behind the ResourceBuilder.
         _ProfileRow(
           name: session?.displayName ?? session?.email ?? 'Guest Athlete',
           subtitle: auth.isRegistered
@@ -186,6 +183,7 @@ class _SettingsContent extends StatelessWidget {
                   ? subscription!.planName
                   : 'Member',
           profile: profile,
+          onEditProfile: onEditProfile,
           controller: controller,
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -200,7 +198,7 @@ class _SettingsContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        const SectionEyebrow('Subscription & Data'),
+        const SectionEyebrow('Subscription'),
         const SizedBox(height: AppSpacing.sm),
         _SubscriptionCard(
           isRegistered: auth.isRegistered,
@@ -209,41 +207,26 @@ class _SettingsContent extends StatelessWidget {
           onReload: onReloadSubscription,
         ),
         const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: Column(
-            children: [
-              _LinkRow(
-                  label: 'Export my data', onTap: () => _exportData(context)),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _LinkRow(
-                  label: 'Restore purchases',
-                  onTap: () => runRestorePurchases(context)),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _LinkRow(
-                  label: 'Manage subscription',
-                  onTap: () => manageSubscription(context, subscription)),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _LinkRow(
-                  label: 'Privacy policy',
-                  onTap: () =>
-                      openHostedPage(context, privacyUrl, 'Privacy Policy')),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _LinkRow(
-                  label: 'Terms of use',
-                  onTap: () =>
-                      openHostedPage(context, termsUrl, 'Terms of Use')),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _LinkRow(
-                  label: 'Support',
-                  onTap: () => openHostedPage(context, supportUrl, 'Support')),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _LinkRow(
-                  label: 'Delete account',
-                  labelColor: AppColors.error,
-                  onTap: () => _confirmDeleteAccount(context)),
-            ],
-          ),
-        ),
+        _GroupCard(children: [
+          _LinkRow(
+              label: 'Manage subscription',
+              onTap: () => manageSubscription(context, subscription)),
+          _LinkRow(
+              label: 'Restore purchases',
+              onTap: () => runRestorePurchases(context)),
+          _LinkRow(label: 'Redeem a code', onTap: () => runRedeemCode(context)),
+        ]),
+        const SizedBox(height: AppSpacing.lg),
+        const SectionEyebrow('More'),
+        const SizedBox(height: AppSpacing.sm),
+        _GroupCard(children: [
+          _LinkRow(
+              label: 'Privacy & data',
+              onTap: () => _openSubpage(context, const _PrivacyDataPage())),
+          _LinkRow(
+              label: 'Help & legal',
+              onTap: () => _openSubpage(context, const _HelpLegalPage())),
+        ]),
         // Keep development-only controls isolated from profile/release builds.
         // Analytics previews deliberately live on the Progress screen so even
         // debug builds exercise the authenticated production-data path.
@@ -345,90 +328,9 @@ class _SettingsContent extends StatelessWidget {
         .timeout(const Duration(seconds: 3), onTimeout: () {});
     await authController.logout();
   }
-
-  /// Asks the server to email the full "download my data" payload to the
-  /// account's address - there's no in-app viewer for it, this is a one-shot
-  /// request, not a screen.
-  Future<void> _exportData(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-        const SnackBar(content: Text('Preparing your data export...')));
-    try {
-      final repository = context.read<AccountRepository>();
-      final email = await repository.exportData();
-      messenger.showSnackBar(
-          SnackBar(content: Text('Your data export is on its way to $email.')));
-    } catch (_) {
-      messenger.showSnackBar(const SnackBar(
-          content:
-              Text('Could not prepare your data export. Please try again.')));
-    }
-  }
-
-  Future<void> _confirmDeleteAccount(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete account?'),
-        // The store owns renewal, so deleting the account can't stop billing -
-        // App Review expects users to be told how to cancel (5.1.1(v)).
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-                'This permanently deletes your account and all of your data - '
-                'profile, workouts, nutrition logs, and bodyweight history. '
-                'This cannot be undone.'),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-                'Deleting your account does not cancel an active subscription. '
-                'Cancel it in your $storeName subscription settings first, or '
-                'you will keep being billed.'),
-            TextButton(
-              onPressed: openManageSubscriptions,
-              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: const Text('Manage subscription'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('Delete', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-    final authController = context.read<AuthController>();
-    final pushMessaging = context.read<PushMessagingService>();
-    try {
-      await context.read<AccountRepository>().deleteAccount();
-      await pushMessaging.deactivate();
-      // Queue the confirmation *before* logging out, because logout reloads
-      // the whole app. The app-level messenger outlives that reload, so the
-      // snackbar still lands on the fresh home screen.
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Your account has been deleted.')));
-      // Server-side data is already gone; `logout()` does the local cleanup
-      // and reloads the app from a cold start, so the user sees the full
-      // loading screen and then lands on Today as a brand-new guest device.
-      await authController.logout();
-    } catch (_) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Could not delete your account. Please try again.')));
-    }
-  }
 }
 
-/// The three preference sections that actually read off [UserSettings] -
+/// The preference sections that actually read off [UserSettings] -
 /// split out of `_SettingsContent` so they're the only part of the screen
 /// gated behind the settings fetch.
 class _PreferencesSections extends StatelessWidget {
@@ -447,36 +349,27 @@ class _PreferencesSections extends StatelessWidget {
     final primaryPreferences = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionEyebrow('Appearance'),
+        const SectionEyebrow('General'),
         const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: _AppearanceRow(
+        _GroupCard(children: [
+          _AppearanceRow(
             mode: settings.appearanceMode,
             onSelected: controller.setAppearanceMode,
           ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        const SectionEyebrow('Units'),
-        const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: Column(
-            children: [
-              _InlineToggleRow(
-                label: 'Weight',
-                options: const ['kg', 'lb'],
-                selected: settings.weightUnit,
-                onChanged: controller.setWeightUnit,
-              ),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _InlineToggleRow(
-                label: 'Distance',
-                options: const ['km', 'mi'],
-                selected: settings.distanceUnit,
-                onChanged: controller.setDistanceUnit,
-              ),
-            ],
+          if (const AppIconService().isSupported) const _AppIconRow(),
+          _InlineToggleRow(
+            label: 'Weight',
+            options: const ['kg', 'lb'],
+            selected: settings.weightUnit,
+            onChanged: controller.setWeightUnit,
           ),
-        ),
+          _InlineToggleRow(
+            label: 'Distance',
+            options: const ['km', 'mi'],
+            selected: settings.distanceUnit,
+            onChanged: controller.setDistanceUnit,
+          ),
+        ]),
       ],
     );
 
@@ -488,47 +381,31 @@ class _PreferencesSections extends StatelessWidget {
         else
           primaryPreferences,
         const SizedBox(height: AppSpacing.lg),
-        const SectionEyebrow('Training & Notifications'),
+        const SectionEyebrow('Training'),
         const SizedBox(height: AppSpacing.sm),
-        SectionCard(
-          child: Column(
-            children: [
-              _SwitchRow(
-                label: 'Rest timer sound',
-                value: settings.restTimerSoundEnabled,
-                onChanged: controller.setRestTimerSoundEnabled,
-              ),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _BarbellStandardRow(
-                valueKg: settings.barbellStandardKg,
-                onSelected: controller.setBarbellStandardKg,
-              ),
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              _SwitchRow(
-                label: 'Workout reminders',
-                value: settings.notificationsEnabled,
-                onChanged: controller.setNotificationsEnabled,
-              ),
-              if (settings.notificationsEnabled) ...[
-                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-                _ReminderTimeRow(
-                  localTime: settings.notificationLocalTime,
-                  onSelected: controller.setNotificationLocalTime,
-                ),
-              ],
-              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
-              // Turning it on goes through the same disclosure sheet the AI
-              // features show, so consent is always given with the facts.
-              _SwitchRow(
-                label: 'Share data with AI provider',
-                value: settings.aiDataConsent,
-                onChanged: (value) => value
-                    ? AiConsentGate.ensure(context)
-                    : controller.setAiDataConsent(false),
-              ),
-            ],
+        _GroupCard(children: [
+          _SwitchRow(
+            label: 'Rest timer sound',
+            value: settings.restTimerSoundEnabled,
+            onChanged: controller.setRestTimerSoundEnabled,
           ),
-        ),
+          _SwitchRow(
+            label: 'Workout reminders',
+            value: settings.notificationsEnabled,
+            onChanged: controller.setNotificationsEnabled,
+          ),
+          if (settings.notificationsEnabled)
+            _ReminderTimeRow(
+              localTime: settings.notificationTimeIsUserSet
+                  ? settings.notificationLocalTime
+                  : settings.detectedNotificationLocalTime ??
+                      settings.notificationLocalTime,
+              isUserSet: settings.notificationTimeIsUserSet,
+              isDetected: settings.detectedNotificationLocalTime != null,
+              onSelected: controller.setNotificationLocalTime,
+              onUseAuto: controller.useAutoNotificationTime,
+            ),
+        ]),
       ],
     );
   }
@@ -696,9 +573,12 @@ class _SubscriptionCard extends StatelessWidget {
   Future<void> _openPlans(BuildContext context) async {
     await Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
-    // A purchase bumps purchaseRevision (which reloads this on its own), but
-    // a lapsed/changed plan the store reported meanwhile only shows on a refetch.
-    await onReload();
+    // A purchase updates the plan on its own, but a lapsed/changed plan the
+    // store reported meanwhile only shows on a refetch - done quietly, so the
+    // card doesn't flash "Checking..." over a plan it already knows.
+    if (context.mounted) {
+      await context.read<PlansController>().refreshCurrent(quiet: true);
+    }
   }
 }
 
@@ -707,6 +587,7 @@ class _ProfileRow extends StatelessWidget {
   final String subtitle;
   final String tierLabel;
   final UserProfile? profile;
+  final VoidCallback onEditProfile;
   final SettingsController controller;
 
   const _ProfileRow(
@@ -714,6 +595,7 @@ class _ProfileRow extends StatelessWidget {
       required this.subtitle,
       required this.tierLabel,
       required this.controller,
+      required this.onEditProfile,
       this.profile});
 
   @override
@@ -756,7 +638,8 @@ class _ProfileRow extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: GestureDetector(
-              onTap: () => _openUserDetailsSheet(context, name, profile),
+              onTap: () =>
+                  _openUserDetailsSheet(context, name, profile, onEditProfile),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -906,21 +789,27 @@ String _detailOr(String? value, [Map<String, String>? labels]) {
 }
 
 /// Opens the onboarding-answers sheet from a tap on the profile row's
-/// username - the same details `CompleteProfileFlow` collects, shown
-/// read-only here since editing them happens through onboarding, not
-/// Settings.
-void _openUserDetailsSheet(
-    BuildContext context, String name, UserProfile? profile) {
+/// username - the same details `CompleteProfileFlow` collects. The sheet
+/// itself is read-only; its button hands off to [onEdit], which re-runs
+/// those questions (labelled as completing the profile while any are unset).
+void _openUserDetailsSheet(BuildContext context, String name,
+    UserProfile? profile, VoidCallback onEdit) {
+  final isComplete = profile?.isComplete ?? false;
   showModalBottomSheet(
     context: context,
+    // Ten rows plus the edit button outgrow the default 9/16-height cap,
+    // which clipped the button under the system navigation bar - let the
+    // sheet size to its content and scroll on short screens instead.
+    isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: AppColors.surfaceContainer,
     shape: const RoundedRectangleBorder(
         borderRadius:
             BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
     builder: (sheetContext) => SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
-            AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.sm),
+            AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -963,6 +852,23 @@ void _openUserDetailsSheet(
             _DetailRow(
                 label: 'Daily activity level',
                 value: _detailOr(profile?.dailyActivityLevel)),
+            const SizedBox(height: AppSpacing.md),
+            isComplete
+                ? SecondaryPillButton(
+                    label: 'Edit details',
+                    icon: Icons.edit_rounded,
+                    onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      onEdit();
+                    },
+                  )
+                : PrimaryPillButton(
+                    label: 'Complete your profile',
+                    onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      onEdit();
+                    },
+                  ),
           ],
         ),
       ),
@@ -1113,6 +1019,183 @@ class _AppearanceOptionTile extends StatelessWidget {
   }
 }
 
+/// The App icon settings row - previews the home-screen icon currently in
+/// use and opens a picker sheet on tap. The choice is device-local (the OS
+/// keeps it, see [AppIconService]), so unlike Appearance it never touches
+/// [SettingsController]. Shows the default (dark) icon until the native
+/// side answers.
+class _AppIconRow extends StatefulWidget {
+  const _AppIconRow();
+
+  @override
+  State<_AppIconRow> createState() => _AppIconRowState();
+}
+
+class _AppIconRowState extends State<_AppIconRow> {
+  static const _service = AppIconService();
+  AppIconChoice _current = AppIconChoice.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _service.current().then((choice) {
+      if (mounted && choice != null) setState(() => _current = choice);
+    });
+  }
+
+  Future<void> _select(AppIconChoice choice) async {
+    if (choice == _current) return;
+    final previous = _current;
+    setState(() => _current = choice);
+    if (!await _service.set(choice) && mounted) {
+      setState(() => _current = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't change the app icon")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _openSheet(context),
+      child: Row(
+        children: [
+          Icon(Icons.apps_rounded, color: AppColors.onSurfaceVariant, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text('App icon', style: AppTypography.bodyMd)),
+          _AppIconPreview(choice: _current, size: 40),
+          const SizedBox(width: AppSpacing.sm),
+          Text(_current.label,
+              style: AppTypography.bodyMd
+                  .copyWith(color: AppColors.onSurfaceVariant)),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded,
+              color: AppColors.onSurfaceVariant, size: 20),
+        ],
+      ),
+    );
+  }
+
+  void _openSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+              AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.sm),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('App icon', style: AppTypography.headlineSm),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  for (final choice in AppIconChoice.values) ...[
+                    if (choice != AppIconChoice.values.first)
+                      const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: _AppIconOptionTile(
+                        choice: choice,
+                        selected: choice == _current,
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          _select(choice);
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A [choice]'s artwork clipped to a home-screen-style rounded square.
+class _AppIconPreview extends StatelessWidget {
+  final AppIconChoice choice;
+  final double size;
+
+  const _AppIconPreview({required this.choice, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.225),
+      child: Image.asset(choice.previewAsset,
+          width: size, height: size, fit: BoxFit.cover),
+    );
+  }
+}
+
+/// One card of [_AppIconRow]'s sheet - the icon's artwork at near
+/// home-screen size with its label underneath, outlined in the accent
+/// colour once selected.
+class _AppIconOptionTile extends StatelessWidget {
+  final AppIconChoice choice;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AppIconOptionTile(
+      {required this.choice, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sm, AppSpacing.lg, AppSpacing.sm, AppSpacing.md),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primaryContainer.withOpacity(0.4)
+              : AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: selected ? AppColors.accent : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          children: [
+            _AppIconPreview(choice: choice, size: 88),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(choice.label,
+                      style: AppTypography.bodyMd,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: AppSpacing.xxs),
+                  Icon(Icons.check_circle_rounded,
+                      color: AppColors.accent, size: 18),
+                ],
+              ],
+            ),
+            Text(choice == AppIconChoice.dark ? 'Default' : ' ',
+                style: AppTypography.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A label on the left, a compact two-option pill toggle on the right - used
 /// for the unit rows (Weight kg/lb, Distance km/mi).
 class _InlineToggleRow extends StatelessWidget {
@@ -1195,92 +1278,69 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
-class _BarbellStandardRow extends StatelessWidget {
-  final double valueKg;
-  final ValueChanged<double> onSelected;
-
-  const _BarbellStandardRow({required this.valueKg, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _openPicker(context),
-      child: Row(
-        children: [
-          Expanded(
-              child: Text('Barbell standard', style: AppTypography.bodyMd)),
-          Text('${valueKg.toStringAsFixed(0)} kg',
-              style: AppTypography.bodyMd
-                  .copyWith(color: AppColors.onSurfaceVariant)),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right_rounded,
-              color: AppColors.onSurfaceVariant, size: 20),
-        ],
-      ),
-    );
-  }
-
-  void _openPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceContainer,
-      shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.marginMobile),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Barbell standard', style: AppTypography.headlineSm),
-              const SizedBox(height: AppSpacing.sm),
-              for (final option in kBarbellStandardOptionsKg)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('${option.toStringAsFixed(0)} kg',
-                      style: AppTypography.bodyMd),
-                  trailing: option == valueKg
-                      ? Icon(Icons.check_circle_rounded,
-                          color: AppColors.accent)
-                      : null,
-                  onTap: () {
-                    onSelected(option);
-                    Navigator.of(sheetContext).pop();
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The reminder-time row under "Workout reminders" - parses the
 /// `HH:mm:ss` wire format into a [TimeOfDay] for display/picking and
-/// serializes back the same way on selection.
+/// serializes back the same way on selection. In auto mode it shows the time
+/// the server learned from the user's workouts; picking a time pins it, and
+/// "Use auto" hands it back to detection.
 class _ReminderTimeRow extends StatelessWidget {
   final String localTime;
+  final bool isUserSet;
+  final bool isDetected;
   final ValueChanged<String> onSelected;
+  final VoidCallback onUseAuto;
 
-  const _ReminderTimeRow({required this.localTime, required this.onSelected});
+  const _ReminderTimeRow({
+    required this.localTime,
+    required this.isUserSet,
+    required this.isDetected,
+    required this.onSelected,
+    required this.onUseAuto,
+  });
 
   TimeOfDay get _time {
     final parts = localTime.split(':');
     final hour = parts.isNotEmpty ? int.tryParse(parts[0]) : null;
     final minute = parts.length > 1 ? int.tryParse(parts[1]) : null;
-    return TimeOfDay(hour: hour ?? 8, minute: minute ?? 0);
+    return TimeOfDay(hour: hour ?? 18, minute: minute ?? 0);
   }
 
   @override
   Widget build(BuildContext context) {
+    final hintStyle =
+        AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant);
     return GestureDetector(
       onTap: () => _pickTime(context),
+      behavior: HitTestBehavior.opaque,
       child: Row(
         children: [
-          Expanded(child: Text('Reminder time', style: AppTypography.bodyMd)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Reminder time', style: AppTypography.bodyMd),
+                const SizedBox(height: 2),
+                if (isUserSet)
+                  Row(
+                    children: [
+                      Text('Set by you · ', style: hintStyle),
+                      GestureDetector(
+                        onTap: onUseAuto,
+                        child: Text('Use auto',
+                            style: hintStyle.copyWith(color: AppColors.accent)),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    isDetected
+                        ? 'Auto · before you usually train'
+                        : 'Auto · adapts to when you train',
+                    style: hintStyle,
+                  ),
+              ],
+            ),
+          ),
           Text(_time.format(context),
               style: AppTypography.bodyMd
                   .copyWith(color: AppColors.onSurfaceVariant)),
@@ -1417,6 +1477,232 @@ class _DevActionRow extends StatelessWidget {
                 color: AppColors.onSurfaceVariant, size: 20),
           ],
         ),
+      ),
+    );
+  }
+}
+
+Future<void> _openSubpage(BuildContext context, Widget page) =>
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+
+/// The shell every Settings sub-page shares - ambient backdrop, a back
+/// control with the page title, and a scrolling column of grouped cards.
+class _SettingsSubpage extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _SettingsSubpage({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(child: SilenAmbientBackdrop()),
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xs, AppSpacing.xs, AppSpacing.marginMobile, 0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.arrow_back_rounded,
+                            color: AppColors.onSurface),
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      Expanded(
+                        child: Text(title,
+                            style: AppTypography.bodyMd
+                                .copyWith(fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.marginMobile,
+                        vertical: AppSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: children,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// AI data sharing, the data export, the privacy policy, and account
+/// deletion - everything about what happens to the user's data, kept off
+/// the main Settings list since it's rarely visited.
+class _PrivacyDataPage extends StatelessWidget {
+  const _PrivacyDataPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<SettingsController>();
+    return _SettingsSubpage(
+      title: 'Privacy & data',
+      children: [
+        _GroupCard(children: [
+          // Turning it on goes through the same disclosure sheet the AI
+          // features show, so consent is always given with the facts. Only
+          // this row needs `settings`, so it alone waits on that fetch.
+          if (controller.state.data case final settings?)
+            _SwitchRow(
+              label: 'Share data with AI provider',
+              value: settings.aiDataConsent,
+              onChanged: (value) => value
+                  ? AiConsentGate.ensure(context)
+                  : controller.setAiDataConsent(false),
+            ),
+          _LinkRow(label: 'Export my data', onTap: () => _exportData(context)),
+          _LinkRow(
+              label: 'Privacy policy',
+              onTap: () =>
+                  openHostedPage(context, privacyUrl, 'Privacy Policy')),
+        ]),
+        const SizedBox(height: AppSpacing.lg),
+        _GroupCard(children: [
+          _LinkRow(
+              label: 'Delete account',
+              labelColor: AppColors.error,
+              onTap: () => _confirmDeleteAccount(context)),
+        ]),
+      ],
+    );
+  }
+
+  /// Asks the server to email the full "download my data" payload to the
+  /// account's address - there's no in-app viewer for it, this is a one-shot
+  /// request, not a screen.
+  Future<void> _exportData(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Preparing your data export...')));
+    try {
+      final repository = context.read<AccountRepository>();
+      final email = await repository.exportData();
+      messenger.showSnackBar(
+          SnackBar(content: Text('Your data export is on its way to $email.')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content:
+              Text('Could not prepare your data export. Please try again.')));
+    }
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete account?'),
+        // The store owns renewal, so deleting the account can't stop billing -
+        // App Review expects users to be told how to cancel (5.1.1(v)).
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'This permanently deletes your account and all of your data - '
+                'profile, workouts, nutrition logs, and bodyweight history. '
+                'This cannot be undone.'),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+                'Deleting your account does not cancel an active subscription. '
+                'Cancel it in your $storeName subscription settings first, or '
+                'you will keep being billed.'),
+            TextButton(
+              onPressed: openManageSubscriptions,
+              style: TextButton.styleFrom(padding: EdgeInsets.zero),
+              child: const Text('Manage subscription'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Delete', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final authController = context.read<AuthController>();
+    final pushMessaging = context.read<PushMessagingService>();
+    try {
+      await context.read<AccountRepository>().deleteAccount();
+      await pushMessaging.deactivate();
+      // Queue the confirmation *before* logging out, because logout reloads
+      // the whole app. The app-level messenger outlives that reload, so the
+      // snackbar still lands on the fresh home screen.
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Your account has been deleted.')));
+      // Server-side data is already gone; `logout()` does the local cleanup
+      // and reloads the app from a cold start, so the user sees the full
+      // loading screen and then lands on Today as a brand-new guest device.
+      await authController.logout();
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not delete your account. Please try again.')));
+    }
+  }
+}
+
+class _HelpLegalPage extends StatelessWidget {
+  const _HelpLegalPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsSubpage(
+      title: 'Help & legal',
+      children: [
+        _GroupCard(children: [
+          _LinkRow(
+              label: 'Support',
+              onTap: () => openHostedPage(context, supportUrl, 'Support')),
+          _LinkRow(
+              label: 'Terms of use',
+              onTap: () => openHostedPage(context, termsUrl, 'Terms of Use')),
+        ]),
+      ],
+    );
+  }
+}
+
+/// A [SectionCard] holding a short group of related rows, separated by the
+/// screen's standard hairline divider.
+class _GroupCard extends StatelessWidget {
+  final List<Widget> children;
+
+  const _GroupCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+            children[i],
+          ],
+        ],
       ),
     );
   }

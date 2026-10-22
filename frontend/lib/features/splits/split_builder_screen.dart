@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/skeleton.dart';
+import '../../core/widgets/swipe_action_tile.dart';
 import 'widgets/ink_field.dart';
 import 'widgets/reorder_sheet.dart';
 import '../auth/widgets/auth_blob_background.dart';
@@ -204,6 +205,46 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
     ));
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _duplicateDay(SplitDayWithExercises day) async {
+    HapticFeedback.selectionClick();
+    final ok = await _controller.duplicateDay(day.day.splitDayId);
+    if (!mounted) return;
+    if (!ok) {
+      _toastError();
+      return;
+    }
+    // The server grows the split's length when the copy lands past it; keep
+    // the local value in step so the next header save doesn't shrink it back.
+    final duration = _controller.detail?.split.durationDays;
+    if (duration != null && duration > _durationDays) {
+      setState(() => _durationDays = duration);
+    }
+    _toast('${day.day.title} duplicated.');
+  }
+
+  Future<void> _deleteDay(SplitDayWithExercises day) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${day.day.title}?'),
+        content: const Text(
+            'This removes the day and its exercises. This can\'t be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final ok = await _controller.deleteDay(day.day.splitDayId);
+    if (!mounted) return;
+    if (!ok) _toastError();
   }
 
   List<SplitDayWithExercises> get _sortedDays => <SplitDayWithExercises>[
@@ -419,9 +460,29 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
           _Entrance(
             key: ValueKey(days[i].day.splitDayId),
             index: i,
-            child: _DayTile(
-              day: days[i],
-              onTap: () => _openDay(splitDayId: days[i].day.splitDayId),
+            child: SwipeActionTile(
+              sheetTitle: days[i].day.title,
+              showHint: i == 0,
+              actions: [
+                SwipeAction(
+                  label: 'Duplicate',
+                  icon: Icons.copy_rounded,
+                  onTap: () => _duplicateDay(days[i]),
+                  disabledReason: days.length >= _kMaxDays
+                      ? 'A split can have at most $_kMaxDays days.'
+                      : null,
+                ),
+                SwipeAction(
+                  label: 'Delete',
+                  icon: Icons.delete_outline_rounded,
+                  isDestructive: true,
+                  onTap: () => _deleteDay(days[i]),
+                ),
+              ],
+              child: _DayTile(
+                day: days[i],
+                onTap: () => _openDay(splitDayId: days[i].day.splitDayId),
+              ),
             ),
           ),
         if (days.length < _kMaxDays)

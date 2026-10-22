@@ -4,9 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../progress_models.dart';
-
-String formatPrWeight(double kg) =>
-    kg % 1 == 0 ? kg.toStringAsFixed(0) : kg.toStringAsFixed(1);
+import '../weight_display.dart';
 
 /// One exercise's personal record row - shared by the Progress tab's
 /// top-3 preview card and the full [AllPersonalRecordsScreen] list so the
@@ -18,6 +16,7 @@ class PersonalRecordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unit = weightUnitOf(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
@@ -25,17 +24,26 @@ class PersonalRecordTile extends StatelessWidget {
           Icon(Icons.emoji_events_rounded, size: 18, color: AppColors.secondary),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(record.exerciseName,
-                style: AppTypography.bodyMd,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(record.exerciseName,
+                    style: AppTypography.bodyMd,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                if (record.isPerDumbbell)
+                  Text('Per dumbbell',
+                      style: AppTypography.labelSm
+                          .copyWith(color: AppColors.onSurfaceVariant)),
+              ],
+            ),
           ),
-          Text('${formatPrWeight(record.weightKg)} kg × ${record.reps}',
+          Text('${formatWeight(record.weightKg, unit)} $unit × ${record.reps}',
               style:
                   AppTypography.numericUnit.copyWith(fontWeight: FontWeight.w600)),
           if (record.deltaKg != null && record.deltaKg! > 0) ...[
             const SizedBox(width: AppSpacing.xs),
-            Text('+${formatPrWeight(record.deltaKg!)}',
+            Text('+${formatWeight(record.deltaKg!, unit)}',
                 style: AppTypography.labelSm.copyWith(color: AppColors.accent)),
           ],
         ],

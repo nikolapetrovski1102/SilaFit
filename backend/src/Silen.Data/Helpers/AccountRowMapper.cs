@@ -23,7 +23,6 @@ public static class AccountRowMapper
         WeightUnit = reader.GetStringValue("WeightUnit"),
         DistanceUnit = reader.GetStringValue("DistanceUnit"),
         RestTimerSoundEnabled = reader.GetBoolValue("RestTimerSoundEnabled"),
-        BarbellStandardKg = reader.GetDecimalValue("BarbellStandardKg"),
         AppearanceMode = reader.GetStringValue("AppearanceMode"),
         AvatarChoice = reader.GetStringValue("AvatarChoice"),
         AiDataConsentAtUtc = reader.GetNullableDateTime("AiDataConsentAtUtc"),

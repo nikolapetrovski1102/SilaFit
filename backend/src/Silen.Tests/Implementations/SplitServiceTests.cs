@@ -80,4 +80,67 @@ public class SplitServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(split.SplitId, Assert.Single(result.Data!).SplitId);
     }
+
+    [Fact]
+    public async Task DuplicateMySplitAsync_FreeUser_ReturnsUpgradeRequiredWithoutCopying()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await sut.DuplicateMySplitAsync(userId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        splitsProvider.Verify(p => p.DuplicateUserSplitAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DuplicateMySplitAsync_ProUserAtSplitLimit_ReturnsPlanLimitWithoutCopying()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        subscriptionGate.Setup(g => g.GetEntitlementsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlanEntitlementsModel { MaxActiveSplits = 2 });
+        splitsProvider.Setup(p => p.GetOwnedSplitsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkoutSplitModel(), new WorkoutSplitModel()]);
+
+        var result = await sut.DuplicateMySplitAsync(userId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(403, result.StatusCode);
+        splitsProvider.Verify(p => p.DuplicateUserSplitAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DuplicateMySplitAsync_ProUserUnderLimit_ReturnsCopyId()
+    {
+        var userId = Guid.NewGuid();
+        var splitId = Guid.NewGuid();
+        var copyId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        subscriptionGate.Setup(g => g.GetEntitlementsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlanEntitlementsModel { MaxActiveSplits = null });
+        splitsProvider.Setup(p => p.DuplicateUserSplitAsync(splitId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = 0, EntityId = copyId });
+
+        var result = await sut.DuplicateMySplitAsync(userId, splitId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(copyId, result.Data!.Id);
+    }
+
+    [Fact]
+    public async Task DuplicateMySplitDayAsync_FreeUser_IsAllowed()
+    {
+        var userId = Guid.NewGuid();
+        var splitDayId = Guid.NewGuid();
+        var newDayId = Guid.NewGuid();
+        splitsProvider.Setup(p => p.DuplicateUserSplitDayAsync(splitDayId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminMutationResultModel { Outcome = 0, EntityId = newDayId });
+
+        var result = await sut.DuplicateMySplitDayAsync(userId, splitDayId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(newDayId, result.Data!.Id);
+    }
 }

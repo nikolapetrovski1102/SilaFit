@@ -137,21 +137,52 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
                         "AI-generated splits aren't included in your plan. Upgrade to unlock them.");
                 }
 
-                if (entitlements.MaxActiveSplits is { } maxSplits)
-                {
-                    var owned = await splitsProvider.GetOwnedSplitsAsync(userId, cancellationToken);
-                    if (owned.Count >= maxSplits)
-                    {
-                        throw new PlanLimitExceededException(
-                            $"User '{userId}' has {owned.Count} splits, at or above their plan's limit of {maxSplits}.",
-                            "You've reached your plan's limit on saved splits. Upgrade to add more.");
-                    }
-                }
+                await ThrowIfAtSplitLimitAsync(userId, entitlements, cancellationToken);
             }
 
             var mutation = await splitsProvider.UpsertUserSplitAsync(request, userId, cancellationToken);
             return AdminMutationOutcomeMapper.Resolve(mutation, $"Split '{name}' saved.");
         });
+
+    public Task<ServiceResult<AdminWriteResultDto>> DuplicateMySplitAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            if (!await subscriptionGate.HasActiveProAsync(userId, cancellationToken))
+            {
+                throw new ProUpgradeRequiredException(
+                    $"User '{userId}' tried to duplicate split '{splitId}' without an active Pro/Advanced subscription.",
+                    "Upgrade to Pro to duplicate splits.");
+            }
+
+            var entitlements = await subscriptionGate.GetEntitlementsAsync(userId, cancellationToken);
+            await ThrowIfAtSplitLimitAsync(userId, entitlements, cancellationToken);
+
+            var mutation = await splitsProvider.DuplicateUserSplitAsync(splitId, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Split duplicated.");
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> DuplicateMySplitDayAsync(Guid userId, Guid splitDayId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var mutation = await splitsProvider.DuplicateUserSplitDayAsync(splitDayId, userId, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Day duplicated.");
+        });
+
+    private async Task ThrowIfAtSplitLimitAsync(Guid userId, PlanEntitlementsModel entitlements, CancellationToken cancellationToken)
+    {
+        if (entitlements.MaxActiveSplits is not { } maxSplits)
+        {
+            return;
+        }
+
+        var owned = await splitsProvider.GetOwnedSplitsAsync(userId, cancellationToken);
+        if (owned.Count >= maxSplits)
+        {
+            throw new PlanLimitExceededException(
+                $"User '{userId}' has {owned.Count} splits, at or above their plan's limit of {maxSplits}.",
+                "You've reached your plan's limit on saved splits. Upgrade to add more.");
+        }
+    }
 
     public Task<ServiceResult<AdminWriteResultDto>> KeepMySplitAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>

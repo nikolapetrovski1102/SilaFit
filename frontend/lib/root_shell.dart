@@ -6,25 +6,35 @@ import 'package:provider/provider.dart';
 
 export 'core/widgets/silen_ambient_backdrop.dart';
 
+import 'core/ads/ads_service.dart';
+import 'core/api/api_client.dart';
 import 'core/platform/device_timezone.dart';
-import 'core/session/session_store.dart';
+import 'core/sync/sync_queue.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/widgets/bottom_nav_bar.dart';
+import 'core/widgets/offline_pill.dart';
 import 'core/widgets/silen_ambient_backdrop.dart';
 import 'features/auth/account_gate.dart';
 import 'features/auth/auth_controller.dart';
+import 'features/diet_plans/diet_plan_controller.dart';
 import 'features/meals/meal_controller.dart';
 import 'features/meals/meal_planning_screen.dart';
 import 'features/notifications/notifications_repository.dart';
 import 'features/onboarding/widgets/tour_guide_card.dart';
 import 'features/plans/plans_controller.dart';
 import 'features/plans/plans_screen.dart';
+import 'features/plans/subscription_celebration.dart';
+import 'features/progress/analytics_controller.dart';
+import 'features/progress/exercise_progress_controller.dart';
 import 'features/progress/progress_controller.dart';
+import 'features/progress/weekly_analytics_controller.dart';
 import 'features/progress/progress_screen.dart';
 import 'features/settings/settings_controller.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/splits/splits_controller.dart';
 import 'features/splits/splits_screen.dart';
+import 'features/today/today_controller.dart';
 import 'features/today/today_screen.dart';
 
 /// The four-tab shell every top-level screen lives inside. Owns the bottom
@@ -46,6 +56,8 @@ class RootShell extends StatefulWidget {
 }
 
 class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
+  late final PlansController _plans;
+  late int _seenPurchaseRevision;
   static const _tabSwitchDuration = Duration(milliseconds: 320);
   static const _tabSwitchCurve = Curves.easeInOutCubic;
 
@@ -54,13 +66,17 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
   // Feature tour state
   bool _showingTour = false;
-  int _tourStep = 0; // 0: Home, 1: Splits, 2: Progress, 3: Nutrition, 4: Settings
+  int _tourStep =
+      0; // 0: Home, 1: Splits, 2: Progress, 3: Nutrition, 4: Settings
 
   // The interaction ping exists to say "the user is here", so rapid
   // background/resume cycling doesn't need a request each time. Throttled to
   // one report per window; genuinely long absences still land.
   static const _interactionMinGap = Duration(seconds: 30);
   DateTime? _lastInteractionReportUtc;
+
+  /// The offline outbox; null only in tests that don't provide one.
+  SyncQueue? _syncQueue;
 
   // Spotlight keys for each tab
   final _homeSpotlightKey = GlobalKey();
@@ -84,17 +100,26 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   }
 
   List<Widget> get _screens => [
-    TodayScreen(overviewSpotlightKey: _showingTour ? _homeSpotlightKey : null),
-    ProgressScreen(spotlightKey: _showingTour ? _progressSpotlightKey : null),
+        TodayScreen(
+            overviewSpotlightKey: _showingTour ? _homeSpotlightKey : null),
+        ProgressScreen(
+            spotlightKey: _showingTour ? _progressSpotlightKey : null),
     MealPlanningScreen(
         spotlightKey: _showingTour ? _nutritionSpotlightKey : null),
-    SettingsScreen(spotlightKey: _showingTour ? _settingsSpotlightKey : null),
+        SettingsScreen(
+            spotlightKey: _showingTour ? _settingsSpotlightKey : null),
   ];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _syncQueue = context.read<SyncQueue?>();
+    _syncQueue?.droppedMessage.addListener(_onSyncDropped);
+    _plans = context.read<PlansController>();
+    _seenPurchaseRevision = _plans.purchaseRevision;
+    _plans.addListener(_onPlansChanged);
+    AdsService.instance.sync(_plans.current);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _reportInteraction();
       _syncEntitlements();
@@ -118,6 +143,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _syncQueue?.droppedMessage.removeListener(_onSyncDropped);
+    _plans.removeListener(_onPlansChanged);
     _pageController.dispose();
     super.dispose();
   }
@@ -127,6 +154,50 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _reportInteraction();
       _syncEntitlements();
+      _recheckIfOffline();
+      if (_syncQueue != null) unawaited(_syncQueue!.flush());
+    }
+  }
+
+  /// A queued offline write the server refused once it was reachable again
+  /// (say, the meal was deleted on another device) - say so, rather than
+  /// let it vanish silently.
+  void _onSyncDropped() {
+    final message = _syncQueue?.droppedMessage.value;
+    if (!mounted || message == null) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content:
+            Text('A change saved offline couldn\'t be uploaded: $message')));
+  }
+
+  /// Back from the background while the last request had no signal - try
+  /// Home again, so the lifter who just walked out of the gym gets fresh
+  /// data (and the offline pill clears) without having to do anything.
+  void _recheckIfOffline() {
+    if (!mounted || !context.read<ApiClient>().isOffline.value) return;
+    unawaited(context.read<TodayController>().load(force: true));
+  }
+
+  /// The app-lifetime controllers behind paid features each remember being
+  /// refused (a 403) and stay locked until asked again. Re-ask every one of
+  /// them the moment the entitlement changes - a purchase, a restore, or a
+  /// plan that moved outside the app - whether or not its screen is open.
+  void _onPlansChanged() {
+    AdsService.instance.sync(_plans.current);
+    final revision = _plans.purchaseRevision;
+    if (revision == _seenPurchaseRevision) return;
+    _seenPurchaseRevision = revision;
+    unawaited(context.read<AnalyticsController>().load(force: true));
+    unawaited(context.read<WeeklyAnalyticsController>().load(force: true));
+    unawaited(context.read<ExerciseProgressController>().load(force: true));
+    unawaited(context.read<SplitsController>().load(force: true));
+    unawaited(context.read<DietPlansController>().load(force: true));
+
+    final unlocked = _plans.takeCelebration();
+    if (unlocked != null) {
+      unawaited(showSubscriptionCelebration(context,
+          planName: unlocked.planName,
+          perks: _plans.perksFor(unlocked.planCode)));
     }
   }
 
@@ -134,7 +205,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   /// promo code, a purchase that was still pending when the app closed).
   /// Guests can't hold a subscription, so there's nothing to sync for them.
   void _syncEntitlements() {
-    if (!mounted || !context.read<AuthController>().isRegistered) return;
+    if (!mounted) return;
+    if (!context.read<AuthController>().isRegistered) {
+      AdsService.instance.syncGuest();
+      return;
+    }
     unawaited(context.read<PlansController>().syncEntitlements());
   }
 
@@ -175,7 +250,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     final previous = _index;
     HapticFeedback.selectionClick();
     setState(() => _index = index);
-    if (index == 1 && !_showingTour && !context.read<AuthController>().isRegistered) {
+    // An ad pass buys one look at Progress - leaving the tab spends it.
+    if (previous == 1 && index != 1) {
+      unawaited(context.read<ExerciseProgressController>().endAdPass());
+    }
+    if (index == 1 &&
+        !_showingTour &&
+        !context.read<AuthController>().isRegistered) {
       _ensureProgressUnlocked().then((unlocked) {
         if (!unlocked && mounted) {
           _pageController.animateToPage(previous,
@@ -195,7 +276,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     if (_tourStep == 0) {
       // Step 0 (Home) -> Step 1 (Splits screen)
       setState(() => _tourStep = 1);
-      Navigator.of(context).push(
+      Navigator.of(context)
+          .push(
         MaterialPageRoute(
           builder: (_) => SplitsScreen(
             isTour: true,
@@ -209,7 +291,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             },
           ),
         ),
-      );
+      ).then((_) {
+        // Safety net: if the Splits step is ever dismissed without its tour
+        // card (Next/Skip both move _tourStep off 1 first), carry on to the
+        // next step instead of leaving the shell stuck with no overlay.
+        if (mounted && _showingTour && _tourStep == 1) _advanceToProgress();
+      });
     } else if (_tourStep == 2) {
       // Step 2 (Progress) -> Step 3 (Nutrition)
       setState(() => _tourStep = 3);
@@ -262,9 +349,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
               onPageChanged: _onPageChanged,
               // Disable swiping while the tour is showing so the user
               // progresses sequentially via the tour card.
-              physics: _showingTour
-                  ? const NeverScrollableScrollPhysics()
-                  : null,
+              physics:
+                  _showingTour ? const NeverScrollableScrollPhysics() : null,
               children: [
                 for (var i = 0; i < _screens.length; i++)
                   _AnimatedTab(active: i == _index, child: _screens[i]),
@@ -288,6 +374,16 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                     SilenBottomNavBar.reservedHeight(context) + AppSpacing.sm,
                 onNext: _nextTourStep,
                 onSkip: _skipToChooseProtocol,
+              ),
+            ),
+          if (!_showingTour)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: SilenBottomNavBar.reservedHeight(context) + AppSpacing.sm,
+              child: OfflinePill(
+                offline: context.read<ApiClient>().isOffline,
+                pendingCount: _syncQueue?.pendingCount,
               ),
             ),
         ],

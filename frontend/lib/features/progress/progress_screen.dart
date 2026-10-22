@@ -3,6 +3,9 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/ads/ads_service.dart';
+import '../../core/api/api_exception.dart';
+
 import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -10,9 +13,9 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/silen_button.dart';
 import '../../core/widgets/skeleton.dart';
 import '../../core/widgets/upgrade_lock_card.dart';
-import '../plans/plans_controller.dart';
 import '../plans/plans_screen.dart';
 import '../settings/ai_consent_gate.dart';
 import 'all_personal_records_screen.dart';
@@ -43,7 +46,6 @@ class ProgressScreen extends StatefulWidget {
 class _ProgressScreenState extends State<ProgressScreen> {
   late final ProgressController _controller;
   late final ExerciseProgressController _exerciseController;
-  int? _purchaseRevision;
 
   @override
   void initState() {
@@ -56,22 +58,29 @@ class _ProgressScreenState extends State<ProgressScreen> {
     Future.microtask(_exerciseController.load);
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // A purchase or restore anywhere in the app can flip entitlement - re-ask
-    // the server rather than leave the screen locked until a restart.
-    final revision = context.watch<PlansController>().purchaseRevision;
-    if (_purchaseRevision != null && _purchaseRevision != revision) {
-      Future.microtask(() => _exerciseController.load(force: true));
-    }
-    _purchaseRevision = revision;
-  }
-
   Future<void> _openPlans() async {
     await Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
     if (mounted) await _exerciseController.load(force: true);
+  }
+
+  bool _watchingAd = false;
+
+  /// Free path: one rewarded video opens the screen until the user leaves it.
+  Future<void> _watchAdToUnlock() async {
+    if (_watchingAd) return;
+    setState(() => _watchingAd = true);
+    try {
+      if (!await AdsService.instance.showRewarded() || !mounted) return;
+      await _exerciseController.unlockWithAdPass();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.userMessage)));
+      }
+    } finally {
+      if (mounted) setState(() => _watchingAd = false);
+    }
   }
 
   @override
@@ -103,9 +112,18 @@ class _ProgressScreenState extends State<ProgressScreen> {
             if (blurred && widget.spotlightKey == null)
               Positioned.fill(
                 child: _ProgressLockOverlay(
-                  checking: access == ExerciseProgressAccess.unknown,
+                  checking: access == ExerciseProgressAccess.unknown ||
+                      _watchingAd,
                   onUnlock: _openPlans,
+                  onWatchAd: _watchAdToUnlock,
                 ),
+              ),
+            if (_exerciseController.viaAdPass && !blurred)
+              Positioned(
+                left: AppSpacing.marginMobile,
+                right: AppSpacing.marginMobile,
+                bottom: SilenBottomNavBar.reservedHeight(context),
+                child: _AdPassStrip(onUpgrade: _openPlans),
               ),
           ],
         );
@@ -142,8 +160,13 @@ class _ProgressScreenState extends State<ProgressScreen> {
 class _ProgressLockOverlay extends StatelessWidget {
   final bool checking;
   final VoidCallback onUnlock;
+  final VoidCallback onWatchAd;
 
-  const _ProgressLockOverlay({required this.checking, required this.onUnlock});
+  const _ProgressLockOverlay({
+    required this.checking,
+    required this.onUnlock,
+    required this.onWatchAd,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -163,13 +186,72 @@ class _ProgressLockOverlay extends StatelessWidget {
                   child: CircularProgressIndicator(
                       strokeWidth: 2.5, color: AppColors.accent),
                 )
-              : UpgradeLockCard(
-                  title: 'Track every lift',
-                  message: 'See your estimated 1RM, top sets and volume for '
-                      'each exercise over time, plus AI reviews.',
-                  actionLabel: 'Unlock Progress',
-                  onUnlock: onUnlock,
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    UpgradeLockCard(
+                      title: 'Track every lift',
+                      message: 'See your estimated 1RM, top sets and volume '
+                          'for each exercise over time, plus AI reviews.',
+                      actionLabel: 'Unlock Progress',
+                      onUnlock: onUnlock,
+                    ),
+                    // Only offered while an ad is loaded and ready to play.
+                    ValueListenableBuilder<bool>(
+                      valueListenable: AdsService.instance.rewardedReady,
+                      builder: (context, ready, _) => !ready
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding:
+                                  const EdgeInsets.only(top: AppSpacing.md),
+                              child: SecondaryPillButton(
+                                label: 'Watch an ad to view once',
+                                icon: Icons.play_circle_outline_rounded,
+                                onPressed: onWatchAd,
+                              ),
+                            ),
+                    ),
+                  ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pinned above the nav bar while Progress is open on an ad pass.
+class _AdPassStrip extends StatelessWidget {
+  final VoidCallback onUpgrade;
+
+  const _AdPassStrip({required this.onUpgrade});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(AppSpacing.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppSpacing.md),
+        onTap: onUpgrade,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          child: Row(
+            children: [
+              Icon(Icons.play_circle_outline_rounded,
+                  size: 18, color: AppColors.secondary),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Viewing with an ad · Get Pro for unlimited access',
+                  style: AppTypography.bodySm
+                      .copyWith(color: AppColors.onSurfaceVariant),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: AppColors.onSurfaceVariant),
+            ],
+          ),
         ),
       ),
     );

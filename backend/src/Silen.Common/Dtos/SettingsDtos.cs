@@ -11,6 +11,14 @@ public sealed class UpdateUserSettingsRequest
 
     public TimeSpan NotificationLocalTime { get; set; }
 
+    /// <summary>
+    /// True when the user picked <see cref="NotificationLocalTime"/> themselves, so
+    /// the reminder fires at exactly that time; false switches back to auto-detect.
+    /// Null (clients older than this field) keeps the stored flag, except that a
+    /// changed time still counts as the user picking it.
+    /// </summary>
+    public bool? NotificationTimeIsUserSet { get; set; }
+
     [StringLength(100)]
     public string TimeZoneId { get; set; } = "UTC";
 
@@ -21,9 +29,6 @@ public sealed class UpdateUserSettingsRequest
     public string DistanceUnit { get; set; } = "km";
 
     public bool RestTimerSoundEnabled { get; set; }
-
-    [Range(0, 500)]
-    public decimal BarbellStandardKg { get; set; }
 
     [StringLength(20)]
     public string AppearanceMode { get; set; } = "Device";

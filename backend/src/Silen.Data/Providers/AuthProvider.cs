@@ -141,4 +141,11 @@ public sealed class AuthProvider(ISqlExecutor sqlExecutor) : IAuthProvider
             "dbo.usp_Auth_MarkEmailVerified",
             [SqlParameterBuilder.Create("@UserId", userId)],
             cancellationToken);
+
+    public Task<bool> IsUnclaimedAccountAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Auth_IsUnclaimedAccount",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, r => r.GetBoolValue("IsUnclaimed"), cancellationToken),
+            cancellationToken);
 }

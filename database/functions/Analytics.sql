@@ -184,7 +184,8 @@ BEGIN
           AND sl.completedatutc < p_todateutc + 1
     )
     SELECT r.exerciseid, e.name AS exercisename, r.weightkg, r.reps,
-           r.completedatutc, r.rpescore, pr.recordweightkg
+           r.completedatutc, r.rpescore, pr.recordweightkg,
+           dbo.ufn_exercise_loadmultiplier(e.equipmenttype, e.name) = 2 AS isperdumbbell
     FROM rankedsets r
     INNER JOIN dbo.exercises e ON e.exerciseid = r.exerciseid
     CROSS JOIN LATERAL (

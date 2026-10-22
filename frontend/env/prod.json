@@ -1,5 +1,13 @@
 {
   "API_BASE_URL": "https://api.sila.fitness/api",
   "GOOGLE_WEB_CLIENT_ID": "147120425242-hclquqf2c4ltodqr9ft4kptf0jjottfi.apps.googleusercontent.com",
-  "GOOGLE_IOS_CLIENT_ID": "147120425242-3kf66c8a6totvp70052epe3ceh3eqr1n.apps.googleusercontent.com"
+  "GOOGLE_IOS_CLIENT_ID": "147120425242-3kf66c8a6totvp70052epe3ceh3eqr1n.apps.googleusercontent.com",
+  "APPODEAL_IOS_KEY": "4500d12e84b680ae5c8512c13e3fea323e9c146b27ef320a",
+  "APPODEAL_ANDROID_KEY": "2d6f304de23a4def4487b9d498e7573a3d10426c87adf5b1",
+  "LEVELPLAY_IOS_APP_KEY": "28d34324d",
+  "LEVELPLAY_ANDROID_APP_KEY": "28d34a55d",
+  "LEVELPLAY_IOS_INTERSTITIAL_UNIT": "nfdyj52ul27wnyy5",
+  "LEVELPLAY_ANDROID_INTERSTITIAL_UNIT": "rxrwx0j5zxe769x6",
+  "LEVELPLAY_IOS_REWARDED_UNIT": "typiu7ecwh49qt8y",
+  "LEVELPLAY_ANDROID_REWARDED_UNIT": "of14fxi4q412gwkw"
 }

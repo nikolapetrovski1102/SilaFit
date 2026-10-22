@@ -23,9 +23,10 @@ import '../onboarding/widgets/training_preference_question.dart';
 /// notification-permission screen, so the questions/copy/animation are
 /// identical to onboarding rather than a re-implementation.
 ///
-/// Pushed by `register_screen.dart` right after a successful sign-up, and
-/// pops `true` once the answers are saved (or `false` if the user backs out
-/// - registration itself already succeeded either way).
+/// Pushed by `register_screen.dart`/`login_screen.dart` right after a
+/// successful sign-up or sign-in, and from Settings' details sheet to fill
+/// in or edit the answers later. Pops `true` once the answers are saved (or
+/// `false` if the user backs out).
 class CompleteProfileFlow extends StatelessWidget {
   final UserProfile? initialProfile;
   const CompleteProfileFlow({super.key, this.initialProfile});

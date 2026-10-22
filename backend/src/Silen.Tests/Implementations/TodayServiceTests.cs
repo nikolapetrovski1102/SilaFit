@@ -199,7 +199,7 @@ public class TodayServiceTests
         var userId = Guid.NewGuid();
         var request = new LogBodyweightRequest { WeightKg = 79m };
         bodyweightProvider
-            .Setup(p => p.LogAsync(userId, 79m, It.IsAny<CancellationToken>()))
+            .Setup(p => p.LogAsync(userId, 79m, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<BodyweightEntryModel>
             {
                 new() { WeightKg = 79m, LoggedAtUtc = DateTime.UtcNow },
@@ -232,7 +232,7 @@ public class TodayServiceTests
         var userId = Guid.NewGuid();
         var request = new LogBodyweightRequest { WeightKg = 79m };
         bodyweightProvider
-            .Setup(p => p.LogAsync(userId, 79m, It.IsAny<CancellationToken>()))
+            .Setup(p => p.LogAsync(userId, 79m, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<BodyweightEntryModel> { new() { WeightKg = 79m, LoggedAtUtc = DateTime.UtcNow } });
         userProfileProvider
             .Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>()))
@@ -281,6 +281,7 @@ public class TodayServiceTests
             .Setup(p => p.CompleteAsync(
                 userId, sessionId, 45, (short?)300, 8m, 2500m,
                 It.Is<IReadOnlyList<SetLogEntryModel>>(logs => logs.Count == 1 && logs[0].ExerciseId == exerciseId && logs[0].Reps == 8),
+                null, null, null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(completion);
 
@@ -302,6 +303,7 @@ public class TodayServiceTests
             .Setup(p => p.CompleteAsync(
                 userId, sessionId, 30, (short?)null, null, null,
                 null,
+                null, null, null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkoutSessionCompletionModel?)null);
 
@@ -310,6 +312,112 @@ public class TodayServiceTests
         Assert.False(result.IsSuccess);
         Assert.Equal(404, result.StatusCode);
     }
+
+    [Fact]
+    public async Task CompleteWorkoutAsync_OfflineUpload_PassesWhenItReallyEnded()
+    {
+        var userId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var endedAt = DateTime.UtcNow.AddHours(-5);
+        var request = new CompleteWorkoutRequest { WorkoutSessionId = sessionId, DurationMinutes = 50, CompletedAtUtc = endedAt };
+
+        workoutSessionProvider
+            .Setup(p => p.CompleteAsync(
+                userId, sessionId, 50, (short?)null, null, null, null,
+                endedAt, null, null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkoutSessionCompletionModel { WorkoutSessionId = sessionId, Status = "Completed" });
+
+        var result = await sut.CompleteWorkoutAsync(userId, request);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task CompleteWorkoutAsync_OfflineMadeSession_ForwardsSplitDayAndScheduledDate()
+    {
+        var userId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var splitDayId = Guid.NewGuid();
+        var endedAt = DateTime.UtcNow.AddHours(-1);
+        var request = new CompleteWorkoutRequest
+        {
+            WorkoutSessionId = sessionId,
+            DurationMinutes = 40,
+            CompletedAtUtc = endedAt,
+            SplitDayId = splitDayId,
+            ScheduledDateUtc = endedAt.Date
+        };
+
+        workoutSessionProvider
+            .Setup(p => p.CompleteAsync(
+                userId, sessionId, 40, (short?)null, null, null, null,
+                endedAt, splitDayId, endedAt.Date,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkoutSessionCompletionModel { WorkoutSessionId = sessionId, Status = "Completed" });
+
+        var result = await sut.CompleteWorkoutAsync(userId, request);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, -1)]
+    [InlineData(-3, 0)]
+    [InlineData(2, 0)]
+    public void ClampScheduledDate_AllowsTheEndDayOrTheDayBefore(int clientOffsetDays, int expectedOffsetDays)
+    {
+        var endedAt = new DateTime(2026, 10, 17, 0, 20, 0, DateTimeKind.Utc);
+
+        var result = TodayService.ClampScheduledDate(endedAt.Date.AddDays(clientOffsetDays), endedAt);
+
+        Assert.Equal(endedAt.Date.AddDays(expectedOffsetDays), result);
+    }
+
+    [Fact]
+    public void ClampScheduledDate_Missing_UsesTheEndDay()
+    {
+        var endedAt = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal(endedAt.Date, TodayService.ClampScheduledDate(null, endedAt));
+    }
+
+    [Fact]
+    public async Task LogBodyweightAsync_OfflineReplay_ForwardsClientIdAndTime()
+    {
+        var userId = Guid.NewGuid();
+        var entryId = Guid.NewGuid();
+        var loggedAt = DateTime.UtcNow.AddMinutes(-40);
+        var request = new LogBodyweightRequest { WeightKg = 79m, BodyweightLogId = entryId, LoggedAtUtc = loggedAt };
+        bodyweightProvider
+            .Setup(p => p.LogAsync(userId, 79m, entryId, loggedAt, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<BodyweightEntryModel> { new() { WeightKg = 79m, LoggedAtUtc = loggedAt } });
+
+        var result = await sut.LogBodyweightAsync(userId, request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(79m, result.Data!.LatestWeightKg);
+    }
+
+    [Theory]
+    [InlineData(-60, true)]        // an hour ago: kept
+    [InlineData(-60 * 24 * 6, true)] // six days ago: kept
+    [InlineData(-60 * 24 * 8, false)] // eight days ago: untrusted, server time
+    [InlineData(5, false)]          // the future: a skewed clock, server time
+    public void ClampClientTimestamp_KeepsOnlyARecentPast(int minutesFromNow, bool kept)
+    {
+        var now = new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
+        var client = now.AddMinutes(minutesFromNow);
+
+        var clamped = TodayService.ClampClientTimestamp(client, now);
+
+        Assert.Equal(kept ? client : null, clamped);
+    }
+
+    [Fact]
+    public void ClampClientTimestamp_Null_StaysNull() =>
+        Assert.Null(TodayService.ClampClientTimestamp(null));
 
     [Fact]
     public async Task GetExerciseHistoryAsync_FreeUser_ReturnsProUpgradeRequiredFailure()

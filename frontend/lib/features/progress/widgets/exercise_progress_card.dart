@@ -1,5 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/state/resource_state.dart';
@@ -15,7 +17,7 @@ import '../../../core/widgets/skeleton.dart';
 import '../../onboarding/widgets/age_wheel_picker.dart';
 import '../exercise_progress_controller.dart';
 import '../progress_models.dart';
-import 'personal_record_tile.dart' show formatPrWeight;
+import '../weight_display.dart';
 
 /// Hairline used in place of card edges - the tracker sits straight on the
 /// screen's ambient backdrop, so separation comes from type and spacing.
@@ -53,6 +55,9 @@ class ExerciseProgressCard extends StatelessWidget {
         : controller.selectedExerciseId;
     final hasExercises =
         exercisesState.data != null && exercisesState.data!.isNotEmpty;
+    final isPerDumbbell = exercisesState.data
+            ?.any((e) => e.exerciseId == selectedId && e.isPerDumbbell) ??
+        false;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
@@ -119,6 +124,7 @@ class ExerciseProgressCard extends StatelessWidget {
                             progress: progressState.data!,
                             metric: controller.metric,
                             onMetricChanged: controller.setMetric,
+                            isPerDumbbell: isPerDumbbell,
                           ),
               ),
             ),
@@ -190,21 +196,21 @@ class _TimeframeValue extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Hero(
-                tag: _amountHeroTag,
-                createRectTween: straightHeroRectTween,
-                flightShuttleBuilder: _pillShuttle,
-                child: Text('$amount',
-                    style: AppTypography.displayStat.copyWith(height: 1)),
+              _timeframeHero(
+                _amountHeroTag,
+                _TimeframeSlot(
+                  label: '$amount',
+                  style: AppTypography.displayStat.copyWith(height: 1),
+                ),
               ),
               const SizedBox(width: 4),
-              Hero(
-                tag: _unitHeroTag,
-                createRectTween: straightHeroRectTween,
-                flightShuttleBuilder: _pillShuttle,
-                child: Text(unit.short,
-                    style: AppTypography.headlineLg
-                        .copyWith(color: AppColors.accent, height: 1)),
+              _timeframeHero(
+                _unitHeroTag,
+                _TimeframeSlot(
+                  label: unit.short,
+                  style: AppTypography.headlineLg
+                      .copyWith(color: AppColors.accent, height: 1),
+                ),
               ),
             ],
           ),
@@ -214,11 +220,40 @@ class _TimeframeValue extends StatelessWidget {
   }
 }
 
-/// Grows the section's plain number/unit into the wheel's accent pill (and
-/// back), crossfading between the two. [animation] reads 0 at the Progress
-/// screen and 1 at the picker for both push and pop, so the picker-side
-/// child is always the one weighted by its value.
-Widget _pillShuttle(
+Widget _timeframeHero(String tag, _TimeframeSlot slot) => Hero(
+      tag: tag,
+      createRectTween: straightHeroRectTween,
+      flightShuttleBuilder: _timeframeShuttle,
+      child: slot,
+    );
+
+/// One end of a timeframe flight: the section's plain number/unit (no
+/// [pill]), or the wheel's selection pill, whose [label] and [style] mirror
+/// the wheel's centered value so the flight can carry the label itself.
+class _TimeframeSlot extends StatelessWidget {
+  final String label;
+  final TextStyle style;
+  final Widget? pill;
+
+  const _TimeframeSlot({required this.label, required this.style, this.pill});
+
+  // The wheel draws the label on the pill side - this only shows it.
+  @override
+  Widget build(BuildContext context) =>
+      pill ?? Text(label, maxLines: 1, softWrap: false, style: style);
+}
+
+/// Flies the section's number/unit into the wheel's accent pill (and back):
+/// the label morphs its size, weight and color into the wheel's centered
+/// label while the pill grows in behind it, so the value itself travels
+/// rather than fading out at one end and in at the other.
+///
+/// Progress is read off the flight box's live height rather than
+/// [animation]: Hero eases the box with its own curve, flipped on pop, so a
+/// separately-curved label ran ahead of or behind the box - on the way back
+/// it was still pill-sized in a box already shrunk to the unit, and got
+/// squeezed. Measured this way, label and box always land together.
+Widget _timeframeShuttle(
   BuildContext flightContext,
   Animation<double> animation,
   HeroFlightDirection direction,
@@ -226,24 +261,65 @@ Widget _pillShuttle(
   BuildContext toHeroContext,
 ) {
   final push = direction == HeroFlightDirection.push;
-  final pill = ((push ? toHeroContext : fromHeroContext).widget as Hero).child;
-  final value = ((push ? fromHeroContext : toHeroContext).widget as Hero).child;
+  final picker = ((push ? toHeroContext : fromHeroContext).widget as Hero).child
+      as _TimeframeSlot;
+  final section = ((push ? fromHeroContext : toHeroContext).widget as Hero)
+      .child as _TimeframeSlot;
+
+  double? heightOf(BuildContext context) {
+    final box = context.findRenderObject();
+    return box is RenderBox && box.hasSize ? box.size.height : null;
+  }
+
+  final sectionHeight = heightOf(push ? fromHeroContext : toHeroContext);
+  final pickerHeight = heightOf(push ? toHeroContext : fromHeroContext);
+
+  // 0 at the section's slot, 1 at the wheel's pill.
+  double progress(double boxHeight) {
+    if (sectionHeight == null ||
+        pickerHeight == null ||
+        (pickerHeight - sectionHeight).abs() < 1) {
+      return animation.value;
+    }
+    return ((boxHeight - sectionHeight) / (pickerHeight - sectionHeight))
+        .clamp(0.0, 1.0);
+  }
+
+  Widget label(String text, TextStyle style) => Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(text, maxLines: 1, softWrap: false, style: style),
+        ),
+      );
+
   return Material(
     type: MaterialType.transparency,
-    child: AnimatedBuilder(
-      animation: animation,
-      builder: (context, _) {
-        final t = Curves.easeOutCubic.transform(animation.value);
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final t = progress(constraints.maxHeight);
+        // The pill lands a touch ahead of the label so the label's color
+        // turns onAccent against an already-solid accent fill.
+        final pillT = Curves.easeOut.transform((t / 0.75).clamp(0.0, 1.0));
+        final style = TextStyle.lerp(section.style, picker.style, t)!;
+        // Usually equal - they only differ if the value changed while the
+        // section hadn't rebuilt yet, so crossfade rather than hard-swap.
+        final same = section.label == picker.label;
         return Stack(
           fit: StackFit.expand,
           children: [
-            Opacity(opacity: t, child: pill),
             Opacity(
-              opacity: (1 - t * 1.6).clamp(0.0, 1.0),
-              child: Center(
-                child: FittedBox(fit: BoxFit.scaleDown, child: value),
+              opacity: pillT,
+              child: Transform.scale(
+                scale: 0.85 + 0.15 * pillT,
+                child: picker.pill,
               ),
             ),
+            if (same)
+              label(picker.label, style)
+            else ...[
+              Opacity(opacity: 1 - t, child: label(section.label, style)),
+              Opacity(opacity: t, child: label(picker.label, style)),
+            ],
           ],
         );
       },
@@ -273,6 +349,35 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
   late int _amount = widget.amount;
   late ProgressTimeframeUnit _unit = widget.unit;
 
+  /// The route's open/close animation - while it runs, the hero flights
+  /// draw the selected labels, so the wheels hide theirs.
+  Animation<double>? _routeAnimation;
+  bool _inFlight = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == _routeAnimation) return;
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
+    _routeAnimation = animation?..addStatusListener(_onRouteStatus);
+    _inFlight = _isInFlight(animation?.status);
+  }
+
+  @override
+  void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
+    super.dispose();
+  }
+
+  static bool _isInFlight(AnimationStatus? status) =>
+      status != null && status != AnimationStatus.completed;
+
+  void _onRouteStatus(AnimationStatus status) {
+    final inFlight = _isInFlight(status);
+    if (inFlight != _inFlight) setState(() => _inFlight = inFlight);
+  }
+
   void _setUnit(int index) {
     final unit = ProgressTimeframeUnit.values[index];
     setState(() {
@@ -281,11 +386,13 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
     });
   }
 
-  Widget _hero(String tag, Widget pill) => Hero(
-        tag: tag,
-        createRectTween: straightHeroRectTween,
-        flightShuttleBuilder: _pillShuttle,
-        child: pill,
+  Widget _hero(String tag, String label, Widget pill) => _timeframeHero(
+        tag,
+        _TimeframeSlot(
+          label: label,
+          style: AgeWheelPicker.selectedLabelStyle,
+          pill: pill,
+        ),
       );
 
   @override
@@ -338,8 +445,9 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
                           min: 1,
                           max: _unit.maxAmount,
                           onChanged: (v) => setState(() => _amount = v),
+                          hideSelectedLabel: _inFlight,
                           selectionBuilder: (pill) =>
-                              _hero(_amountHeroTag, pill),
+                              _hero(_amountHeroTag, '$_amount', pill),
                         ),
                       ),
                       Expanded(
@@ -351,7 +459,9 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
                           labelBuilder: (i) =>
                               ProgressTimeframeUnit.values[i].short,
                           onChanged: _setUnit,
-                          selectionBuilder: (pill) => _hero(_unitHeroTag, pill),
+                          hideSelectedLabel: _inFlight,
+                          selectionBuilder: (pill) =>
+                              _hero(_unitHeroTag, _unit.short, pill),
                         ),
                       ),
                     ],
@@ -717,7 +827,15 @@ extension on ExerciseProgressMetric {
         ExerciseProgressMetric.reps => 'Reps',
       };
 
-  String get unit => this == ExerciseProgressMetric.reps ? 'reps' : 'kg';
+  bool get isWeight => this != ExerciseProgressMetric.reps;
+
+  /// Top set and Est. 1RM come straight from one set's logged weight, so on
+  /// a two-dumbbell exercise they are per hand; Volume already counts both.
+  bool get isPerSet =>
+      this == ExerciseProgressMetric.estimatedOneRm ||
+      this == ExerciseProgressMetric.topSet;
+
+  String unitFor(String weightUnit) => isWeight ? weightUnit : 'reps';
 
   double valueOf(ExerciseProgressPoint p) => switch (this) {
         ExerciseProgressMetric.estimatedOneRm => p.estimatedOneRmKg,
@@ -731,11 +849,13 @@ class _ProgressBody extends StatelessWidget {
   final ExerciseProgress progress;
   final ExerciseProgressMetric metric;
   final ValueChanged<ExerciseProgressMetric> onMetricChanged;
+  final bool isPerDumbbell;
 
   const _ProgressBody({
     required this.progress,
     required this.metric,
     required this.onMetricChanged,
+    required this.isPerDumbbell,
   });
 
   @override
@@ -758,7 +878,14 @@ class _ProgressBody extends StatelessWidget {
         : const [ExerciseProgressMetric.reps];
     final effective = metrics.contains(metric) ? metric : metrics.first;
 
-    final values = [for (final p in points) effective.valueOf(p)];
+    final weightUnit = weightUnitOf(context);
+    final unit = effective.unitFor(weightUnit);
+    final values = [
+      for (final p in points)
+        effective.isWeight
+            ? toDisplayWeight(effective.valueOf(p), weightUnit)
+            : effective.valueOf(p),
+    ];
     final latest = values.last;
     final best = values.reduce((a, b) => a > b ? a : b);
     final first = values.first;
@@ -781,7 +908,7 @@ class _ProgressBody extends StatelessWidget {
             const SizedBox(width: 6),
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(effective.unit,
+              child: Text(unit,
                   style: AppTypography.numericUnit
                       .copyWith(color: AppColors.onSurfaceVariant)),
             ),
@@ -795,8 +922,9 @@ class _ProgressBody extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Best ${formatPrWeight(best)} ${effective.unit} · '
-          '${points.length} session${points.length == 1 ? '' : 's'}',
+          'Best ${formatDisplayWeight(best)} $unit · '
+          '${points.length} session${points.length == 1 ? '' : 's'}'
+          '${isPerDumbbell && effective.isPerSet ? perDumbbellSuffix : ''}',
           style: AppTypography.bodySm,
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -810,15 +938,16 @@ class _ProgressBody extends StatelessWidget {
         else
           SizedBox(
             height: 180,
-            child: _MetricChart(
-                points: points, values: values, unit: effective.unit),
+            child: _MetricChart(points: points, values: values, unit: unit),
           ),
         const SizedBox(height: AppSpacing.xl),
-        const SectionEyebrow('Recent sessions'),
+        SectionEyebrow(isPerDumbbell
+            ? 'Recent sessions$perDumbbellSuffix'
+            : 'Recent sessions'),
         const SizedBox(height: AppSpacing.xs),
         for (final (i, p) in points.reversed.take(3).indexed) ...[
           if (i > 0) Divider(height: 1, thickness: 1, color: _hairline),
-          _SessionRow(point: p),
+          _SessionRow(point: p, weightUnit: weightUnit),
         ],
       ],
     );
@@ -939,7 +1068,7 @@ class _DeltaBadge extends StatelessWidget {
   }
 }
 
-class _MetricChart extends StatelessWidget {
+class _MetricChart extends StatefulWidget {
   final List<ExerciseProgressPoint> points;
   final List<double> values;
   final String unit;
@@ -951,7 +1080,76 @@ class _MetricChart extends StatelessWidget {
   });
 
   @override
+  State<_MetricChart> createState() => _MetricChartState();
+}
+
+/// Press and hold, then drag across the chart to scrub between sessions. The
+/// long-press recognizer claims the gesture before the surrounding scroll view
+/// can, so a sideways drag reads the line instead of scrolling the page.
+class _MetricChartState extends State<_MetricChart> {
+  int? _selected;
+
+  @override
+  void didUpdateWidget(covariant _MetricChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selected != null && _selected! >= widget.values.length) {
+      _selected = null;
+    }
+  }
+
+  int _indexAt(double dx, double width) {
+    final last = widget.values.length - 1;
+    if (width <= 0 || last <= 0) return 0;
+    return (dx / width * last).round().clamp(0, last);
+  }
+
+  void _select(int index) {
+    if (index == _selected) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selected = index);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      return RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: {
+          LongPressGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(
+                duration: const Duration(milliseconds: 180)),
+            (r) => r
+              ..onLongPressStart =
+                  ((d) => _select(_indexAt(d.localPosition.dx, width)))
+              ..onLongPressMoveUpdate =
+                  ((d) => _select(_indexAt(d.localPosition.dx, width))),
+          ),
+          TapGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+            TapGestureRecognizer.new,
+            (r) => r
+              ..onTapUp = (d) {
+                final index = _indexAt(d.localPosition.dx, width);
+                if (index == _selected) {
+                  setState(() => _selected = null);
+                } else {
+                  _select(index);
+                }
+              },
+          ),
+        },
+        child: _buildChart(),
+      );
+    });
+  }
+
+  Widget _buildChart() {
+    final points = widget.points;
+    final values = widget.values;
+    final unit = widget.unit;
+    final selected = _selected;
     final spots = [
       for (var i = 0; i < values.length; i++) FlSpot(i.toDouble(), values[i]),
     ];
@@ -963,6 +1161,45 @@ class _MetricChart extends StatelessWidget {
     final pad = span == 0 ? (maxValue == 0 ? 1.0 : maxValue * 0.1) : span * 0.2;
     final minY = (minValue - pad).clamp(0.0, double.infinity);
     final maxY = maxValue + pad;
+
+    final bar = LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      curveSmoothness: 0.3,
+      preventCurveOverShooting: true,
+      gradient: LinearGradient(
+        colors: [
+          AppColors.accent.withValues(alpha: 0.35),
+          AppColors.accent,
+        ],
+      ),
+      barWidth: 3,
+      isStrokeCapRound: true,
+      // Only the latest session is marked - every other point stays
+      // part of the line rather than a row of dots.
+      dotData: FlDotData(
+        show: true,
+        checkToShowDot: (spot, bar) => spot.x == spots.last.x,
+        getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+          radius: 5,
+          color: AppColors.accent,
+          strokeColor: AppColors.background,
+          strokeWidth: 2.5,
+        ),
+      ),
+      belowBarData: BarAreaData(
+        show: true,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.accent.withValues(alpha: 0.22),
+            AppColors.accent.withValues(alpha: 0),
+          ],
+        ),
+      ),
+      showingIndicators: selected == null ? const [] : [selected],
+    );
 
     return LineChart(
       duration: const Duration(milliseconds: 420),
@@ -1011,7 +1248,12 @@ class _MetricChart extends StatelessWidget {
             ),
           ),
         ),
+        showingTooltipIndicators: [
+          if (selected != null)
+            ShowingTooltipIndicators([LineBarSpot(bar, 0, spots[selected])]),
+        ],
         lineTouchData: LineTouchData(
+          handleBuiltInTouches: false,
           getTouchedSpotIndicator: (bar, indexes) => [
             for (final _ in indexes)
               TouchedSpotIndicatorData(
@@ -1033,54 +1275,18 @@ class _MetricChart extends StatelessWidget {
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => AppColors.surfaceContainerHighest,
             tooltipRoundedRadius: AppRadius.inset,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipItems: (touchedSpots) => [
               for (final spot in touchedSpots)
                 LineTooltipItem(
-                  '${formatPrWeight(spot.y)} $unit\n${DateFormat('MMM d').format(points[spot.x.round()].date)}',
+                  '${formatDisplayWeight(spot.y)} $unit\n${DateFormat('MMM d').format(points[spot.x.round()].date)}',
                   AppTypography.labelSm.copyWith(color: AppColors.onSurface),
                 ),
             ],
           ),
         ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            curveSmoothness: 0.3,
-            preventCurveOverShooting: true,
-            gradient: LinearGradient(
-              colors: [
-                AppColors.accent.withValues(alpha: 0.35),
-                AppColors.accent,
-              ],
-            ),
-            barWidth: 3,
-            isStrokeCapRound: true,
-            // Only the latest session is marked - every other point stays
-            // part of the line rather than a row of dots.
-            dotData: FlDotData(
-              show: true,
-              checkToShowDot: (spot, bar) => spot.x == spots.last.x,
-              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
-                radius: 5,
-                color: AppColors.accent,
-                strokeColor: AppColors.background,
-                strokeWidth: 2.5,
-              ),
-            ),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.accent.withValues(alpha: 0.22),
-                  AppColors.accent.withValues(alpha: 0),
-                ],
-              ),
-            ),
-          ),
-        ],
+        lineBarsData: [bar],
       ),
     );
   }
@@ -1088,13 +1294,14 @@ class _MetricChart extends StatelessWidget {
 
 class _SessionRow extends StatelessWidget {
   final ExerciseProgressPoint point;
+  final String weightUnit;
 
-  const _SessionRow({required this.point});
+  const _SessionRow({required this.point, required this.weightUnit});
 
   @override
   Widget build(BuildContext context) {
     final topSet = point.topWeightKg > 0
-        ? '${formatPrWeight(point.topWeightKg)} kg × ${point.topSetReps}'
+        ? '${formatWeight(point.topWeightKg, weightUnit)} $weightUnit × ${point.topSetReps}'
         : '${point.totalReps} reps';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),

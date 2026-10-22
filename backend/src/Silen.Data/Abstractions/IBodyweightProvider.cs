@@ -4,8 +4,14 @@ namespace Silen.Data.Abstractions;
 
 public interface IBodyweightProvider
 {
-    /// <summary>Logs a new entry and returns the two most recent entries (newest first).</summary>
-    Task<List<BodyweightEntryModel>> LogAsync(Guid userId, decimal weightKg, CancellationToken cancellationToken = default);
+    /// <summary>Logs a new entry and returns the two most recent entries (newest first).
+    /// A <paramref name="bodyweightLogId"/> that's already stored is a no-op (an offline replay).</summary>
+    Task<List<BodyweightEntryModel>> LogAsync(
+        Guid userId,
+        decimal weightKg,
+        Guid? bodyweightLogId = null,
+        DateTime? loggedAtUtc = null,
+        CancellationToken cancellationToken = default);
 
     Task<List<BodyweightEntryModel>> GetLatestAsync(Guid userId, CancellationToken cancellationToken = default);
 

@@ -36,6 +36,10 @@ public sealed class UserSubscriptionModel
     public string? PlanName { get; set; }
     public Guid? LatestReceiptId { get; set; }
     public bool AutoRenewing { get; set; }
+
+    /// <summary>Granted through the partner website (usp_PartnerLead_Provision) rather than
+    /// bought in a store - no receipt, no expiry until the partner cancels it.</summary>
+    public bool IsPartnerGrant { get; set; }
 }
 
 /// <summary>An append-only, server-verified record of a single App Store /
@@ -68,4 +72,14 @@ public sealed class PlanEntitlementsModel
     public int? MaxActiveSplits { get; set; }
     public int? MaxActiveDietPlans { get; set; }
     public bool AllowAiGeneration { get; set; }
+}
+
+/// <summary>The outcome of claiming a Silen discount code (usp_PromoCode_Redeem). Status is
+/// Ok, Invalid, NotStarted, Expired or Exhausted; PlayOfferId is only set when Ok.</summary>
+public sealed class PromoCodeRedemptionModel
+{
+    public string Status { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? PlayOfferId { get; set; }
+    public DateTime? ExpiresAtUtc { get; set; }
 }

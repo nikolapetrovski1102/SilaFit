@@ -14,13 +14,13 @@ import '../../core/widgets/silen_ambient_backdrop.dart';
 import '../../core/widgets/silen_button.dart';
 import '../../core/widgets/skeleton.dart';
 import '../auth/account_gate.dart';
-import '../progress/analytics_controller.dart';
-import '../progress/weekly_analytics_controller.dart';
 import 'cancel_subscription_screen.dart';
 import 'iap_service.dart';
 import 'plans_controller.dart';
 import 'plans_models.dart';
+import 'redeem_code_action.dart';
 import 'restore_purchases_action.dart';
+import 'subscription_celebration.dart';
 
 /// Where Settings' "Manage" goes. A paying user lands on the plan list with
 /// their current plan selected - picking Free or "Cancel subscription" from
@@ -43,6 +43,8 @@ class PlansScreen extends StatefulWidget {
 
   /// The caller's paid plan when opened to manage it (see
   /// [manageSubscription]) - preselects that plan and offers the cancel flow.
+  /// Defaults to [PlansController.current], so an upsell opened by a paying
+  /// user still shows their plan instead of the first-time offer.
   final CurrentSubscription? currentSubscription;
 
   const PlansScreen({
@@ -79,10 +81,10 @@ class _PlansScreenState extends State<PlansScreen> {
   GlobalKey _rowKeyFor(String planId) =>
       _rowKeys.putIfAbsent(planId, GlobalKey.new);
 
-  CurrentSubscription? get _current =>
-      widget.currentSubscription?.isPaid == true
-          ? widget.currentSubscription
-          : null;
+  CurrentSubscription? get _current {
+    final subscription = widget.currentSubscription ?? _controller.current;
+    return subscription?.isPaid == true ? subscription : null;
+  }
 
   @override
   void initState() {
@@ -91,6 +93,9 @@ class _PlansScreenState extends State<PlansScreen> {
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
+    if (widget.currentSubscription == null) {
+      Future.microtask(() => _controller.refreshCurrent(quiet: true));
+    }
     // Open on the cycle the user actually pays for, so their current plan
     // reads as current rather than as a switch to the other cycle.
     final cycle = _current?.billingCycle;
@@ -183,23 +188,19 @@ class _PlansScreenState extends State<PlansScreen> {
     final ok = await _controller.purchase(plan);
     if (!mounted) return;
     if (ok) {
-      // The app-lifetime AnalyticsControllers otherwise only ever check
-      // entitlement once, in ProgressScreen's initState - without this, a
-      // fresh purchase leaves the AI Monthly/Weekly Review cards looking
-      // locked until the app is restarted.
-      context.read<AnalyticsController>().load(force: true);
-      context.read<WeeklyAnalyticsController>().load(force: true);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Upgraded to ${plan.name}.')));
+      // Everything gated re-checks on its own (RootShell watches
+      // purchaseRevision) while the celebration plays over it.
+      await showSubscriptionCelebration(context,
+          planName: plan.name, perks: _controller.perksFor(plan.code));
+      if (!mounted) return;
       if (widget.isWelcomeOffer) {
         await context.read<SessionStore>().markFeatureTourComplete();
-        if (mounted) {
-          if (widget.onDismiss != null) {
-            widget.onDismiss!();
-          } else {
-            Navigator.of(context).pop();
-          }
-        }
+        if (!mounted) return;
+      }
+      if (widget.onDismiss != null) {
+        widget.onDismiss!();
+      } else {
+        Navigator.of(context).pop();
       }
     } else if (_controller.actionError != null) {
       ScaffoldMessenger.of(context)
@@ -211,15 +212,19 @@ class _PlansScreenState extends State<PlansScreen> {
   Widget build(BuildContext context) {
     final activeOffer = widget.isWelcomeOffer;
 
-    return Scaffold(
+    // The welcome-offer step has a single way out - "Continue with Free
+    // Plan" - so back/swipe-back are blocked rather than silently leaving
+    // without marking the tour complete.
+    return PopScope(
+      canPop: !widget.isWelcomeOffer,
+      child: Scaffold(
       backgroundColor: AppColors.background,
       // No AppBar on this screen - a Material AppBar tints/dims as content
       // scrolls underneath it (scrolledUnderElevation), which fought the
       // ambient blur backdrop. Regular plan browsing keeps a floating back
-      // control; the welcome-offer step gets a floating close control instead
-      // - it must stay dismissible even when the catalogue or store products
-      // fail to load and the footer's "Continue with Free Plan" never renders
-      // (App Review 3.1.2 / 5.6).
+      // control; the welcome-offer step has no top control at all - its
+      // "Continue with Free Plan" stays on screen even when the catalogue or
+      // store products fail to load (App Review 3.1.2 / 5.6).
       body: Stack(
         children: [
           const Positioned.fill(child: SilenAmbientBackdrop()),
@@ -284,36 +289,60 @@ class _PlansScreenState extends State<PlansScreen> {
                         onSkip: _dismiss,
                         onCancelSubscription:
                             _current != null ? _openCancelFlow : null,
+                      )
+                    else if (widget.isWelcomeOffer)
+                      // No plan to show a footer for (still loading, or the
+                      // fetch failed) - the free path must still be there.
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: _ContinueFreeButton(onPressed: _dismiss),
                       ),
                   ],
                 ),
               );
             },
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: widget.isWelcomeOffer
-                  ? Align(
-                      alignment: Alignment.topRight,
-                      child: _TopControl(
-                        icon: Icons.close_rounded,
-                        tooltip: 'Close',
-                        onPressed: _dismiss,
-                      ),
-                    )
-                  : Align(
-                      alignment: Alignment.topLeft,
-                      child: _TopControl(
-                        icon: Icons.arrow_back_rounded,
-                        tooltip: 'Back',
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                    ),
+          if (!widget.isWelcomeOffer)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: _TopControl(
+                    icon: Icons.arrow_back_rounded,
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+              ),
             ),
-          ),
         ],
       ),
+    ),
+    );
+  }
+}
+
+/// The welcome offer's only exit. Full-size tap target and on-surface
+/// color: App Review rejects paywalls whose free path is hard to find
+/// (3.1.2 / 5.6).
+class _ContinueFreeButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _ContinueFreeButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          visualDensity: VisualDensity.compact),
+      child: Text('Continue with Free Plan',
+          style: AppTypography.bodySm.copyWith(
+              fontSize: 14,
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -987,21 +1016,7 @@ class _PlansFooter extends StatelessWidget {
                       color: AppColors.onSurface,
                       fontWeight: FontWeight.w600)),
             ),
-          if (isWelcomeOfferFlow)
-            TextButton(
-              onPressed: onSkip,
-              // Full-size tap target and on-surface color: App Review rejects
-              // paywalls whose free path is hard to find (3.1.2 / 5.6).
-              style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  visualDensity: VisualDensity.compact),
-              child: Text('Continue with Free Plan',
-                  style: AppTypography.bodySm.copyWith(
-                      fontSize: 14,
-                      color: AppColors.onSurface,
-                      fontWeight: FontWeight.w600)),
-            ),
+          if (isWelcomeOfferFlow) _ContinueFreeButton(onPressed: onSkip),
           // Auto-renewal disclosure + Terms/Privacy links: App Review 3.1.2
           // requires both on the purchase screen itself.
           if (!_isFree)
@@ -1040,6 +1055,11 @@ class _PlansFooter extends StatelessWidget {
                 onPressed: controller.isRestoring
                     ? null
                     : () => runRestorePurchases(context),
+              ),
+              _FooterLink(
+                label: 'Redeem code',
+                style: linkStyle,
+                onPressed: () => runRedeemCode(context, openPaywall: false),
               ),
             ],
           ),

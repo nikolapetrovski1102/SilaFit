@@ -40,6 +40,7 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IImageUploadService, ImageUploadService>();
         services.AddScoped<ISubscriptionReceiptService, SubscriptionReceiptService>();
+        services.AddScoped<IPartnerService, PartnerService>();
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();

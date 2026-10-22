@@ -82,6 +82,20 @@ public sealed class SplitsProvider(ISqlExecutor sqlExecutor) : ISplitsProvider
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
 
+    public Task<AdminMutationResultModel> DuplicateUserSplitAsync(Guid splitId, Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_UserSplit_Duplicate",
+            [SqlParameterBuilder.Create("@SplitId", splitId), SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> DuplicateUserSplitDayAsync(Guid splitDayId, Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_UserSplitDay_Duplicate",
+            [SqlParameterBuilder.Create("@SplitDayId", splitDayId), SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
     public Task<AdminMutationResultModel> DeleteUserSplitAsync(Guid splitId, Guid userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_UserSplit_Delete",

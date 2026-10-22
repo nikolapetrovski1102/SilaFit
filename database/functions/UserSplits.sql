@@ -400,3 +400,118 @@ BEGIN
 
     RETURN NEXT dbo.outcome_cursor(0, p_splitid, NULL);
 END $$;
+
+-- Copies a split the user owns - header, days and each day's exercises - into
+-- a brand-new private split owned by the same user, named "<name> (copy)".
+-- The copy is a plain hand-built split: never AI-generated, never kept, never
+-- a system default. Tier rules (Free can't duplicate, MaxActiveSplits) are
+-- checked by SplitService before this runs.
+CREATE OR REPLACE FUNCTION dbo.usp_usersplit_duplicate(
+    p_splitid uuid,
+    p_userid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    v_newsplitid uuid := gen_random_uuid();
+    v_newdayid uuid;
+    d record;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.workoutsplits WHERE splitid = p_splitid) THEN
+        RETURN NEXT dbo.outcome_cursor(1, p_splitid, 'That split no longer exists.');
+        RETURN;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.workoutsplits WHERE splitid = p_splitid AND owneruserid = p_userid) THEN
+        RETURN NEXT dbo.outcome_cursor(2, p_splitid, 'You can only duplicate splits you built yourself.');
+        RETURN;
+    END IF;
+
+    INSERT INTO dbo.workoutsplits
+        (splitid, name, category, level, durationdays, description, heroimageurl, recommendedgoal,
+         issystemdefault, sortorder, visibility, owneruserid, isaigenerated,
+         daysperweek, programdurationweeks, minsessionminutes, maxsessionminutes,
+         equipmentrequired, targetgender, workouttypelabel)
+    SELECT v_newsplitid, left(s.name, 143) || ' (copy)', s.category, s.level, s.durationdays,
+           s.description, s.heroimageurl, s.recommendedgoal,
+           false, s.sortorder, 'Private', p_userid, false,
+           s.daysperweek, s.programdurationweeks, s.minsessionminutes, s.maxsessionminutes,
+           s.equipmentrequired, s.targetgender, s.workouttypelabel
+    FROM dbo.workoutsplits s
+    WHERE s.splitid = p_splitid;
+
+    FOR d IN SELECT * FROM dbo.splitdays WHERE splitid = p_splitid LOOP
+        v_newdayid := gen_random_uuid();
+
+        INSERT INTO dbo.splitdays (splitdayid, splitid, dayindex, title, focuslabel, estimatedminutes, isrestday)
+        VALUES (v_newdayid, v_newsplitid, d.dayindex, d.title, d.focuslabel, d.estimatedminutes, d.isrestday);
+
+        INSERT INTO dbo.splitdayexercises
+            (splitdayexerciseid, splitdayid, exerciseid, sortorder, targetsets, targetrepslow, targetrepshigh)
+        SELECT gen_random_uuid(), v_newdayid, e.exerciseid, e.sortorder, e.targetsets, e.targetrepslow, e.targetrepshigh
+        FROM dbo.splitdayexercises e
+        WHERE e.splitdayid = d.splitdayid;
+    END LOOP;
+
+    RETURN NEXT dbo.outcome_cursor(0, v_newsplitid, NULL);
+END $$;
+
+-- Copies one day of a split the user owns, with its exercises, into the slot
+-- right after it. Later days move down one to make room; a split never goes
+-- past 14 days. The split's length grows with it if the days now run past it.
+CREATE OR REPLACE FUNCTION dbo.usp_usersplitday_duplicate(
+    p_splitdayid uuid,
+    p_userid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    v_day dbo.splitdays%ROWTYPE;
+    v_newdayid uuid := gen_random_uuid();
+    v_target smallint;
+    v_lastindex smallint;
+BEGIN
+    SELECT * INTO v_day FROM dbo.splitdays WHERE splitdayid = p_splitdayid;
+
+    IF v_day.splitdayid IS NULL THEN
+        RETURN NEXT dbo.outcome_cursor(1, p_splitdayid, 'That day no longer exists.');
+        RETURN;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.workoutsplits WHERE splitid = v_day.splitid AND owneruserid = p_userid) THEN
+        RETURN NEXT dbo.outcome_cursor(2, p_splitdayid, 'You can only edit splits you built yourself.');
+        RETURN;
+    END IF;
+
+    v_target := v_day.dayindex + 1;
+
+    IF EXISTS (SELECT 1 FROM dbo.splitdays WHERE splitid = v_day.splitid AND dayindex = v_target) THEN
+        SELECT max(dayindex) INTO v_lastindex FROM dbo.splitdays WHERE splitid = v_day.splitid;
+        IF v_lastindex >= 14 THEN
+            RETURN NEXT dbo.outcome_cursor(3, p_splitdayid, 'A split can have at most 14 days.');
+            RETURN;
+        END IF;
+
+        -- uq_splitdays_splitdayindex is checked row by row, so a plain +1 would
+        -- collide with the next day mid-update: park the days out of range first.
+        UPDATE dbo.splitdays SET dayindex = dayindex + 100
+        WHERE splitid = v_day.splitid AND dayindex > v_day.dayindex;
+        UPDATE dbo.splitdays SET dayindex = dayindex - 99
+        WHERE splitid = v_day.splitid AND dayindex > 100;
+    ELSIF v_target > 14 THEN
+        RETURN NEXT dbo.outcome_cursor(3, p_splitdayid, 'A split can have at most 14 days.');
+        RETURN;
+    END IF;
+
+    INSERT INTO dbo.splitdays (splitdayid, splitid, dayindex, title, focuslabel, estimatedminutes, isrestday)
+    VALUES (v_newdayid, v_day.splitid, v_target, v_day.title, v_day.focuslabel, v_day.estimatedminutes, v_day.isrestday);
+
+    INSERT INTO dbo.splitdayexercises
+        (splitdayexerciseid, splitdayid, exerciseid, sortorder, targetsets, targetrepslow, targetrepshigh)
+    SELECT gen_random_uuid(), v_newdayid, e.exerciseid, e.sortorder, e.targetsets, e.targetrepslow, e.targetrepshigh
+    FROM dbo.splitdayexercises e
+    WHERE e.splitdayid = p_splitdayid;
+
+    UPDATE dbo.workoutsplits
+    SET durationdays = (SELECT max(dayindex) FROM dbo.splitdays WHERE splitid = v_day.splitid)
+    WHERE splitid = v_day.splitid
+      AND durationdays < (SELECT max(dayindex) FROM dbo.splitdays WHERE splitid = v_day.splitid);
+
+    RETURN NEXT dbo.outcome_cursor(0, v_newdayid, NULL);
+END $$;

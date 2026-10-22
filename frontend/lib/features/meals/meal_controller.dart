@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../core/api/api_client.dart' show queuedWriteTimeout;
 import '../../core/api/api_exception.dart';
 import '../../core/state/resource_state.dart';
+import '../../core/sync/sync_queue.dart';
 import 'meal_models.dart';
 import 'meal_repository.dart';
 
@@ -33,7 +36,35 @@ class MealController extends ChangeNotifier {
   bool _suggestionsLoading = false;
   int _dayRequestId = 0;
 
-  MealController(this._repository);
+  /// Where meal writes go when the server can't be reached - see
+  /// [SyncQueue]. Null means a failed write is just an error.
+  final SyncQueue? _syncQueue;
+
+  MealController(this._repository, {SyncQueue? syncQueue})
+      : _syncQueue = syncQueue {
+    _syncQueue?.syncedVersion.addListener(_onSynced);
+  }
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _syncQueue?.syncedVersion.removeListener(_onSynced);
+    super.dispose();
+  }
+
+  /// A load started by a sync can finish after sign-out has torn this
+  /// controller down - its result just has nowhere to go.
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  /// Queued meal writes reached the server - re-fetch the day for real.
+  void _onSynced() {
+    if (state.hasData) _loadFor(_selectedDate, force: true);
+  }
 
   DateTime get selectedDate => _selectedDate;
 
@@ -89,7 +120,20 @@ class MealController extends ChangeNotifier {
     if (previous == null) state = const ResourceState.loading();
     notifyListeners();
     try {
-      final day = await _repository.getDay(date);
+      final day = await _withPendingWrites(await fetchPaintingCached(
+        cached: () => _repository.getCachedDay(date),
+        fetch: () => _repository.getDay(date),
+        paint: (saved) async {
+          // Only over a skeleton - never over another day's real numbers.
+          bool stale() =>
+              requestId != _dayRequestId || !isDayLoading || state.hasData;
+          if (stale()) return;
+          final shown = await _withPendingWrites(saved);
+          if (stale()) return;
+          state = ResourceState.data(shown);
+          notifyListeners();
+        },
+      ));
       if (requestId != _dayRequestId) return;
       state = ResourceState.data(day);
     } on ApiException catch (e) {
@@ -127,6 +171,8 @@ class MealController extends ChangeNotifier {
       await _repository.updateLog(optimisticMeal);
       await _loadFor(_selectedDate, force: true);
     } on ApiException catch (e) {
+      // No signal: keep the optimistic flip and upload it later.
+      if (await _queueUpsert(e, optimisticMeal)) return;
       state = ResourceState.data(current);
       actionError = e.userMessage;
       notifyListeners();
@@ -146,20 +192,23 @@ class MealController extends ChangeNotifier {
     required int fatsG,
     bool logNow = true,
   }) async {
+    final meal = MealLog(
+      mealLogId: const Uuid().v4(),
+      logDateUtc: MealRepository.isoDate(_selectedDate),
+      mealType: mealType,
+      title: title,
+      caloriesKcal: caloriesKcal,
+      proteinG: proteinG,
+      carbsG: carbsG,
+      fatsG: fatsG,
+      status: logNow ? 'Logged' : 'Planned',
+    );
     try {
-      await _repository.createLog(
-        logDate: _selectedDate,
-        mealType: mealType,
-        title: title,
-        caloriesKcal: caloriesKcal,
-        proteinG: proteinG,
-        carbsG: carbsG,
-        fatsG: fatsG,
-        status: logNow ? 'Logged' : 'Planned',
-      );
+      await _create(meal);
       await _loadFor(_selectedDate, force: true);
       return true;
     } on ApiException catch (e) {
+      if (await _queueUpsert(e, meal)) return true;
       actionError = e.userMessage;
     } catch (_) {
       actionError = ApiException.genericMessage;
@@ -178,43 +227,131 @@ class MealController extends ChangeNotifier {
     required List<MealLogItem> items,
   }) async {
     final totals = MealTotals.of(items);
+    final meal = MealLog(
+      mealLogId: existing?.mealLogId ?? const Uuid().v4(),
+      logDateUtc:
+          existing?.logDateUtc ?? MealRepository.isoDate(_selectedDate),
+      mealType: mealType,
+      title: title,
+      caloriesKcal: totals.caloriesKcal.round(),
+      proteinG: totals.proteinG.round(),
+      carbsG: totals.carbsG.round(),
+      fatsG: totals.fatsG.round(),
+      status: 'Logged',
+      plannedLocalTime: existing?.plannedLocalTime,
+      items: items,
+    );
     try {
       if (existing == null) {
-        await _repository.createLog(
-          logDate: _selectedDate,
-          mealType: mealType,
-          title: title,
-          caloriesKcal: totals.caloriesKcal.round(),
-          proteinG: totals.proteinG.round(),
-          carbsG: totals.carbsG.round(),
-          fatsG: totals.fatsG.round(),
-          status: 'Logged',
-          items: items,
-        );
+        await _create(meal);
       } else {
-        await _repository.updateLog(MealLog(
-          mealLogId: existing.mealLogId,
-          logDateUtc: existing.logDateUtc,
-          mealType: mealType,
-          title: title,
-          caloriesKcal: totals.caloriesKcal.round(),
-          proteinG: totals.proteinG.round(),
-          carbsG: totals.carbsG.round(),
-          fatsG: totals.fatsG.round(),
-          status: 'Logged',
-          plannedLocalTime: existing.plannedLocalTime,
-          items: items,
-        ));
+        await _repository.updateLog(meal);
       }
       await _loadFor(_selectedDate, force: true);
       return true;
     } on ApiException catch (e) {
+      if (await _queueUpsert(e, meal)) return true;
       actionError = e.userMessage;
     } catch (_) {
       actionError = ApiException.genericMessage;
     }
     notifyListeners();
     return false;
+  }
+
+  Future<MealLog> _create(MealLog meal) => _repository.createLog(
+        mealLogId: meal.mealLogId,
+        logDate: DateTime.parse(meal.logDateUtc),
+        mealType: meal.mealType,
+        title: meal.title,
+        caloriesKcal: meal.caloriesKcal,
+        proteinG: meal.proteinG,
+        carbsG: meal.carbsG,
+        fatsG: meal.fatsG,
+        status: meal.status,
+        items: meal.items.isEmpty ? null : meal.items,
+        timeout: queuedWriteTimeout,
+      );
+
+  /// After a failed create/edit of [meal]: when the server just couldn't be
+  /// reached, queue the write for later, show it on the day straight away,
+  /// and return true. False when [error] is a real refusal to report.
+  Future<bool> _queueUpsert(ApiException error, MealLog meal) async {
+    final queue = _syncQueue;
+    if (!error.isRetryable || queue == null) return false;
+    await queue.enqueue(PendingWrite.create(
+      kind: SyncQueue.kindMealUpsert,
+      method: 'PUT',
+      path: MealRepository.logPath(meal.mealLogId),
+      body: MealRepository.logBody(meal),
+      entityId: meal.mealLogId,
+    ));
+    await _repaintWithPending();
+    return true;
+  }
+
+  Future<void> _repaintWithPending() async {
+    final current = state.data;
+    if (current == null) return;
+    state = ResourceState.data(await _withPendingWrites(current));
+    notifyListeners();
+  }
+
+  /// Meal writes still waiting in the offline queue, replayed over [day]
+  /// (fresh from the server or its saved copy, which can't include them
+  /// yet) so a meal logged with no signal doesn't vanish from the list -
+  /// and from the calorie ring - on the next refresh or app restart.
+  Future<MealDay> _withPendingWrites(MealDay day) async {
+    final queue = _syncQueue;
+    if (queue == null) return day;
+    await queue.ready();
+    final writes = queue.pending.where((w) =>
+        w.kind == SyncQueue.kindMealUpsert ||
+        w.kind == SyncQueue.kindMealDelete);
+    if (writes.isEmpty) return day;
+
+    final date = MealRepository.isoDate(_selectedDate);
+    final meals = List.of(day.meals);
+    for (final write in writes) {
+      final id = write.entityId;
+      if (id == null) continue;
+      final index = meals.indexWhere((m) => m.mealLogId == id);
+      if (write.kind == SyncQueue.kindMealDelete) {
+        if (index >= 0) meals.removeAt(index);
+        continue;
+      }
+      final body = write.body;
+      if (body == null || body['logDateUtc'] != date) continue;
+      MealLog meal;
+      try {
+        meal = MealLog.fromJson({...body, 'mealLogId': id});
+      } catch (_) {
+        continue;
+      }
+      if (index >= 0) {
+        // An edit that didn't resend the foods keeps the stored ones, same
+        // as the server does.
+        if (meal.items.isEmpty && meals[index].items.isNotEmpty) {
+          meal = MealLog(
+            mealLogId: meal.mealLogId,
+            logDateUtc: meal.logDateUtc,
+            mealType: meal.mealType,
+            title: meal.title,
+            caloriesKcal: meal.caloriesKcal,
+            proteinG: meal.proteinG,
+            carbsG: meal.carbsG,
+            fatsG: meal.fatsG,
+            status: meal.status,
+            plannedLocalTime: meal.plannedLocalTime,
+            items: meals[index].items,
+          );
+        }
+        meals[index] = meal;
+      } else {
+        meals.add(meal);
+      }
+    }
+    return _recompute(day, meals);
   }
 
   Future<List<FoodItem>> searchFoods(String query) =>
@@ -256,6 +393,17 @@ class MealController extends ChangeNotifier {
       await _repository.deleteLog(mealLogId);
       await _loadFor(_selectedDate, force: true);
     } on ApiException catch (e) {
+      final queue = _syncQueue;
+      if (e.isRetryable && queue != null) {
+        await queue.enqueue(PendingWrite.create(
+          kind: SyncQueue.kindMealDelete,
+          method: 'DELETE',
+          path: MealRepository.logPath(mealLogId),
+          entityId: mealLogId,
+        ));
+        await _repaintWithPending();
+        return;
+      }
       actionError = e.userMessage;
       notifyListeners();
     } catch (_) {

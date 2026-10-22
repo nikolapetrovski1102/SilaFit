@@ -28,6 +28,8 @@ public sealed class HeatmapDayDto
 /// The heaviest set ever logged for one exercise. `PreviousBestWeightKg` is
 /// null when this is the only set ever logged for that exercise - the
 /// client shows no delta badge in that case rather than a misleading "+0".
+/// `IsPerDumbbell` marks a two-dumbbell exercise, whose logged weight is the
+/// load in each hand.
 /// </summary>
 public sealed class PersonalRecordDto
 {
@@ -37,6 +39,7 @@ public sealed class PersonalRecordDto
     public short Reps { get; set; }
     public DateTime AchievedAtUtc { get; set; }
     public decimal? PreviousBestWeightKg { get; set; }
+    public bool IsPerDumbbell { get; set; }
 }
 
 /// <summary>An exercise the caller has logged at least one set for - the Progress screen's exercise picker.</summary>
@@ -46,6 +49,8 @@ public sealed class TrackedExerciseDto
     public string ExerciseName { get; set; } = string.Empty;
     public int SessionCount { get; set; }
     public DateTime LastTrainedAtUtc { get; set; }
+    /// <summary>Weights are per dumbbell (two in use); volume already counts both.</summary>
+    public bool IsPerDumbbell { get; set; }
 }
 
 /// <summary>Per-session history of one exercise over the requested range, oldest first.</summary>
@@ -65,4 +70,11 @@ public sealed class ExerciseProgressPointDto
     public decimal TotalVolumeKg { get; set; }
     public int TotalReps { get; set; }
     public int SetCount { get; set; }
+}
+
+/// <summary>A Progress pass earned by watching a rewarded ad. ExpiresAtUtc is null for a Pro/Advanced
+/// caller, who never needs one.</summary>
+public sealed class ProgressAdPassDto
+{
+    public DateTime? ExpiresAtUtc { get; set; }
 }

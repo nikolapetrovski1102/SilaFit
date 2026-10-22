@@ -11,17 +11,28 @@ class MealRepository {
 
   MealRepository(this._client);
 
-  String _isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
+  static String isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 
   Future<MealDay> getDay(DateTime date) => _client.get(
         '/meals/day',
         MealDay.fromJson,
-        query: {'date': _isoDate(date)},
+        query: {'date': isoDate(date)},
+        cache: true,
       );
 
+  /// [getDay]'s saved copy, for painting before it answers.
+  Future<MealDay?> getCachedDay(DateTime date) async =>
+      (await _client.cached('/meals/day', MealDay.fromJson,
+              query: {'date': isoDate(date)}))
+          ?.value;
+
+  /// [mealLogId] is optional and client-generated: with it, a create that
+  /// times out can be replayed from the offline queue without duplicating
+  /// the meal. Without it the server picks the id.
   Future<MealLog> createLog({
+    String? mealLogId,
     required DateTime logDate,
     required String mealType,
     required String title,
@@ -31,12 +42,14 @@ class MealRepository {
     required int fatsG,
     String status = 'Planned',
     List<MealLogItem>? items,
+    Duration? timeout,
   }) =>
       _client.post(
         '/meals/log',
         MealLog.fromJson,
         body: {
-          'logDateUtc': _isoDate(logDate),
+          if (mealLogId != null) 'mealLogId': mealLogId,
+          'logDateUtc': isoDate(logDate),
           'mealType': mealType,
           'title': title,
           'caloriesKcal': caloriesKcal,
@@ -46,30 +59,41 @@ class MealRepository {
           'status': status,
           if (items != null) 'items': [for (final i in items) i.toJson()],
         },
+        timeout: timeout,
       );
 
   /// Saves [meal] as-is. Its [MealLog.items] are only sent when non-empty:
   /// the server keeps a meal's stored foods when none are sent, so a status
   /// flip never drops them.
   Future<MealLog> updateLog(MealLog meal) => _client.put(
-        '/meals/log/${meal.mealLogId}',
-        MealLog.fromJson,
-        body: {
-          'logDateUtc': meal.logDateUtc,
-          'mealType': meal.mealType,
-          'title': meal.title,
-          'caloriesKcal': meal.caloriesKcal,
-          'proteinG': meal.proteinG,
-          'carbsG': meal.carbsG,
-          'fatsG': meal.fatsG,
-          'status': meal.status,
-          if (meal.items.isNotEmpty)
-            'items': [for (final i in meal.items) i.toJson()],
-        },
-      );
+      logPath(meal.mealLogId), MealLog.fromJson,
+      body: logBody(meal),
+      timeout: queuedWriteTimeout);
 
-  Future<void> deleteLog(String mealLogId) =>
-      _client.delete('/meals/log/$mealLogId', (_) => null);
+  Future<void> deleteLog(String mealLogId) => _client.delete(
+      logPath(mealLogId), (_) => null,
+      timeout: queuedWriteTimeout);
+
+  static String logPath(String mealLogId) => '/meals/log/$mealLogId';
+
+  /// The PUT body for [meal]. The server creates the meal when its id isn't
+  /// stored yet, so the offline queue replays creates and edits alike as
+  /// this. The planned time is sent back too - leaving it out used to wipe
+  /// a planned meal's time when it was ticked off as eaten.
+  static Map<String, dynamic> logBody(MealLog meal) => {
+        'logDateUtc': meal.logDateUtc,
+        'mealType': meal.mealType,
+        'title': meal.title,
+        'caloriesKcal': meal.caloriesKcal,
+        'proteinG': meal.proteinG,
+        'carbsG': meal.carbsG,
+        'fatsG': meal.fatsG,
+        'status': meal.status,
+        if (meal.plannedLocalTime != null)
+          'plannedLocalTime': meal.plannedLocalTime,
+        if (meal.items.isNotEmpty)
+          'items': [for (final i in meal.items) i.toJson()],
+      };
 
   /// Curated meal ideas for [month] (1-12); the backend defaults to the
   /// current UTC month when omitted.
@@ -79,6 +103,7 @@ class MealRepository {
             .map((e) => MealSuggestion.fromJson(e))
             .toList(growable: false),
         query: month != null ? {'month': '$month'} : null,
+        cache: true,
       );
 
   /// Catalog search behind the meal tracker (`api/foods/search`) - the shared

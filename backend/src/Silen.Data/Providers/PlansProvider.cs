@@ -126,6 +126,13 @@ public sealed class PlansProvider(ISqlExecutor sqlExecutor) : IPlansProvider
             reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
             cancellationToken);
 
+    public Task<SubscriptionReceiptModel?> GetReceiptByIdAsync(Guid receiptId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_SubscriptionReceipt_GetById",
+            [SqlParameterBuilder.Create("@ReceiptId", receiptId)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapReceipt, cancellationToken),
+            cancellationToken);
+
     public Task<SubscriptionReceiptModel?> GetSubscriptionOwnerAsync(
         string store, string? originalTransactionId, string? purchaseToken, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
@@ -145,5 +152,15 @@ public sealed class PlansProvider(ISqlExecutor sqlExecutor) : IPlansProvider
                 SqlParameterBuilder.Create("@UserId", userId),
                 SqlParameterBuilder.Create("@Status", status)
             ],
+            cancellationToken);
+
+    public Task<PromoCodeRedemptionModel?> RedeemPromoCodeAsync(Guid userId, string code, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_PromoCode_Redeem",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@Code", code)
+            ],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, WorkoutRowMapper.MapPromoCodeRedemption, cancellationToken),
             cancellationToken);
 }

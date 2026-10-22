@@ -42,6 +42,10 @@ class ExerciseProgressController extends ChangeNotifier {
   final ProgressRepository _repository;
 
   ExerciseProgressAccess access = ExerciseProgressAccess.unknown;
+
+  /// Granted only by a rewarded-video pass (see [unlockWithAdPass]), which
+  /// ends when the user leaves the Progress screen.
+  bool viaAdPass = false;
   ResourceState<List<TrackedExercise>> exercisesState =
       const ResourceState.loading();
   ResourceState<ExerciseProgress> progressState = const ResourceState.loading();
@@ -79,7 +83,8 @@ class ExerciseProgressController extends ChangeNotifier {
     exercisesState = const ResourceState.loading();
     notifyListeners();
     try {
-      final exercises = await _repository.getTrackedExercises();
+      final exercises =
+          await _repository.getTrackedExercises(cache: !viaAdPass);
       access = ExerciseProgressAccess.granted;
       exercisesState = ResourceState.data(exercises);
       if (!exercises.any((e) => e.exerciseId == selectedExerciseId)) {
@@ -89,6 +94,7 @@ class ExerciseProgressController extends ChangeNotifier {
     } on ApiException catch (e) {
       if (e.isForbidden) {
         access = ExerciseProgressAccess.locked;
+        viaAdPass = false;
         exercisesState = const ResourceState.error('');
       } else {
         exercisesState = ResourceState.error(e.userMessage);
@@ -130,6 +136,29 @@ class ExerciseProgressController extends ChangeNotifier {
 
   Future<void> retryProgress() => _loadProgress();
 
+  /// Asks the server for an ad pass after a rewarded video was watched, then
+  /// reloads the tracker under it. Throws the server's [ApiException] (a 429
+  /// once the day's passes are used up) for the screen to show.
+  Future<void> unlockWithAdPass() async {
+    viaAdPass = await _repository.grantAdPass();
+    await load(force: true);
+  }
+
+  /// Locks the screen again and ends the pass server-side, so one ad buys
+  /// one look rather than the pass's full lifetime.
+  Future<void> endAdPass() async {
+    if (!viaAdPass) return;
+    viaAdPass = false;
+    ++_progressRequest;
+    access = ExerciseProgressAccess.locked;
+    exercisesState = const ResourceState.error('');
+    progressState = const ResourceState.loading();
+    notifyListeners();
+    try {
+      await _repository.endAdPass();
+    } catch (_) {}
+  }
+
   Future<void> _loadProgress() async {
     final exerciseId = selectedExerciseId;
     if (exerciseId == null) return;
@@ -139,9 +168,13 @@ class ExerciseProgressController extends ChangeNotifier {
     ResourceState<ExerciseProgress> next;
     try {
       next = ResourceState.data(
-          await _repository.getExerciseProgress(exerciseId, days: days));
+          await _repository.getExerciseProgress(exerciseId,
+              days: days, cache: !viaAdPass));
     } on ApiException catch (e) {
-      if (e.isForbidden) access = ExerciseProgressAccess.locked;
+      if (e.isForbidden) {
+        access = ExerciseProgressAccess.locked;
+        viaAdPass = false;
+      }
       next = ResourceState.error(e.userMessage);
     } catch (_) {
       next = const ResourceState.error(ApiException.genericMessage);

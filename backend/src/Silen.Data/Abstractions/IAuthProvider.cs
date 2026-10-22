@@ -52,4 +52,8 @@ public interface IAuthProvider
     Task DeletePendingEmailVerificationAsync(Guid pendingId, CancellationToken cancellationToken = default);
 
     Task MarkEmailVerifiedAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>True when the account has no password and no sign-in identity at all - a
+    /// partner-provisioned account its owner hasn't signed in to yet.</summary>
+    Task<bool> IsUnclaimedAccountAsync(Guid userId, CancellationToken cancellationToken = default);
 }

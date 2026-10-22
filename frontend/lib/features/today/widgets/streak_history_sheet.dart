@@ -12,6 +12,7 @@ import '../../plans/plans_repository.dart';
 import '../../progress/progress_models.dart';
 import '../../progress/progress_repository.dart';
 import 'set_history_screen.dart';
+import 'day_preview.dart';
 
 /// Opens the streak history sheet - tapped from the streak badge on Home.
 /// Shows the last 12 weeks of sessions as a small calendar so the user can
@@ -245,7 +246,7 @@ class _HistoryGrid extends StatelessWidget {
     List<HeatmapDay?>? current;
     DateTime? weekStart;
     for (final day in sorted) {
-      final start = day.date.subtract(Duration(days: day.date.weekday - 1));
+      final start = addDays(day.date, DateTime.monday - day.date.weekday);
       if (weekStart == null ||
           start.year != weekStart.year ||
           start.month != weekStart.month ||

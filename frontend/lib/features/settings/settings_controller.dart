@@ -107,9 +107,6 @@ class SettingsController extends ChangeNotifier {
   Future<void> setRestTimerSoundEnabled(bool value) =>
       _update((s) => s.copyWith(restTimerSoundEnabled: value));
 
-  Future<void> setBarbellStandardKg(double value) =>
-      _update((s) => s.copyWith(barbellStandardKg: value));
-
   Future<void> setAvatarChoice(String value) =>
       _update((s) => s.copyWith(avatarChoice: value));
 
@@ -124,6 +121,19 @@ class SettingsController extends ChangeNotifier {
   // Save the time together with the device's current zone. This matters when a
   // user travels and edits the reminder without toggling reminders off/on: the
   // chosen wall-clock time should still be interpreted in the place they are.
-  Future<void> setNotificationLocalTime(String value) => _update((s) =>
-      s.copyWith(notificationLocalTime: value, timeZoneId: deviceTimeZoneId()));
+  // Picking a time switches auto-detect off - the reminder follows it exactly.
+  Future<void> setNotificationLocalTime(String value) =>
+      _update((s) => s.copyWith(
+            notificationLocalTime: value,
+            notificationTimeIsUserSet: true,
+            timeZoneId: deviceTimeZoneId(),
+          ));
+
+  // Back to auto: the reminder follows when the user actually trains (18:00
+  // until there's enough history). The server answers with the detected time.
+  Future<void> useAutoNotificationTime() => _update((s) => s.copyWith(
+        notificationLocalTime: '18:00:00',
+        notificationTimeIsUserSet: false,
+        timeZoneId: deviceTimeZoneId(),
+      ));
 }

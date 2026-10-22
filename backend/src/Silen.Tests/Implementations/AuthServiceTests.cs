@@ -101,6 +101,8 @@ public class AuthServiceTests
         var request = new EmailRegisterRequest { Email = "taken@example.com", Password = "password1" };
         authProvider.Setup(p => p.GetUserByEmailAsync(request.Email, It.IsAny<CancellationToken>()))
             .ReturnsAsync(User(email: request.Email));
+        authProvider.Setup(p => p.IsUnclaimedAccountAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
         // No Setup for UpsertPendingEmailVerificationAsync or emailSender.SendAsync -
         // MockBehavior.Strict makes an unexpected call throw, so this also asserts they are never invoked.
@@ -129,6 +131,35 @@ public class AuthServiceTests
         Assert.NotEqual(Guid.Empty, result.Data!.PendingId);
         authProvider.Verify(p => p.UpsertPendingEmailVerificationAsync(
             It.IsAny<Guid>(), request.ExistingUserId, request.Email, It.IsAny<byte[]>(), It.IsAny<byte[]>(), request.DisplayName,
+            It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        emailSender.Verify(e => e.SendAsync(request.Email, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task StartEmailRegistrationAsync_UnclaimedPartnerAccount_StartsRealVerificationForThatAccount()
+    {
+        // The partner website provisioned this account: email set, no password, no identity.
+        var provisioned = User(email: "lead@example.com");
+        var request = new EmailRegisterRequest
+        {
+            Email = provisioned.Email!, Password = "password1", DisplayName = "Lead", ExistingUserId = Guid.NewGuid()
+        };
+        authProvider.Setup(p => p.GetUserByEmailAsync(request.Email, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(provisioned);
+        authProvider.Setup(p => p.IsUnclaimedAccountAsync(provisioned.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        authProvider.Setup(p => p.UpsertPendingEmailVerificationAsync(
+                It.IsAny<Guid>(), provisioned.UserId, request.Email, It.IsAny<byte[]>(), It.IsAny<byte[]>(), request.DisplayName,
+                It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        emailSender.Setup(e => e.SendAsync(request.Email, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.StartEmailRegistrationAsync(request);
+
+        Assert.True(result.IsSuccess);
+        authProvider.Verify(p => p.UpsertPendingEmailVerificationAsync(
+            It.IsAny<Guid>(), provisioned.UserId, request.Email, It.IsAny<byte[]>(), It.IsAny<byte[]>(), request.DisplayName,
             It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         emailSender.Verify(e => e.SendAsync(request.Email, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }

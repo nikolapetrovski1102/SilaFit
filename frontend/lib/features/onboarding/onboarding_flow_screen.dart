@@ -20,7 +20,7 @@ import 'widgets/option_row_selector.dart';
 import 'widgets/question_scaffold.dart';
 import 'widgets/training_preference_question.dart';
 
-/// The first-launch flow: 2 intro slides, 9 profile questions, then a
+/// The first-launch flow: a 2-slide intro carousel, 9 profile questions, then a
 /// notification-permission screen. Owns its own [OnboardingController] -
 /// nothing outside this flow needs the in-progress answers - and hands off
 /// into [RootShell] once it's done, however the user got there (finished,
@@ -91,7 +91,7 @@ class _OnboardingFlowView extends StatelessWidget {
           // from the first frame and re-laid-out - via AuthBlobBackground's
           // own AnimatedAlign glide - on every step change, so onboarding
           // shares that screen's dynamic-background language end to end.
-          Positioned.fill(child: AuthBlobBackground(layout: controller.stepIndex)),
+          Positioned.fill(child: AuthBlobBackground(layout: controller.backgroundLayout)),
           ClipRect(
             child: AnimatedSwitcher(
               duration: MediaQuery.disableAnimationsOf(context)
@@ -151,30 +151,12 @@ class _OnboardingFlowView extends StatelessWidget {
 
   Widget _buildStep(BuildContext context, OnboardingController controller) {
     switch (controller.step) {
-      case OnboardingStep.intro1:
-        return IntroSlide(
-          iconMark: const DumbbellIconMark(),
-          headline: 'Track every rep.\nSee real progress.',
-          subhead: 'Workouts, meals, and progress in one place.',
-          dotIndex: 0,
-          dotCount: 2,
-          ctaLabel: 'Get started',
-          onCta: controller.goNext,
-          onSkip: () => _skip(context),
-          onLogin: () => _goToLogin(context),
-        );
-
-      case OnboardingStep.intro2:
-        return IntroSlide(
-          iconMark: const BarChartIconMark(),
-          headline: 'Make it your plan.',
-          subhead:
-              'Answer a few quick questions to find workouts that fit your life.',
-          dotIndex: 1,
-          dotCount: 2,
-          ctaLabel: 'Continue',
-          onCta: controller.goNext,
-          onBack: controller.goBack,
+      case OnboardingStep.intro:
+        return IntroCarousel(
+          slides: _introSlides,
+          initialPage: controller.introPage,
+          onPageChanged: controller.setIntroPage,
+          onDone: controller.goNext,
           onSkip: () => _skip(context),
           onLogin: () => _goToLogin(context),
         );
@@ -182,6 +164,7 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.gender:
         return QuestionScaffold(
           onBack: controller.goBack,
+          onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
           headline: "What's your gender?",
@@ -202,6 +185,7 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.age:
         return QuestionScaffold(
           onBack: controller.goBack,
+          onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
           headline: 'What is your age?',
@@ -220,6 +204,7 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.height:
         return QuestionScaffold(
           onBack: controller.goBack,
+          onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
           headline: "What's your height?",
@@ -244,6 +229,7 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.weight:
         return QuestionScaffold(
           onBack: controller.goBack,
+          onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
           headline: "What's your current weight?",
@@ -268,6 +254,7 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.goal:
         return QuestionScaffold(
           onBack: controller.goBack,
+          onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
           headline: "What's your main goal?",
@@ -297,6 +284,7 @@ class _OnboardingFlowView extends StatelessWidget {
           progressStepCount: controller.questionStepCount,
           onBack: controller.goBack,
           onNext: controller.goNext,
+          onSkip: () => _skip(context),
         );
 
       case OnboardingStep.notifications:
@@ -308,6 +296,20 @@ class _OnboardingFlowView extends StatelessWidget {
     }
   }
 }
+
+const _introSlides = [
+  IntroSlideData(
+    iconMark: DumbbellIconMark(),
+    headline: 'Track every rep.\nSee real progress.',
+    subhead: 'Workouts, meals, and progress in one place.',
+  ),
+  IntroSlideData(
+    iconMark: BarChartIconMark(),
+    headline: 'Make it your plan.',
+    subhead:
+        'Answer a few quick questions to find workouts that fit your life.',
+  ),
+];
 
 // Backend-canonical goal value -> the reference screenshot's display copy.
 const _goalLabels = {

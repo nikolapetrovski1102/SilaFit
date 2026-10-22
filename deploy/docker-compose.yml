@@ -138,6 +138,12 @@ services:
       AppStoreServer__Environment: "${APP_STORE_SERVER_ENVIRONMENT:-Production}"
       GooglePlay__PackageName: "${GOOGLE_PLAY_PACKAGE_NAME:-com.nikolapetrovski.silafit}"
       GooglePlay__ServiceAccountJsonPath: "${GOOGLE_PLAY_SERVICE_ACCOUNT_PATH:-/secrets/play-service-account.json}"
+      # Partner lead provisioning (PartnerController, docs/partner-integration.md).
+      # Basic auth credentials and the 32-byte base64 AES-256-GCM payload key shared
+      # with the partner. Leave any of them blank and every partner request is refused.
+      Partner__Username: "${PARTNER_USERNAME:-}"
+      Partner__Password: "${PARTNER_PASSWORD:-}"
+      Partner__PayloadKeyBase64: "${PARTNER_PAYLOAD_KEY:-}"
     ports:
       - "127.0.0.1:${API_PORT:-5010}:8080"   # localhost only — nginx proxies to it
     volumes:

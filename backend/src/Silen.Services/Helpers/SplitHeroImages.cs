@@ -4,10 +4,10 @@ namespace Silen.Services.Helpers;
 
 /// <summary>
 /// Auto-assigned hero artwork for splits users build themselves (in-app wizard,
-/// split builder, AI weekly generation). The artwork comes in a dark and a light
-/// variant, so what's stored is a theme-neutral key; the API serves both variants
+/// split builder, AI weekly generation). The artwork comes in a dark (male) and a
+/// light (female) variant, so what's stored is a variant-neutral key; the API serves both
 /// from Silen.Api/StaticAssets at <c>/api/static/splits/{dark|light}/{key}.jpg</c>
-/// and the app picks one - see frontend/lib/features/splits/widgets/split_hero_image.dart.
+/// and the app picks one by profile gender - see frontend/lib/features/splits/widgets/split_hero_image.dart.
 /// The curated category wins; a "Custom" split falls back to keywords in its
 /// name/description, then to the generic custom-protocol artwork.
 /// </summary>

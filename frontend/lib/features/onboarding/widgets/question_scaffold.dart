@@ -22,6 +22,10 @@ class QuestionScaffold extends StatelessWidget {
   final bool hideBelowCta;
   final Widget? footer;
 
+  /// When set, a Skip link sits after the step count so the user can leave
+  /// the flow from any question, not just the intro carousel.
+  final VoidCallback? onSkip;
+
   /// The header title next to the back button - "Assessment" for onboarding,
   /// overridable for other step-by-step flows built on this same shell (e.g.
   /// the split creation wizard).
@@ -40,6 +44,7 @@ class QuestionScaffold extends StatelessWidget {
     this.belowCta,
     this.hideBelowCta = false,
     this.footer,
+    this.onSkip,
     this.title = 'Assessment',
   });
 
@@ -74,6 +79,13 @@ class QuestionScaffold extends StatelessWidget {
                       )),
                 ),
                 _StepCounter(step: progressStep, stepCount: progressStepCount),
+                if (onSkip != null)
+                  TextButton(
+                    onPressed: onSkip,
+                    child: Text('Skip',
+                        style: AppTypography.bodyMd
+                            .copyWith(color: AppColors.onSurfaceVariant)),
+                  ),
               ],
             ),
             const SizedBox(height: AppSpacing.xxxl),

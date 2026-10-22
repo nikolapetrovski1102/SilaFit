@@ -34,6 +34,7 @@ class _FakeMeals extends MealRepository {
 
   @override
   Future<MealLog> createLog({
+    String? mealLogId,
     required DateTime logDate,
     required String mealType,
     required String title,
@@ -43,6 +44,7 @@ class _FakeMeals extends MealRepository {
     required int fatsG,
     String status = 'Planned',
     List<MealLogItem>? items,
+    Duration? timeout,
   }) async {
     created = {
       'mealType': mealType,

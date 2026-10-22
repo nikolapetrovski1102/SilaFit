@@ -15,7 +15,6 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/upgrade_lock_card.dart';
 import '../onboarding/widgets/tour_guide_card.dart';
-import '../plans/plans_controller.dart';
 import '../plans/plans_screen.dart';
 import 'my_splits_screen.dart';
 import 'split_detail_screen.dart';
@@ -44,7 +43,6 @@ class SplitsScreen extends StatefulWidget {
 class _SplitsScreenState extends State<SplitsScreen> {
   late final SplitsController _controller;
   final _splitsSpotlightKey = GlobalKey();
-  int? _purchaseRevision;
 
   @override
   void initState() {
@@ -53,18 +51,6 @@ class _SplitsScreenState extends State<SplitsScreen> {
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // A purchase or restore can unlock the library - re-ask the server
-    // rather than leave it locked until the next app launch.
-    final revision = context.watch<PlansController>().purchaseRevision;
-    if (_purchaseRevision != null && _purchaseRevision != revision) {
-      Future.microtask(() => _controller.load(force: true));
-    }
-    _purchaseRevision = revision;
   }
 
   Future<void> _openPlans() async {
@@ -80,20 +66,27 @@ class _SplitsScreenState extends State<SplitsScreen> {
     // ancestor, text falls back to WidgetsApp's default style - underlined,
     // as a debug cue - and without a SafeArea the header sits under the
     // status bar/notch.
-    return Scaffold(
+    //
+    // During the feature tour this screen is a tour step, not a page the
+    // user navigated to: leaving it any way other than the tour card's
+    // Next/Skip would strand RootShell mid-tour (overlay gone, tabs locked),
+    // so the back arrow, My splits and system/swipe back are all disabled.
+    final scaffold = Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: !widget.isTour,
         actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MySplitsScreen())),
-            icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
-            label: Text('My splits',
-                style:
-                    AppTypography.labelSm.copyWith(color: AppColors.onSurface)),
-          ),
+          if (!widget.isTour)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const MySplitsScreen())),
+              icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
+              label: Text('My splits',
+                  style: AppTypography.labelSm
+                      .copyWith(color: AppColors.onSurface)),
+            ),
         ],
       ),
       body: Stack(
@@ -165,6 +158,7 @@ class _SplitsScreenState extends State<SplitsScreen> {
         ],
       ),
     );
+    return PopScope(canPop: !widget.isTour, child: scaffold);
   }
 }
 

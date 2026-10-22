@@ -123,3 +123,20 @@ class CurrentSubscription {
     );
   }
 }
+
+/// A Silen promo code the server accepted: the Play subscription offer it
+/// unlocks, sold on the paywall at the store's discounted price.
+class PromoCode {
+  final String code;
+  final String playOfferId;
+
+  const PromoCode({required this.code, required this.playOfferId});
+
+  factory PromoCode.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return PromoCode(
+      code: map['code'] as String,
+      playOfferId: map['playOfferId'] as String,
+    );
+  }
+}

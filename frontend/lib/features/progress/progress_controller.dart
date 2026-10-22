@@ -42,7 +42,14 @@ class ProgressController extends ChangeNotifier {
     state = const ResourceState.loading();
     notifyListeners();
     try {
-      final overview = await _repository.getOverview(days: days, force: force);
+      final overview = await fetchPaintingCached(
+        cached: () => _repository.getCachedOverview(days: days),
+        fetch: () => _repository.getOverview(days: days, force: force),
+        paint: (saved) {
+          state = ResourceState.data(saved);
+          notifyListeners();
+        },
+      );
       state = ResourceState.data(overview);
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
@@ -63,7 +70,14 @@ class ProgressController extends ChangeNotifier {
     try {
       // The card only ever shows a top-3 preview - the full list lives on
       // AllPersonalRecordsScreen, fetched separately on tap.
-      final records = await _repository.getPersonalRecords(top: 3);
+      final records = await fetchPaintingCached(
+        cached: () => _repository.getCachedPersonalRecords(top: 3),
+        fetch: () => _repository.getPersonalRecords(top: 3),
+        paint: (saved) {
+          prsState = ResourceState.data(saved);
+          notifyListeners();
+        },
+      );
       prsState = ResourceState.data(records);
     } on ApiException catch (e) {
       prsState = ResourceState.error(e.userMessage);

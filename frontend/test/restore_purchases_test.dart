@@ -8,6 +8,7 @@ import 'package:silafit/core/api/api_exception.dart';
 import 'package:silafit/core/session/session_store.dart';
 import 'package:silafit/features/plans/iap_service.dart';
 import 'package:silafit/features/plans/plans_controller.dart';
+import 'package:silafit/features/plans/plans_models.dart';
 import 'package:silafit/features/plans/plans_repository.dart';
 
 /// Fails verification for any transaction id listed in [rejections], with
@@ -19,7 +20,7 @@ class _PlansRepository extends PlansRepository {
       : super(ApiClient(sessionStore: SessionStore()));
 
   @override
-  Future<void> verifyPurchase({
+  Future<CurrentSubscription> verifyPurchase({
     required String store,
     required String productId,
     required String receiptData,
@@ -27,6 +28,7 @@ class _PlansRepository extends PlansRepository {
   }) async {
     final rejection = rejections[transactionId];
     if (rejection != null) throw ApiException(rejection, statusCode: 409);
+    return const CurrentSubscription(planCode: 'PRO', planName: 'Pro');
   }
 }
 
@@ -144,5 +146,5 @@ void main() {
 
 class _FreePlanRepository extends _PlansRepository {
   @override
-  Future<String> getActivePlanCode() async => 'FREE';
+  Future<CurrentSubscription> getCurrent() async => CurrentSubscription.free;
 }

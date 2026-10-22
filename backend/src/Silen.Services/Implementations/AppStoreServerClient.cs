@@ -51,6 +51,111 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
 
     public async Task<AppStoreTransactionInfo?> GetTransactionInfoAsync(string transactionId, CancellationToken cancellationToken = default)
     {
+        using var document = await GetWithEnvironmentFallbackAsync(
+            $"/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}", transactionId, cancellationToken).ConfigureAwait(false);
+        if (document is null)
+        {
+            return null;
+        }
+
+        if (!document.RootElement.TryGetProperty("signedTransactionInfo", out var signedElement))
+        {
+            _logger.LogWarning("App Store Server API response for '{TransactionId}' had no signedTransactionInfo.", transactionId);
+            return null;
+        }
+
+        return DecodeTransaction(signedElement.GetString(), _options.BundleId, _logger);
+    }
+
+    public async Task<AppStoreSubscriptionStatus?> GetSubscriptionStatusAsync(
+        string transactionId, string? originalTransactionId, CancellationToken cancellationToken = default)
+    {
+        using var document = await GetWithEnvironmentFallbackAsync(
+            $"/inApps/v1/subscriptions/{Uri.EscapeDataString(transactionId)}", transactionId, cancellationToken).ConfigureAwait(false);
+        if (document is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            // data[] is one entry per subscription group, lastTransactions[] one per
+            // subscription in it - normally exactly one, but match on the original
+            // transaction id when we know it so a second subscription can't be picked.
+            var entries = new List<JsonElement>();
+            if (document.RootElement.TryGetProperty("data", out var groups) && groups.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var group in groups.EnumerateArray())
+                {
+                    if (group.TryGetProperty("lastTransactions", out var lastTransactions) && lastTransactions.ValueKind == JsonValueKind.Array)
+                    {
+                        entries.AddRange(lastTransactions.EnumerateArray());
+                    }
+                }
+            }
+
+            var entry = entries.FirstOrDefault(e =>
+                !string.IsNullOrWhiteSpace(originalTransactionId)
+                && e.TryGetProperty("originalTransactionId", out var original)
+                && string.Equals(original.GetString(), originalTransactionId, StringComparison.Ordinal));
+            if (entry.ValueKind == JsonValueKind.Undefined)
+            {
+                entry = entries.FirstOrDefault();
+            }
+
+            if (entry.ValueKind == JsonValueKind.Undefined)
+            {
+                _logger.LogWarning("App Store subscription status for '{TransactionId}' listed no subscriptions.", transactionId);
+                return null;
+            }
+
+            var transaction = DecodeTransaction(
+                entry.TryGetProperty("signedTransactionInfo", out var signedTransaction) ? signedTransaction.GetString() : null,
+                _options.BundleId, _logger);
+            if (transaction is null)
+            {
+                return null;
+            }
+
+            var autoRenewing = true;
+            DateTime? gracePeriodExpiresAtUtc = null;
+            using (var renewal = JwsPayloadDecoder.TryDecodePayload(
+                       entry.TryGetProperty("signedRenewalInfo", out var signedRenewal) ? signedRenewal.GetString() : null, _logger))
+            {
+                if (renewal is not null)
+                {
+                    if (renewal.RootElement.TryGetProperty("autoRenewStatus", out var autoRenewStatus))
+                    {
+                        autoRenewing = autoRenewStatus.GetInt32() == 1;
+                    }
+
+                    if (renewal.RootElement.TryGetProperty("gracePeriodExpiresDate", out var graceExpires))
+                    {
+                        gracePeriodExpiresAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(graceExpires.GetInt64()).UtcDateTime;
+                    }
+                }
+            }
+
+            return new AppStoreSubscriptionStatus
+            {
+                Status = entry.TryGetProperty("status", out var status) ? status.GetInt32() : 0,
+                LatestTransaction = transaction,
+                AutoRenewing = autoRenewing,
+                GracePeriodExpiresAtUtc = gracePeriodExpiresAtUtc
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not read App Store subscription status for '{TransactionId}'.", transactionId);
+            return null;
+        }
+    }
+
+    /// <summary>GETs an App Store Server API path, retrying once against the other
+    /// environment on a 404. Null when unconfigured or the call fails.</summary>
+    private async Task<JsonDocument?> GetWithEnvironmentFallbackAsync(
+        string path, string transactionId, CancellationToken cancellationToken)
+    {
         if (!IsConfigured)
         {
             _logger.LogWarning("AppStoreServer is not configured; cannot verify transaction '{TransactionId}'.", transactionId);
@@ -69,10 +174,10 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
         }
 
         var primaryBaseUrl = GetBaseUrl(_options.Environment);
-        var (info, notFound) = await TryFetchTransactionAsync(primaryBaseUrl, transactionId, token, cancellationToken).ConfigureAwait(false);
-        if (info is not null || !notFound)
+        var (document, notFound) = await TryGetAsync(primaryBaseUrl, path, transactionId, token, cancellationToken).ConfigureAwait(false);
+        if (document is not null || !notFound)
         {
-            return info;
+            return document;
         }
 
         // Apple returns 404 when the transaction only exists in the other environment
@@ -82,8 +187,8 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
         _logger.LogInformation(
             "Transaction '{TransactionId}' not found at {PrimaryBaseUrl}; retrying at {FallbackBaseUrl}.",
             transactionId, primaryBaseUrl, fallbackBaseUrl);
-        var (fallbackInfo, _) = await TryFetchTransactionAsync(fallbackBaseUrl, transactionId, token, cancellationToken).ConfigureAwait(false);
-        return fallbackInfo;
+        var (fallbackDocument, _) = await TryGetAsync(fallbackBaseUrl, path, transactionId, token, cancellationToken).ConfigureAwait(false);
+        return fallbackDocument;
     }
 
     private static string GetBaseUrl(string? environment) =>
@@ -92,10 +197,10 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
     private static string GetFallbackBaseUrl(string baseUrl) =>
         baseUrl == SandboxBaseUrl ? ProductionBaseUrl : SandboxBaseUrl;
 
-    private async Task<(AppStoreTransactionInfo? Info, bool NotFound)> TryFetchTransactionAsync(
-        string baseUrl, string transactionId, string token, CancellationToken cancellationToken)
+    private async Task<(JsonDocument? Document, bool NotFound)> TryGetAsync(
+        string baseUrl, string path, string transactionId, string token, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{path}");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         try
@@ -105,23 +210,16 @@ public sealed class AppStoreServerClient : IAppStoreServerClient
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "App Store Server API rejected transaction lookup for '{TransactionId}' at {BaseUrl} ({Status}): {Body}",
-                    transactionId, baseUrl, (int)response.StatusCode, body);
+                    "App Store Server API rejected {Path} for '{TransactionId}' at {BaseUrl} ({Status}): {Body}",
+                    path, transactionId, baseUrl, (int)response.StatusCode, body);
                 return (null, response.StatusCode == System.Net.HttpStatusCode.NotFound);
             }
 
-            using var document = JsonDocument.Parse(body);
-            if (!document.RootElement.TryGetProperty("signedTransactionInfo", out var signedElement))
-            {
-                _logger.LogWarning("App Store Server API response for '{TransactionId}' at {BaseUrl} had no signedTransactionInfo.", transactionId, baseUrl);
-                return (null, false);
-            }
-
-            return (DecodeTransaction(signedElement.GetString(), _options.BundleId, _logger), false);
+            return (JsonDocument.Parse(body), false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "App Store Server API call failed for transaction '{TransactionId}' at {BaseUrl}.", transactionId, baseUrl);
+            _logger.LogError(ex, "App Store Server API call {Path} failed for '{TransactionId}' at {BaseUrl}.", path, transactionId, baseUrl);
             return (null, false);
         }
     }

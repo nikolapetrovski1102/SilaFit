@@ -53,6 +53,10 @@ public interface IPlansProvider
     Task<SubscriptionReceiptModel?> GetReceiptByPurchaseTokenAsync(
         string purchaseToken, CancellationToken cancellationToken = default);
 
+    /// <summary>Looks up a receipt by id - used to read the receipt behind a user's current
+    /// plan (<see cref="UserSubscriptionModel.LatestReceiptId"/>).</summary>
+    Task<SubscriptionReceiptModel?> GetReceiptByIdAsync(Guid receiptId, CancellationToken cancellationToken = default);
+
     /// <summary>Finds the receipt that first tied a store subscription to a Silen account -
     /// matched by App Store original transaction id or Play purchase token, both of which stay
     /// the same across renewals. Null when no account has claimed it yet.</summary>
@@ -62,4 +66,8 @@ public interface IPlansProvider
     /// <summary>Moves a subscription out of Active (Cancelled/Expired) without granting
     /// entitlement - used when a store check finds the receipt is no longer current.</summary>
     Task UpdateSubscriptionStatusAsync(Guid userId, string status, CancellationToken cancellationToken = default);
+
+    /// <summary>Claims a Silen discount code for the user - see <see cref="PromoCodeRedemptionModel"/>.
+    /// Never null in practice: the function always answers with exactly one status row.</summary>
+    Task<PromoCodeRedemptionModel?> RedeemPromoCodeAsync(Guid userId, string code, CancellationToken cancellationToken = default);
 }

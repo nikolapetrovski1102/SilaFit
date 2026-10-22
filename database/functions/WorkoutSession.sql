@@ -108,6 +108,12 @@ END $$;
 -- the set-by-set log behind real Personal Records (see
 -- usp_WorkoutSession_GetPersonalRecords). NULL/absent is a valid, older-client
 -- call: the session still completes, it just adds nothing to PR history.
+--
+-- p_splitdayid / p_scheduleddateutc: set only for a session the phone made up
+-- itself because it couldn't reach usp_workoutsession_gettodayscheduled (a
+-- gym with no signal, app not opened yet that day). When no session has
+-- p_workoutsessionid, that day's session is completed instead - the server
+-- may have created one since - or, failing that, created under the phone's id.
 CREATE OR REPLACE FUNCTION dbo.usp_workoutsession_complete(
     p_userid uuid,
     p_workoutsessionid uuid,
@@ -115,27 +121,60 @@ CREATE OR REPLACE FUNCTION dbo.usp_workoutsession_complete(
     p_caloriesestimate smallint DEFAULT NULL,
     p_rpescore numeric(3,1) DEFAULT NULL,
     p_tonnagekg numeric(10,2) DEFAULT NULL,
-    p_setlogsjson text DEFAULT NULL
+    p_setlogsjson text DEFAULT NULL,
+    p_completedatutc timestamp(3) DEFAULT NULL,
+    p_splitdayid uuid DEFAULT NULL,
+    p_scheduleddateutc date DEFAULT NULL
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 DECLARE
     c1 refcursor;
+    -- A workout finished offline in the gym is uploaded later; the client
+    -- sends when it actually ended (already clamped by TodayService) so the
+    -- session and its sets land on the right day for streaks and PRs.
+    v_completedatutc timestamp(3) := COALESCE(p_completedatutc, dbo.sysutcdatetime());
+    v_scheduleddate date := COALESCE(p_scheduleddateutc, v_completedatutc::date);
+    v_workoutsessionid uuid := p_workoutsessionid;
 BEGIN
+    IF p_splitdayid IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM dbo.workoutsessions
+        WHERE workoutsessionid = p_workoutsessionid AND userid = p_userid
+    ) THEN
+        -- Same lock as usp_workoutsession_gettodayscheduled, so the two can't
+        -- each create that day's session.
+        PERFORM pg_advisory_xact_lock(hashtextextended('today-session:' || p_userid::text, 0));
+
+        SELECT workoutsessionid INTO v_workoutsessionid
+        FROM dbo.workoutsessions
+        WHERE userid = p_userid AND scheduleddateutc = v_scheduleddate
+        LIMIT 1;
+
+        IF v_workoutsessionid IS NULL
+           AND EXISTS (SELECT 1 FROM dbo.splitdays WHERE splitdayid = p_splitdayid) THEN
+            v_workoutsessionid := p_workoutsessionid;
+            INSERT INTO dbo.workoutsessions (workoutsessionid, userid, splitdayid, scheduleddateutc, status)
+            VALUES (v_workoutsessionid, p_userid, p_splitdayid, v_scheduleddate, 'Scheduled');
+        END IF;
+        -- Otherwise the split day was deleted before the upload: nothing to
+        -- attach the workout to, so it falls through as not found.
+    END IF;
+
     UPDATE dbo.workoutsessions
     SET status = 'Completed',
-        completedatutc = dbo.sysutcdatetime(),
+        completedatutc = v_completedatutc,
         durationminutes = p_durationminutes,
         caloriesestimate = p_caloriesestimate,
         rpescore = p_rpescore,
         tonnagekg = p_tonnagekg
-    WHERE workoutsessionid = p_workoutsessionid AND userid = p_userid;
+    WHERE workoutsessionid = v_workoutsessionid AND userid = p_userid;
 
     -- Idempotent: completing the same session twice (a retried request)
     -- replaces its set log rather than duplicating every set.
-    DELETE FROM dbo.workoutsetlogs WHERE workoutsessionid = p_workoutsessionid AND userid = p_userid;
+    DELETE FROM dbo.workoutsetlogs WHERE workoutsessionid = v_workoutsessionid AND userid = p_userid;
 
-    IF p_setlogsjson IS NOT NULL AND p_setlogsjson IS JSON ARRAY THEN
-        INSERT INTO dbo.workoutsetlogs (workoutsessionid, userid, exerciseid, setnumber, weightkg, reps)
-        SELECT p_workoutsessionid, p_userid, j."exerciseId", j."setNumber", j."weightKg", j.reps
+    IF v_workoutsessionid IS NOT NULL AND p_setlogsjson IS NOT NULL AND p_setlogsjson IS JSON ARRAY
+       AND EXISTS (SELECT 1 FROM dbo.workoutsessions WHERE workoutsessionid = v_workoutsessionid AND userid = p_userid) THEN
+        INSERT INTO dbo.workoutsetlogs (workoutsessionid, userid, exerciseid, setnumber, weightkg, reps, completedatutc)
+        SELECT v_workoutsessionid, p_userid, j."exerciseId", j."setNumber", j."weightKg", j.reps, v_completedatutc
         FROM jsonb_to_recordset(p_setlogsjson::jsonb)
             AS j("exerciseId" uuid, "setNumber" smallint, "weightKg" numeric(6,2), reps smallint);
     END IF;
@@ -143,9 +182,31 @@ BEGIN
     OPEN c1 FOR
     SELECT workoutsessionid, status, completedatutc, durationminutes, caloriesestimate, rpescore, tonnagekg
     FROM dbo.workoutsessions
-    WHERE workoutsessionid = p_workoutsessionid AND userid = p_userid;
+    WHERE workoutsessionid = v_workoutsessionid AND userid = p_userid;
     RETURN NEXT c1;
 END $$;
+
+-- How many times a set's logged weight counts toward volume: 2 for a Dumbbell
+-- exercise done with a dumbbell in each hand (the set log stores the weight
+-- per hand), 1 for everything else - single-dumbbell moves (goblet squat,
+-- pullover, one-arm row, ...), barbells, machines. Mirrors
+-- `_loadMultiplierFor` in active_workout_tracker_screen.dart and migration
+-- 0012 - keep the three in step.
+CREATE OR REPLACE FUNCTION dbo.ufn_exercise_loadmultiplier(
+    p_equipmenttype varchar,
+    p_name varchar
+) RETURNS integer LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_equipmenttype = 'Dumbbell'
+                 AND NOT (p_name COLLATE "C" ~* (
+                     'goblet|single[ -]arm|one[ -]arm|1-arm|tripod|pull ?over|concentration'
+                     '|plie|sumo squat|side bend|knee-in|pass-through'
+                     '|two arm dumbbell overhead|two arm seated dumbbell'
+                     '|overhead dumbbell (extension|tricep)|dumbbell overhead (extension|tricep)'
+                     '|dumbbell tricep overhead|seated dumbbell tricep extension'
+                     '|triceps press with db|overhead triceps|behind head|french press'
+                     '|weighted (ab )?crunch|1 db|dumbbell on chest'))
+                THEN 2 ELSE 1 END;
+$$;
 
 -- Feeds the Progress screen's Personal Records card: the heaviest set ever
 -- logged per exercise, plus whatever the heaviest set was *before* that one
@@ -163,6 +224,7 @@ BEGIN
         SELECT
             wsl.exerciseid,
             e.name AS exercisename,
+            dbo.ufn_exercise_loadmultiplier(e.equipmenttype, e.name) = 2 AS isperdumbbell,
             wsl.weightkg,
             wsl.reps,
             wsl.completedatutc,
@@ -186,7 +248,8 @@ BEGIN
             WHERE prior.userid = p_userid
               AND prior.exerciseid = b.exerciseid
               AND prior.completedatutc < b.completedatutc
-        ) AS previousbestweightkg
+        ) AS previousbestweightkg,
+        b.isperdumbbell
     FROM best b
     ORDER BY b.completedatutc DESC
     LIMIT p_top;
@@ -310,11 +373,12 @@ BEGIN
         wsl.exerciseid,
         e.name AS exercisename,
         COUNT(DISTINCT wsl.workoutsessionid)::int AS sessioncount,
-        MAX(wsl.completedatutc) AS lasttrainedatutc
+        MAX(wsl.completedatutc) AS lasttrainedatutc,
+        dbo.ufn_exercise_loadmultiplier(e.equipmenttype, e.name) = 2 AS isperdumbbell
     FROM dbo.workoutsetlogs wsl
     INNER JOIN dbo.exercises e ON e.exerciseid = wsl.exerciseid
     WHERE wsl.userid = p_userid
-    GROUP BY wsl.exerciseid, e.name
+    GROUP BY wsl.exerciseid, e.name, e.equipmenttype
     ORDER BY MAX(wsl.completedatutc) DESC;
     RETURN NEXT c1;
 END $$;
@@ -322,7 +386,8 @@ END $$;
 -- Feeds the Progress screen's per-exercise chart: one row per session the
 -- exercise was trained in since p_fromdateutc (oldest first), reduced to the
 -- heaviest set, the best Epley-estimated 1RM, and the session's total
--- volume/reps/sets for that exercise. PRO/Advanced entitlement is checked in
+-- volume/reps/sets for that exercise. Weights stay as logged (per dumbbell for
+-- two-dumbbell moves); volume counts both dumbbells, like the session tonnage. PRO/Advanced entitlement is checked in
 -- ProgressService, not here.
 CREATE OR REPLACE FUNCTION dbo.usp_workoutsetlog_getexerciseprogress(
     p_userid uuid,
@@ -339,6 +404,7 @@ BEGIN
             ws.scheduleddateutc,
             wsl.weightkg,
             wsl.reps,
+            dbo.ufn_exercise_loadmultiplier(e.equipmenttype, e.name) AS loadmultiplier,
             -- Epley; a single rep already *is* the 1RM.
             CASE WHEN wsl.reps = 1 THEN wsl.weightkg
                  ELSE wsl.weightkg * (1 + wsl.reps / 30.0) END AS estimatedonermkg,
@@ -346,6 +412,7 @@ BEGIN
                                ORDER BY wsl.weightkg DESC, wsl.reps DESC) AS rankinsession
         FROM dbo.workoutsetlogs wsl
         INNER JOIN dbo.workoutsessions ws ON ws.workoutsessionid = wsl.workoutsessionid
+        INNER JOIN dbo.exercises e ON e.exerciseid = wsl.exerciseid
         WHERE wsl.userid = p_userid
           AND ws.userid = p_userid
           AND wsl.exerciseid = p_exerciseid
@@ -356,7 +423,7 @@ BEGIN
         MAX(CASE WHEN s.rankinsession = 1 THEN s.weightkg END) AS topweightkg,
         MAX(CASE WHEN s.rankinsession = 1 THEN s.reps END)::smallint AS topsetreps,
         MAX(s.estimatedonermkg)::numeric(8,2) AS estimatedonermkg,
-        SUM(s.weightkg * s.reps)::numeric(12,2) AS totalvolumekg,
+        SUM(s.weightkg * s.reps * s.loadmultiplier)::numeric(12,2) AS totalvolumekg,
         SUM(s.reps::int)::int AS totalreps,
         COUNT(*)::int AS setcount
     FROM sets s

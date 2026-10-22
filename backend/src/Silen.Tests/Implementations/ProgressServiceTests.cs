@@ -12,11 +12,12 @@ public class ProgressServiceTests
     private readonly Mock<IWorkoutSessionProvider> workoutSessionProvider = new(MockBehavior.Strict);
     private readonly Mock<IStreakProvider> streakProvider = new(MockBehavior.Strict);
     private readonly Mock<ISubscriptionGate> subscriptionGate = new(MockBehavior.Strict);
+    private readonly Mock<IProgressAdPassProvider> progressAdPassProvider = new(MockBehavior.Strict);
     private readonly ProgressService sut;
 
     public ProgressServiceTests()
     {
-        sut = new ProgressService(workoutSessionProvider.Object, streakProvider.Object, subscriptionGate.Object);
+        sut = new ProgressService(workoutSessionProvider.Object, streakProvider.Object, subscriptionGate.Object, progressAdPassProvider.Object);
     }
 
     [Fact]
@@ -144,7 +145,8 @@ public class ProgressServiceTests
                 WeightKg = 100m,
                 Reps = 5,
                 AchievedAtUtc = new DateTime(2026, 1, 1),
-                PreviousBestWeightKg = 95m
+                PreviousBestWeightKg = 95m,
+                IsPerDumbbell = true
             }
         };
 
@@ -161,6 +163,7 @@ public class ProgressServiceTests
         Assert.Equal(100m, result.Data![0].WeightKg);
         Assert.Equal((short)5, result.Data![0].Reps);
         Assert.Equal(95m, result.Data![0].PreviousBestWeightKg);
+        Assert.True(result.Data![0].IsPerDumbbell);
     }
 
     [Fact]
@@ -168,6 +171,7 @@ public class ProgressServiceTests
     {
         var userId = Guid.NewGuid();
         subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        progressAdPassProvider.Setup(p => p.HasActiveAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await sut.GetTrackedExercisesAsync(userId);
 
@@ -184,7 +188,7 @@ public class ProgressServiceTests
         subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         workoutSessionProvider
             .Setup(p => p.GetTrackedExercisesAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TrackedExerciseModel { ExerciseId = exerciseId, ExerciseName = "Bench Press", SessionCount = 6, LastTrainedAtUtc = lastTrained }]);
+            .ReturnsAsync([new TrackedExerciseModel { ExerciseId = exerciseId, ExerciseName = "Bench Press", SessionCount = 6, LastTrainedAtUtc = lastTrained, IsPerDumbbell = true }]);
 
         var result = await sut.GetTrackedExercisesAsync(userId);
 
@@ -194,6 +198,7 @@ public class ProgressServiceTests
         Assert.Equal("Bench Press", exercise.ExerciseName);
         Assert.Equal(6, exercise.SessionCount);
         Assert.Equal(lastTrained, exercise.LastTrainedAtUtc);
+        Assert.True(exercise.IsPerDumbbell);
     }
 
     [Fact]
@@ -201,6 +206,7 @@ public class ProgressServiceTests
     {
         var userId = Guid.NewGuid();
         subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        progressAdPassProvider.Setup(p => p.HasActiveAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await sut.GetExerciseProgressAsync(userId, Guid.NewGuid(), 90);
 
@@ -244,5 +250,76 @@ public class ProgressServiceTests
         Assert.Equal(1500m, point.TotalVolumeKg);
         Assert.Equal(15, point.TotalReps);
         Assert.Equal(3, point.SetCount);
+    }
+
+    [Fact]
+    public async Task GetTrackedExercisesAsync_FreeUserWithActiveAdPass_ReturnsExercises()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        progressAdPassProvider.Setup(p => p.HasActiveAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        workoutSessionProvider
+            .Setup(p => p.GetTrackedExercisesAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await sut.GetTrackedExercisesAsync(userId);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task GrantAdPassAsync_FreeUserUnderLimit_ReturnsPassExpiry()
+    {
+        var userId = Guid.NewGuid();
+        var expires = new DateTime(2026, 10, 18, 12, 15, 0, DateTimeKind.Utc);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        progressAdPassProvider
+            .Setup(p => p.GrantAsync(userId, 15, 5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProgressAdPassGrantModel { Status = "Ok", ExpiresAtUtc = expires });
+
+        var result = await sut.GrantAdPassAsync(userId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(expires, result.Data!.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task GrantAdPassAsync_DailyLimitReached_Returns429()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        progressAdPassProvider
+            .Setup(p => p.GrantAsync(userId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProgressAdPassGrantModel { Status = "LimitReached" });
+
+        var result = await sut.GrantAdPassAsync(userId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(429, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GrantAdPassAsync_ProUser_RecordsNothing()
+    {
+        var userId = Guid.NewGuid();
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await sut.GrantAdPassAsync(userId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Data!.ExpiresAtUtc);
+        progressAdPassProvider.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task EndAdPassAsync_ExpiresTheCallersPass()
+    {
+        var userId = Guid.NewGuid();
+        progressAdPassProvider.Setup(p => p.EndAsync(userId, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var result = await sut.EndAdPassAsync(userId);
+
+        Assert.True(result.IsSuccess);
+        progressAdPassProvider.Verify(p => p.EndAsync(userId, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

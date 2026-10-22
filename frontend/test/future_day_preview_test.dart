@@ -22,7 +22,7 @@ void main() {
       ]);
 
       final preview = DayPreview.resolve(
-        date: monday.add(const Duration(days: 1)),
+        date: addDays(monday, 1),
         dashboard: _dashboard(split),
         splitDetail: detail,
       );
@@ -47,7 +47,7 @@ void main() {
       ]);
 
       final preview = DayPreview.resolve(
-        date: monday.add(const Duration(days: 1)),
+        date: addDays(monday, 1),
         dashboard: _dashboard(split),
         splitDetail: detail,
       );
@@ -84,7 +84,7 @@ void main() {
 
       for (final offset in [5, 6]) {
         final preview = DayPreview.resolve(
-          date: monday.add(Duration(days: offset)),
+          date: addDays(monday, offset),
           dashboard: _dashboard(split),
           splitDetail: detail,
         );
@@ -95,7 +95,7 @@ void main() {
       // And the cycle keeps repeating indefinitely - day 7 of the next lap
       // lands back on the first authored day rather than running out.
       final nextLap = DayPreview.resolve(
-        date: monday.add(const Duration(days: 7)),
+        date: addDays(monday, 7),
         dashboard: _dashboard(split),
         splitDetail: detail,
       );
@@ -119,10 +119,10 @@ void main() {
       ]);
 
       String? titleOn(int offset) =>
-          resolveSplitDay(monday.add(Duration(days: offset)), split, detail)
+          resolveSplitDay(addDays(monday, offset), split, detail)
               ?.title;
       bool? restOn(int offset) =>
-          resolveSplitDay(monday.add(Duration(days: offset)), split, detail)
+          resolveSplitDay(addDays(monday, offset), split, detail)
               ?.isRestDay;
 
       expect(titleOn(0), 'Push');
@@ -148,7 +148,7 @@ void main() {
       ]);
 
       expect(
-          resolveSplitDay(monday.add(const Duration(days: 4)), split, detail)
+          resolveSplitDay(addDays(monday, 4), split, detail)
               ?.isRestDay,
           isTrue);
       for (final week in [1, 2, 5]) {
@@ -179,7 +179,7 @@ void main() {
 
       expect(resolveSplitDay(monday, split, detail)?.title, 'First');
       expect(
-        resolveSplitDay(monday.add(const Duration(days: 1)), split, detail)
+        resolveSplitDay(addDays(monday, 1), split, detail)
             ?.title,
         'Second',
       );
@@ -189,7 +189,7 @@ void main() {
       // Activated on a Wednesday: the first day still belongs to that week's
       // Monday, so Wednesday resolves to the third day, not the first.
       final monday = _upcomingMonday();
-      final wednesday = monday.add(const Duration(days: 2));
+      final wednesday = addDays(monday, 2);
       final split = ActiveSplit(
         splitId: 'split-1',
         durationDays: 7,
@@ -201,7 +201,7 @@ void main() {
 
       expect(resolveSplitDay(wednesday, split, detail)?.title, 'Day 3');
       expect(
-        resolveSplitDay(monday.add(const Duration(days: 7)), split, detail)
+        resolveSplitDay(addDays(monday, 7), split, detail)
             ?.title,
         'Day 1',
       );
@@ -210,7 +210,7 @@ void main() {
     testWidgets('opens the complete workout from the future-day button',
         (tester) async {
       final monday = _upcomingMonday();
-      final futureDate = monday.add(const Duration(days: 1));
+      final futureDate = addDays(monday, 1);
       final split = ActiveSplit(
         splitId: 'split-1',
         name: 'Strength rotation',
@@ -293,7 +293,7 @@ void main() {
 /// future day and the split's rotation starts exactly on it.
 DateTime _upcomingMonday() {
   final today = dateOnly(DateTime.now());
-  return today.add(Duration(days: 8 - today.weekday));
+  return addDays(today, 8 - today.weekday);
 }
 
 TodayDashboard _dashboard(ActiveSplit split) => TodayDashboard(

@@ -33,3 +33,17 @@ public sealed class VerifyPurchaseRequest
     /// <summary>Required for AppStore purchases - StoreKit's transaction/purchase id.</summary>
     public string? TransactionId { get; set; }
 }
+
+public sealed class RedeemPromoCodeRequest
+{
+    public string Code { get; set; } = string.Empty;
+}
+
+/// <summary>An accepted Silen discount code: the Play subscription offer it unlocks on the
+/// paywall, and until when the code itself can still be entered.</summary>
+public sealed class PromoCodeDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string PlayOfferId { get; set; } = string.Empty;
+    public DateTime? ExpiresAtUtc { get; set; }
+}

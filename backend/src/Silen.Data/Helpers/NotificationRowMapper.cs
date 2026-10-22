@@ -24,6 +24,7 @@ public static class NotificationRowMapper
         DisplayName = reader.GetNullableString("DisplayName"),
         NotificationsEnabled = reader.GetBoolValue("NotificationsEnabled"),
         NotificationLocalTime = reader.GetTimeSpanValue("NotificationLocalTime"),
+        NotificationTimeIsUserSet = reader.GetBoolValue("NotificationTimeIsUserSet"),
         TimeZoneId = reader.GetStringValue("TimeZoneId"),
         LastInteractionAtUtc = reader.GetNullableDateTime("LastInteractionAtUtc"),
         LastPushedAtUtc = reader.GetNullableDateTime("LastPushedAtUtc"),
@@ -33,10 +34,12 @@ public static class NotificationRowMapper
         LastWorkoutStartedAtUtc = reader.GetNullableDateTime("LastWorkoutStartedAtUtc"),
         LastWorkoutCompletedAtUtc = reader.GetNullableDateTime("LastWorkoutCompletedAtUtc"),
         WorkoutsLast7Days = reader.GetInt32Value("WorkoutsLast7Days"),
+        RecentWorkoutStartsUtc = reader.GetDateTimeArray("RecentWorkoutStartsUtc"),
         ActiveSessionStartedAtUtc = reader.GetNullableDateTime("ActiveSessionStartedAtUtc"),
         ActiveSessionLastActivityAtUtc = reader.GetNullableDateTime("ActiveSessionLastActivityAtUtc"),
         LastMealLoggedAtUtc = reader.GetNullableDateTime("LastMealLoggedAtUtc"),
         MealsLast24h = reader.GetInt32Value("MealsLast24h"),
+        RecentMealsLoggedUtc = reader.GetDateTimeArray("RecentMealsLoggedUtc"),
         HasPaidSubscription = reader.GetBoolValue("HasPaidSubscription"),
         ActiveTokenCount = reader.GetInt32Value("ActiveTokenCount")
     };

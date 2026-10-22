@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/account_gate.dart';
-import '../progress/analytics_controller.dart';
-import '../progress/weekly_analytics_controller.dart';
 import 'plans_controller.dart';
 
 /// The one Restore Purchases flow, shared by Settings and the paywall so both
@@ -29,12 +27,6 @@ Future<void> runRestorePurchases(BuildContext context) async {
       'No active subscription found for this Apple ID or Google account.',
     RestoreOutcome.failed => plans.actionError!,
   };
-  if (outcome == RestoreOutcome.restored) {
-    // Same reason as a fresh purchase: these app-lifetime controllers only
-    // check entitlement once, so the AI review cards would stay locked.
-    context.read<AnalyticsController>().load(force: true);
-    context.read<WeeklyAnalyticsController>().load(force: true);
-  }
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(SnackBar(content: Text(message)));
 }

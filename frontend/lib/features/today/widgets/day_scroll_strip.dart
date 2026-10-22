@@ -132,13 +132,13 @@ class _DayScrollStripState extends State<DayScrollStrip> {
 
   List<WeekDayStatus> _computeDays() {
     final today = dateOnly(DateTime.now());
-    final start = today.subtract(const Duration(days: _historyDays));
-    final end = today.add(const Duration(days: _futureDays));
+    final start = addDays(today, -_historyDays);
+    final end = addDays(today, _futureDays);
     final split = widget.activeSplit;
     final detail = widget.splitDetail;
 
     final days = <WeekDayStatus>[];
-    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+    for (var d = start; !d.isAfter(end); d = addDays(d, 1)) {
       final known = _knownByKey[dayKey(d)];
       String status;
       if (known != null) {

@@ -18,4 +18,12 @@ public interface IProgressService
     /// <summary>Per-session history of one exercise over the last <paramref name="days"/> days. PRO/Advanced only;
     /// throws <see cref="Silen.Common.Exceptions.ProUpgradeRequiredException"/> otherwise.</summary>
     Task<ServiceResult<ExerciseProgressDto>> GetExerciseProgressAsync(Guid userId, Guid exerciseId, int days, CancellationToken cancellationToken = default);
+
+    /// <summary>Grants a Free caller a short Progress pass after a rewarded video ad. Throws
+    /// <see cref="Silen.Common.Exceptions.TooManyRequestsException"/> once the daily cap is used;
+    /// a Pro/Advanced caller gets a pass with no expiry and nothing recorded.</summary>
+    Task<ServiceResult<ProgressAdPassDto>> GrantAdPassAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Ends the caller's Progress ad pass early - the app calls it when the user leaves the screen.</summary>
+    Task<ServiceResult<bool>> EndAdPassAsync(Guid userId, CancellationToken cancellationToken = default);
 }

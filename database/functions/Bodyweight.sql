@@ -5,22 +5,36 @@
 -- without a second round-trip.
 CREATE OR REPLACE FUNCTION dbo.usp_bodyweight_log(
     p_userid uuid,
-    p_weightkg bytea
+    p_weightkg bytea,
+    p_bodyweightlogid uuid DEFAULT NULL,
+    p_loggedatutc timestamp(3) DEFAULT NULL
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 DECLARE
     c1 refcursor;
+    v_loggedatutc timestamp(3) := COALESCE(p_loggedatutc, dbo.sysutcdatetime());
+    v_inserted integer;
 BEGIN
-    INSERT INTO dbo.bodyweightlogs (userid, weightkg)
-    VALUES (p_userid, p_weightkg);
+    -- The client id makes a replay harmless: an entry logged offline and
+    -- re-sent after a dropped response is stored once, not twice.
+    INSERT INTO dbo.bodyweightlogs (bodyweightlogid, userid, weightkg, loggedatutc)
+    VALUES (COALESCE(p_bodyweightlogid, uuidv7()), p_userid, p_weightkg, v_loggedatutc)
+    ON CONFLICT (bodyweightlogid) DO NOTHING;
+    GET DIAGNOSTICS v_inserted = ROW_COUNT;
 
     -- BodyweightLogs is the chronological source of truth. Keep the profile's
     -- denormalized weight aligned with the value the user just entered so BMI,
     -- recommendations and automatically derived nutrition targets do not keep
-    -- using the older onboarding weight.
-    UPDATE dbo.userprofiles
-    SET weightkg = p_weightkg,
-        updatedatutc = dbo.sysutcdatetime()
-    WHERE userid = p_userid;
+    -- using the older onboarding weight - unless this was a late upload that
+    -- a newer entry has already superseded.
+    IF v_inserted > 0 AND NOT EXISTS (
+        SELECT 1 FROM dbo.bodyweightlogs
+        WHERE userid = p_userid AND loggedatutc > v_loggedatutc
+    ) THEN
+        UPDATE dbo.userprofiles
+        SET weightkg = p_weightkg,
+            updatedatutc = dbo.sysutcdatetime()
+        WHERE userid = p_userid;
+    END IF;
 
     OPEN c1 FOR
     SELECT bodyweightlogid, weightkg, loggedatutc

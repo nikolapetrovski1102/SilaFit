@@ -18,10 +18,20 @@ public sealed class BodyweightProvider : IBodyweightProvider
         _key = Convert.FromBase64String(encryptionOptions.Value.MasterKeyBase64);
     }
 
-    public Task<List<BodyweightEntryModel>> LogAsync(Guid userId, decimal weightKg, CancellationToken cancellationToken = default) =>
+    public Task<List<BodyweightEntryModel>> LogAsync(
+        Guid userId,
+        decimal weightKg,
+        Guid? bodyweightLogId = null,
+        DateTime? loggedAtUtc = null,
+        CancellationToken cancellationToken = default) =>
         _sqlExecutor.QueryAsync(
             "dbo.usp_Bodyweight_Log",
-            [SqlParameterBuilder.Create("@UserId", userId), SqlParameterBuilder.Create("@WeightKg", FieldCipher.EncryptDecimal(weightKg, _key))],
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@WeightKg", FieldCipher.EncryptDecimal(weightKg, _key)),
+                SqlParameterBuilder.Create("@BodyweightLogId", bodyweightLogId),
+                SqlParameterBuilder.Create("@LoggedAtUtc", loggedAtUtc)
+            ],
             reader => SqlResultSetReader.ReadListAsync(reader, r => WorkoutRowMapper.MapBodyweightEntry(r, _key), cancellationToken),
             cancellationToken);
 

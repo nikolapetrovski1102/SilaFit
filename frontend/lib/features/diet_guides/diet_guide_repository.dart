@@ -10,8 +10,10 @@ class DietGuideRepository {
       '/diet-guides',
       (json) => (json as List<dynamic>)
           .map(DietGuide.fromJson)
-          .toList());
+          .toList(),
+      cache: true);
 
   Future<DietGuideDetail> getDetail(String dietGuideId) =>
-      _client.get('/diet-guides/$dietGuideId', DietGuideDetail.fromJson);
+      _client.get('/diet-guides/$dietGuideId', DietGuideDetail.fromJson,
+          cache: true);
 }

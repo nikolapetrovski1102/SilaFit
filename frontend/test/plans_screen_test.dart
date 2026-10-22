@@ -65,13 +65,14 @@ void main() {
     );
   }
 
-  testWidgets('welcome offer starts with the title and a close control',
+  testWidgets('welcome offer starts with the title and no top control',
       (tester) async {
     await pumpPlans(tester, welcomeOffer: true);
     await tester.pump();
 
     expect(find.byTooltip('Back'), findsNothing);
-    expect(find.byTooltip('Close'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsNothing);
+    expect(find.text('Continue with Free Plan'), findsOneWidget);
     expect(
         find.text('NEW MEMBER · 50% OFF FIRST BILLING PERIOD'), findsNothing);
     expect(find.text('Choose Your Protocol'), findsOneWidget);
@@ -85,8 +86,8 @@ void main() {
     await pumpPlans(tester, welcomeOffer: true);
     await tester.pump();
 
-    expect(find.text('Continue with Free Plan'), findsNothing);
-    expect(find.byTooltip('Close'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsNothing);
+    expect(find.text('Continue with Free Plan'), findsOneWidget);
   });
 
   testWidgets('regular plans keep their back control without a context chip',

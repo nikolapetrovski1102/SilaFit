@@ -54,12 +54,15 @@ BEGIN
     ON CONFLICT (userid) DO UPDATE SET
         planid = p_planid, billingcycle = p_billingcycle, status = 'Active',
         startedatutc = dbo.sysutcdatetime(), expiresatutc = p_expiresatutc,
-        latestreceiptid = p_receiptid, autorenewing = p_autorenewing;
+        latestreceiptid = p_receiptid, autorenewing = p_autorenewing,
+        ispartnergrant = false;
 
     OPEN c1 FOR
-    SELECT userid, planid, billingcycle, status, startedatutc, expiresatutc, latestreceiptid, autorenewing
-    FROM dbo.usersubscriptions
-    WHERE userid = p_userid;
+    SELECT us.userid, us.planid, us.billingcycle, us.status, us.startedatutc, us.expiresatutc, COALESCE(sp.entitlementcode, sp.code) AS code, sp.name,
+           us.latestreceiptid, us.autorenewing, us.ispartnergrant
+    FROM dbo.usersubscriptions us
+    INNER JOIN dbo.subscriptionplans sp ON sp.planid = us.planid
+    WHERE us.userid = p_userid;
     RETURN NEXT c1;
 END $$;
 
@@ -102,6 +105,23 @@ BEGIN
     RETURN NEXT c1;
 END $$;
 
+-- One receipt by id - how a store notification finds the receipt behind the
+-- user's current plan (UserSubscriptions.LatestReceiptId) to tell whether the
+-- receipt it is reconciling still backs that plan or was replaced.
+CREATE OR REPLACE FUNCTION dbo.usp_subscriptionreceipt_getbyid(
+    p_receiptid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT receiptid, userid, planid, store, productid, transactionid, originaltransactionid,
+           purchasetoken, rawpayload, status, expiresatutc, autorenewing, verifiedatutc, createdatutc
+    FROM dbo.subscriptionreceipts
+    WHERE receiptid = p_receiptid;
+    RETURN NEXT c1;
+END $$;
+
 -- Finds the Silen account a store subscription already belongs to - by
 -- OriginalTransactionId for the App Store (shared by every renewal) or by
 -- purchase token for Play (stable across renewals). The verify endpoint uses
@@ -139,10 +159,12 @@ BEGIN
     WHERE userid = p_userid;
 END $$;
 
--- Active, auto-renewing receipts due for a store re-check, oldest-verified
--- first, for the periodic reconciliation job (Silen.Tools.SubscriptionSync).
--- Non-renewing/terminal receipts (Expired, Cancelled, Refunded) never need
--- re-checking, so they're excluded rather than just deprioritized.
+-- Active receipts due for a store re-check, oldest-verified first, for the
+-- periodic reconciliation job (Silen.Tools.SubscriptionSync): auto-renewing
+-- ones, plus cancelled ones still inside their paid period (the user can
+-- turn renewal back on, or be refunded). Terminal receipts (Expired,
+-- Cancelled, Refunded) never need re-checking, so they're excluded rather
+-- than just deprioritized.
 CREATE OR REPLACE FUNCTION dbo.usp_subscriptionreceipt_getforreconciliation(
     p_batchsize integer DEFAULT 200
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
@@ -155,7 +177,7 @@ BEGIN
            r.autorenewing, r.verifiedatutc
     FROM dbo.subscriptionreceipts r
     WHERE r.status = 'Active'
-      AND r.autorenewing
+      AND (r.autorenewing OR r.expiresatutc > dbo.sysutcdatetime())
     ORDER BY r.verifiedatutc ASC
     LIMIT p_batchsize;
     RETURN NEXT c1;

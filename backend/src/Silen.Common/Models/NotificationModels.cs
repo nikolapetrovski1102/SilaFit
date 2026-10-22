@@ -52,6 +52,11 @@ public sealed class NotificationCandidateModel
     public string? DisplayName { get; set; }
     public bool NotificationsEnabled { get; set; }
     public TimeSpan NotificationLocalTime { get; set; }
+
+    /// <summary>True once the user picked the gym reminder time themselves - it is
+    /// then used exactly. False means "auto": follow their detected training time.</summary>
+    public bool NotificationTimeIsUserSet { get; set; }
+
     public string TimeZoneId { get; set; } = "UTC";
 
     public DateTime? LastInteractionAtUtc { get; set; }
@@ -64,11 +69,17 @@ public sealed class NotificationCandidateModel
     public DateTime? LastWorkoutCompletedAtUtc { get; set; }
     public int WorkoutsLast7Days { get; set; }
 
+    /// <summary>Workout start times over the detection lookback (see ReminderTimeDetector).</summary>
+    public IReadOnlyList<DateTime> RecentWorkoutStartsUtc { get; set; } = [];
+
     public DateTime? ActiveSessionStartedAtUtc { get; set; }
     public DateTime? ActiveSessionLastActivityAtUtc { get; set; }
 
     public DateTime? LastMealLoggedAtUtc { get; set; }
     public int MealsLast24h { get; set; }
+
+    /// <summary>Meal log times over the detection lookback (see ReminderTimeDetector).</summary>
+    public IReadOnlyList<DateTime> RecentMealsLoggedUtc { get; set; } = [];
 
     /// <summary>True when the user holds an active PRO/ADVANCED entitlement - the
     /// monthly review upsell is only for users who do not.</summary>

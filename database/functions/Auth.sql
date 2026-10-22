@@ -61,6 +61,26 @@ BEGIN
     RETURN NEXT c1;
 END $$;
 
+-- True for an account nobody can sign in to yet: no password and no sign-in
+-- identity of any kind. Only usp_PartnerLead_Provision creates these - every app
+-- sign-in path writes an identity - so email registration may claim one once the
+-- emailed code proves the caller owns the address.
+CREATE OR REPLACE FUNCTION dbo.usp_auth_isunclaimedaccount(
+    p_userid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT EXISTS (
+        SELECT 1 FROM dbo.users u
+        WHERE u.userid = p_userid
+          AND u.passwordhash IS NULL
+          AND NOT EXISTS (SELECT 1 FROM dbo.userauthidentities ai WHERE ai.userid = u.userid)
+    ) AS isunclaimed;
+    RETURN NEXT c1;
+END $$;
+
 CREATE OR REPLACE FUNCTION dbo.usp_auth_getidentity(
     p_provider varchar(20),
     p_externalid varchar(256)

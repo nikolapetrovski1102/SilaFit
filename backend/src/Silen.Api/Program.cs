@@ -32,6 +32,7 @@ builder.Services.Configure<SupportOptions>(builder.Configuration.GetSection(Supp
 builder.Services.Configure<ImageUploadOptions>(builder.Configuration.GetSection(ImageUploadOptions.SectionName));
 builder.Services.Configure<AppStoreServerOptions>(builder.Configuration.GetSection(AppStoreServerOptions.SectionName));
 builder.Services.Configure<GooglePlayOptions>(builder.Configuration.GetSection(GooglePlayOptions.SectionName));
+builder.Services.Configure<PartnerOptions>(builder.Configuration.GetSection(PartnerOptions.SectionName));
 
 builder.Services.AddSilenData();
 builder.Services.AddSilenServices();
@@ -139,6 +140,18 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             }));
 
+    // A real user types a code once or twice; anything more looks like guessing.
+    options.AddPolicy(RateLimitPolicies.PromoCodes, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            AuthenticatedPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(15),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
     // Generous: real store traffic (renewals, refunds, retries) is legitimate and
     // bursty around billing cycles, but this is still an anonymous endpoint that
     // shouldn't be left fully unbounded against abuse.
@@ -162,6 +175,19 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(30),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    // One partner server behind Basic auth. Generous enough for a signup burst, but it
+    // also caps how fast anyone can guess the credentials.
+    options.AddPolicy(RateLimitPolicies.Partner, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));

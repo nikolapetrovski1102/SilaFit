@@ -187,17 +187,21 @@ class MonthlyExercise {
   final String exerciseId;
   final String exerciseName;
   final double recordWeightKg;
+  /// Two-dumbbell exercise: the weights are per hand.
+  final bool isPerDumbbell;
   final List<MonthlyExercisePoint> points;
   const MonthlyExercise(
       {required this.exerciseId,
       required this.exerciseName,
       required this.recordWeightKg,
+      this.isPerDumbbell = false,
       required this.points});
 
   factory MonthlyExercise.fromJson(Map<String, dynamic> map) => MonthlyExercise(
         exerciseId: map['exerciseId'] as String,
         exerciseName: map['exerciseName'] as String,
         recordWeightKg: (map['recordWeightKg'] as num).toDouble(),
+        isPerDumbbell: map['isPerDumbbell'] as bool? ?? false,
         points: (map['points'] as List<dynamic>)
             .map(
                 (p) => MonthlyExercisePoint.fromJson(p as Map<String, dynamic>))

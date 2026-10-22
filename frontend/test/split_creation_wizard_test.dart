@@ -128,7 +128,9 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    // Empty field + done moves to the next day.
+    // Adding drops the keyboard (so the chip can fly home); tapping back
+    // into the empty field and hitting done moves to the next day.
+    await tester.showKeyboard(find.byType(TextField));
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(fieldText(tester), 'Awesome Day 2');

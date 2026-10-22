@@ -6,8 +6,9 @@ using Silen.Services.Abstractions;
 
 namespace Silen.Api.Controllers;
 
-/// <summary>Listing the suggested-split library is PRO/Advanced only (enforced in SplitService); a split's detail,
-/// the user's own splits and activating a split are core tracking, open to any authenticated tier.</summary>
+/// <summary>Listing the suggested-split library and duplicating a split are PRO/Advanced only (enforced in
+/// SplitService); a split's detail, the user's own splits and activating a split are core tracking, open to any
+/// authenticated tier.</summary>
 [ApiController]
 [Route("api/splits")]
 public sealed class SplitsController(ISplitService splitService, ILogger<SplitsController> logger) : ControllerBase
@@ -65,6 +66,22 @@ public sealed class SplitsController(ISplitService splitService, ILogger<SplitsC
     public async Task<IActionResult> Keep(Guid splitId, CancellationToken cancellationToken)
     {
         var result = await splitService.KeepMySplitAsync(User.GetUserId(), splitId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("mine/{splitId:guid}/duplicate")]
+    [Authorize]
+    public async Task<IActionResult> Duplicate(Guid splitId, CancellationToken cancellationToken)
+    {
+        var result = await splitService.DuplicateMySplitAsync(User.GetUserId(), splitId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("days/{splitDayId:guid}/duplicate")]
+    [Authorize]
+    public async Task<IActionResult> DuplicateDay(Guid splitDayId, CancellationToken cancellationToken)
+    {
+        var result = await splitService.DuplicateMySplitDayAsync(User.GetUserId(), splitDayId, cancellationToken);
         return result.ToActionResult(logger);
     }
 

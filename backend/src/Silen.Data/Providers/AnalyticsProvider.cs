@@ -86,7 +86,8 @@ public sealed class AnalyticsProvider : IAnalyticsProvider
                         {
                             ExerciseId = id,
                             ExerciseName = reader.GetStringValue("ExerciseName"),
-                            RecordWeightKg = reader.GetDecimalValue("RecordWeightKg")
+                            RecordWeightKg = reader.GetDecimalValue("RecordWeightKg"),
+                            IsPerDumbbell = reader.GetBoolValue("IsPerDumbbell")
                         };
                         exercises.Add(id, exercise);
                     }

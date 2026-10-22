@@ -26,6 +26,28 @@ class AgeWheelPicker extends StatefulWidget {
   /// can grow into it. The pill fills whatever box it's given.
   final Widget Function(Widget selection)? selectionBuilder;
 
+  /// Hides the centered value's label - for while a [Hero] flying into the
+  /// pill is drawing that label itself, so it isn't shown twice.
+  final bool hideSelectedLabel;
+
+  /// The centered value's label style, so a [Hero] flight can land on it.
+  static TextStyle get selectedLabelStyle => labelStyle(1);
+
+  /// A label's style at [closeness] (1 = centered, 0 = a full item away).
+  static TextStyle labelStyle(double closeness, {double opacity = 1}) {
+    final fontSize = 38 + 40 * closeness;
+    final color = closeness > 0.5
+        ? Color.lerp(AppColors.onSurfaceVariant, AppColors.onAccent, closeness)!
+        : AppColors.onSurfaceVariant.withValues(alpha: opacity);
+    return AppTypography.displayStatMobile.copyWith(
+      fontSize: fontSize,
+      height: 1,
+      letterSpacing: -0.035 * fontSize,
+      fontWeight: FontWeight.w700,
+      color: color,
+    );
+  }
+
   const AgeWheelPicker({
     super.key,
     required this.value,
@@ -34,6 +56,7 @@ class AgeWheelPicker extends StatefulWidget {
     required this.onChanged,
     this.labelBuilder,
     this.selectionBuilder,
+    this.hideSelectedLabel = false,
   });
 
   @override
@@ -174,25 +197,19 @@ class _AgeWheelPickerState extends State<AgeWheelPicker> {
                 builder: (context, index) {
                   final distance = (index - centerOffset).abs();
                   final closeness = (1 - distance).clamp(0.0, 1.0);
-                  final fontSize = 38 + 40 * closeness;
                   final neighborOpacity =
                       (0.16 + (1 - distance.clamp(0.0, 2.0) / 2) * 0.38)
                           .clamp(0.16, 0.54);
-                  final color = closeness > 0.5
-                      ? Color.lerp(AppColors.onSurfaceVariant,
-                          AppColors.onAccent, closeness)!
-                      : AppColors.onSurfaceVariant
-                          .withValues(alpha: neighborOpacity);
+                  final hidden = widget.hideSelectedLabel &&
+                      index == widget.value - widget.min;
                   return Center(
-                    child: Text(
-                      widget.labelBuilder?.call(widget.min + index) ??
-                          '${widget.min + index}',
-                      style: AppTypography.displayStatMobile.copyWith(
-                        fontSize: fontSize,
-                        height: 1,
-                        letterSpacing: -0.035 * fontSize,
-                        fontWeight: FontWeight.w700,
-                        color: color,
+                    child: Opacity(
+                      opacity: hidden ? 0 : 1,
+                      child: Text(
+                        widget.labelBuilder?.call(widget.min + index) ??
+                            '${widget.min + index}',
+                        style: AgeWheelPicker.labelStyle(closeness,
+                            opacity: neighborOpacity),
                       ),
                     ),
                   );

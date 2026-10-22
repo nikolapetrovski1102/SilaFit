@@ -85,6 +85,7 @@ public sealed class PersonalRecordModel
     public short Reps { get; set; }
     public DateTime AchievedAtUtc { get; set; }
     public decimal? PreviousBestWeightKg { get; set; }
+    public bool IsPerDumbbell { get; set; }
 }
 
 /// <summary>One exercise the user has logged sets for - see `usp_WorkoutSetLog_GetTrackedExercises`.</summary>
@@ -94,6 +95,7 @@ public sealed class TrackedExerciseModel
     public string ExerciseName { get; set; } = string.Empty;
     public int SessionCount { get; set; }
     public DateTime LastTrainedAtUtc { get; set; }
+    public bool IsPerDumbbell { get; set; }
 }
 
 /// <summary>

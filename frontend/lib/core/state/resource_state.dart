@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -21,6 +23,27 @@ class ResourceState<T> {
       : this._(false, message, staleData);
 
   bool get hasData => data != null;
+}
+
+/// Runs [fetch], and meanwhile hands [paint] the saved copy from [cached]
+/// if that turns up first - so on patchy gym signal a screen shows its
+/// last-known data straight away instead of a skeleton until the request
+/// times out. The cached read never delays the fetch, and is ignored once
+/// the fetch has finished either way.
+Future<T> fetchPaintingCached<T>({
+  required Future<T?> Function() cached,
+  required Future<T> Function() fetch,
+  required void Function(T saved) paint,
+}) async {
+  var settled = false;
+  unawaited(cached().then((saved) {
+    if (!settled && saved != null) paint(saved);
+  }, onError: (_) {}));
+  try {
+    return await fetch();
+  } finally {
+    settled = true;
+  }
 }
 
 /// Renders a [ResourceState] with the right builder for its case. Centralizes

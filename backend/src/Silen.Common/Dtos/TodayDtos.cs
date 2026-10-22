@@ -8,6 +8,14 @@ public sealed class LogHydrationRequest
 public sealed class LogBodyweightRequest
 {
     public decimal WeightKg { get; set; }
+
+    /// <summary>Client-generated entry id, so an entry queued offline and re-sent after a
+    /// dropped response is stored once. Null from older client builds.</summary>
+    public Guid? BodyweightLogId { get; set; }
+
+    /// <summary>When the user actually logged it (an offline upload arrives later). Clamped
+    /// server-side; null means now.</summary>
+    public DateTime? LoggedAtUtc { get; set; }
 }
 
 public sealed class CompleteWorkoutRequest
@@ -19,6 +27,19 @@ public sealed class CompleteWorkoutRequest
     public decimal? TonnageKg { get; set; }
     /// <summary>The set-by-set log behind real Personal Records - null for an older client build.</summary>
     public List<SetLogRequest>? SetLogs { get; set; }
+
+    /// <summary>When the workout actually ended - a session finished offline in the gym is
+    /// uploaded later. Clamped server-side; null means now.</summary>
+    public DateTime? CompletedAtUtc { get; set; }
+
+    /// <summary>Set only when the phone made the session up itself, offline, before the server
+    /// had created that day's session - the split day it trained and the day it was for, so
+    /// the server can attach the workout to that day's session or create it.</summary>
+    public Guid? SplitDayId { get; set; }
+
+    /// <summary>Goes with <see cref="SplitDayId"/>. Clamped server-side to the day the workout
+    /// ended or the day before.</summary>
+    public DateTime? ScheduledDateUtc { get; set; }
 }
 
 public sealed class SetLogRequest

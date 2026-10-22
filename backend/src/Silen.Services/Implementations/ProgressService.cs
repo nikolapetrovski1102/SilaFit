@@ -12,11 +12,19 @@ namespace Silen.Services.Implementations;
 public sealed class ProgressService(
     IWorkoutSessionProvider workoutSessionProvider,
     IStreakProvider streakProvider,
-    ISubscriptionGate subscriptionGate) : IProgressService
+    ISubscriptionGate subscriptionGate,
+    IProgressAdPassProvider progressAdPassProvider) : IProgressService
 {
     // Two years of sessions is far more than the chart can meaningfully plot,
     // and caps what a hand-crafted `days` can make the proc scan.
     private const int MaxExerciseProgressDays = 730;
+
+    // A rewarded-ad pass is meant to cover one look at the screen - the app
+    // re-locks it on leaving, so this is only the server's ceiling. The daily
+    // cap bounds what a client faking "ad watched" could get without any
+    // server-side reward verification.
+    private const int AdPassValidMinutes = 15;
+    private const int AdPassDailyLimit = 5;
 
     public Task<ServiceResult<ProgressOverviewDto>> GetOverviewAsync(Guid userId, int days, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
@@ -60,14 +68,15 @@ public sealed class ProgressService(
                 WeightKg = r.WeightKg,
                 Reps = r.Reps,
                 AchievedAtUtc = r.AchievedAtUtc,
-                PreviousBestWeightKg = r.PreviousBestWeightKg
+                PreviousBestWeightKg = r.PreviousBestWeightKg,
+                IsPerDumbbell = r.IsPerDumbbell
             }).ToList();
         });
 
     public Task<ServiceResult<List<TrackedExerciseDto>>> GetTrackedExercisesAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
-            await EnsureProAsync(userId, "tracked exercises", cancellationToken);
+            await EnsureProgressAccessAsync(userId, "tracked exercises", cancellationToken);
 
             var exercises = await workoutSessionProvider.GetTrackedExercisesAsync(userId, cancellationToken);
 
@@ -76,14 +85,15 @@ public sealed class ProgressService(
                 ExerciseId = e.ExerciseId,
                 ExerciseName = e.ExerciseName,
                 SessionCount = e.SessionCount,
-                LastTrainedAtUtc = e.LastTrainedAtUtc
+                LastTrainedAtUtc = e.LastTrainedAtUtc,
+                IsPerDumbbell = e.IsPerDumbbell
             }).ToList();
         });
 
     public Task<ServiceResult<ExerciseProgressDto>> GetExerciseProgressAsync(Guid userId, Guid exerciseId, int days, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
-            await EnsureProAsync(userId, "exercise progress", cancellationToken);
+            await EnsureProgressAccessAsync(userId, "exercise progress", cancellationToken);
 
             var effectiveDays = days <= 0 ? 90 : Math.Min(days, MaxExerciseProgressDays);
             var fromDate = DateTime.UtcNow.Date.AddDays(-(effectiveDays - 1));
@@ -106,9 +116,37 @@ public sealed class ProgressService(
             };
         });
 
-    private async Task EnsureProAsync(Guid userId, string feature, CancellationToken cancellationToken)
+    public Task<ServiceResult<ProgressAdPassDto>> GrantAdPassAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            if (await subscriptionGate.HasActiveProAsync(userId, cancellationToken))
+            {
+                return new ProgressAdPassDto();
+            }
+
+            var grant = await progressAdPassProvider.GrantAsync(userId, AdPassValidMinutes, AdPassDailyLimit, cancellationToken);
+            if (grant.Status != "Ok")
+            {
+                throw new TooManyRequestsException(
+                    $"User {userId} hit the daily Progress ad pass limit ({AdPassDailyLimit}).",
+                    "You've used today's free unlocks. Get Pro for unlimited Progress.");
+            }
+
+            return new ProgressAdPassDto { ExpiresAtUtc = grant.ExpiresAtUtc };
+        });
+
+    public Task<ServiceResult<bool>> EndAdPassAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            await progressAdPassProvider.EndAsync(userId, cancellationToken);
+            return true;
+        });
+
+    // Pro/Advanced, or a Free account holding an unexpired rewarded-ad pass.
+    private async Task EnsureProgressAccessAsync(Guid userId, string feature, CancellationToken cancellationToken)
     {
-        if (!await subscriptionGate.HasActiveProAsync(userId, cancellationToken).ConfigureAwait(false))
+        if (!await subscriptionGate.HasActiveProAsync(userId, cancellationToken).ConfigureAwait(false)
+            && !await progressAdPassProvider.HasActiveAsync(userId, cancellationToken).ConfigureAwait(false))
         {
             throw new ProUpgradeRequiredException(
                 $"User {userId} requested {feature} without an active Pro/Advanced subscription.",

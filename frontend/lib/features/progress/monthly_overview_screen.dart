@@ -24,6 +24,7 @@ import '../splits/splits_repository.dart';
 import '../today/today_models.dart';
 import '../today/widgets/day_preview.dart';
 import 'analytics_models.dart';
+import 'weight_display.dart';
 import 'monthly_training_chart.dart';
 import 'recap_animation.dart';
 
@@ -343,16 +344,13 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
   }
 }
 
-String _kg(double value) => value == value.roundToDouble()
-    ? value.toStringAsFixed(0)
-    : value.toStringAsFixed(1);
-
 class _ImprovementsSlide extends StatelessWidget {
   final AnalyticsRecap analytics;
   const _ImprovementsSlide({required this.analytics});
   @override
   Widget build(BuildContext context) {
     final improved = analytics.exercises.where((e) => e.improved).toList();
+    final unit = weightUnitOf(context);
     return _SlideScaffold(
       eyebrow: 'Your wins',
       icon: Icons.trending_up_rounded,
@@ -391,11 +389,12 @@ class _ImprovementsSlide extends StatelessWidget {
                   Text(exercise.exerciseName, style: AppTypography.headlineSm),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                      '${_kg(exercise.points.first.weightKg)} kg → ${_kg(exercise.points.last.weightKg)} kg',
+                      '${formatWeight(exercise.points.first.weightKg, unit)} $unit → ${formatWeight(exercise.points.last.weightKg, unit)} $unit',
                       style: AppTypography.headlineLg
                           .copyWith(color: AppColors.accent)),
                   Text(
-                      '${exercise.points.first.reps} reps → ${exercise.points.last.reps} reps',
+                      '${exercise.points.first.reps} reps → ${exercise.points.last.reps} reps'
+                      '${exercise.isPerDumbbell ? perDumbbellSuffix : ''}',
                       style: AppTypography.bodySm),
                 ],
               ))),
@@ -858,7 +857,7 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
       }
       return _RecommendedMealDay(
         dayNumber: dayIndex + 1,
-        date: startDate.add(Duration(days: dayIndex)),
+        date: addDays(startDate, dayIndex),
         meals: meals,
       );
     });
@@ -1170,7 +1169,7 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
 
     final start = DateUtils.dateOnly(DateTime.now());
     final schedule = List.generate(7, (index) {
-      final date = start.add(Duration(days: index));
+      final date = addDays(start, index);
       return (date: date, day: resolveSplitDay(date, activeSplit, detail));
     });
     final improvement = widget.analytics.improvements.isEmpty

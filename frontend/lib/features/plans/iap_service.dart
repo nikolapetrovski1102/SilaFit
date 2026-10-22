@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// A store's introductory offer on one subscription product, as the store
 /// itself quotes it - the paywall only ever advertises a discount that one of
@@ -62,10 +64,15 @@ class StoreQuote {
   final ProductDetails purchaseProduct;
   final StoreIntroOffer? intro;
 
+  /// True when [intro] is the discount a Silen promo code unlocked rather
+  /// than the store's own intro offer.
+  final bool isPromoCode;
+
   const StoreQuote({
     required this.product,
     ProductDetails? purchaseProduct,
     this.intro,
+    this.isPromoCode = false,
   }) : purchaseProduct = purchaseProduct ?? product;
 
   String get price => product.price;
@@ -101,13 +108,20 @@ class IapService {
   static const _storeOffersChannel =
       MethodChannel('com.nikolapetrovski.silafit/store_offers');
 
+  /// Play Console tag on a developer-determined offer that only a Silen
+  /// promo code unlocks. Play hands such offers to every user, so without
+  /// this tag the paywall would advertise the code's discount to everyone.
+  static const promoCodeOfferTag = 'promo-code';
+
   Stream<List<PurchaseDetails>> get purchaseStream => _iap.purchaseStream;
 
   Future<bool> isAvailable() => _iap.isAvailable();
 
   /// Store quotes keyed by product id. Ids the store doesn't know are simply
-  /// absent from the result.
-  Future<Map<String, StoreQuote>> loadQuotes(Set<String> productIds) async {
+  /// absent from the result. [promoOfferId] is the Play offer an accepted
+  /// promo code unlocked - it wins over the intro offer wherever it exists.
+  Future<Map<String, StoreQuote>> loadQuotes(Set<String> productIds,
+      {String? promoOfferId}) async {
     final response = await _iap.queryProductDetails(productIds);
     final byId = <String, List<ProductDetails>>{};
     for (final details in response.productDetails) {
@@ -116,7 +130,7 @@ class IapService {
     final quotes = <String, StoreQuote>{};
     for (final MapEntry(key: id, value: details) in byId.entries) {
       quotes[id] = Platform.isAndroid
-          ? _playQuote(details)
+          ? _playQuote(details, promoOfferId)
           : await _appStoreQuote(details.first);
     }
     return quotes;
@@ -124,42 +138,56 @@ class IapService {
 
   /// Play returns one [GooglePlayProductDetails] per base plan / offer, and
   /// only the offers this user is eligible for - so an offer with a leading
-  /// discounted pricing phase is an intro offer they can actually get.
-  StoreQuote _playQuote(List<ProductDetails> details) {
+  /// discounted pricing phase is an intro offer they can actually get. The
+  /// exception is a promo-code offer (see [promoCodeOfferTag]): it's only
+  /// sold once a code has unlocked that exact offer.
+  StoreQuote _playQuote(List<ProductDetails> details, String? promoOfferId) {
     GooglePlayProductDetails? basePlan;
     GooglePlayProductDetails? introProduct;
-    PricingPhaseWrapper? introPhase;
+    GooglePlayProductDetails? promoProduct;
     for (final product in details.whereType<GooglePlayProductDetails>()) {
-      final offers = product.productDetails.subscriptionOfferDetails;
-      final index = product.subscriptionIndex;
-      if (offers == null || index == null) continue;
-      final offer = offers[index];
+      final offer = _offerOf(product);
+      if (offer == null) continue;
       if (offer.offerId == null) {
         basePlan ??= product;
-      } else if (introProduct == null && offer.pricingPhases.length > 1) {
-        introProduct = product;
-        introPhase = offer.pricingPhases.first;
+      } else if (offer.pricingPhases.length > 1) {
+        if (promoOfferId != null && offer.offerId == promoOfferId) {
+          promoProduct ??= product;
+        } else if (!offer.offerTags.contains(promoCodeOfferTag)) {
+          introProduct ??= product;
+        }
       }
     }
     final regular = basePlan ?? details.first;
-    if (introProduct == null || introPhase == null) {
+    final discounted = promoProduct ?? introProduct;
+    final phase = discounted == null
+        ? null
+        : _offerOf(discounted)!.pricingPhases.first;
+    if (discounted == null || phase == null) {
       return StoreQuote(product: regular);
     }
-    final (unit, value) = _parseIsoPeriod(introPhase.billingPeriod);
+    final (unit, value) = _parseIsoPeriod(phase.billingPeriod);
     return StoreQuote(
       product: regular,
-      purchaseProduct: introProduct,
+      purchaseProduct: discounted,
+      isPromoCode: promoProduct != null,
       intro: StoreIntroOffer(
-        displayPrice: introPhase.formattedPrice,
-        rawPrice: introPhase.priceAmountMicros / 1000000.0,
-        isFreeTrial: introPhase.priceAmountMicros == 0,
-        isPerPeriod: introPhase.billingCycleCount > 1,
+        displayPrice: phase.formattedPrice,
+        rawPrice: phase.priceAmountMicros / 1000000.0,
+        isFreeTrial: phase.priceAmountMicros == 0,
+        isPerPeriod: phase.billingCycleCount > 1,
         periodUnit: unit,
         periodValue: value,
-        periodCount:
-            introPhase.billingCycleCount < 1 ? 1 : introPhase.billingCycleCount,
+        periodCount: phase.billingCycleCount < 1 ? 1 : phase.billingCycleCount,
       ),
     );
+  }
+
+  static SubscriptionOfferDetailsWrapper? _offerOf(
+      GooglePlayProductDetails product) {
+    final offers = product.productDetails.subscriptionOfferDetails;
+    final index = product.subscriptionIndex;
+    return offers == null || index == null ? null : offers[index];
   }
 
   Future<StoreQuote> _appStoreQuote(ProductDetails product) async {
@@ -204,12 +232,69 @@ class IapService {
   /// Google each own renewal on their own side, this only starts the initial
   /// purchase sheet. Returns true once the request is handed off to the
   /// platform; the actual result arrives later on [purchaseStream].
-  Future<bool> buy(StoreQuote quote) => _iap.buyNonConsumable(
-      purchaseParam: PurchaseParam(productDetails: quote.purchaseProduct));
+  ///
+  /// On Play a plan change must name the subscription it replaces - unlike
+  /// an App Store subscription group, buying a second product otherwise runs
+  /// both side by side, and the old one keeps billing and keeps sending the
+  /// server notifications for the plan the user just left.
+  Future<bool> buy(StoreQuote quote) async {
+    final product = quote.purchaseProduct;
+    final replaced =
+        Platform.isAndroid ? await _subscriptionToReplace(product.id) : null;
+    return _iap.buyNonConsumable(
+        purchaseParam: replaced == null
+            ? PurchaseParam(productDetails: product)
+            : GooglePlayPurchaseParam(
+                productDetails: product,
+                changeSubscriptionParam: ChangeSubscriptionParam(
+                  oldPurchaseDetails: replaced,
+                  // Takes effect now, crediting the old plan's unused time -
+                  // valid for upgrades and downgrades alike.
+                  replacementMode: ReplacementMode.withTimeProration,
+                ),
+              ));
+  }
+
+  /// The user's live Play subscription on a different product, if any.
+  /// Best-effort: if Play can't be asked, the purchase goes ahead as new.
+  Future<GooglePlayPurchaseDetails?> _subscriptionToReplace(
+      String productId) async {
+    try {
+      final response = await _iap
+          .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>()
+          .queryPastPurchases();
+      for (final purchase in response.pastPurchases) {
+        if (purchase.productID != productId &&
+            purchase.billingClientPurchase.purchaseState ==
+                PurchaseStateWrapper.purchased) {
+          return purchase;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 
   Future<void> completePurchase(PurchaseDetails purchase) {
     if (!purchase.pendingCompletePurchase) return Future.value();
     return _iap.completePurchase(purchase);
+  }
+
+  /// Opens the store's own promo/offer-code redemption. On iOS these are
+  /// Apple offer codes - the only way App Review allows discounting a digital
+  /// subscription (3.1.1) - and a redeemed one arrives on [purchaseStream]
+  /// like any purchase. On Android it's Play's free-time promo codes, redeemed
+  /// in the Play Store app and picked up by the resume sync; Play's
+  /// percentage discounts go through Silen's own codes instead (see
+  /// `PlansController.applyPromoCode`).
+  Future<void> presentRedeemCode() async {
+    if (Platform.isIOS) {
+      await _iap
+          .getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>()
+          .presentCodeRedemptionSheet();
+      return;
+    }
+    await launchUrl(Uri.parse('https://play.google.com/redeem'),
+        mode: LaunchMode.externalApplication);
   }
 
   /// Re-delivers the user's current purchases onto [purchaseStream].

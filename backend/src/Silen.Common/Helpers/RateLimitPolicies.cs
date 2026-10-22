@@ -21,4 +21,10 @@ public static class RateLimitPolicies
 
     /// <summary>The website's anonymous support contact form, partitioned per client IP.</summary>
     public const string SupportContact = "support-contact";
+
+    /// <summary>Discount code redemption, partitioned per authenticated user (fallback IP) - tight enough to make guessing codes impractical.</summary>
+    public const string PromoCodes = "promo-codes";
+
+    /// <summary>The partner website's server-to-server lead endpoints, partitioned per client IP - also bounds Basic-auth guessing.</summary>
+    public const string Partner = "partner";
 }

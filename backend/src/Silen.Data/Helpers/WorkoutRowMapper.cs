@@ -96,7 +96,8 @@ public static class WorkoutRowMapper
         WeightKg = reader.GetDecimalValue("WeightKg"),
         Reps = reader.GetInt16Value("Reps"),
         AchievedAtUtc = reader.GetDateTimeValue("CompletedAtUtc"),
-        PreviousBestWeightKg = reader.GetNullableDecimal("PreviousBestWeightKg")
+        PreviousBestWeightKg = reader.GetNullableDecimal("PreviousBestWeightKg"),
+        IsPerDumbbell = reader.GetBoolValue("IsPerDumbbell")
     };
 
     public static TrackedExerciseModel MapTrackedExercise(NpgsqlDataReader reader) => new()
@@ -104,7 +105,8 @@ public static class WorkoutRowMapper
         ExerciseId = reader.GetGuidValue("ExerciseId"),
         ExerciseName = reader.GetStringValue("ExerciseName"),
         SessionCount = reader.GetInt32Value("SessionCount"),
-        LastTrainedAtUtc = reader.GetDateTimeValue("LastTrainedAtUtc")
+        LastTrainedAtUtc = reader.GetDateTimeValue("LastTrainedAtUtc"),
+        IsPerDumbbell = reader.GetBoolValue("IsPerDumbbell")
     };
 
     public static ExerciseProgressPointModel MapExerciseProgressPoint(NpgsqlDataReader reader) => new()
@@ -233,7 +235,8 @@ public static class WorkoutRowMapper
         PlanCode = HasColumn(reader, "Code") ? reader.GetNullableString("Code") : null,
         PlanName = HasColumn(reader, "Name") ? reader.GetNullableString("Name") : null,
         LatestReceiptId = HasColumn(reader, "LatestReceiptId") ? reader.GetNullableGuid("LatestReceiptId") : null,
-        AutoRenewing = HasColumn(reader, "AutoRenewing") && reader.GetBoolValue("AutoRenewing")
+        AutoRenewing = HasColumn(reader, "AutoRenewing") && reader.GetBoolValue("AutoRenewing"),
+        IsPartnerGrant = HasColumn(reader, "IsPartnerGrant") && reader.GetBoolValue("IsPartnerGrant")
     };
 
     public static SubscriptionReceiptModel MapReceipt(NpgsqlDataReader reader) => new()
@@ -252,6 +255,14 @@ public static class WorkoutRowMapper
         AutoRenewing = reader.GetBoolValue("AutoRenewing"),
         VerifiedAtUtc = HasColumn(reader, "VerifiedAtUtc") ? reader.GetDateTimeValue("VerifiedAtUtc") : default,
         CreatedAtUtc = HasColumn(reader, "CreatedAtUtc") ? reader.GetDateTimeValue("CreatedAtUtc") : default
+    };
+
+    public static PromoCodeRedemptionModel MapPromoCodeRedemption(NpgsqlDataReader reader) => new()
+    {
+        Status = reader.GetStringValue("Status"),
+        Code = reader.GetNullableString("Code"),
+        PlayOfferId = reader.GetNullableString("PlayOfferId"),
+        ExpiresAtUtc = reader.GetNullableDateTime("ExpiresAtUtc")
     };
 
     public static PlanEntitlementsModel MapPlanEntitlements(NpgsqlDataReader reader) => new()

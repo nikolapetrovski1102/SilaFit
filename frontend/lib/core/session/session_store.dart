@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -48,7 +49,14 @@ class SessionStore {
   static const _displayNameKey = 'silen.display_name';
   static const _onboardingCompleteKey = 'silen.onboarding_complete';
   static const _appearanceModeKey = 'silen.appearance_mode';
+  static const _profileGenderKey = 'silen.profile_gender';
   static const _featureTourCompleteKey = 'silen.feature_tour_complete';
+  static const _swipeHintShowsKey = 'silen.swipe_hint_shows';
+  static const _swipeActionsLearnedKey = 'silen.swipe_actions_learned';
+
+  /// How many launches the swipe/hold peek hint gets before it stops, even
+  /// if the user never tries the gesture.
+  static const _maxSwipeHintShows = 3;
 
   // encryptedSharedPreferences wraps the Android prefs file with a
   // Keystore-backed AES key (requires API 23+, see android/app/build.gradle.kts).
@@ -62,7 +70,11 @@ class SessionStore {
   String? _deviceId;
   bool _hasCompletedOnboarding = false;
   String? _cachedAppearanceMode;
+  final ValueNotifier<String?> _profileGender = ValueNotifier(null);
   bool _hasCompletedFeatureTour = false;
+  int _swipeHintShows = 0;
+  bool _swipeActionsLearned = false;
+  bool _swipeHintShownThisLaunch = false;
 
   SilenSession? get current => _session;
   String? get currentToken => _session?.token;
@@ -78,8 +90,22 @@ class SessionStore {
   /// has a chance to resolve - null only on a genuinely first-ever launch.
   String? get cachedAppearanceMode => _cachedAppearanceMode;
 
+  /// The last-known onboarding-collected `UserProfile.gender` ('Male'/
+  /// 'Female'/'Other'), cached so gender-keyed artwork (the split heroes)
+  /// paints correctly on cold start and updates once a profile fetch or
+  /// save lands. Null until a profile has been seen on this device.
+  ValueListenable<String?> get profileGender => _profileGender;
+
   /// Whether the post-onboarding feature tour has already been shown.
   bool get hasCompletedFeatureTour => _hasCompletedFeatureTour;
+
+  /// Whether a `SwipeActionTile` should play its peek hint: at most once per
+  /// launch, for a few launches, and never again once the user has swiped or
+  /// held a tile themselves.
+  bool get shouldShowSwipeHint =>
+      !_swipeActionsLearned &&
+      !_swipeHintShownThisLaunch &&
+      _swipeHintShows < _maxSwipeHintShows;
 
   /// Loads the persisted device id (creating one on first launch) and any
   /// saved session. Call once at app startup before reading [current].
@@ -94,8 +120,11 @@ class SessionStore {
 
     _hasCompletedOnboarding = prefs.getBool(_onboardingCompleteKey) ?? false;
     _cachedAppearanceMode = prefs.getString(_appearanceModeKey);
+    _profileGender.value = prefs.getString(_profileGenderKey);
     _hasCompletedFeatureTour =
         prefs.getBool(_featureTourCompleteKey) ?? false;
+    _swipeHintShows = prefs.getInt(_swipeHintShowsKey) ?? 0;
+    _swipeActionsLearned = prefs.getBool(_swipeActionsLearnedKey) ?? false;
 
     final token = await _secureStorage.read(key: _tokenKey);
     final userId = await _secureStorage.read(key: _userIdKey);
@@ -157,6 +186,17 @@ class SessionStore {
     await prefs.setString(_appearanceModeKey, mode);
   }
 
+  /// Persists the profile's gender for [profileGender].
+  Future<void> cacheProfileGender(String? gender) async {
+    _profileGender.value = gender;
+    final prefs = await SharedPreferences.getInstance();
+    if (gender == null) {
+      await prefs.remove(_profileGenderKey);
+    } else {
+      await prefs.setString(_profileGenderKey, gender);
+    }
+  }
+
   /// Marks the feature tour as completed so it never shows again.
   /// Marks the feature tour as completed so it never shows again.
   Future<void> markFeatureTourComplete() => setFeatureTourComplete(true);
@@ -168,10 +208,33 @@ class SessionStore {
     await prefs.setBool(_featureTourCompleteKey, value);
   }
 
-  /// Resets both profile onboarding and feature tour flags for testing.
+  /// Counts one showing of the swipe/hold peek hint.
+  Future<void> recordSwipeHintShown() async {
+    _swipeHintShownThisLaunch = true;
+    _swipeHintShows++;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_swipeHintShowsKey, _swipeHintShows);
+  }
+
+  /// The user has opened a tile's actions themselves, so the hint is done.
+  Future<void> markSwipeActionsLearned() async {
+    if (_swipeActionsLearned) return;
+    _swipeActionsLearned = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_swipeActionsLearnedKey, true);
+  }
+
+  /// Resets profile onboarding, the feature tour and the swipe hint for
+  /// testing.
   Future<void> resetAllOnboarding() async {
     await setOnboardingComplete(false);
     await setFeatureTourComplete(false);
+    _swipeHintShows = 0;
+    _swipeActionsLearned = false;
+    _swipeHintShownThisLaunch = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_swipeHintShowsKey);
+    await prefs.remove(_swipeActionsLearnedKey);
   }
 
   /// Clears the saved auth session only. Used by [ApiClient] when a request
@@ -187,8 +250,8 @@ class SessionStore {
   }
 
   /// Full sign-out: clears the session *and* rotates the device identity,
-  /// plus the cached appearance preference that came from the outgoing
-  /// account's settings.
+  /// plus the cached appearance preference and profile gender that came from
+  /// the outgoing account.
   ///
   /// Deleting the token alone is not enough to sign anyone out. Device login
   /// (`POST /auth/device`) looks the device id up server-side and returns
@@ -205,7 +268,9 @@ class SessionStore {
     _deviceId = null;
     await _secureStorage.delete(key: _deviceIdKey);
     _cachedAppearanceMode = null;
+    _profileGender.value = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_appearanceModeKey);
+    await prefs.remove(_profileGenderKey);
   }
 }

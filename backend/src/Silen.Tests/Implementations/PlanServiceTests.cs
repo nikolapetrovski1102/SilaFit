@@ -189,4 +189,51 @@ public class PlanServiceTests
         Assert.False(result.IsSuccess);
         Assert.Equal(404, result.StatusCode);
     }
+
+    [Fact]
+    public async Task RedeemPromoCodeAsync_AcceptedCode_ReturnsPlayOffer()
+    {
+        var userId = Guid.NewGuid();
+        var expires = DateTime.UtcNow.AddDays(14);
+        plansProvider
+            .Setup(p => p.RedeemPromoCodeAsync(userId, "SILEN30", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromoCodeRedemptionModel { Status = "Ok", Code = "SILEN30", PlayOfferId = "silen30", ExpiresAtUtc = expires });
+
+        var result = await sut.RedeemPromoCodeAsync(userId, new RedeemPromoCodeRequest { Code = "  SILEN30 " });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("SILEN30", result.Data!.Code);
+        Assert.Equal("silen30", result.Data!.PlayOfferId);
+        Assert.Equal(expires, result.Data!.ExpiresAtUtc);
+    }
+
+    [Theory]
+    [InlineData("Invalid")]
+    [InlineData("Expired")]
+    [InlineData("NotStarted")]
+    [InlineData("Exhausted")]
+    public async Task RedeemPromoCodeAsync_RejectedCode_ReturnsValidationFailure(string status)
+    {
+        var userId = Guid.NewGuid();
+        plansProvider
+            .Setup(p => p.RedeemPromoCodeAsync(userId, "SILEN30", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromoCodeRedemptionModel { Status = status, Code = "SILEN30" });
+
+        var result = await sut.RedeemPromoCodeAsync(userId, new RedeemPromoCodeRequest { Code = "SILEN30" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("THIS-CODE-IS-FAR-TOO-LONG-TO-BE-ONE-OF-OURS")]
+    public async Task RedeemPromoCodeAsync_MalformedCode_NeverReachesProvider(string code)
+    {
+        var result = await sut.RedeemPromoCodeAsync(Guid.NewGuid(), new RedeemPromoCodeRequest { Code = code });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(400, result.StatusCode);
+    }
 }

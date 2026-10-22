@@ -280,11 +280,24 @@ public sealed class NotificationPublishService(
             return null;
         }
 
+        var silence = nowUtc - (candidate.LastInteractionAtUtc ?? nowUtc);
+        var gymTime = ReminderTimeDetector.GymReminderTime(
+            candidate.NotificationLocalTime,
+            candidate.NotificationTimeIsUserSet,
+            candidate.RecentWorkoutStartsUtc,
+            timeZone,
+            nowUtc,
+            opts.DetectedReminderOffsetMinutes);
+
         // Nothing fires at night - including the comeback message, which waits
-        // for the next morning rather than pinging at 03:00.
+        // for the next morning rather than pinging at 03:00. The one exception is
+        // a gym reminder time the user picked themselves: that is followed exactly.
         if (localNow.Hour < opts.QuietHoursStart || localNow.Hour >= opts.QuietHoursEnd)
         {
-            return null;
+            return candidate.NotificationTimeIsUserSet
+                   && silence < TimeSpan.FromHours(opts.InteractionSilenceHours)
+                ? GymReminder(candidate, timeZone, localNow, localDate, gymTime, opts)
+                : null;
         }
 
         // 0. Monthly review upsell - once per local calendar month for users with
@@ -297,8 +310,6 @@ public sealed class NotificationPublishService(
         {
             return upsell;
         }
-
-        var silence = nowUtc - (candidate.LastInteractionAtUtc ?? nowUtc);
 
         // Went quiet -> one comeback message, no matter what else would fire.
         if (silence >= TimeSpan.FromHours(opts.ComebackSilenceHours))
@@ -328,20 +339,15 @@ public sealed class NotificationPublishService(
             return sets;
         }
 
-        // 2. The user's chosen training time, on a day they haven't trained yet.
-        var preferredLocal = localNow.Date + candidate.NotificationLocalTime;
-        if (IsInWindow(localNow, preferredLocal, opts.SendWindowMinutes)
-            && !TrainedToday(candidate, timeZone, localDate))
+        // 2. Training time - the user's pick, or learned from when they train -
+        //    on a day they haven't trained yet.
+        if (GymReminder(candidate, timeZone, localNow, localDate, gymTime, opts) is { } gym)
         {
-            return new PendingNotification(
-                NotificationCategories.GymReminder,
-                NotificationMessageComposer.GymReminder(candidate, localDate),
-                $"gym:{localDate:yyyy-MM-dd}",
-                preferredLocal);
+            return gym;
         }
 
-        // 3. Calorie / meal reminder around the configured local meal times.
-        if (TryMealReminder(candidate, nowUtc, localNow, localDate, opts, out var meal))
+        // 3. Calorie / meal reminder around the user's usual meal times.
+        if (TryMealReminder(candidate, nowUtc, timeZone, localNow, localDate, opts, out var meal))
         {
             return meal;
         }
@@ -361,6 +367,30 @@ public sealed class NotificationPublishService(
         }
 
         return null;
+    }
+
+    private static PendingNotification? GymReminder(
+        NotificationCandidateModel candidate,
+        TimeZoneInfo timeZone,
+        DateTime localNow,
+        DateOnly localDate,
+        TimeSpan gymTime,
+        NotificationPublishOptions opts)
+    {
+        var preferredLocal = localNow.Date + gymTime;
+        if (!IsInWindow(localNow, preferredLocal, opts.SendWindowMinutes)
+            || TrainedToday(candidate, timeZone, localDate))
+        {
+            return null;
+        }
+
+        // Keyed by date, not time, so a detected time drifting during the day
+        // can never produce a second reminder.
+        return new PendingNotification(
+            NotificationCategories.GymReminder,
+            NotificationMessageComposer.GymReminder(candidate, localDate),
+            $"gym:{localDate:yyyy-MM-dd}",
+            preferredLocal);
     }
 
     private static bool TryMonthlyReviewUpsell(
@@ -447,6 +477,7 @@ public sealed class NotificationPublishService(
     private static bool TryMealReminder(
         NotificationCandidateModel candidate,
         DateTime nowUtc,
+        TimeZoneInfo timeZone,
         DateTime localNow,
         DateOnly localDate,
         NotificationPublishOptions opts,
@@ -462,6 +493,19 @@ public sealed class NotificationPublishService(
                 continue;
             }
 
+            // Alternate "log what you ate" with "here's an idea" per slot so the
+            // two meal messages don't feel like the same nag twice a day.
+            var useIdea = i % 2 == 1;
+
+            // Once the user has a meal routine, follow it: the idea lands a bit
+            // before they usually eat, the "log it" nudge a bit after they usually
+            // log - giving them the chance to log on their own first.
+            if (ReminderTimeDetector.DetectMealTime(candidate.RecentMealsLoggedUtc, timeZone, nowUtc, slotTime) is TimeSpan usual)
+            {
+                var offset = TimeSpan.FromMinutes(opts.DetectedReminderOffsetMinutes);
+                slotTime = useIdea ? usual - offset : usual + offset;
+            }
+
             var slotAt = localNow.Date + slotTime;
             if (!IsInWindow(localNow, slotAt, opts.SendWindowMinutes))
             {
@@ -475,10 +519,6 @@ public sealed class NotificationPublishService(
             }
 
             var slotName = i switch { 0 => "lunch", 1 => "dinner", _ => $"meal{i}" };
-
-            // Alternate "log what you ate" with "here's an idea" per slot so the
-            // two meal messages don't feel like the same nag twice a day.
-            var useIdea = i % 2 == 1;
             var category = useIdea ? NotificationCategories.MealIdea : NotificationCategories.TrackCalories;
             var content = useIdea
                 ? NotificationMessageComposer.MealIdea(candidate, localDate)

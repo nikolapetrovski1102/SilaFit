@@ -35,6 +35,8 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IAdminRbacProvider, AdminRbacProvider>();
         services.AddScoped<IAdminContentProvider, AdminContentProvider>();
         services.AddScoped<IAccountProvider, AccountProvider>();
+        services.AddScoped<IProgressAdPassProvider, ProgressAdPassProvider>();
+        services.AddScoped<IPartnerLeadsProvider, PartnerLeadsProvider>();
 
         // Singleton like SqlExecutor: it holds no per-request state, and the CLI tool
         // builds the same type from environment variables rather than DI, which is why

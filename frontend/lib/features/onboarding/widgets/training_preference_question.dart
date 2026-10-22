@@ -12,6 +12,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
   final int progressStepCount;
   final VoidCallback onBack;
   final VoidCallback onNext;
+  final VoidCallback? onSkip;
   final bool isLast;
   const TrainingPreferenceQuestion(
       {super.key,
@@ -21,6 +22,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
       required this.progressStepCount,
       required this.onBack,
       required this.onNext,
+      this.onSkip,
       this.isLast = false});
 
   static const _experienceLabels = {
@@ -34,6 +36,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
     if (step == OnboardingStep.trainingExperience) {
       return QuestionScaffold(
         onBack: onBack,
+        onSkip: onSkip,
         progressStep: progressStep,
         progressStepCount: progressStepCount,
         headline: 'How would you rate your fitness level?',
@@ -122,6 +125,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
     }
     return QuestionScaffold(
       onBack: onBack,
+      onSkip: onSkip,
       progressStep: progressStep,
       progressStepCount: progressStepCount,
       headline: headline,

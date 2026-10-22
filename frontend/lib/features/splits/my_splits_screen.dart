@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/api_exception.dart';
@@ -8,7 +9,9 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
+import '../../core/widgets/swipe_action_tile.dart';
 import '../auth/widgets/auth_blob_background.dart';
+import '../plans/plans_screen.dart';
 import '../today/today_controller.dart';
 import 'split_builder_screen.dart';
 import 'split_creation_wizard_screen.dart';
@@ -85,6 +88,74 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
     }
   }
 
+  void _snack(String message, {SnackBarAction? action}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message), action: action));
+  }
+
+  /// PRO/Advanced only and capped by the plan's split limit - the server
+  /// checks both and answers 403, which is offered as an upgrade.
+  Future<void> _duplicateSplit(WorkoutSplit split) async {
+    HapticFeedback.selectionClick();
+    final repository = context.read<SplitsRepository>();
+    try {
+      await repository.duplicate(split.splitId);
+      if (!mounted) return;
+      _controller.load(force: true);
+      _snack('${split.name} duplicated.');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _snack(
+        e.userMessage,
+        action: e.isForbidden
+            ? SnackBarAction(
+                label: 'Upgrade',
+                onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PlansScreen())),
+              )
+            : null,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _snack(ApiException.genericMessage);
+    }
+  }
+
+  Future<void> _deleteSplit(WorkoutSplit split, {required bool isActive}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${split.name}?'),
+        content: const Text(
+            'This removes the split and every day/exercise in it. This can\'t be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final repository = context.read<SplitsRepository>();
+    try {
+      await repository.delete(split.splitId);
+      if (!mounted) return;
+      _controller.load(force: true);
+      if (isActive) context.read<TodayController>().load(force: true);
+      _snack('${split.name} deleted.');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _snack(e.userMessage);
+    } catch (_) {
+      if (!mounted) return;
+      _snack(ApiException.genericMessage);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeSplit =
@@ -147,11 +218,33 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                             const SectionEyebrow('Your splits'),
                             const SizedBox(height: AppSpacing.sm),
                             for (final split in splits) ...[
-                              _MySplitCard(
-                                split: split,
-                                isActive: activeSplit?.splitId == split.splitId,
-                                onTap: () => _openBuilder(split.splitId),
-                                onActivate: () => _activateSplit(split),
+                              SwipeActionTile(
+                                key: ValueKey(split.splitId),
+                                sheetTitle: split.name,
+                                showHint: split == splits.first,
+                                borderRadius: AppRadius.card,
+                                actions: [
+                                  SwipeAction(
+                                    label: 'Duplicate',
+                                    icon: Icons.copy_rounded,
+                                    onTap: () => _duplicateSplit(split),
+                                  ),
+                                  SwipeAction(
+                                    label: 'Delete',
+                                    icon: Icons.delete_outline_rounded,
+                                    isDestructive: true,
+                                    onTap: () => _deleteSplit(split,
+                                        isActive: activeSplit?.splitId ==
+                                            split.splitId),
+                                  ),
+                                ],
+                                child: _MySplitCard(
+                                  split: split,
+                                  isActive:
+                                      activeSplit?.splitId == split.splitId,
+                                  onTap: () => _openBuilder(split.splitId),
+                                  onActivate: () => _activateSplit(split),
+                                ),
                               ),
                               const SizedBox(height: AppSpacing.sm),
                             ],

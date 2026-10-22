@@ -17,7 +17,7 @@ class RecordingClient extends ApiClient {
   RecordingClient() : super(sessionStore: SessionStore());
   @override
   Future<T> put<T>(String path, T Function(dynamic) parse,
-      {Object? body}) async {
+      {Object? body, Duration? timeout}) async {
     expect(path, '/profile');
     saved = body as Map<String, dynamic>?;
     return parse(body);

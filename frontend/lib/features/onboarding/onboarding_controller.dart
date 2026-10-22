@@ -13,12 +13,11 @@ import 'onboarding_models.dart';
 /// short enough that it still reads as "one tap, not two".
 const _autoAdvanceDelay = Duration(milliseconds: 260);
 
-/// The screens of the flow in display order. `intro1`/`intro2` are the
-/// carousel slides; nine profile questions precede the closing notification
-/// prompt.
+/// The screens of the flow in display order. `intro` is the swipeable
+/// carousel (its own page lives in [OnboardingController.introPage]); nine
+/// profile questions precede the closing notification prompt.
 enum OnboardingStep {
-  intro1,
-  intro2,
+  intro,
   gender,
   age,
   height,
@@ -76,6 +75,21 @@ class OnboardingController extends ChangeNotifier {
   int _stepIndex = 0;
   OnboardingStep get step => OnboardingStep.values[_stepIndex];
   int get stepIndex => _stepIndex;
+
+  /// The carousel page the user is on, kept here so stepping back from the
+  /// first question lands on the slide they left rather than slide one.
+  int introPage = 0;
+
+  /// Which backdrop layout to glide to: one per intro slide, then one per
+  /// step after the carousel, so every swipe and step moves the blobs.
+  int get backgroundLayout =>
+      step == OnboardingStep.intro ? introPage : introPage + _stepIndex;
+
+  void setIntroPage(int page) {
+    if (page == introPage) return;
+    introPage = page;
+    notifyListeners();
+  }
   static int get stepCount => OnboardingStep.values.length;
 
   bool _disposed = false;
@@ -87,7 +101,7 @@ class OnboardingController extends ChangeNotifier {
   int get lastDirection => _lastDirection;
 
   /// 1-based position within the question/notification steps, used by the
-  /// compact assessment count badge - null on the two intro slides.
+  /// compact assessment count badge - null on the intro carousel.
   int? get questionProgressStep {
     final index = _questionSteps.indexOf(step);
     return index == -1 ? null : index + 1;

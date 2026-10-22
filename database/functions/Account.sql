@@ -86,6 +86,8 @@ BEGIN
     DELETE FROM dbo.usersettings WHERE userid = p_userid;
     DELETE FROM dbo.userauthidentities WHERE userid = p_userid;
     DELETE FROM dbo.pendingemailverifications WHERE existinguserid = p_userid;
+    -- The partner's later cancel for this lead then finds nothing and is a no-op.
+    DELETE FROM dbo.partnerleads WHERE userid = p_userid;
     DELETE FROM dbo.users WHERE userid = p_userid;
 END $$;
 
@@ -219,7 +221,7 @@ BEGIN
     -- 4: Settings
     OPEN c4 FOR
     SELECT userid, notificationsenabled, notificationlocaltime, timezoneid,
-           weightunit, distanceunit, resttimersoundenabled, barbellstandardkg, appearancemode,
+           weightunit, distanceunit, resttimersoundenabled, appearancemode,
            avatarchoice, aidataconsentatutc, updatedatutc
     FROM dbo.usersettings
     WHERE userid = p_userid;

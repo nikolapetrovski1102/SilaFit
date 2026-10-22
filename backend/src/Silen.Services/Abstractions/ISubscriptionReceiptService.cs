@@ -13,6 +13,8 @@ public interface ISubscriptionReceiptService
 
     /// <summary>Re-verifies an already-known transaction (driven by a store webhook or the
     /// periodic reconciliation job) and updates entitlement to match its current state.
-    /// A no-op when the transaction isn't already on file.</summary>
-    Task ApplyStoreNotificationAsync(string store, string transactionId, CancellationToken cancellationToken = default);
+    /// A no-op when the transaction isn't already on file - for the App Store,
+    /// <paramref name="originalTransactionId"/> also matches a renewal we haven't seen yet.</summary>
+    Task ApplyStoreNotificationAsync(
+        string store, string transactionId, string? originalTransactionId = null, CancellationToken cancellationToken = default);
 }

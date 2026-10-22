@@ -9,7 +9,7 @@ class OnboardingRepository {
   OnboardingRepository(this._client);
 
   Future<UserProfile> getProfile() =>
-      _client.get('/profile', UserProfile.fromJson);
+      _client.get('/profile', UserProfile.fromJson, cache: true).then(_remember);
 
   Future<UserProfile> upsertProfile({
     required String gender,
@@ -42,5 +42,12 @@ class OnboardingRepository {
           if (dailyActivityLevel != null)
             'dailyActivityLevel': dailyActivityLevel,
         },
-      );
+      ).then(_remember);
+
+  // Keeps SessionStore.profileGender (which picks the split artwork) in step
+  // with whatever profile the API last returned.
+  UserProfile _remember(UserProfile profile) {
+    _client.sessionStore.cacheProfileGender(profile.gender).ignore();
+    return profile;
+  }
 }

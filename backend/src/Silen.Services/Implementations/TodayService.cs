@@ -110,7 +110,8 @@ public sealed class TodayService(
                 throw new ValidationException("Bodyweight must be positive.", "Enter a valid bodyweight.");
             }
 
-            var entries = await bodyweightProvider.LogAsync(userId, request.WeightKg, cancellationToken);
+            var entries = await bodyweightProvider.LogAsync(
+                userId, request.WeightKg, request.BodyweightLogId, ClampClientTimestamp(request.LoggedAtUtc), cancellationToken);
 
             // usp_Bodyweight_Log updates UserProfiles.WeightKg in the same
             // database call. Refresh non-manual nutrition targets from that
@@ -167,11 +168,61 @@ public sealed class TodayService(
                 Reps = s.Reps
             }).ToList();
 
+            var completedAtUtc = ClampClientTimestamp(request.CompletedAtUtc);
+            var scheduledDateUtc = request.SplitDayId is null
+                ? (DateTime?)null
+                : ClampScheduledDate(request.ScheduledDateUtc, completedAtUtc ?? DateTime.UtcNow);
+
             return await workoutSessionProvider.CompleteAsync(
                 userId, request.WorkoutSessionId, request.DurationMinutes,
-                request.CaloriesEstimate, request.RpeScore, request.TonnageKg, setLogs, cancellationToken)
+                request.CaloriesEstimate, request.RpeScore, request.TonnageKg, setLogs,
+                completedAtUtc, request.SplitDayId, scheduledDateUtc, cancellationToken)
                 ?? throw new NotFoundException($"Workout session '{request.WorkoutSessionId}' not found for user '{userId}'.", "That workout session couldn't be found.");
         });
+
+    /// <summary>
+    /// The day an offline-made session was for: the day the workout ended, or the day before (a
+    /// session started just before midnight). Anything else isn't trusted and becomes the day it
+    /// ended.
+    /// </summary>
+    public static DateTime ClampScheduledDate(DateTime? clientDateUtc, DateTime completedAtUtc)
+    {
+        var endedOn = completedAtUtc.Date;
+        if (clientDateUtc is not { } value)
+        {
+            return endedOn;
+        }
+
+        var date = value.Date;
+        return date == endedOn || date == endedOn.AddDays(-1) ? date : endedOn;
+    }
+
+    /// <summary>How far back an offline-queued write may date itself. Older than this and the
+    /// client clock (or a week-old queue) is not trusted - the server time is used instead.</summary>
+    public static readonly TimeSpan MaxClientBackdate = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// A write uploaded from the phone's offline queue carries when it really happened, so a
+    /// workout finished in a gym with no signal still counts for that day. Never trust it
+    /// blindly: a future time becomes now, and anything older than <see cref="MaxClientBackdate"/>
+    /// falls back to now (null) rather than letting a bad clock rewrite history.
+    /// </summary>
+    public static DateTime? ClampClientTimestamp(DateTime? clientUtc, DateTime? nowUtc = null)
+    {
+        if (clientUtc is not { } value)
+        {
+            return null;
+        }
+
+        var now = nowUtc ?? DateTime.UtcNow;
+        var utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        if (utc > now || utc < now - MaxClientBackdate)
+        {
+            return null;
+        }
+
+        return utc;
+    }
 
     /// <summary>How far back a Free account can open a day's set history (the streak sheet
     /// and Home both link there); Pro/Advanced have no server-side limit.</summary>

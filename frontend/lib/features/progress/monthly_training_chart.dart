@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -8,6 +10,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_dropdown.dart';
 import 'analytics_models.dart';
+import 'weight_display.dart';
 
 /// Plots logged load, not an inferred quality/effort score. The drawing starts
 /// at the baseline, then traces each real point with a moving tip.
@@ -25,6 +28,20 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
   late final AnimationController _reveal = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800));
   int _selected = 0;
+  // Session under the finger while scrubbing the chart; null shows none.
+  int? _touched;
+
+  void _touch(MonthlyExercise exercise, Offset position, Size size) {
+    // Touching mid-reveal finishes the drawing so the dots are there to read.
+    if (_reveal.isAnimating || _reveal.value < 1) {
+      _reveal.stop();
+      _reveal.value = 1;
+    }
+    final index = _TrainingPainter.nearestIndex(exercise, size, position.dx);
+    if (index == _touched) return;
+    HapticFeedback.selectionClick();
+    setState(() => _touched = index);
+  }
 
   void _play() {
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -67,6 +84,11 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
             .whereType<double>()
             .toList() ??
         <double>[];
+    final unit = weightUnitOf(context);
+    final unitWord = unit == 'lb' ? 'pounds' : 'kilograms';
+    final perDumbbell =
+        exercise != null && exercise.isPerDumbbell ? perDumbbellSuffix : '';
+    String w(double kg) => formatWeight(kg, unit);
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.marginMobile, vertical: AppSpacing.xl),
@@ -98,7 +120,10 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
             ],
             onChanged: (value) {
               if (value != null) {
-                setState(() => _selected = value);
+                setState(() {
+                  _selected = value;
+                  _touched = null;
+                });
                 _play();
               }
             },
@@ -109,26 +134,73 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                 Text(
-                    '${_format(exercise.points.last.weightKg)} kg × ${exercise.points.last.reps} reps',
+                    '${w(exercise.points.last.weightKg)} $unit × ${exercise.points.last.reps} reps',
                     style: AppTypography.headlineLg
                         .copyWith(color: AppColors.accent)),
                 Text(
-                    'Latest heaviest set · ${DateFormat.MMMd().format(exercise.points.last.dateUtc)}',
+                    'Latest heaviest set · ${DateFormat.MMMd().format(exercise.points.last.dateUtc)}$perDumbbell',
                     style: AppTypography.bodySm),
                 const SizedBox(height: AppSpacing.md),
                 Semantics(
                   label:
-                      '${exercise.exerciseName}. Heaviest set per session. Record through month end ${exercise.recordWeightKg} kilograms. ${exercise.points.map((p) => '${DateFormat.MMMd().format(p.dateUtc)}: ${p.weightKg} kilograms, ${p.reps} reps').join('; ')}',
+                      '${exercise.exerciseName}. Heaviest set per session. Record through month end ${w(exercise.recordWeightKg)} $unitWord. ${exercise.points.map((p) => '${DateFormat.MMMd().format(p.dateUtc)}: ${w(p.weightKg)} $unitWord, ${p.reps} reps').join('; ')}',
                   child: SizedBox(
                       height: 220,
-                      child: AnimatedBuilder(
-                        animation: _reveal,
-                        builder: (context, _) => CustomPaint(
-                            painter: _TrainingPainter(exercise, _reveal.value)),
-                      )),
+                      child: LayoutBuilder(builder: (context, constraints) {
+                        final size = constraints.biggest;
+                        final touched = _touched;
+                        final point =
+                            touched == null ? null : exercise.points[touched];
+                        // Hold, then drag to scrub. The long press claims the
+                        // gesture before the page scroll or swipe can.
+                        return RawGestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          gestures: {
+                            LongPressGestureRecognizer:
+                                GestureRecognizerFactoryWithHandlers<
+                                    LongPressGestureRecognizer>(
+                              () => LongPressGestureRecognizer(
+                                  duration: const Duration(milliseconds: 180)),
+                              (r) => r
+                                ..onLongPressStart = ((d) =>
+                                    _touch(exercise, d.localPosition, size))
+                                ..onLongPressMoveUpdate = ((d) =>
+                                    _touch(exercise, d.localPosition, size)),
+                            ),
+                            TapGestureRecognizer:
+                                GestureRecognizerFactoryWithHandlers<
+                                    TapGestureRecognizer>(
+                              TapGestureRecognizer.new,
+                              (r) => r
+                                ..onTapUp = (d) {
+                                  final index = _TrainingPainter.nearestIndex(
+                                      exercise, size, d.localPosition.dx);
+                                  if (index == _touched) {
+                                    setState(() => _touched = null);
+                                  } else {
+                                    _touch(exercise, d.localPosition, size);
+                                  }
+                                },
+                            ),
+                          },
+                          child: AnimatedBuilder(
+                            animation: _reveal,
+                            builder: (context, _) => CustomPaint(
+                                size: size,
+                                painter: _TrainingPainter(
+                                  exercise,
+                                  _reveal.value,
+                                  selected: touched,
+                                  selectedLabel: point == null
+                                      ? null
+                                      : '${w(point.weightKg)} $unit × ${point.reps} reps\n${DateFormat.MMMd().format(point.dateUtc)}${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
+                                )),
+                          ),
+                        );
+                      })),
                 ),
                 Text(
-                    'Heaviest set each session · kg\nDashed line: PR through month end (${_format(exercise.recordWeightKg)} kg)',
+                    'Heaviest set each session · $unit$perDumbbell\nDashed line: PR through month end (${w(exercise.recordWeightKg)} $unit)',
                     style: AppTypography.bodySm),
               ])),
           const SizedBox(height: AppSpacing.md),
@@ -136,7 +208,7 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
               exercise.points.length < 2
                   ? 'One session is a starting point. More logs are needed to show a trend.'
                   : exercise.steadyLoad
-                      ? 'Your heaviest logged weight stayed at ${_format(exercise.points.last.weightKg)} kg across ${exercise.points.length} sessions. ${exercise.points.last.reps > exercise.points.first.reps ? 'You added reps at that weight.' : 'There is no upward load trend in these logs yet.'}'
+                      ? 'Your heaviest logged weight stayed at ${w(exercise.points.last.weightKg)} $unit across ${exercise.points.length} sessions. ${exercise.points.last.reps > exercise.points.first.reps ? 'You added reps at that weight.' : 'There is no upward load trend in these logs yet.'}'
                       : exercise.improved
                           ? 'Your latest set shows progress over your first session this month.'
                           : 'Your load varied this month. Compare the reps too before drawing conclusions about progress.',
@@ -159,7 +231,7 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Text(
-                  '${DateFormat.MMMd().format(point.dateUtc)} · ${_format(point.weightKg)} kg × ${point.reps} reps${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
+                  '${DateFormat.MMMd().format(point.dateUtc)} · ${w(point.weightKg)} $unit × ${point.reps} reps${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
                   style: AppTypography.bodySm),
             ),
         ],
@@ -168,14 +240,41 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
   }
 }
 
-String _format(double value) => value == value.roundToDouble()
-    ? value.toStringAsFixed(0)
-    : value.toStringAsFixed(1);
-
 class _TrainingPainter extends CustomPainter {
   final MonthlyExercise exercise;
   final double progress;
-  _TrainingPainter(this.exercise, this.progress);
+  final int? selected;
+  final String? selectedLabel;
+  _TrainingPainter(this.exercise, this.progress,
+      {this.selected, this.selectedLabel});
+
+  static Rect _area(Size size) =>
+      Rect.fromLTRB(34, 16, size.width - 12, size.height - 28);
+
+  /// Sessions are spaced by date, so x positions follow the calendar.
+  static List<double> _xs(MonthlyExercise exercise, Rect area) {
+    final firstTime = exercise.points.first.dateUtc.millisecondsSinceEpoch;
+    final span =
+        exercise.points.last.dateUtc.millisecondsSinceEpoch - firstTime;
+    return [
+      for (final point in exercise.points)
+        span == 0
+            ? area.center.dx
+            : area.left +
+                (point.dateUtc.millisecondsSinceEpoch - firstTime) /
+                    span *
+                    area.width,
+    ];
+  }
+
+  static int nearestIndex(MonthlyExercise exercise, Size size, double dx) {
+    final xs = _xs(exercise, _area(size));
+    var best = 0;
+    for (var i = 1; i < xs.length; i++) {
+      if ((xs[i] - dx).abs() < (xs[best] - dx).abs()) best = i;
+    }
+    return best;
+  }
 
   void _label(Canvas canvas, String text, Offset position) {
     final painter = TextPainter(
@@ -192,7 +291,7 @@ class _TrainingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final area = Rect.fromLTRB(34, 16, size.width - 12, size.height - 28);
+    final area = _area(size);
     final maxWeight = math.max(
             1.0,
             math.max(exercise.recordWeightKg,
@@ -217,20 +316,14 @@ class _TrainingPainter extends CustomPainter {
             ..color = AppColors.secondary
             ..strokeWidth = 1.5);
     }
-    final firstTime = exercise.points.first.dateUtc.millisecondsSinceEpoch;
-    final span =
-        exercise.points.last.dateUtc.millisecondsSinceEpoch - firstTime;
-    final points = exercise.points
-        .map((point) => Offset(
-              span == 0
-                  ? area.center.dx
-                  : area.left +
-                      (point.dateUtc.millisecondsSinceEpoch - firstTime) /
-                          span *
-                          area.width,
-              y(point.weightKg),
-            ))
-        .toList();
+    final xs = _xs(exercise, area);
+    final span = exercise.points.last.dateUtc
+        .difference(exercise.points.first.dateUtc)
+        .inMilliseconds;
+    final points = [
+      for (var i = 0; i < xs.length; i++)
+        Offset(xs[i], y(exercise.points[i].weightKg)),
+    ];
     // The baseline stem is an animation lead-in, not a zero-weight data point.
     final stem = Path()
       ..moveTo(points.first.dx, area.bottom)
@@ -277,9 +370,52 @@ class _TrainingPainter extends CustomPainter {
       _label(canvas, DateFormat.MMMd().format(exercise.points.last.dateUtc),
           Offset(math.max(area.left + 50, area.right - 40), area.bottom + 10));
     }
+    if (selected case final index? when index < points.length) {
+      _drawSelection(canvas, size, area, points[index]);
+    }
+  }
+
+  void _drawSelection(Canvas canvas, Size size, Rect area, Offset point) {
+    for (double y = area.top; y < area.bottom; y += 6) {
+      canvas.drawLine(
+          Offset(point.dx, y),
+          Offset(point.dx, math.min(y + 3, area.bottom)),
+          Paint()
+            ..color = AppColors.accent.withValues(alpha: .35)
+            ..strokeWidth = 1);
+    }
+    canvas.drawCircle(point, 7, Paint()..color = AppColors.background);
+    canvas.drawCircle(point, 5, Paint()..color = AppColors.accent);
+    final label = selectedLabel;
+    if (label == null) return;
+    final text = TextPainter(
+        text: TextSpan(
+            text: label,
+            style: TextStyle(
+                color: AppColors.onSurface,
+                fontSize: 11,
+                height: 1.35,
+                fontFamily: 'HankenGrotesk')),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr)
+      ..layout(maxWidth: size.width - 16);
+    const padX = 10.0, padY = 6.0, gap = 12.0;
+    final w = text.width + padX * 2, h = text.height + padY * 2;
+    final left =
+        (point.dx - w / 2).clamp(0.0, math.max(0.0, size.width - w)).toDouble();
+    // Sit above the point; flip below when there is no room on top.
+    final above = point.dy - gap - h;
+    final top = above >= 0 ? above : point.dy + gap;
+    final box = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, w, h), const Radius.circular(8));
+    canvas.drawRRect(box, Paint()..color = AppColors.surfaceContainerHighest);
+    text.paint(canvas, Offset(left + padX, top + padY));
   }
 
   @override
   bool shouldRepaint(covariant _TrainingPainter oldDelegate) =>
-      oldDelegate.exercise != exercise || oldDelegate.progress != progress;
+      oldDelegate.exercise != exercise ||
+      oldDelegate.progress != progress ||
+      oldDelegate.selected != selected ||
+      oldDelegate.selectedLabel != selectedLabel;
 }

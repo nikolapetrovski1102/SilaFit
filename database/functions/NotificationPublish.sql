@@ -126,7 +126,9 @@ BEGIN
         SELECT userid,
                MAX(startedatutc)   AS lastworkoutstartedatutc,
                MAX(completedatutc) AS lastworkoutcompletedatutc,
-               COUNT(CASE WHEN completedatutc >= v_now - interval '7 days' THEN 1 END)::int AS workoutslast7days
+               COUNT(CASE WHEN completedatutc >= v_now - interval '7 days' THEN 1 END)::int AS workoutslast7days,
+               -- Raw history for ReminderTimeDetector: when this user actually trains.
+               array_agg(startedatutc) FILTER (WHERE startedatutc >= v_now - interval '28 days') AS recentworkoutstartsutc
         FROM dbo.workoutsessions
         GROUP BY userid
     ),
@@ -142,7 +144,9 @@ BEGIN
     mealstats AS (
         SELECT userid,
                MAX(loggedatutc) AS lastmealloggedatutc,
-               COUNT(CASE WHEN loggedatutc >= v_now - interval '24 hours' THEN 1 END)::int AS mealslast24h
+               COUNT(CASE WHEN loggedatutc >= v_now - interval '24 hours' THEN 1 END)::int AS mealslast24h,
+               -- Raw history for ReminderTimeDetector: when this user actually logs meals.
+               array_agg(loggedatutc) FILTER (WHERE loggedatutc >= v_now - interval '28 days') AS recentmealsloggedutc
         FROM dbo.meallogs
         WHERE status = 'Logged'
         GROUP BY userid
@@ -158,6 +162,7 @@ BEGIN
         u.displayname,
         s.notificationsenabled,
         s.notificationlocaltime,
+        s.notificationtimeisuserset,
         s.timezoneid,
         COALESCE(st.lastinteractionatutc, u.lastloginatutc, u.createdatutc) AS lastinteractionatutc,
         st.lastpushedatutc,
@@ -167,10 +172,12 @@ BEGIN
         w.lastworkoutstartedatutc,
         w.lastworkoutcompletedatutc,
         COALESCE(w.workoutslast7days, 0) AS workoutslast7days,
+        w.recentworkoutstartsutc,
         a.activesessionstartedatutc,
         a.activesessionlastactivityatutc,
         m.lastmealloggedatutc,
         COALESCE(m.mealslast24h, 0) AS mealslast24h,
+        m.recentmealsloggedutc,
         -- Drives the monthly-review upsell: only non-paying users (no active
         -- PRO/ADVANCED entitlement) get the "unlock your review" push. Same
         -- plan-code set as SubscriptionGate.ProPlanCodes and
@@ -182,7 +189,7 @@ BEGIN
             WHERE us.userid = u.userid
               AND us.status = 'Active'
               AND (us.expiresatutc IS NULL OR us.expiresatutc > v_now)
-              AND sp.code IN ('PRO', 'ADVANCED')
+              AND COALESCE(sp.entitlementcode, sp.code) IN ('PRO', 'ADVANCED')
         ) AS haspaidsubscription,
         tc.activetokencount
     FROM dbo.usersettings s

@@ -16,7 +16,7 @@ class PostRecordingClient extends ApiClient {
 
   @override
   Future<T> post<T>(String path, T Function(dynamic json) parse,
-      {Object? body}) async {
+      {Object? body, bool idempotent = false, Duration? timeout}) async {
     posts.add({'path': path, 'body': body});
     return parse({'success': true, 'data': true});
   }

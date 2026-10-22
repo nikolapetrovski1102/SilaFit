@@ -41,6 +41,12 @@ class _FakeTodayRepo extends TodayRepository {
   _FakeTodayRepo() : super(ApiClient(sessionStore: SessionStore()));
 
   @override
+  Future<TodayDashboard?> getCachedDashboard() async => null;
+
+  @override
+  Future<OfflineToday?> getOfflineDashboard() async => null;
+
+  @override
   Future<TodayDashboard> getDashboard() async {
     return TodayDashboard(
       session: const TodaySession(
@@ -75,6 +81,12 @@ class _FakeTodayRepo extends TodayRepository {
 
 class _FakeRestTodayRepo extends TodayRepository {
   _FakeRestTodayRepo() : super(ApiClient(sessionStore: SessionStore()));
+
+  @override
+  Future<TodayDashboard?> getCachedDashboard() async => null;
+
+  @override
+  Future<OfflineToday?> getOfflineDashboard() async => null;
 
   @override
   Future<TodayDashboard> getDashboard() async {

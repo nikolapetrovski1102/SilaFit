@@ -8,12 +8,14 @@ BEGIN
     SELECT planid, code, name, tagline, monthlyprice, yearlyprice, isfeatured, sortorder,
            appstoremonthlyproductid, appstoreyearlyproductid, playstoremonthlyproductid, playstoreyearlyproductid
     FROM dbo.subscriptionplans
+    WHERE NOT ishidden
     ORDER BY sortorder;
     RETURN NEXT c1;
 
     OPEN c2 FOR
     SELECT planid, featuretext, sortorder, ishighlighted
     FROM dbo.planfeatures
+    WHERE planid IN (SELECT planid FROM dbo.subscriptionplans WHERE NOT ishidden)
     ORDER BY planid, sortorder;
     RETURN NEXT c2;
 END $$;
@@ -36,7 +38,8 @@ BEGIN
     VALUES (p_userid, p_planid, p_billingcycle, 'Active', dbo.sysutcdatetime(), v_expiresatutc)
     ON CONFLICT (userid) DO UPDATE SET
         planid = p_planid, billingcycle = p_billingcycle, status = 'Active',
-        startedatutc = dbo.sysutcdatetime(), expiresatutc = v_expiresatutc;
+        startedatutc = dbo.sysutcdatetime(), expiresatutc = v_expiresatutc,
+        ispartnergrant = false;
 
     OPEN c1 FOR
     SELECT userid, planid, billingcycle, status, startedatutc, expiresatutc
@@ -52,7 +55,8 @@ DECLARE
     c1 refcursor;
 BEGIN
     OPEN c1 FOR
-    SELECT us.userid, us.planid, us.billingcycle, us.status, us.startedatutc, us.expiresatutc, sp.code, sp.name
+    SELECT us.userid, us.planid, us.billingcycle, us.status, us.startedatutc, us.expiresatutc, COALESCE(sp.entitlementcode, sp.code) AS code, sp.name,
+           us.latestreceiptid, us.autorenewing, us.ispartnergrant
     FROM dbo.usersubscriptions us
     INNER JOIN dbo.subscriptionplans sp ON sp.planid = us.planid
     WHERE us.userid = p_userid;
@@ -75,12 +79,12 @@ BEGIN
         u.userid,
         u.displayname,
         u.email,
-        sp.code AS plancode,
+        COALESCE(sp.entitlementcode, sp.code) AS plancode,
         us.expiresatutc
     FROM dbo.usersubscriptions us
     INNER JOIN dbo.subscriptionplans sp ON sp.planid = us.planid
     INNER JOIN dbo.users u ON u.userid = us.userid
-    WHERE sp.code = p_plancode
+    WHERE COALESCE(sp.entitlementcode, sp.code) = p_plancode
       AND us.status = 'Active'
       AND u.isactive
       AND (us.expiresatutc IS NULL OR us.expiresatutc > dbo.sysutcdatetime())
@@ -120,7 +124,7 @@ BEGIN
           WHERE us.userid = u.userid
             AND us.status = 'Active'
             AND (us.expiresatutc IS NULL OR us.expiresatutc > dbo.sysutcdatetime())
-            AND sp.code IN ('PRO', 'ADVANCED')
+            AND COALESCE(sp.entitlementcode, sp.code) IN ('PRO', 'ADVANCED')
       )
     ORDER BY u.createdatutc
     LIMIT p_maxusers;
@@ -145,5 +149,48 @@ BEGIN
     WHERE us.userid = p_userid
       AND us.status = 'Active'
       AND (us.expiresatutc IS NULL OR us.expiresatutc > dbo.sysutcdatetime());
+    RETURN NEXT c1;
+END $$;
+
+-- Claims a Silen discount code for the caller. Always returns one row whose
+-- Status is Ok, Invalid (unknown or switched off), NotStarted, Expired or
+-- Exhausted; PlayOfferId is only filled in for Ok. A caller who already
+-- claimed the code gets Ok again without using up another redemption.
+CREATE OR REPLACE FUNCTION dbo.usp_promocode_redeem(
+    p_userid uuid,
+    p_code varchar(40)
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+    v_promo dbo.promocodes%ROWTYPE;
+    v_status text;
+BEGIN
+    -- Locked so two last-slot claims can't both squeeze under MaxRedemptions.
+    SELECT * INTO v_promo
+    FROM dbo.promocodes
+    WHERE code = btrim(p_code)
+    FOR UPDATE;
+
+    IF NOT FOUND OR NOT v_promo.isactive THEN
+        v_status := 'Invalid';
+    ELSIF v_promo.startsatutc IS NOT NULL AND v_promo.startsatutc > dbo.sysutcdatetime() THEN
+        v_status := 'NotStarted';
+    ELSIF v_promo.expiresatutc IS NOT NULL AND v_promo.expiresatutc <= dbo.sysutcdatetime() THEN
+        v_status := 'Expired';
+    ELSIF EXISTS (SELECT 1 FROM dbo.promocoderedemptions WHERE code = v_promo.code AND userid = p_userid) THEN
+        v_status := 'Ok';
+    ELSIF v_promo.maxredemptions IS NOT NULL
+          AND (SELECT count(*) FROM dbo.promocoderedemptions WHERE code = v_promo.code) >= v_promo.maxredemptions THEN
+        v_status := 'Exhausted';
+    ELSE
+        INSERT INTO dbo.promocoderedemptions (code, userid) VALUES (v_promo.code, p_userid);
+        v_status := 'Ok';
+    END IF;
+
+    OPEN c1 FOR
+    SELECT v_status AS status,
+           v_promo.code AS code,
+           CASE WHEN v_status = 'Ok' THEN v_promo.playofferid END AS playofferid,
+           v_promo.expiresatutc AS expiresatutc;
     RETURN NEXT c1;
 END $$;

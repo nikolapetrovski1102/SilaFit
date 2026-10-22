@@ -65,6 +65,8 @@ public sealed class MonthlyExerciseModel
     public Guid ExerciseId { get; set; }
     public string ExerciseName { get; set; } = string.Empty;
     public decimal RecordWeightKg { get; set; }
+    /// <summary>Two-dumbbell exercise: the weights are per dumbbell.</summary>
+    public bool IsPerDumbbell { get; set; }
     public List<MonthlyExercisePointModel> Points { get; set; } = new();
 }
 

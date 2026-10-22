@@ -12,7 +12,7 @@ class AnalyticsRepository {
         if (year != null) 'year': '$year',
         if (month != null) 'month': '$month',
         if (refresh) 'refresh': 'true',
-      });
+      }, cache: !refresh);
 
   /// The ADVANCED-only weekly recap. A Pro-tier caller gets a 403 (mapped to
   /// `requiresUpgrade`); the weekly controller keeps that distinct from the
@@ -23,5 +23,5 @@ class AnalyticsRepository {
         if (year != null) 'year': '$year',
         if (week != null) 'week': '$week',
         if (refresh) 'refresh': 'true',
-      });
+      }, cache: !refresh);
 }

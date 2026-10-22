@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/ads/ads_service.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/live_workout/live_workout_notifier.dart';
 import '../../core/live_workout/live_workout_snapshot.dart';
@@ -37,7 +38,7 @@ import 'today_repository.dart';
 
 /// Exercises tagged with this `EquipmentType` (see the seed data in
 /// `database/seed/001_SeedReferenceData.sql`) are the only ones where a
-/// bar-plus-plates breakdown, or a floor at the empty-bar weight, means
+/// bar-plus-plates breakdown, or starting a fresh set at the empty bar, means
 /// anything - every other equipment type (dumbbell, cable, machine,
 /// bodyweight, kettlebell) is loaded a different way and would show
 /// nonsense plate math if this gate weren't here (e.g. a 30kg dumbbell
@@ -50,6 +51,54 @@ const _barbellEquipment = 'Barbell';
 /// excluded: the seeded "Kettlebell Swing" is one two-handed implement,
 /// not a pair, so its logged weight is already the total load.
 const _bilateralDumbbellEquipment = 'Dumbbell';
+
+/// Name fragments of dumbbell exercises done with a *single* dumbbell - one
+/// held in both hands (goblet squat, pullover, two-hand overhead extension)
+/// or worked one arm at a time (one-arm row, concentration curl). Their
+/// logged weight is already the whole load, so they're not doubled like a
+/// pair would be. The catalog's EquipmentType can't say "one or two", so
+/// this reads it off the name.
+const _singleDumbbellNameHints = [
+  'goblet',
+  'single arm',
+  'single-arm',
+  'one arm',
+  'one-arm',
+  '1-arm',
+  'tripod',
+  'pullover',
+  'pull over',
+  'concentration',
+  'plie',
+  'sumo squat',
+  'side bend',
+  'knee-in',
+  'pass-through',
+  'two arm dumbbell overhead',
+  'two arm seated dumbbell',
+  'overhead dumbbell extension',
+  'overhead dumbbell tricep',
+  'dumbbell overhead extension',
+  'dumbbell overhead tricep',
+  'dumbbell tricep overhead',
+  'seated dumbbell tricep extension',
+  'triceps press with db',
+  'overhead triceps',
+  'behind head',
+  'french press',
+  'weighted crunch',
+  'weighted ab crunch',
+  '1 db',
+  'dumbbell on chest',
+];
+
+/// How many dumbbells (or other implements) a set's logged weight counts for
+/// in tonnage: 2 for a two-dumbbell exercise, 1 for everything else.
+int _loadMultiplierFor(String? equipmentType, String exerciseName) {
+  if (equipmentType != _bilateralDumbbellEquipment) return 1;
+  final name = exerciseName.toLowerCase();
+  return _singleDumbbellNameHints.any(name.contains) ? 1 : 2;
+}
 
 /// One set's local draft state. Every *completed* set is flattened and sent
 /// to the server alongside the session aggregate in
@@ -79,6 +128,27 @@ const _plateSizesLb = [45.0, 35.0, 25.0, 10.0, 5.0, 2.5];
 /// kg -> lb, matching the factor already used by
 /// `onboarding_flow_screen.dart`'s `_formatWeight`.
 const _kgToLb = 2.20462;
+
+/// A standard Olympic bar - what the plate breakdown subtracts and where a
+/// fresh barbell set starts. Only a starting point: the lifter can dial the
+/// weight below it (a lighter technique bar, an EZ bar, ...).
+const _barWeightKg = 20.0;
+
+/// An EZ curl bar - lighter than the Olympic bar, so its plate math and
+/// starting weight subtract this instead.
+const _ezBarWeightKg = 10.0;
+
+/// The bar a [Barbell](_barbellEquipment) exercise is loaded on, or `null`
+/// when a bar-plus-plates breakdown means nothing for it: any non-barbell
+/// exercise, a landmine lift (one end of the bar is anchored, so plates go on
+/// one side only) and a trap bar (no standard weight).
+double? _plateBarKgFor(String? equipmentType, String exerciseName) {
+  if (equipmentType != _barbellEquipment) return null;
+  final name = exerciseName.toLowerCase();
+  if (name.contains('landmine') || name.contains('trap bar')) return null;
+  if (name.contains('ez bar') || name.contains('ez-bar')) return _ezBarWeightKg;
+  return _barWeightKg;
+}
 
 /// Greedy per-side plate breakdown for [totalWeightKg] on a [barbellKg]
 /// bar, expressed in whichever [unit] the caller wants the plates named in
@@ -151,7 +221,6 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   // Falls back to the spec defaults if Settings hasn't finished its own
   // first load yet (e.g. a very fast cold-start tap-through).
   late final String _weightUnit;
-  late final double _barbellStandardKg;
 
   // Wall-clock rather than a `Stopwatch` - a `Stopwatch` lives only in this
   // object's memory, so it can't tell a resumed screen how much time has
@@ -272,10 +341,9 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   Future<void> _init() async {
     final settings = context.read<SettingsController>().state.data;
     _weightUnit = settings?.weightUnit ?? 'kg';
-    _barbellStandardKg = settings?.barbellStandardKg ?? 20.0;
 
     // Last time each exercise was actually logged, if ever - a fresh set
-    // starts from there instead of always resetting to the barbell standard
+    // starts from there instead of always resetting to the empty bar
     // or the target rep-range midpoint, matching how a lifter actually
     // plans a set ("what did I do last time").
     final memory = await ExerciseMemoryStore.instance.loadAll();
@@ -285,8 +353,8 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
       return List.generate(
         exercise.targetSets <= 0 ? 1 : exercise.targetSets,
         (_) => _SetDraft(
-          weightKg:
-              remembered?.weightKg ?? _weightFloorKgFor(exercise.equipmentType),
+          weightKg: remembered?.weightKg ??
+              _startingWeightKgFor(exercise.equipmentType, exercise.name),
           reps: remembered?.reps ??
               ((exercise.targetRepsLow + exercise.targetRepsHigh) / 2)
                   .round()
@@ -295,7 +363,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
       );
     }).toList();
 
-    final sessionId = widget.session.workoutSessionId;
+    final sessionId = _draftSessionId;
     final draft = sessionId == null
         ? null
         : await ActiveWorkoutDraftStore.instance.load(sessionId);
@@ -378,7 +446,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     // next "Continue Workout" resumes the clock without the time away. No
     // heartbeat here (unlike `_saveDraft`) - `context` is unusable in
     // dispose, and leaving isn't activity anyway.
-    final sessionId = widget.session.workoutSessionId;
+    final sessionId = _draftSessionId;
     if (_ready && !_workoutCompleted && sessionId != null) {
       unawaited(ActiveWorkoutDraftStore.instance
           .save(_buildDraft(sessionId, pausedAtUtc: DateTime.now().toUtc())));
@@ -412,8 +480,18 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   List<String> get _planExerciseIds =>
       widget.exercises.map((e) => e.exerciseId).toList();
 
+  /// The session id the draft (and heartbeat) is saved under: normally
+  /// this screen's, but once the server has replaced a session the phone
+  /// made up offline, the real one - the draft was moved there (see
+  /// [TodayController.sessionIdFor]). The live surface keeps the original
+  /// id, since that's what its recorded taps are keyed by.
+  String? get _draftSessionId {
+    final id = widget.session.workoutSessionId;
+    return id == null ? null : widget.controller.sessionIdFor(id);
+  }
+
   void _saveDraft() {
-    final sessionId = widget.session.workoutSessionId;
+    final sessionId = _draftSessionId;
     if (sessionId == null) return;
     final now = DateTime.now();
     final hasCompletedSets =
@@ -496,20 +574,12 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   /// lb-preference lifter.
   double get _weightStepKg => _weightUnit == 'lb' ? 5 / _kgToLb : 2.5;
 
-  /// The lowest weight this exercise's equipment can plausibly show. Only a
-  /// barbell exercise (or one with no `equipmentType` on record, so the
-  /// pre-existing behaviour holds rather than guessing) has a real hard
-  /// floor - the empty bar itself. Every other equipment type just floors
-  /// at one weight-step above zero, so a dumbbell/cable/machine set can be
-  /// dialled down without getting stuck at a 20kg barbell-bar minimum that
-  /// has nothing to do with what's actually in the lifter's hands.
-  double _weightFloorKgFor(String? equipmentType) =>
-      (equipmentType == null || equipmentType == _barbellEquipment)
-          ? _barbellStandardKg
-          : _weightStepKg;
-
-  double get _weightFloorKg =>
-      _weightFloorKgFor(_currentExercise.equipmentType);
+  /// Where a set with no history starts: the empty bar for a barbell
+  /// exercise (see [_plateBarKgFor]), one weight-step for everything else,
+  /// including an exercise with no `equipmentType` on record. Only a starting
+  /// point - any set can be dialled down to zero.
+  double _startingWeightKgFor(String? equipmentType, String exerciseName) =>
+      _plateBarKgFor(equipmentType, exerciseName) ?? _weightStepKg;
 
   /// The current exercise's first not-yet-logged set - the only set this
   /// screen ever shows. `null` once every set is logged (see
@@ -578,7 +648,9 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   void _addSet() {
     final last = _currentSets.isNotEmpty ? _currentSets.last : null;
     setState(() => _currentSets.add(_SetDraft(
-          weightKg: last?.weightKg ?? _weightFloorKg,
+          weightKg: last?.weightKg ??
+              _startingWeightKgFor(
+                  _currentExercise.equipmentType, _currentExercise.name),
           reps: last?.reps ?? _currentExercise.targetRepsLow,
         )));
     _saveDraft();
@@ -617,8 +689,8 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     return List.generate(
       targetSets <= 0 ? 1 : targetSets,
       (_) => _SetDraft(
-        weightKg:
-            remembered?.weightKg ?? _weightFloorKgFor(exercise.equipmentType),
+        weightKg: remembered?.weightKg ??
+            _startingWeightKgFor(exercise.equipmentType, exercise.name),
         reps: remembered?.reps ??
             ((repsLow + repsHigh) / 2).round().clamp(1, 999),
       ),
@@ -717,17 +789,15 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
 
   void _adjustWeight(int index, double directionSign) {
     setState(() {
-      final floor = _weightFloorKg;
       final next = _currentSets[index].weightKg + directionSign * _weightStepKg;
       _currentSets[index].weightKg =
-          next < floor ? floor : double.parse(next.toStringAsFixed(2));
+          next < 0 ? 0 : double.parse(next.toStringAsFixed(2));
     });
     _saveDraft();
   }
 
   void _setWeightDirect(int index, double kg) {
-    final floor = _weightFloorKg;
-    setState(() => _currentSets[index].weightKg = kg < floor ? floor : kg);
+    setState(() => _currentSets[index].weightKg = kg < 0 ? 0 : kg);
     _saveDraft();
   }
 
@@ -747,11 +817,11 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   double get _totalTonnageKg {
     var total = 0.0;
     for (var i = 0; i < _setsByExercise.length; i++) {
-      // See `_bilateralDumbbellEquipment` - a dumbbell set's logged weight
-      // is per hand, so the load actually moved is double what a
+      // See `_loadMultiplierFor` - a two-dumbbell set's logged weight is
+      // per hand, so the load actually moved is double what a
       // barbell/machine/cable set of the same number would be.
       final perRepMultiplier =
-          _exercises[i].equipmentType == _bilateralDumbbellEquipment ? 2 : 1;
+          _loadMultiplierFor(_exercises[i].equipmentType, _exercises[i].name);
       for (final set in _setsByExercise[i]) {
         if (set.completed) {
           total += set.weightKg * set.reps * perRepMultiplier;
@@ -818,7 +888,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     setState(() => _isFinishing = true);
     final elapsedMinutes = _elapsed.value.inMinutes;
     final durationMinutes = elapsedMinutes < 1 ? 1 : elapsedMinutes;
-    final ok = await widget.controller.completeWorkout(
+    final outcome = await widget.controller.completeWorkout(
       workoutSessionId: sessionId,
       durationMinutes: durationMinutes,
       tonnageKg: _totalTonnageKg > 0 ? _totalTonnageKg : null,
@@ -826,8 +896,9 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
     );
     if (!mounted) return;
     setState(() => _isFinishing = false);
-    if (ok) {
-      // Session is logged server-side now - the local draft would only ever
+    if (outcome != WorkoutCompletion.failed) {
+      // Session is logged server-side now (or queued on the phone with
+      // every set, to upload by itself) - the local draft would only ever
       // be stale from here on, so it's cleared regardless of whether the
       // mascot dialog below is dismissed or the screen is popped first.
       // Fire-and-forget (like `_saveDraft`) rather than awaited: nothing
@@ -846,12 +917,18 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
         context,
         pose: isMilestone ? MascotPose.proud : MascotPose.celebrating,
         title: isMilestone ? '$streakDays-day streak!' : 'Workout complete',
-        message: isMilestone
-            ? 'You\'re on fire - $streakDays days in a row. Keep it going.'
-            : 'Nice work. Your session has been logged.',
+        message: outcome == WorkoutCompletion.savedOffline
+            ? 'Nice work. Saved on your phone - it\'ll upload by itself when you\'re back online.'
+            : isMilestone
+                ? 'You\'re on fire - $streakDays days in a row. Keep it going.'
+                : 'Nice work. Your session has been logged.',
         actionLabel: 'Nice',
         showConfetti: true,
       );
+      // Offline there's no ad to fetch anyway; Free accounts only.
+      if (outcome != WorkoutCompletion.savedOffline) {
+        unawaited(AdsService.instance.maybeShowWorkoutInterstitial());
+      }
       if (!mounted) return;
       Navigator.of(context).pop();
     } else if (widget.controller.actionError != null) {
@@ -933,8 +1010,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                       Icon(Icons.fitness_center_rounded,
                           size: 56, color: AppColors.accent),
                       const SizedBox(height: AppSpacing.md),
-                      Text('No exercises yet',
-                          style: AppTypography.headlineSm),
+                      Text('No exercises yet', style: AppTypography.headlineSm),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
                           'This day has no exercises assigned. Add one to get started.',
@@ -1064,10 +1140,10 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                         style: AppTypography.labelCaps
                                             .copyWith(color: AppColors.accent)),
                                   ),
-                                  if (_currentExercise.demoVideoUrl != null)
+                                  if (_currentExercise.demoVideoUrl != null &&
+                                      isVideoUrl(
+                                          _currentExercise.demoVideoUrl!))
                                     _WatchDemoChip(
-                                      isVideo: isVideoUrl(
-                                          _currentExercise.demoVideoUrl!),
                                       onTap: () => showExerciseVideoSheet(
                                         context,
                                         url: _currentExercise.demoVideoUrl!,
@@ -1151,13 +1227,9 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                         totalSets: _currentSets.length,
                                         set: _currentSets[_activeSetIndex!],
                                         weightUnit: _weightUnit,
-                                        barbellStandardKg: _barbellStandardKg,
-                                        weightFloorKg: _weightFloorKg,
-                                        isBarbell: _currentExercise
-                                                    .equipmentType ==
-                                                _barbellEquipment ||
-                                            _currentExercise.equipmentType ==
-                                                null,
+                                        barKg: _plateBarKgFor(
+                                            _currentExercise.equipmentType,
+                                            _currentExercise.name),
                                         suggestWeightIncrease:
                                             _suggestWeightIncrease,
                                         canRemove: _canRemoveSet,
@@ -1401,16 +1473,13 @@ class _ExerciseMenuChip extends StatelessWidget {
 }
 
 class _WatchDemoChip extends StatelessWidget {
-  final bool isVideo;
-
-  /// True for exercises with no `demoVideoUrl` - opens a web search instead
-  /// of the in-app demo sheet. Takes precedence over [isVideo].
+  /// True for exercises with no demo video - opens a web search instead of
+  /// the in-app video sheet.
   final bool isSearch;
 
   final VoidCallback onTap;
 
   const _WatchDemoChip({
-    this.isVideo = false,
     this.isSearch = false,
     required this.onTap,
   });
@@ -1419,11 +1488,8 @@ class _WatchDemoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final icon = isSearch
         ? Icons.travel_explore_rounded
-        : isVideo
-            ? Icons.play_circle_fill_rounded
-            : Icons.image_rounded;
-    final label =
-        isSearch ? 'Search form' : (isVideo ? 'Watch form' : 'View form');
+        : Icons.play_circle_fill_rounded;
+    final label = isSearch ? 'Search form' : 'Watch form';
 
     return GestureDetector(
       onTap: onTap,
@@ -1560,12 +1626,9 @@ class _CurrentSetCard extends StatelessWidget {
   final int totalSets;
   final _SetDraft set;
   final String weightUnit;
-  final double barbellStandardKg;
-  final double weightFloorKg;
-  // Whether this exercise is a confirmed-or-unknown barbell lift - the only
-  // case where a bar-plus-plates breakdown is meaningful (see
-  // `_barbellEquipment` on the parent state).
-  final bool isBarbell;
+  // The bar this exercise is loaded on, or null when a bar-plus-plates
+  // breakdown means nothing for it (see `_plateBarKgFor`).
+  final double? barKg;
   final bool suggestWeightIncrease;
   // False once this is the exercise's only remaining set - see `_canRemoveSet`.
   final bool canRemove;
@@ -1582,9 +1645,7 @@ class _CurrentSetCard extends StatelessWidget {
     required this.totalSets,
     required this.set,
     required this.weightUnit,
-    required this.barbellStandardKg,
-    required this.weightFloorKg,
-    required this.isBarbell,
+    required this.barKg,
     required this.suggestWeightIncrease,
     required this.canRemove,
     required this.onLog,
@@ -1602,7 +1663,7 @@ class _CurrentSetCard extends StatelessWidget {
       unitSuffix: weightUnit,
       initialValue: double.parse(_formatWeight(set.weightKg, weightUnit)),
       step: weightUnit == 'lb' ? 5 : 2.5,
-      min: weightUnit == 'lb' ? weightFloorKg * _kgToLb : weightFloorKg,
+      min: 0,
     );
     if (result != null) {
       onWeightDirectKg(weightUnit == 'lb' ? result / _kgToLb : result);
@@ -1624,9 +1685,20 @@ class _CurrentSetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final plates = isBarbell
-        ? _plateBreakdown(set.weightKg, barbellStandardKg, weightUnit)
-        : const <double>[];
+    final bar = barKg;
+    // Names the bar as well as the plates, so the per-side figures visibly
+    // add up to the total (27.5 kg reads "20 kg bar + 2.5 + 1.25 kg each
+    // side", not a bare "Per side: 2.5 + 1.25" that looks like the total).
+    String? plateLine;
+    if (bar != null) {
+      final plates = _plateBreakdown(set.weightKg, bar, weightUnit);
+      if (plates.isNotEmpty) {
+        plateLine = '${_formatWeight(bar, weightUnit)} $weightUnit bar + '
+            '${plates.map((p) => p % 1 == 0 ? p.toStringAsFixed(0) : p.toStringAsFixed(2)).join(' + ')} $weightUnit each side';
+      } else if ((set.weightKg - bar).abs() < 0.01) {
+        plateLine = 'Empty bar';
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -1689,10 +1761,9 @@ class _CurrentSetCard extends StatelessWidget {
           onPlus: () => onWeightDelta(1),
           onTap: () => _editWeight(context),
         ),
-        if (plates.isNotEmpty) ...[
+        if (plateLine != null) ...[
           const SizedBox(height: AppSpacing.xs),
-          Text(
-              'Per side: ${plates.map((p) => p % 1 == 0 ? p.toStringAsFixed(0) : p.toStringAsFixed(2)).join(' + ')} $weightUnit',
+          Text(plateLine,
               style: AppTypography.labelSm
                   .copyWith(color: AppColors.onSurfaceVariant)),
         ],
@@ -1930,8 +2001,8 @@ class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
           child: TextButton(
             onPressed: _load,
             child: Text('RETRY',
-                style: AppTypography.labelCaps
-                    .copyWith(color: AppColors.accent)),
+                style:
+                    AppTypography.labelCaps.copyWith(color: AppColors.accent)),
           ),
         ),
       ];

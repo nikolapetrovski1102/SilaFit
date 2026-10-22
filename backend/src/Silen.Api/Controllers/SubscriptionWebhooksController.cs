@@ -43,6 +43,10 @@ public sealed class SubscriptionWebhooksController(
                 && transactionPayload.RootElement.TryGetProperty("transactionId", out var transactionIdElement)
                 ? transactionIdElement.GetString()
                 : null;
+            var originalTransactionId = transactionPayload is not null
+                && transactionPayload.RootElement.TryGetProperty("originalTransactionId", out var originalTransactionIdElement)
+                ? originalTransactionIdElement.GetString()
+                : null;
 
             if (string.IsNullOrWhiteSpace(transactionId))
             {
@@ -50,7 +54,8 @@ public sealed class SubscriptionWebhooksController(
                 return Ok();
             }
 
-            await subscriptionReceiptService.ApplyStoreNotificationAsync("AppStore", transactionId, cancellationToken);
+            await subscriptionReceiptService.ApplyStoreNotificationAsync(
+                "AppStore", transactionId, originalTransactionId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -82,7 +87,8 @@ public sealed class SubscriptionWebhooksController(
                 return Ok();
             }
 
-            await subscriptionReceiptService.ApplyStoreNotificationAsync("PlayStore", receipt.TransactionId, cancellationToken);
+            await subscriptionReceiptService.ApplyStoreNotificationAsync(
+                "PlayStore", receipt.TransactionId, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

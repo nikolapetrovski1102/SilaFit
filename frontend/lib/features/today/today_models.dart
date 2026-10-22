@@ -47,11 +47,13 @@ class TodayDashboard {
   }
 
   TodayDashboard copyWith(
-          {int? hydrationTotalMl,
+          {TodaySession? session,
+          int? hydrationTotalMl,
           double? latestWeightKg,
-          double? weightDeltaKg}) =>
+          double? weightDeltaKg,
+          List<WeekDayStatus>? weekStatuses}) =>
       TodayDashboard(
-        session: session,
+        session: session ?? this.session,
         targetExercises: targetExercises,
         hydrationTotalMl: hydrationTotalMl ?? this.hydrationTotalMl,
         hydrationTargetMl: hydrationTargetMl,
@@ -59,7 +61,7 @@ class TodayDashboard {
         weightDeltaKg: weightDeltaKg ?? this.weightDeltaKg,
         currentStreakDays: currentStreakDays,
         weeklyCompliancePercent: weeklyCompliancePercent,
-        weekStatuses: weekStatuses,
+        weekStatuses: weekStatuses ?? this.weekStatuses,
         activeSplit: activeSplit,
       );
 }
@@ -116,6 +118,15 @@ class TodaySession {
       isRestDay: map['isRestDay'] as bool? ?? false,
     );
   }
+
+  TodaySession copyWith({String? status}) => TodaySession(
+        workoutSessionId: workoutSessionId,
+        status: status ?? this.status,
+        title: title,
+        focusLabel: focusLabel,
+        estimatedMinutes: estimatedMinutes,
+        isRestDay: isRestDay,
+      );
 }
 
 class TargetExercise {

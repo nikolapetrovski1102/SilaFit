@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'core/api/api_client.dart';
 import 'core/session/session_store.dart';
+import 'core/sync/sync_queue.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/soft_glow.dart';
@@ -22,6 +23,7 @@ import 'features/meals/meal_repository.dart';
 import 'features/notifications/notifications_repository.dart';
 import 'features/notifications/push_messaging_service.dart';
 import 'features/onboarding/onboarding_flow_screen.dart';
+import 'features/onboarding/onboarding_repository.dart';
 import 'features/plans/iap_service.dart';
 import 'features/plans/plans_controller.dart';
 import 'features/plans/plans_repository.dart';
@@ -65,6 +67,9 @@ class _SilenAppState extends State<SilenApp> {
   final _sessionStore = SessionStore();
   late final _apiClient = ApiClient(sessionStore: _sessionStore);
   late final _notificationsRepository = NotificationsRepository(_apiClient);
+  // Writes made with no signal wait here until the server answers again.
+  // Above the reload key so a queued workout survives a run rebuild.
+  late final _syncQueue = SyncQueue(_apiClient)..start();
   // App-scoped so the FCM token-refresh subscription lives as long as the
   // app does; every registration path goes through this one instance.
   late final _pushMessagingService =
@@ -99,6 +104,14 @@ class _SilenAppState extends State<SilenApp> {
     try {
       await ExerciseMemoryStore.instance.clear();
     } catch (_) {}
+    await _apiClient.clearCache();
+    await _syncQueue.clear();
+  }
+
+  @override
+  void dispose() {
+    _syncQueue.stop();
+    super.dispose();
   }
 
   @override
@@ -107,6 +120,7 @@ class _SilenAppState extends State<SilenApp> {
       key: _runKey,
       sessionStore: _sessionStore,
       apiClient: _apiClient,
+      syncQueue: _syncQueue,
       notificationsRepository: _notificationsRepository,
       pushMessagingService: _pushMessagingService,
       messengerKey: _messengerKey,
@@ -123,6 +137,7 @@ class _AppRun extends StatelessWidget {
     super.key,
     required this.sessionStore,
     required this.apiClient,
+    required this.syncQueue,
     required this.notificationsRepository,
     required this.pushMessagingService,
     required this.messengerKey,
@@ -131,6 +146,7 @@ class _AppRun extends StatelessWidget {
 
   final SessionStore sessionStore;
   final ApiClient apiClient;
+  final SyncQueue syncQueue;
   final NotificationsRepository notificationsRepository;
   final PushMessagingService pushMessagingService;
   final GlobalKey<ScaffoldMessengerState> messengerKey;
@@ -142,6 +158,7 @@ class _AppRun extends StatelessWidget {
       providers: [
         Provider.value(value: sessionStore),
         Provider.value(value: apiClient),
+        Provider.value(value: syncQueue),
         Provider(create: (_) => AuthRepository(apiClient)),
         Provider(create: (_) => TodayRepository(apiClient)),
         Provider(create: (_) => SplitsRepository(apiClient)),
@@ -164,7 +181,8 @@ class _AppRun extends StatelessWidget {
                   onReload: onReload,
                 )..bootstrap()),
         ChangeNotifierProvider(
-            create: (ctx) => TodayController(ctx.read<TodayRepository>())),
+            create: (ctx) => TodayController(ctx.read<TodayRepository>(),
+                syncQueue: syncQueue)),
         ChangeNotifierProvider(
             create: (ctx) => SplitsController(ctx.read<SplitsRepository>())),
         ChangeNotifierProvider(
@@ -199,7 +217,8 @@ class _AppRun extends StatelessWidget {
             create: (ctx) => SettingsController(
                 ctx.read<SettingsRepository>(), sessionStore)),
         ChangeNotifierProvider(
-            create: (ctx) => MealController(ctx.read<MealRepository>())),
+            create: (ctx) => MealController(ctx.read<MealRepository>(),
+                syncQueue: syncQueue)),
       ],
       child: Consumer<SettingsController>(
         builder: (context, settingsController, _) {
@@ -295,6 +314,10 @@ class _AppRootState extends State<_AppRoot> {
           _settingsLoadTriggered = true;
           final settingsController = context.read<SettingsController>();
           Future.microtask(settingsController.load);
+          // Refreshes the cached profile gender the split artwork keys off.
+          OnboardingRepository(context.read<ApiClient>())
+              .getProfile()
+              .then((_) {}, onError: (_) {});
         }
         final sessionStore = context.read<SessionStore>();
         if (!sessionStore.hasCompletedOnboarding) {

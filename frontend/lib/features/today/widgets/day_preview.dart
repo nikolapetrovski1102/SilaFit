@@ -8,14 +8,21 @@ bool isSameCalendarDay(DateTime a, DateTime b) =>
 
 String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 
+/// The calendar date [days] after [d] (before, when negative), as a
+/// midnight. Not `d.add(Duration(days: n))`: a local day isn't always 24h,
+/// so across the autumn clock change midnight + 24h is still the same date
+/// (23:00) and across the spring one midnight - 24h is two dates back.
+DateTime addDays(DateTime d, int days) => d.isUtc
+    ? DateTime.utc(d.year, d.month, d.day + days)
+    : DateTime(d.year, d.month, d.day + days);
+
 /// The Monday of the week [activatedAtUtc] falls in. Every split's rotation
 /// is anchored here so its first day always lands on a Monday - activating
 /// mid-week picks up at that weekday's slot. Mirrors `@AnchorDate` in
 /// `usp_WorkoutSession_GetTodayScheduled`.
 DateTime splitCycleAnchor(DateTime activatedAtUtc) {
   final activated = dateOnly(activatedAtUtc);
-  return activated
-      .subtract(Duration(days: activated.weekday - DateTime.monday));
+  return addDays(activated, DateTime.monday - activated.weekday);
 }
 
 /// Looks up which day of the active split's rotation lands on [date], given

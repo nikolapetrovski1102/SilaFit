@@ -1,6 +1,8 @@
+using Microsoft.Extensions.Options;
 using Moq;
 using Silen.Common.Dtos;
 using Silen.Common.Models;
+using Silen.Common.Options;
 using Silen.Data.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
@@ -14,7 +16,7 @@ public class SettingsServiceTests
 
     public SettingsServiceTests()
     {
-        sut = new SettingsService(userSettingsProvider.Object);
+        sut = new SettingsService(userSettingsProvider.Object, Options.Create(new NotificationPublishOptions()));
     }
 
     private static UpdateUserSettingsRequest ValidRequest() => new()
@@ -26,7 +28,6 @@ public class SettingsServiceTests
         WeightUnit = "kg",
         DistanceUnit = "km",
         RestTimerSoundEnabled = true,
-        BarbellStandardKg = 20,
         AppearanceMode = "Dark",
         AvatarChoice = "Male"
     };
@@ -201,20 +202,6 @@ public class SettingsServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("+05:45", request.TimeZoneId);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-5)]
-    public async Task UpdateAsync_NonPositiveBarbellStandard_ReturnsValidationFailureWithoutCallingProvider(decimal barbellKg)
-    {
-        var request = ValidRequest();
-        request.BarbellStandardKg = barbellKg;
-
-        var result = await sut.UpdateAsync(Guid.NewGuid(), request);
-
-        Assert.False(result.IsSuccess);
-        Assert.Equal(400, result.StatusCode);
     }
 
     [Theory]

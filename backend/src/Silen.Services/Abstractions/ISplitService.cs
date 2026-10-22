@@ -35,6 +35,14 @@ public interface ISplitService
     /// AI-generated or is already kept.</summary>
     Task<ServiceResult<AdminWriteResultDto>> KeepMySplitAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default);
 
+    /// <summary>Copies a split this user owns into a new private split. Pro/Advanced only, and
+    /// still bound by the plan's MaxActiveSplits like creating a split from scratch.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> DuplicateMySplitAsync(Guid userId, Guid splitId, CancellationToken cancellationToken = default);
+
+    /// <summary>Copies one day of a split this user owns into the slot right after it. Open to
+    /// every tier - it's editing a split the user already has.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> DuplicateMySplitDayAsync(Guid userId, Guid splitDayId, CancellationToken cancellationToken = default);
+
     Task<ServiceResult<AdminWriteResultDto>> SaveMySplitDayAsync(Guid userId, UserSplitDayUpsertRequest request, CancellationToken cancellationToken = default);
 
     Task<ServiceResult<AdminWriteResultDto>> DeleteMySplitDayAsync(Guid userId, Guid splitDayId, CancellationToken cancellationToken = default);

@@ -15,6 +15,9 @@ public interface IWorkoutSessionProvider
         decimal? rpeScore,
         decimal? tonnageKg,
         IReadOnlyList<SetLogEntryModel>? setLogs,
+        DateTime? completedAtUtc = null,
+        Guid? splitDayId = null,
+        DateTime? scheduledDateUtc = null,
         CancellationToken cancellationToken = default);
 
     Task<(RangeSummaryModel Summary, List<DaySessionStatusModel> Days)> GetRangeSummaryAsync(

@@ -30,7 +30,17 @@ public sealed class NotificationPublishOptions
     /// </summary>
     public int SendWindowMinutes { get; set; } = 45;
 
-    /// <summary>Local times (HH:mm) at which calorie/meal reminders may fire.</summary>
+    /// <summary>
+    /// Auto-detected reminders (see ReminderTimeDetector): the gym reminder fires
+    /// this long before the user's usual training time, the meal idea this long
+    /// before their usual meal, and the "log it" nudge this long after it.
+    /// </summary>
+    public int DetectedReminderOffsetMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// Default local times (HH:mm) for calorie/meal reminders. Each one moves to
+    /// the user's own meal time once their logs show a routine around it.
+    /// </summary>
     public string[] MealReminderLocalTimes { get; set; } = ["12:30", "18:30"];
 
     /// <summary>Don't repeat a calorie/meal nudge if the user logged food more recently than this.</summary>

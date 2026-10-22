@@ -27,7 +27,14 @@ class SplitsController extends ChangeNotifier {
     state = const ResourceState.loading();
     notifyListeners();
     try {
-      final splits = await _repository.getAll();
+      final splits = await fetchPaintingCached(
+        cached: _repository.getCachedAll,
+        fetch: _repository.getAll,
+        paint: (saved) {
+          state = ResourceState.data(saved);
+          notifyListeners();
+        },
+      );
       requiresUpgrade = false;
       state = ResourceState.data(splits);
     } on ApiException catch (e) {
@@ -69,7 +76,14 @@ class SplitDetailController extends ChangeNotifier {
     state = const ResourceState.loading();
     notifyListeners();
     try {
-      final detail = await _repository.getDetail(splitId);
+      final detail = await fetchPaintingCached(
+        cached: () => _repository.getCachedDetail(splitId),
+        fetch: () => _repository.getDetail(splitId),
+        paint: (saved) {
+          state = ResourceState.data(saved);
+          notifyListeners();
+        },
+      );
       state = ResourceState.data(detail);
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
@@ -275,6 +289,11 @@ class SplitBuilderController extends ChangeNotifier {
 
   Future<bool> deleteDay(String splitDayId) => _run(() async {
         await _repository.deleteDay(splitDayId);
+        await load();
+      });
+
+  Future<bool> duplicateDay(String splitDayId) => _run(() async {
+        await _repository.duplicateDay(splitDayId);
         await load();
       });
 

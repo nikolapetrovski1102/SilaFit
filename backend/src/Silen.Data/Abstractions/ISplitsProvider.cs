@@ -33,6 +33,14 @@ public interface ISplitsProvider
 
     Task<AdminMutationResultModel> DeleteUserSplitAsync(Guid splitId, Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>Copies an owned split with its days and exercises into a new private split
+    /// (usp_UserSplit_Duplicate); EntityId is the copy's id. Tier rules are the caller's job.</summary>
+    Task<AdminMutationResultModel> DuplicateUserSplitAsync(Guid splitId, Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Copies one day of an owned split, with its exercises, into the slot right after
+    /// it (usp_UserSplitDay_Duplicate); EntityId is the new day's id.</summary>
+    Task<AdminMutationResultModel> DuplicateUserSplitDayAsync(Guid splitDayId, Guid userId, CancellationToken cancellationToken = default);
+
     Task<AdminMutationResultModel> UpsertUserSplitDayAsync(UserSplitDayUpsertRequest request, Guid userId, CancellationToken cancellationToken = default);
 
     Task<AdminMutationResultModel> DeleteUserSplitDayAsync(Guid splitDayId, Guid userId, CancellationToken cancellationToken = default);

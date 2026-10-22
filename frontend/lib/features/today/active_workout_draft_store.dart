@@ -201,4 +201,23 @@ class ActiveWorkoutDraftStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
   }
+
+  /// Moves a draft saved under [fromSessionId] to [toSessionId] - a workout
+  /// started on a session the phone made up offline, once the server has
+  /// given today's session its real id. Without this, the next [load] for
+  /// the real id would see a mismatch and delete the sets logged so far.
+  /// Leaves any other draft alone.
+  Future<void> rekey(String fromSessionId, String toSessionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw == null) return;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      if (json['workoutSessionId'] != fromSessionId) return;
+      json['workoutSessionId'] = toSessionId;
+      await prefs.setString(_key, jsonEncode(json));
+    } catch (_) {
+      // A corrupt draft is [load]'s to clean up.
+    }
+  }
 }

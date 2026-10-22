@@ -18,6 +18,7 @@ import 'meal_tracker_screen.dart';
 import 'widgets/active_diet_plan_section.dart';
 import 'widgets/macro_bar.dart';
 import 'widgets/meal_log_card.dart';
+import '../today/widgets/day_preview.dart';
 
 /// The Nutrition/Meal Planning screen - boxless: a calorie ring on the left
 /// with its macro bars beside it on the right, a 7-day pill strip below that
@@ -139,9 +140,8 @@ class _DayStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final start = today.subtract(const Duration(days: 3));
-    final days = List.generate(7, (i) => start.add(Duration(days: i)));
+    final today = dateOnly(DateTime.now());
+    final days = List.generate(7, (i) => addDays(today, i - 3));
 
     return SizedBox(
       height: _DayPill.connectorHeight + _DayPill.pillHeight,

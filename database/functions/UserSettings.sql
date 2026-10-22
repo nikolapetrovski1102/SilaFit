@@ -5,11 +5,17 @@ DECLARE
     c1 refcursor;
 BEGIN
     OPEN c1 FOR
-    SELECT userid, targetwaterml, notificationsenabled, notificationlocaltime, timezoneid,
-           weightunit, distanceunit, resttimersoundenabled, barbellstandardkg, appearancemode,
-           avatarchoice, aidataconsentatutc, updatedatutc
-    FROM dbo.usersettings
-    WHERE userid = p_userid;
+    SELECT s.userid, s.targetwaterml, s.notificationsenabled, s.notificationlocaltime,
+           s.notificationtimeisuserset, s.timezoneid,
+           s.weightunit, s.distanceunit, s.resttimersoundenabled, s.appearancemode,
+           s.avatarchoice, s.aidataconsentatutc, s.updatedatutc,
+           -- Feeds the "Auto" reminder time shown in Settings (see ReminderTimeDetector).
+           (SELECT array_agg(w.startedatutc)
+            FROM dbo.workoutsessions w
+            WHERE w.userid = s.userid
+              AND w.startedatutc >= dbo.sysutcdatetime() - interval '28 days') AS recentworkoutstartsutc
+    FROM dbo.usersettings s
+    WHERE s.userid = p_userid;
     RETURN NEXT c1;
 END $$;
 
@@ -40,11 +46,17 @@ BEGIN
     WHERE userid = p_userid;
 
     OPEN c1 FOR
-    SELECT userid, targetwaterml, notificationsenabled, notificationlocaltime, timezoneid,
-           weightunit, distanceunit, resttimersoundenabled, barbellstandardkg, appearancemode,
-           avatarchoice, aidataconsentatutc, updatedatutc
-    FROM dbo.usersettings
-    WHERE userid = p_userid;
+    SELECT s.userid, s.targetwaterml, s.notificationsenabled, s.notificationlocaltime,
+           s.notificationtimeisuserset, s.timezoneid,
+           s.weightunit, s.distanceunit, s.resttimersoundenabled, s.appearancemode,
+           s.avatarchoice, s.aidataconsentatutc, s.updatedatutc,
+           -- Feeds the "Auto" reminder time shown in Settings (see ReminderTimeDetector).
+           (SELECT array_agg(w.startedatutc)
+            FROM dbo.workoutsessions w
+            WHERE w.userid = s.userid
+              AND w.startedatutc >= dbo.sysutcdatetime() - interval '28 days') AS recentworkoutstartsutc
+    FROM dbo.usersettings s
+    WHERE s.userid = p_userid;
     RETURN NEXT c1;
 END $$;
 
@@ -57,9 +69,9 @@ CREATE OR REPLACE FUNCTION dbo.usp_usersettings_update(
     p_weightunit varchar(3),
     p_distanceunit varchar(3),
     p_resttimersoundenabled boolean,
-    p_barbellstandardkg numeric(5, 2),
     p_appearancemode varchar(10),
-    p_avatarchoice varchar(10)
+    p_avatarchoice varchar(10),
+    p_notificationtimeisuserset boolean DEFAULT NULL
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 DECLARE
     c1 refcursor;
@@ -68,21 +80,31 @@ BEGIN
     SET targetwaterml = p_targetwaterml,
         notificationsenabled = p_notificationsenabled,
         notificationlocaltime = p_notificationlocaltime,
+        -- NULL comes from app builds that predate the flag: keep it, but treat a
+        -- changed time as the user choosing one.
+        notificationtimeisuserset = COALESCE(
+            p_notificationtimeisuserset,
+            notificationtimeisuserset OR notificationlocaltime <> p_notificationlocaltime),
         timezoneid = p_timezoneid,
         weightunit = p_weightunit,
         distanceunit = p_distanceunit,
         resttimersoundenabled = p_resttimersoundenabled,
-        barbellstandardkg = p_barbellstandardkg,
         appearancemode = p_appearancemode,
         avatarchoice = p_avatarchoice,
         updatedatutc = dbo.sysutcdatetime()
     WHERE userid = p_userid;
 
     OPEN c1 FOR
-    SELECT userid, targetwaterml, notificationsenabled, notificationlocaltime, timezoneid,
-           weightunit, distanceunit, resttimersoundenabled, barbellstandardkg, appearancemode,
-           avatarchoice, aidataconsentatutc, updatedatutc
-    FROM dbo.usersettings
-    WHERE userid = p_userid;
+    SELECT s.userid, s.targetwaterml, s.notificationsenabled, s.notificationlocaltime,
+           s.notificationtimeisuserset, s.timezoneid,
+           s.weightunit, s.distanceunit, s.resttimersoundenabled, s.appearancemode,
+           s.avatarchoice, s.aidataconsentatutc, s.updatedatutc,
+           -- Feeds the "Auto" reminder time shown in Settings (see ReminderTimeDetector).
+           (SELECT array_agg(w.startedatutc)
+            FROM dbo.workoutsessions w
+            WHERE w.userid = s.userid
+              AND w.startedatutc >= dbo.sysutcdatetime() - interval '28 days') AS recentworkoutstartsutc
+    FROM dbo.usersettings s
+    WHERE s.userid = p_userid;
     RETURN NEXT c1;
 END $$;

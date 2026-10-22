@@ -11,14 +11,15 @@ public static class SettingsRowMapper
         TargetWaterMl = reader.GetInt32Value("TargetWaterMl"),
         NotificationsEnabled = reader.GetBoolValue("NotificationsEnabled"),
         NotificationLocalTime = reader.GetTimeSpanValue("NotificationLocalTime"),
+        NotificationTimeIsUserSet = reader.GetBoolValue("NotificationTimeIsUserSet"),
         TimeZoneId = reader.GetStringValue("TimeZoneId"),
         WeightUnit = reader.GetStringValue("WeightUnit"),
         DistanceUnit = reader.GetStringValue("DistanceUnit"),
         RestTimerSoundEnabled = reader.GetBoolValue("RestTimerSoundEnabled"),
-        BarbellStandardKg = reader.GetDecimalValue("BarbellStandardKg"),
         AppearanceMode = reader.GetStringValue("AppearanceMode"),
         AvatarChoice = reader.GetStringValue("AvatarChoice"),
         AiDataConsentAtUtc = reader.GetNullableDateTime("AiDataConsentAtUtc"),
-        UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
+        UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc"),
+        RecentWorkoutStartsUtc = reader.GetDateTimeArray("RecentWorkoutStartsUtc")
     };
 }

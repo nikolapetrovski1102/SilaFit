@@ -9,15 +9,18 @@ class DietPlanRepository {
   Future<List<DietPlan>> getAll() => _client.get(
       '/diet-plans',
       (json) =>
-          (json as List<dynamic>).map((e) => DietPlan.fromJson(e)).toList());
+          (json as List<dynamic>).map((e) => DietPlan.fromJson(e)).toList(),
+      cache: true);
 
   Future<DietPlanDetail> getDetail(String dietPlanId) =>
-      _client.get('/diet-plans/$dietPlanId', DietPlanDetail.fromJson);
+      _client.get('/diet-plans/$dietPlanId', DietPlanDetail.fromJson,
+          cache: true);
 
   /// The caller's active plan with days/meals, or null when none is active.
   Future<DietPlanDetail?> getActive() => _client.get(
       '/diet-plans/active',
-      (json) => json == null ? null : DietPlanDetail.fromJson(json));
+      (json) => json == null ? null : DietPlanDetail.fromJson(json),
+      cache: true);
 
   /// Makes any visible plan the caller's active plan.
   Future<void> activate(String dietPlanId) =>
@@ -33,7 +36,8 @@ class DietPlanRepository {
   Future<List<DietPlan>> getMine() => _client.get(
       '/diet-plans/mine',
       (json) =>
-          (json as List<dynamic>).map((e) => DietPlan.fromJson(e)).toList());
+          (json as List<dynamic>).map((e) => DietPlan.fromJson(e)).toList(),
+      cache: true);
 
   Future<String?> createOrUpdate({
     String? dietPlanId,

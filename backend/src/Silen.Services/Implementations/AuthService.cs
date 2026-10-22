@@ -62,7 +62,16 @@ public sealed class AuthService(
             }
 
             var existingByEmail = await authProvider.GetUserByEmailAsync(request.Email, cancellationToken);
-            if (existingByEmail is not null)
+
+            // An account the partner website provisioned has the email but no password and
+            // no sign-in identity yet. Registering with that email claims it: the verified
+            // code proves the inbox, and the password lands on the provisioned account.
+            var targetUserId = request.ExistingUserId;
+            if (existingByEmail is not null && await authProvider.IsUnclaimedAccountAsync(existingByEmail.UserId, cancellationToken))
+            {
+                targetUserId = existingByEmail.UserId;
+            }
+            else if (existingByEmail is not null)
             {
                 // Do not reveal that the address is already registered - a 409 here
                 // is an unauthenticated account-enumeration oracle. Return the exact
@@ -85,7 +94,7 @@ public sealed class AuthService(
             var expiresAtUtc = DateTime.UtcNow.Add(CodeLifetime);
 
             await authProvider.UpsertPendingEmailVerificationAsync(
-                pendingId, request.ExistingUserId, request.Email, passwordHash, passwordSalt, request.DisplayName,
+                pendingId, targetUserId, request.Email, passwordHash, passwordSalt, request.DisplayName,
                 codeHash, codeSalt, expiresAtUtc, cancellationToken);
 
             // Reviewer account gets a fixed code and no real email - App Store / Play

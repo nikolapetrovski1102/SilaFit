@@ -9,7 +9,7 @@ class SettingsRepository {
   SettingsRepository(this._client);
 
   Future<UserSettings> getSettings() =>
-      _client.get('/settings', UserSettings.fromJson);
+      _client.get('/settings', UserSettings.fromJson, cache: true);
 
   Future<UserSettings> updateSettings(UserSettings settings) => _client.put(
         '/settings',

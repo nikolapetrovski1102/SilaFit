@@ -95,23 +95,32 @@ BEGIN
             (v_meallogid, p_userid, p_logdateutc, p_mealtype, p_title, p_calorieskcal, p_proteing, p_carbsg, p_fatsg,
              p_status, p_plannedlocaltime, CASE WHEN p_status = 'Logged' THEN dbo.sysutcdatetime() ELSE NULL END, p_items);
     ELSE
-        UPDATE dbo.meallogs
-        SET logdateutc = p_logdateutc,
-            mealtype = p_mealtype,
-            title = p_title,
-            calorieskcal = p_calorieskcal,
-            proteing = p_proteing,
-            carbsg = p_carbsg,
-            fatsg = p_fatsg,
-            status = p_status,
-            plannedlocaltime = p_plannedlocaltime,
-            items = COALESCE(p_items, items),
+        -- A client-generated id that isn't stored yet creates the meal: a meal
+        -- logged offline is queued with its id up front, so the upload (and
+        -- any edit queued after it) can be replayed safely in order.
+        INSERT INTO dbo.meallogs AS m
+            (meallogid, userid, logdateutc, mealtype, title, calorieskcal, proteing, carbsg, fatsg,
+             status, plannedlocaltime, loggedatutc, items)
+        VALUES
+            (v_meallogid, p_userid, p_logdateutc, p_mealtype, p_title, p_calorieskcal, p_proteing, p_carbsg, p_fatsg,
+             p_status, p_plannedlocaltime, CASE WHEN p_status = 'Logged' THEN dbo.sysutcdatetime() ELSE NULL END, p_items)
+        ON CONFLICT (meallogid) DO UPDATE
+        SET logdateutc = EXCLUDED.logdateutc,
+            mealtype = EXCLUDED.mealtype,
+            title = EXCLUDED.title,
+            calorieskcal = EXCLUDED.calorieskcal,
+            proteing = EXCLUDED.proteing,
+            carbsg = EXCLUDED.carbsg,
+            fatsg = EXCLUDED.fatsg,
+            status = EXCLUDED.status,
+            plannedlocaltime = EXCLUDED.plannedlocaltime,
+            items = COALESCE(EXCLUDED.items, m.items),
             loggedatutc = CASE
-                WHEN p_status = 'Logged' AND loggedatutc IS NULL THEN dbo.sysutcdatetime()
-                WHEN p_status = 'Planned' THEN NULL
-                ELSE loggedatutc
+                WHEN EXCLUDED.status = 'Logged' AND m.loggedatutc IS NULL THEN dbo.sysutcdatetime()
+                WHEN EXCLUDED.status = 'Planned' THEN NULL
+                ELSE m.loggedatutc
             END
-        WHERE meallogid = v_meallogid AND userid = p_userid;
+        WHERE m.userid = p_userid;
     END IF;
 
     OPEN c1 FOR

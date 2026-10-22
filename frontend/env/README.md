@@ -68,3 +68,20 @@ under **APIs & Services → Credentials**, project `silafit`.
 
 Production (`deploy/.env` on the server, separate from this repo) needs its own
 `GOOGLE_WEB_CLIENT_ID` set the same way - see `deploy/.env.example`.
+
+## `APPODEAL_IOS_KEY` / `APPODEAL_ANDROID_KEY`
+
+Appodeal App Keys for the iOS and Android apps (Appodeal dashboard → the app →
+App Key), read by `AdsService` (`lib/core/ads/ads_service.dart`). They ship
+inside the app binary, so they aren't secrets. Debug builds request test ads
+(`Appodeal.setTesting(kDebugMode)`), so the same keys are safe in `dev.json`.
+An empty key turns ads off on that platform.
+
+## `LEVELPLAY_*`
+
+Unity LevelPlay App Keys and ad unit ids (Unity dashboard → LevelPlay → the
+app), read by `AdsService` alongside Appodeal. Not secrets either. LevelPlay has
+no SDK test mode, so a build with its App Key serves **live** ads: the key is
+only in `prod.json`. Register your phone under LevelPlay → Testing before
+copying the App Keys into `dev.json`. An empty App Key leaves LevelPlay off and
+Appodeal serves alone.
