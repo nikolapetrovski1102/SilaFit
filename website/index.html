@@ -16,9 +16,9 @@
   <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png" />
   <meta name="twitter:card" content="summary" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
-  <link rel="stylesheet" href="css/base.css?v=20260915-teal" />
+  <link rel="stylesheet" href="css/base.css?v=20261101-sila" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261016" />
+  <link rel="stylesheet" href="css/site.css?v=20261101-sila" />
   <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
   <script>
     (function () {
@@ -66,7 +66,7 @@
         <div class="eyebrow eyebrow--accent reveal">Workout + nutrition tracking</div>
         <h1 class="t-hero" data-split>Strength, measured <em>to the rep.</em><span class="hero-sticker" data-nosplit aria-hidden="true">
           <svg class="hero-sticker__ring" viewBox="0 0 200 200"><defs><path id="stickerPath" d="M100 100m-78 0a78 78 0 1 1 156 0a78 78 0 1 1-156 0"/></defs><text><textPath href="#stickerPath" textLength="485">TRAIN · EAT · RECOVER · REPEAT ·</textPath></text></svg>
-          <img src="assets/img/mascot/ready.webp" width="600" height="600" alt="" />
+          <span class="sila sila--glow sila--alive" data-sila="flame" aria-hidden="true"><img class="sila__art sila__art--dark" src="assets/img/mascot/flame/dark/flame.webp" width="384" height="384" alt="" decoding="async" /><img class="sila__art sila__art--light" src="assets/img/mascot/flame/light/flame.webp" width="384" height="384" alt="" decoding="async" /></span>
         </span></h1>
         <div class="hero__row">
           <p class="t-lead reveal reveal-delay-1">
@@ -117,7 +117,7 @@
               </ol>
               <p class="t-body">Rest days count. Recovery is training too.</p>
             </div>
-            <img class="mascot" src="assets/img/mascot/celebrating.webp" width="600" height="600" alt="" aria-hidden="true" />
+            <span class="sila sila--glow sila--alive mascot" data-sila="blaze" aria-hidden="true"><img class="sila__art sila__art--dark" src="assets/img/mascot/flame/dark/blaze.webp" width="384" height="384" alt="" loading="lazy" decoding="async" /><img class="sila__art sila__art--light" src="assets/img/mascot/flame/light/blaze.webp" width="384" height="384" alt="" loading="lazy" decoding="async" /></span>
           </div>
         </div>
       </div>
@@ -408,7 +408,7 @@
       <div class="wrap">
         <div class="closing" data-closing>
           <h2 class="t-hero reveal">Your next PR is already on the curve.</h2>
-          <img class="closing__mascot reveal" src="assets/img/mascot/lifting.webp" width="600" height="600" loading="lazy" alt="SilaFit mascot lifting a barbell" />
+          <div class="closing__mascot reveal"><p class="sila-bubble" data-closing-bubble>one more rep. then the next PR.</p><span class="sila sila--glow sila--alive" data-sila="determined" role="img" aria-label="Sila, the SilaFit flame mascot" data-closing-sila><img class="sila__art sila__art--dark" src="assets/img/mascot/flame/dark/determined.webp" width="384" height="384" alt="" loading="lazy" decoding="async" /><img class="sila__art sila__art--light" src="assets/img/mascot/flame/light/determined.webp" width="384" height="384" alt="" loading="lazy" decoding="async" /></span></div>
           <div class="closing__actions reveal">
             <div class="store-cta">
               <a class="store-badge" href="https://apps.apple.com/app/id6811345732" data-app-link aria-label="Download SilaFit on the App Store">
@@ -478,6 +478,7 @@
   <script src="js/data.js"></script>
   <script src="js/vendor-qrcode.js"></script>
   <script src="js/site.js?v=20261016"></script>
-  <script src="js/motion.js?v=20261016"></script>
+  <script src="js/sila.js?v=20261101"></script>
+  <script src="js/motion.js?v=20261101-sila"></script>
 </body>
 </html>

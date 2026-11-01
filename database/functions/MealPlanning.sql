@@ -178,7 +178,8 @@ BEGIN
            ms.carbsg, ms.fatsg, ms.suggestedmonth, ms.issystemdefault, ms.sortorder,
            ingredienttotals.ingredientcount > 0 AS hasingredients,
            ingredientpreview.ingredientpreview,
-           ingredienttotals.ingredientcount
+           ingredienttotals.ingredientcount,
+           steptotals.stepcount
     FROM dbo.mealsuggestions ms
     CROSS JOIN LATERAL
     (
@@ -186,6 +187,12 @@ BEGIN
         FROM dbo.mealsuggestioningredients i
         WHERE i.mealsuggestionid = ms.mealsuggestionid
     ) ingredienttotals
+    CROSS JOIN LATERAL
+    (
+        SELECT COUNT(*)::int AS stepcount
+        FROM dbo.mealsuggestioninstructions st
+        WHERE st.mealsuggestionid = ms.mealsuggestionid
+    ) steptotals
     LEFT JOIN LATERAL
     (
         SELECT string_agg(g.ingredienttext, ' · ' ORDER BY g.firstsortorder) AS ingredientpreview
@@ -200,8 +207,10 @@ BEGIN
             LIMIT 4
         ) g
     ) ingredientpreview ON true
-    -- User-built meals are private to their diet plans, never catalog.
+    -- User-built meals are private to their diet plans, never catalog; so are
+    -- the meals a trainer's document import created for their own plan.
     WHERE ms.owneruserid IS NULL
+      AND ms.owneradminuserid IS NULL
       AND (ms.suggestedmonth = p_month OR ms.suggestedmonth IS NULL)
     ORDER BY CASE WHEN ms.suggestedmonth = p_month THEN 0 ELSE 1 END, ms.sortorder
     LIMIT 500;
@@ -296,7 +305,10 @@ BEGIN
 
     OPEN c3 FOR
     SELECT d.dietplandayid, m.dietplanmealid, m.mealtype, ms.mealsuggestionid, ms.title, ms.description,
-           ms.calorieskcal, ms.proteing, ms.carbsg, ms.fatsg, m.sortorder
+           ms.calorieskcal, ms.proteing, ms.carbsg, ms.fatsg, m.sortorder,
+           (EXISTS (SELECT 1 FROM dbo.mealsuggestioningredients i WHERE i.mealsuggestionid = ms.mealsuggestionid)
+            OR EXISTS (SELECT 1 FROM dbo.mealsuggestioninstructions st WHERE st.mealsuggestionid = ms.mealsuggestionid))
+               AS hasrecipe
     FROM dbo.dietplandays d
     INNER JOIN dbo.dietplanmeals m ON m.dietplandayid = d.dietplandayid
     INNER JOIN dbo.mealsuggestions ms ON ms.mealsuggestionid = m.mealsuggestionid
@@ -314,4 +326,48 @@ BEGIN
       AND v_visible
     ORDER BY d.dayindex, m.sortorder, i.sortorder;
     RETURN NEXT c4;
+END $$;
+
+-- =============================================================================
+-- Recipe: every ingredient line and preparation step of one meal suggestion,
+-- for the app's recipe screen. Catalog meals and trainer-imported meals are
+-- readable by anyone holding the id (it only ever reaches a client through a
+-- plan or suggestion they can see); a user-built meal only by its owner.
+-- Result set 1: the meal (empty when not visible). 2: ingredients. 3: steps.
+-- =============================================================================
+CREATE OR REPLACE FUNCTION dbo.usp_mealsuggestion_getrecipe(
+    p_mealsuggestionid uuid,
+    p_userid uuid DEFAULT NULL
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+    c2 refcursor;
+    c3 refcursor;
+    v_visible boolean;
+BEGIN
+    v_visible := EXISTS (
+        SELECT 1 FROM dbo.mealsuggestions ms
+        WHERE ms.mealsuggestionid = p_mealsuggestionid
+          AND (ms.owneruserid IS NULL OR ms.owneruserid = p_userid));
+
+    OPEN c1 FOR
+    SELECT mealsuggestionid, title, mealtype, description, calorieskcal, proteing, carbsg, fatsg,
+           imageurl, servingsuggestion
+    FROM dbo.mealsuggestions
+    WHERE mealsuggestionid = p_mealsuggestionid AND v_visible;
+    RETURN NEXT c1;
+
+    OPEN c2 FOR
+    SELECT ingredienttext
+    FROM dbo.mealsuggestioningredients
+    WHERE mealsuggestionid = p_mealsuggestionid AND v_visible
+    ORDER BY sortorder;
+    RETURN NEXT c2;
+
+    OPEN c3 FOR
+    SELECT instructiontext
+    FROM dbo.mealsuggestioninstructions
+    WHERE mealsuggestionid = p_mealsuggestionid AND v_visible
+    ORDER BY sortorder;
+    RETURN NEXT c3;
 END $$;

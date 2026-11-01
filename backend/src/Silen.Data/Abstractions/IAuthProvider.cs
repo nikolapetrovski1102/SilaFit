@@ -30,6 +30,21 @@ public interface IAuthProvider
 
     Task UpdateLastLoginAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Makes device login on <paramref name="deviceUserId"/>'s device answer with
+    /// <paramref name="accountUserId"/>. No-op unless the device user is a Guest.
+    /// </summary>
+    Task LinkDeviceToAccountAsync(Guid deviceUserId, Guid accountUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>Stores a refresh token's hash for <paramref name="userId"/>, pruning that user's expired and oldest tokens.</summary>
+    Task CreateRefreshTokenAsync(Guid userId, byte[] tokenHash, DateTime expiresAtUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>Redeems a refresh token, sliding its expiry to <paramref name="expiresAtUtc"/>. Null when the
+    /// token is unknown, expired or revoked, or its account is inactive.</summary>
+    Task<UserAccountModel?> UseRefreshTokenAsync(byte[] tokenHash, DateTime expiresAtUtc, CancellationToken cancellationToken = default);
+
+    Task RevokeRefreshTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+
     Task UpsertPendingEmailVerificationAsync(
         Guid pendingId,
         Guid? existingUserId,

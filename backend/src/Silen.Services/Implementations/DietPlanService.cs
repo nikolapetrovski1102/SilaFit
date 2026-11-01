@@ -82,7 +82,9 @@ public sealed class DietPlanService(
             }
 
             plan.IsEditableByMe = plan.OwnerUserId == userId;
-            return BuildDetail(plan, days, meals, ingredients);
+            var detail = BuildDetail(plan, days, meals, ingredients);
+            detail.ActivatedAtUtc = DateTime.SpecifyKind(active.ActivatedAtUtc, DateTimeKind.Utc);
+            return detail;
         });
 
     public Task<ServiceResult<AdminWriteResultDto>> ActivateAsync(Guid userId, Guid dietPlanId, CancellationToken cancellationToken = default) =>
@@ -101,7 +103,7 @@ public sealed class DietPlanService(
             }
 
             await dietPlansProvider.SetActiveDietPlanAsync(userId, dietPlanId, cancellationToken);
-            await ApplyToUpcomingWeekCoreAsync(userId, plan, days, meals, cancellationToken);
+            await ApplyToUpcomingWeekCoreAsync(userId, plan, days, meals, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
 
             return new AdminWriteResultDto
             {
@@ -119,17 +121,23 @@ public sealed class DietPlanService(
                 throw new NotFoundException($"Diet plan '{dietPlanId}' was not found.", "That diet plan couldn't be found.");
             }
 
-            return await ApplyToUpcomingWeekCoreAsync(userId, plan, days, meals, cancellationToken);
+            // Keep the rotation where the user is in it: anchored to when this plan
+            // was activated, or to today for a plan that isn't the active one.
+            var active = await dietPlansProvider.GetActiveAsync(userId, cancellationToken);
+            var activatedOn = active is not null && active.DietPlanId == dietPlanId
+                ? DateOnly.FromDateTime(active.ActivatedAtUtc)
+                : DateOnly.FromDateTime(DateTime.UtcNow);
+
+            return await ApplyToUpcomingWeekCoreAsync(userId, plan, days, meals, activatedOn, cancellationToken);
         });
 
     /// <summary>Maps each of the next 7 calendar days (starting today, UTC) onto
-    /// <paramref name="plan"/>'s day cycle and bulk-applies that day's meals as
-    /// Planned meal logs. Mirrors `_PlanDayCard._dayIndexFor` in the Flutter app
-    /// exactly (Mon=1..Sun=7 for a 7-day plan; a day-of-year rotation for any other
-    /// length), so the meals applied here are the same ones the Active Diet Plan
-    /// card would already show for that day.</summary>
+    /// <paramref name="plan"/>'s rotation (see <see cref="DietPlanRotation"/>) and
+    /// bulk-applies that day's meals as Planned meal logs - the same meals the
+    /// app's Active Diet Plan card shows for each of those days.</summary>
     private async Task<int> ApplyToUpcomingWeekCoreAsync(
-        Guid userId, DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals, CancellationToken cancellationToken)
+        Guid userId, DietPlanModel plan, List<DietPlanDayModel> days, List<DietPlanMealModel> meals, DateOnly activatedOn,
+        CancellationToken cancellationToken)
     {
         if (days.Count == 0)
         {
@@ -137,12 +145,13 @@ public sealed class DietPlanService(
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var maxDayIndex = days.Max(d => (int)d.DayIndex);
         var requests = new List<UpsertMealLogRequest>();
         for (var offset = 0; offset < 7; offset++)
         {
             var date = today.AddDays(offset);
-            var dayIndex = DayIndexFor(date, plan.DurationDays);
-            var planDay = days.FirstOrDefault(d => d.DayIndex == dayIndex) ?? days[0];
+            var dayIndex = DietPlanRotation.DayIndexFor(date, activatedOn, plan.DurationDays, maxDayIndex);
+            var planDay = DietPlanRotation.PickDay(days, dayIndex, d => d.DayIndex)!;
 
             requests.AddRange(meals
                 .Where(m => m.DietPlanDayId == planDay.DietPlanDayId)
@@ -181,17 +190,6 @@ public sealed class DietPlanService(
         }
     }
 
-    private static int DayIndexFor(DateOnly date, int durationDays)
-    {
-        var days = durationDays <= 0 ? 1 : durationDays;
-        if (days == 7)
-        {
-            return date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek;
-        }
-
-        var dayOfYear = date.DayOfYear;
-        return ((dayOfYear - 1) % days) + 1;
-    }
 
     private static T RequireData<T>(ServiceResult<T> result, string action)
     {

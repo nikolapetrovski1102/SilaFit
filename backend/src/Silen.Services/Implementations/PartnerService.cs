@@ -13,6 +13,8 @@ namespace Silen.Services.Implementations;
 /// <inheritdoc cref="IPartnerService"/>
 public sealed class PartnerService(
     IPartnerLeadsProvider partnerLeadsProvider,
+    IUserProfileProvider userProfileProvider,
+    IMealPlanningService mealPlanningService,
     IOptions<PartnerOptions> partnerOptions) : IPartnerService
 {
     public Task<ServiceResult<PartnerEncryptedResponse>> ProvisionLeadAsync(PartnerEncryptedRequest request, CancellationToken cancellationToken = default) =>
@@ -23,6 +25,7 @@ public sealed class PartnerService(
             var issuedAtUtc = PartnerPayloadCodec.RequireFreshIssuedAt(payload.IssuedAtUtc, options, DateTime.UtcNow);
             var partnerUserId = PartnerPayloadCodec.RequirePartnerUserId(payload.PartnerUserId);
             var (email, displayName, provider) = PartnerPayloadCodec.RequireLeadDetails(payload);
+            var profile = PartnerPayloadCodec.RequireProfile(payload.Profile);
 
             var outcome = await partnerLeadsProvider.ProvisionAsync(
                 partnerUserId, email, displayName, provider, issuedAtUtc, cancellationToken)
@@ -37,7 +40,8 @@ public sealed class PartnerService(
                     Status = "Active",
                     RequestIssuedAtUtc = issuedAtUtc,
                     IsNewAccount = outcome.IsNewAccount,
-                    ProGranted = outcome.ProGranted
+                    ProGranted = outcome.ProGranted,
+                    ProfileSaved = profile is not null && await SeedProfileAsync(userId, profile, cancellationToken)
                 },
                 "Stale" => throw new ConflictException(
                     $"Partner provision for lead '{partnerUserId}' is older than a request already applied.",
@@ -84,4 +88,22 @@ public sealed class PartnerService(
 
             return PartnerPayloadCodec.Seal(result, options, PartnerPayloadCipher.CancelResponsePurpose);
         });
+
+    /// <summary>Saves the partner's onboarding answers as the account's profile, unless it
+    /// already has one - answers the user gave in the app, or an earlier provision's, are
+    /// never overwritten. Returns whether the profile was written.</summary>
+    private async Task<bool> SeedProfileAsync(Guid userId, UpsertUserProfileRequest profile, CancellationToken cancellationToken)
+    {
+        if (await userProfileProvider.GetAsync(userId, cancellationToken) is not null)
+        {
+            return false;
+        }
+
+        var saved = await userProfileProvider.UpsertAsync(userId, profile, cancellationToken);
+
+        // Same as the app's own profile save: nutrition targets follow the profile.
+        // Best-effort - the result is not checked, so a hiccup never fails the provision.
+        await mealPlanningService.RecomputeTargetsAsync(userId, saved, cancellationToken);
+        return true;
+    }
 }

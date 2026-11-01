@@ -44,9 +44,9 @@ class CachedValue<T> {
 /// calls through this instead of touching `package:http` directly, so
 /// header/auth/error handling never gets duplicated per-feature.
 ///
-/// On a 401 it clears the stored session (the token is dead) so the next
-/// screen read notices the user is logged out; callers still see the
-/// exception and decide what to show.
+/// On a 401 it renews the access token with the stored refresh token and
+/// retries once. It clears the stored session only when the server definitely
+/// refuses to renew it - never because the renewal couldn't get through.
 ///
 /// A GET made with `cache: true` keeps its last successful payload in
 /// [ResponseCache] and answers from it when the server can't be reached (no
@@ -56,6 +56,10 @@ class ApiClient {
   final SessionStore sessionStore;
   final http.Client _http;
   final ResponseCache _cache;
+
+  /// The access-token renewal in flight, shared by every request that hit a
+  /// 401 meanwhile. See [_renewSession].
+  Future<_Renewal>? _renewing;
 
   /// True once a request has failed to reach the server - or reached it
   /// while it was broken (a 5xx) and was answered from the saved copy - and
@@ -223,6 +227,7 @@ class ApiClient {
           sameDayOnly: sameDayOnly);
     }
 
+    final sentToken = sessionStore.currentToken;
     late final http.Response response;
     try {
       response = await request().timeout(timeout);
@@ -263,20 +268,39 @@ class ApiClient {
         (response.statusCode >= 200 && response.statusCode < 300);
 
     if (!success) {
-      if (response.statusCode == 401 && !path.startsWith('/auth/')) {
-        // The access token expired. Re-run the idempotent device login and
+      if (response.statusCode == 401 && !path.startsWith('/auth/') && !isRetry) {
+        // The access token expired. Trade the refresh token for a new one and
         // retry once, so a short-lived token is invisible in normal use. A 401
-        // from an /auth/ endpoint is a failed credential, not a dead session,
-        // so it must not clear the guest session the way this used to.
-        if (!isRetry && await _trySilentDeviceReauth()) {
-          return _send(path, request, parse,
-              isRetry: true,
-              canRetry: canRetry,
-              timeout: timeout,
-              cacheKey: cacheKey,
-              sameDayOnly: sameDayOnly);
+        // from an /auth/ endpoint is a failed credential, not a dead session.
+        // If another request already renewed while this one was in flight,
+        // just retry with the token it got.
+        final outcome =
+            sessionStore.current != null && sessionStore.currentToken != sentToken
+                ? _Renewal.renewed
+                : await _renewSession();
+        switch (outcome) {
+          case _Renewal.renewed:
+            return _send(path, request, parse,
+                isRetry: true,
+                canRetry: canRetry,
+                timeout: timeout,
+                cacheKey: cacheKey,
+                sameDayOnly: sameDayOnly);
+          case _Renewal.rejected:
+            // The server definitely won't take this session back.
+            await sessionStore.clear();
+          case _Renewal.unavailable:
+            // Couldn't reach the server to renew - keep the session and treat
+            // it like being offline, so the next request tries again.
+            final hit = await _fromCache(cacheKey, parse, sameDayOnly);
+            if (hit != null) {
+              isOffline.value = true;
+              return hit.value;
+            }
+            throw const ApiException(
+                'Cannot reach the server. Check your connection and try again.',
+                isNetworkError: true);
         }
-        await sessionStore.clear();
       }
       // nginx answers 502/503/504 while the API container restarts or is
       // briefly saturated - not a real verdict on the request.
@@ -308,45 +332,113 @@ class ApiClient {
     return parsed;
   }
 
-  /// Best-effort re-auth for an expired token using the stored device id.
-  /// Returns true only when the server re-issued a token for the *same* user,
-  /// so this can never silently swap the account underneath the UI.
-  Future<bool> _trySilentDeviceReauth() async {
+  /// Renews the access token after a 401. Every request that hits a 401
+  /// while a renewal is in flight shares that one renewal, so a screen firing
+  /// ten requests at once with an expired token makes one `/auth/refresh`
+  /// call, not ten that trip the server's rate limit.
+  Future<_Renewal> _renewSession() =>
+      _renewing ??= _doRenewSession().whenComplete(() => _renewing = null);
+
+  Future<_Renewal> _doRenewSession() async {
     final current = sessionStore.current;
-    if (current == null) return false;
+    if (current == null) return _Renewal.rejected;
 
+    final refreshToken = current.refreshToken;
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      final outcome = await _postSessionRenewal(
+          '/auth/refresh', {'refreshToken': refreshToken}, current);
+      // Refresh token refused (revoked, expired, account gone) - the device
+      // login below is the last chance before the session really ends.
+      if (outcome != _Renewal.rejected) return outcome;
+    }
+
+    // Sessions from before refresh tokens, or whose refresh token was
+    // refused: device login still restores the account when this device
+    // owns it (or was linked to it at sign-in).
+    final deviceId = await sessionStore.deviceId();
+    if (deviceId.isEmpty) return _Renewal.rejected;
+    return _postSessionRenewal('/auth/device', {'deviceId': deviceId}, current);
+  }
+
+  /// One renewal call. Only a definite "no" - a 401/403, or an answer for a
+  /// *different* user - counts as [_Renewal.rejected]; no connection, a
+  /// timeout, a 429 or a 5xx is [_Renewal.unavailable], which must never end
+  /// the session (that used to sign people out on bad gym Wi-Fi).
+  Future<_Renewal> _postSessionRenewal(
+      String path, Map<String, String> body, SilenSession current,
+      {String? bearer}) async {
+    final http.Response response;
     try {
-      final deviceId = await sessionStore.deviceId();
-      if (deviceId.isEmpty) return false;
-
-      final response = await _http
+      response = await _http
           .post(
-            Uri.parse('${ApiConfig.baseUrl}/auth/device'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'deviceId': deviceId}),
+            Uri.parse('${ApiConfig.baseUrl}$path'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (bearer != null) 'Authorization': 'Bearer $bearer',
+            },
+            body: jsonEncode(body),
           )
           .timeout(_requestTimeout);
+    } catch (_) {
+      return _Renewal.unavailable;
+    }
 
-      if (response.statusCode < 200 || response.statusCode >= 300) return false;
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      return _Renewal.rejected;
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return _Renewal.unavailable;
+    }
 
+    try {
       final data = (jsonDecode(response.body) as Map<String, dynamic>)['data']
           as Map<String, dynamic>?;
       final token = data?['token'] as String?;
       final userId = data?['userId'] as String?;
-      if (token == null || token.isEmpty || userId != current.userId) {
-        return false;
-      }
+      if (token == null || token.isEmpty) return _Renewal.unavailable;
+      // Never silently swap the account underneath the UI.
+      if (userId != current.userId) return _Renewal.rejected;
 
       await sessionStore.save(SilenSession(
         token: token,
+        refreshToken: (data?['refreshToken'] as String?) ?? current.refreshToken,
         userId: current.userId,
         accountTier: (data?['accountTier'] as String?) ?? current.accountTier,
         email: data?['email'] as String?,
         displayName: data?['displayName'] as String?,
       ));
-      return true;
+      return _Renewal.renewed;
     } catch (_) {
-      return false;
+      return _Renewal.unavailable;
     }
   }
+
+  /// Gives a session saved by an app version from before refresh tokens its
+  /// first one, while its access token is still valid. Best-effort: if the
+  /// access token has already expired, the 401 path falls back to device
+  /// login as before.
+  Future<void> ensureRefreshToken() async {
+    final current = sessionStore.current;
+    if (current == null || current.refreshToken != null) return;
+    await _postSessionRenewal('/auth/refresh', const {}, current,
+        bearer: current.token);
+  }
+
+  /// Sign-out: tells the server to forget this session's refresh token.
+  /// Best-effort with a short timeout - signing out locally never waits on it.
+  Future<void> revokeRefreshToken() async {
+    final refreshToken = sessionStore.current?.refreshToken;
+    if (refreshToken == null) return;
+    try {
+      await _http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/auth/logout'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refreshToken': refreshToken}),
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {}
+  }
 }
+
+enum _Renewal { renewed, rejected, unavailable }

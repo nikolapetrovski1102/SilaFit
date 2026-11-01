@@ -320,6 +320,18 @@
     burst(r.left + r.width / 2, r.top + r.height / 2, count);
   }
 
+  /* Sila lights up for a moment when something good happens, then settles
+     back into its resting pose. Needs js/sila.js; without it, Sila just hops. */
+  function cheer(container, ms) {
+    var sila = container && (container.matches('.sila') ? container : container.querySelector('.sila'));
+    if (!sila || !window.Sila) return;
+    var rest = sila.getAttribute('data-sila-rest') || sila.getAttribute('data-sila');
+    sila.setAttribute('data-sila-rest', rest);
+    window.Sila.set(sila, 'laughing');
+    clearTimeout(sila._cheerTimer);
+    sila._cheerTimer = setTimeout(function () { window.Sila.set(sila, rest); }, ms || 1600);
+  }
+
   /* Mascots hop when poked; the closing one celebrates on arrival. */
   $$('.mascot, .closing__mascot').forEach(function (m) {
     m.style.cursor = 'pointer';
@@ -328,6 +340,7 @@
       void m.offsetWidth;
       m.classList.add('is-hopping');
       burstFrom(m, 50);
+      cheer(m);
     });
     m.addEventListener('animationend', function (e) {
       if (e.animationName === 'mascot-hop') m.classList.remove('is-hopping');
@@ -341,7 +354,9 @@
       closingObserver.disconnect();
       var mascot = closing.querySelector('.closing__mascot');
       setTimeout(function () {
-        if (mascot) { mascot.classList.add('is-hopping'); burstFrom(mascot, 90); }
+        if (mascot) { mascot.classList.add('is-hopping'); burstFrom(mascot, 90); cheer(mascot, 2200); }
+        var bubble = closing.querySelector('[data-closing-bubble]');
+        if (bubble) bubble.classList.add('is-shown');
       }, 700);
     }, { threshold: 0.6 });
     closingObserver.observe(closing);

@@ -13,6 +13,13 @@ RUN dotnet publish src/Silen.Api/Silen.Api.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
+
+# Headless LibreOffice Writer converts trainers' Word uploads (.docx/.doc) to PDF
+# (Silen.Services DocumentProcessor). Writer only, no GUI or Java; the fonts keep
+# Cyrillic and Latin layouts close to what the trainer saw in Word.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libreoffice-writer-nogui fonts-dejavu-core fonts-liberation2 fonts-crosextra-carlito \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app .
 
 ENV ASPNETCORE_URLS=http://+:8080

@@ -13,6 +13,11 @@ class AccountTier {
 /// A logged-in session snapshot, mirroring `AuthResultDto`.
 class SilenSession {
   final String token;
+
+  /// Long-lived; traded at `POST /auth/refresh` for a new [token] when that
+  /// one expires. Null only for a session saved by an app version from before
+  /// refresh tokens - `AuthController.bootstrap` upgrades those.
+  final String? refreshToken;
   final String userId;
   final String accountTier;
   final String? email;
@@ -20,6 +25,7 @@ class SilenSession {
 
   const SilenSession({
     required this.token,
+    this.refreshToken,
     required this.userId,
     required this.accountTier,
     this.email,
@@ -43,6 +49,7 @@ class SilenSession {
 class SessionStore {
   static const _deviceIdKey = 'silen.device_id';
   static const _tokenKey = 'silen.token';
+  static const _refreshTokenKey = 'silen.refresh_token';
   static const _userIdKey = 'silen.user_id';
   static const _tierKey = 'silen.tier';
   static const _emailKey = 'silen.email';
@@ -132,6 +139,7 @@ class SessionStore {
     if (token != null && userId != null && tier != null) {
       _session = SilenSession(
         token: token,
+        refreshToken: await _secureStorage.read(key: _refreshTokenKey),
         userId: userId,
         accountTier: tier,
         email: await _secureStorage.read(key: _emailKey),
@@ -149,6 +157,12 @@ class SessionStore {
   Future<void> save(SilenSession session) async {
     _session = session;
     await _secureStorage.write(key: _tokenKey, value: session.token);
+    if (session.refreshToken != null) {
+      await _secureStorage.write(
+          key: _refreshTokenKey, value: session.refreshToken!);
+    } else {
+      await _secureStorage.delete(key: _refreshTokenKey);
+    }
     await _secureStorage.write(key: _userIdKey, value: session.userId);
     await _secureStorage.write(key: _tierKey, value: session.accountTier);
     if (session.email != null) {
@@ -243,6 +257,7 @@ class SessionStore {
   Future<void> clear() async {
     _session = null;
     await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _tierKey);
     await _secureStorage.delete(key: _emailKey);

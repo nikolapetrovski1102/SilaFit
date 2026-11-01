@@ -148,11 +148,46 @@ class DietPlanDetail {
   /// week's shopping list. Empty when the meals have no ingredient data.
   final List<String> shoppingList;
 
+  /// When this plan became the user's active plan - only set by
+  /// `GET diet-plans/active`. Anchors the day rotation (see [dietPlanDayIndexFor]).
+  final DateTime? activatedAtUtc;
+
   const DietPlanDetail({
     required this.plan,
     required this.days,
     this.shoppingList = const [],
+    this.activatedAtUtc,
   });
+
+  int get maxDayIndex =>
+      days.fold(0, (max, d) => d.day.dayIndex > max ? d.day.dayIndex : max);
+
+  /// Rotation length in days: whole weeks covering the plan.
+  int get cycleLength => dietPlanCycleLength(plan.durationDays, maxDayIndex);
+
+  /// The plan day served on [date], given the plan was activated on
+  /// [activatedAtUtc] (today when unknown).
+  int dayIndexFor(DateTime date) => dietPlanDayIndexFor(
+        date,
+        activatedOn: activatedAtUtc ?? DateTime.now().toUtc(),
+        durationDays: plan.durationDays,
+        maxDayIndex: maxDayIndex,
+      );
+
+  /// The authored day for a cycle slot: exact, else the same weekday in
+  /// week 1, else the first day.
+  DietPlanDayWithMeals? dayFor(int dayIndex) {
+    if (days.isEmpty) return null;
+    final weekday = ((dayIndex - 1) % 7) + 1;
+    for (final d in days) {
+      if (d.day.dayIndex == dayIndex) return d;
+    }
+    for (final d in days) {
+      if (d.day.dayIndex == weekday) return d;
+    }
+    return ([...days]..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex)))
+        .first;
+  }
 
   factory DietPlanDetail.fromJson(dynamic json) {
     final map = json as Map<String, dynamic>;
@@ -164,6 +199,35 @@ class DietPlanDetail {
       shoppingList: (map['shoppingList'] as List<dynamic>? ?? [])
           .map((e) => e as String)
           .toList(),
+      activatedAtUtc: DateTime.tryParse(map['activatedAtUtc'] as String? ?? ''),
     );
   }
+}
+
+/// Mirrors `DietPlanRotation.CycleLength` on the API.
+int dietPlanCycleLength(int durationDays, int maxDayIndex) {
+  final span = [1, durationDays, maxDayIndex].reduce((a, b) => a > b ? a : b);
+  return ((span + 6) ~/ 7) * 7;
+}
+
+/// Mirrors `DietPlanRotation.DayIndexFor` on the API (and splits'
+/// `splitCycleLength` rotation): the cycle starts on the Monday of the week
+/// the plan was activated and loops, so a 7-day plan maps Monday..Sunday to
+/// days 1..7 and a 12-week plan moves on a week every Monday.
+///
+/// The server anchors on the UTC calendar date of activation, so that date is
+/// taken in UTC here too; [date] is the local calendar day being shown.
+int dietPlanDayIndexFor(
+  DateTime date, {
+  required DateTime activatedOn,
+  required int durationDays,
+  required int maxDayIndex,
+}) {
+  final a = activatedOn.toUtc();
+  final activated = DateTime.utc(a.year, a.month, a.day);
+  final anchor = activated.subtract(Duration(days: activated.weekday - 1));
+  final day = DateTime.utc(date.year, date.month, date.day);
+  final cycle = dietPlanCycleLength(durationDays, maxDayIndex);
+  final offset = day.difference(anchor).inDays;
+  return ((offset % cycle) + cycle) % cycle + 1;
 }

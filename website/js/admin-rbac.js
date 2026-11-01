@@ -91,7 +91,7 @@
   function confirmDelete(title, body, onConfirm) {
     var backdrop = openModal(
       '<div style="text-align:center;padding:8px 0 4px;">' +
-        '<img src="assets/img/mascot/proud.png" alt="" style="width:88px;margin:0 auto 14px;" />' +
+        window.Sila.html('shocked', { glow: true, className: 'modal__sila' }) +
         '<div class="headline-md">' + esc(title) + '</div>' +
         '<p class="body-sm" style="margin-top:8px;">' + esc(body) + '</p>' +
       '</div>' +
@@ -204,7 +204,7 @@
     if (!grid) return;
     grid.innerHTML = roles.length
       ? roles.map(roleCardHtml).join('')
-      : '<div class="card"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No roles yet</div></div></div>';
+      : '<div class="card"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">No roles yet</div></div></div>';
 
     $$('[data-perm-toggle]', grid).forEach(function (input) {
       input.addEventListener('change', function () {
@@ -321,7 +321,7 @@
     }).join('');
 
     table.innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="7"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No operators</div></div></td></tr>') +
+      (body || '<tr><td colspan="7"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">No operators</div></div></td></tr>') +
     '</tbody>';
 
     $$('[data-op-role]', table).forEach(function (select) {
@@ -477,7 +477,7 @@
     }).join('');
 
     table.innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="6"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">Nothing logged yet</div></div></td></tr>') +
+      (body || '<tr><td colspan="6"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">Nothing logged yet</div></div></td></tr>') +
     '</tbody>';
   }
 

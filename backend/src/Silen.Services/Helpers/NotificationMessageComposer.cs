@@ -149,6 +149,28 @@ public static class NotificationMessageComposer
         ("if it fits, we keep it", "{name}, your split stays. your meal plan and shopping list just got a refresh."),
     ];
 
+    /// <summary>A trainer assigned a split / diet plan (<paramref name="documentOnly"/> false) or shared
+    /// one of its PDFs. Names the program, so it is built directly rather than from a rotating template.</summary>
+    public static NotificationContent TrainerProgramAssigned(
+        bool isSplit, string programName, string? trainerName, bool documentOnly)
+    {
+        var trainer = string.IsNullOrWhiteSpace(trainerName) ? "your trainer" : trainerName.Trim();
+        var screen = isSplit ? "splits" : "meals";
+        var program = programName.Length > 60 ? programName[..57] + "..." : programName;
+
+        if (documentOnly)
+        {
+            return new NotificationContent(
+                "new document from your trainer 📄",
+                $"{trainer} shared a document for {program}. we emailed you a secure link too.",
+                screen);
+        }
+
+        return isSplit
+            ? new NotificationContent("new split from your trainer 💪", $"{trainer} assigned you {program}. open it and get started.", screen)
+            : new NotificationContent("new diet plan from your trainer 🍽️", $"{trainer} assigned you {program}. your meals are ready to view.", screen);
+    }
+
     private static NotificationContent Pick(
         NotificationCandidateModel candidate,
         DateOnly localDate,

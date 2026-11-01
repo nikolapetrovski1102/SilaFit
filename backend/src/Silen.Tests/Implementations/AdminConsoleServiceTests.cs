@@ -18,11 +18,12 @@ public class AdminConsoleServiceTests
     private readonly Mock<IMockDataSeeder> mockDataSeeder = new(MockBehavior.Strict);
     private readonly Mock<IImageUploadService> imageUploadService = new(MockBehavior.Strict);
     private readonly Mock<IDietPlanService> dietPlanService = new(MockBehavior.Strict);
+    private readonly Mock<ITrainerAssignmentNotifier> assignmentNotifier = new();
     private readonly AdminConsoleService sut;
 
     public AdminConsoleServiceTests()
     {
-        sut = new AdminConsoleService(adminProvider.Object, adminRbacProvider.Object, contentProvider.Object, mockDataSeeder.Object, imageUploadService.Object, dietPlanService.Object);
+        sut = new AdminConsoleService(adminProvider.Object, adminRbacProvider.Object, contentProvider.Object, mockDataSeeder.Object, imageUploadService.Object, dietPlanService.Object, assignmentNotifier.Object);
     }
 
     private (string SessionToken, Guid AdminUserId) ArrangeSession(params string[] permissions)
@@ -259,7 +260,7 @@ public class AdminConsoleServiceTests
     {
         var (token, _) = ArrangeSession(AdminPermissions.SplitsWrite);
         var request = ValidSplitRequest();
-        request.DurationDays = 15;
+        request.DurationDays = 183;
 
         var result = await sut.SaveSplitAsync(token, request, null);
 

@@ -34,6 +34,16 @@ public class AuthServiceTests
         var reviewerBypassOptions = Options.Create(new ReviewerBypassOptions());
 
         sut = new AuthService(authProvider.Object, googleTokenVerifier.Object, appleTokenVerifier.Object, appleSignInRevoker.Object, emailSender.Object, jwtOptions, reviewerBypassOptions);
+
+        // Any login from a different caller session repoints that device; the
+        // device-linking tests below verify the exact calls.
+        authProvider.Setup(p => p.LinkDeviceToAccountAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // Every successful sign-in stores a refresh token; the refresh tests below
+        // verify the exact calls.
+        authProvider.Setup(p => p.CreateRefreshTokenAsync(It.IsAny<Guid>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
     }
 
     private static UserAccountModel User(Guid? userId = null, string? email = "user@example.com", byte[]? passwordHash = null, byte[]? passwordSalt = null) => new()
@@ -47,6 +57,109 @@ public class AuthServiceTests
         CreatedAtUtc = DateTime.UtcNow,
         IsActive = true
     };
+
+    // ---- Refresh tokens ----
+
+    [Fact]
+    public async Task LoginWithDeviceAsync_IssuesRefreshToken_StoresOnlyItsHash()
+    {
+        var user = User(email: null);
+        authProvider.Setup(p => p.GetOrCreateDeviceUserAsync("device-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        var result = await sut.LoginWithDeviceAsync("device-1");
+
+        Assert.True(result.IsSuccess);
+        var refreshToken = result.Data!.RefreshToken;
+        Assert.False(string.IsNullOrWhiteSpace(refreshToken));
+        var expectedHash = RefreshTokenFactory.Hash(refreshToken);
+        authProvider.Verify(p => p.CreateRefreshTokenAsync(
+            user.UserId,
+            It.Is<byte[]>(h => h.SequenceEqual(expectedHash)),
+            It.Is<DateTime>(d => d > DateTime.UtcNow.AddDays(179)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_ValidToken_ReturnsNewAccessTokenAndSameRefreshToken()
+    {
+        var user = User();
+        var refreshToken = RefreshTokenFactory.Create();
+        var hash = RefreshTokenFactory.Hash(refreshToken);
+        authProvider.Setup(p => p.UseRefreshTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(hash)), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        var result = await sut.RefreshSessionAsync(new RefreshSessionRequest { RefreshToken = refreshToken });
+
+        Assert.True(result.IsSuccess);
+        Assert.False(string.IsNullOrWhiteSpace(result.Data!.Token));
+        Assert.Equal(refreshToken, result.Data.RefreshToken);
+        Assert.Equal(user.UserId, result.Data.UserId);
+        authProvider.Verify(p => p.CreateRefreshTokenAsync(It.IsAny<Guid>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_UnknownToken_Returns401()
+    {
+        authProvider.Setup(p => p.UseRefreshTokenAsync(It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAccountModel?)null);
+
+        var result = await sut.RefreshSessionAsync(new RefreshSessionRequest { RefreshToken = "revoked" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(401, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_LegacySessionWithValidAccessToken_GetsFirstRefreshToken()
+    {
+        var user = User();
+        authProvider.Setup(p => p.GetUserByIdAsync(user.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        var result = await sut.RefreshSessionAsync(new RefreshSessionRequest { CallerUserId = user.UserId });
+
+        Assert.True(result.IsSuccess);
+        Assert.False(string.IsNullOrWhiteSpace(result.Data!.RefreshToken));
+        authProvider.Verify(p => p.CreateRefreshTokenAsync(user.UserId, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_NoTokenAndNoCaller_Returns401()
+    {
+        var result = await sut.RefreshSessionAsync(new RefreshSessionRequest());
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(401, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_LegacySessionForInactiveUser_Returns401()
+    {
+        var user = User();
+        user.IsActive = false;
+        authProvider.Setup(p => p.GetUserByIdAsync(user.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        var result = await sut.RefreshSessionAsync(new RefreshSessionRequest { CallerUserId = user.UserId });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(401, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task RevokeSessionAsync_DeletesByHash()
+    {
+        var refreshToken = RefreshTokenFactory.Create();
+        var hash = RefreshTokenFactory.Hash(refreshToken);
+        authProvider.Setup(p => p.RevokeRefreshTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(hash)), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.RevokeSessionAsync(new RevokeSessionRequest { RefreshToken = refreshToken });
+
+        Assert.True(result.IsSuccess);
+        authProvider.Verify(p => p.RevokeRefreshTokenAsync(It.Is<byte[]>(h => h.SequenceEqual(hash)), It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     // ---- LoginWithDeviceAsync ----
 
@@ -402,6 +515,25 @@ public class AuthServiceTests
         Assert.False(string.IsNullOrWhiteSpace(result.Data!.Token));
         Assert.Equal(user.UserId, result.Data.UserId);
         authProvider.Verify(p => p.UpdateLastLoginAsync(user.UserId, It.IsAny<CancellationToken>()), Times.Once);
+        authProvider.Verify(p => p.LinkDeviceToAccountAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginEmailAsync_FromGuestSession_LinksDeviceToAccount()
+    {
+        var (hash, salt) = PasswordHasher.Hash("correct-password");
+        var guestSessionUserId = Guid.NewGuid();
+        var request = new EmailLoginRequest { ExistingUserId = guestSessionUserId, Email = "user@example.com", Password = "correct-password" };
+        var user = User(email: request.Email, passwordHash: hash, passwordSalt: salt);
+        authProvider.Setup(p => p.GetUserByEmailAsync(request.Email, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+        authProvider.Setup(p => p.UpdateLastLoginAsync(user.UserId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.LoginEmailAsync(request);
+
+        Assert.True(result.IsSuccess);
+        authProvider.Verify(p => p.LinkDeviceToAccountAsync(guestSessionUserId, user.UserId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ---- LoginOrLinkGoogleAsync ----
@@ -603,6 +735,53 @@ public class AuthServiceTests
         Assert.Equal(user.UserId, result.Data!.UserId);
         authProvider.Verify(p => p.LinkExternalIdentityAsync(
             It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        authProvider.Verify(p => p.LinkDeviceToAccountAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkAppleAsync_GuestSessionSignsInToExistingAccount_LinksDeviceToAccount()
+    {
+        var guestSessionUserId = Guid.NewGuid();
+        var request = new AppleLoginRequest { ExistingUserId = guestSessionUserId, IdentityToken = "good-token" };
+        var payload = new ExternalIdentityPayload { Subject = "apple-sub-1", Email = "a@example.com", DisplayName = "A User" };
+        var account = User(email: payload.Email);
+
+        appleTokenVerifier.Setup(v => v.VerifyAsync(request.IdentityToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+        authProvider.Setup(p => p.GetUserByIdAsync(account.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+        authProvider.Setup(p => p.UpdateLastLoginAsync(account.UserId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.LoginOrLinkAppleAsync(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(account.UserId, result.Data!.UserId);
+        authProvider.Verify(p => p.LinkDeviceToAccountAsync(guestSessionUserId, account.UserId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginOrLinkAppleAsync_SessionIsAlreadyTheAccount_DoesNotLinkDevice()
+    {
+        var account = User(email: "a@example.com");
+        var request = new AppleLoginRequest { ExistingUserId = account.UserId, IdentityToken = "good-token" };
+        var payload = new ExternalIdentityPayload { Subject = "apple-sub-1", Email = account.Email, DisplayName = "A User" };
+
+        appleTokenVerifier.Setup(v => v.VerifyAsync(request.IdentityToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payload);
+        authProvider.Setup(p => p.GetIdentityAsync("Apple", payload.Subject, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+        authProvider.Setup(p => p.GetUserByIdAsync(account.UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+        authProvider.Setup(p => p.UpdateLastLoginAsync(account.UserId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await sut.LoginOrLinkAppleAsync(request);
+
+        Assert.True(result.IsSuccess);
+        authProvider.Verify(p => p.LinkDeviceToAccountAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

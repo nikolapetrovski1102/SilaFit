@@ -49,6 +49,7 @@ public sealed class AuthController(IAuthService authService, ILogger<AuthControl
     [HttpPost("login/email")]
     public async Task<IActionResult> LoginEmail([FromBody] EmailLoginRequest request, CancellationToken cancellationToken)
     {
+        request.ExistingUserId = User.GetUserIdOrNull();
         var result = await authService.LoginEmailAsync(request, cancellationToken);
         return result.ToActionResult(logger);
     }
@@ -66,6 +67,26 @@ public sealed class AuthController(IAuthService authService, ILogger<AuthControl
     {
         request.ExistingUserId = User.GetUserIdOrNull();
         var result = await authService.LoginOrLinkAppleAsync(request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    /// <summary>Trades a refresh token for a new access token. Anonymous on purpose -
+    /// the access token is usually what just expired - but a still-valid bearer token
+    /// is honoured so sessions from older app versions can pick up a refresh token.</summary>
+    [HttpPost("refresh")]
+    [EnableRateLimiting(RateLimitPolicies.SessionRefresh)]
+    public async Task<IActionResult> Refresh([FromBody] RefreshSessionRequest request, CancellationToken cancellationToken)
+    {
+        request.CallerUserId = User.GetUserIdOrNull();
+        var result = await authService.RefreshSessionAsync(request, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
+    [HttpPost("logout")]
+    [EnableRateLimiting(RateLimitPolicies.SessionRefresh)]
+    public async Task<IActionResult> Logout([FromBody] RevokeSessionRequest request, CancellationToken cancellationToken)
+    {
+        var result = await authService.RevokeSessionAsync(request, cancellationToken);
         return result.ToActionResult(logger);
     }
 }

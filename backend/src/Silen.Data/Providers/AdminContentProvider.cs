@@ -88,6 +88,25 @@ public sealed class AdminContentProvider(
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
 
+    public Task<AdminMealRecipeModel> GetMealRecipeAsync(Guid mealSuggestionId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_MealSuggestion_GetRecipe",
+            [SqlParameterBuilder.Create("@MealSuggestionId", mealSuggestionId)],
+            reader => TrainerDocumentRowMapper.ReadAdminRecipeAsync(reader, mealSuggestionId, cancellationToken),
+            cancellationToken);
+
+    public Task<AdminMutationResultModel> SetMealRecipeAsync(AdminMealRecipeRequest request, AdminActorModel actor, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Admin_MealSuggestion_SetRecipe",
+            [
+                SqlParameterBuilder.Create("@MealSuggestionId", request.MealSuggestionId),
+                SqlParameterBuilder.Create("@Ingredients", request.Ingredients.ToArray()),
+                SqlParameterBuilder.Create("@Steps", request.Steps.ToArray()),
+                .. AdminActorParameters.Build(actor)
+            ],
+            reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
+            cancellationToken);
+
     /* --------------------------------- plans -------------------------------- */
 
     public Task<List<AdminPlanModel>> GetPlansAsync(CancellationToken cancellationToken = default) =>

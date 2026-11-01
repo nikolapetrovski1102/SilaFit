@@ -79,6 +79,41 @@ public sealed class AuthProvider(ISqlExecutor sqlExecutor) : IAuthProvider
             [SqlParameterBuilder.Create("@UserId", userId)],
             cancellationToken);
 
+    public Task LinkDeviceToAccountAsync(Guid deviceUserId, Guid accountUserId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_LinkDeviceToAccount",
+            [
+                SqlParameterBuilder.Create("@DeviceUserId", deviceUserId),
+                SqlParameterBuilder.Create("@AccountUserId", accountUserId)
+            ],
+            cancellationToken);
+
+    public Task CreateRefreshTokenAsync(Guid userId, byte[] tokenHash, DateTime expiresAtUtc, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_CreateRefreshToken",
+            [
+                SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@TokenHash", tokenHash),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc)
+            ],
+            cancellationToken);
+
+    public Task<UserAccountModel?> UseRefreshTokenAsync(byte[] tokenHash, DateTime expiresAtUtc, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_Auth_UseRefreshToken",
+            [
+                SqlParameterBuilder.Create("@TokenHash", tokenHash),
+                SqlParameterBuilder.Create("@ExpiresAtUtc", expiresAtUtc)
+            ],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, AuthRowMapper.MapAccount, cancellationToken),
+            cancellationToken);
+
+    public Task RevokeRefreshTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default) =>
+        sqlExecutor.ExecuteAsync(
+            "dbo.usp_Auth_RevokeRefreshToken",
+            [SqlParameterBuilder.Create("@TokenHash", tokenHash)],
+            cancellationToken);
+
     public Task UpsertPendingEmailVerificationAsync(
         Guid pendingId,
         Guid? existingUserId,

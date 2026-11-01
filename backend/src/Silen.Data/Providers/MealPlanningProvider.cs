@@ -122,4 +122,11 @@ public sealed class MealPlanningProvider : IMealPlanningProvider
                 return entries;
             },
             cancellationToken);
+
+    public Task<MealRecipeModel?> GetRecipeAsync(Guid mealSuggestionId, Guid userId, CancellationToken cancellationToken = default) =>
+        _sqlExecutor.QueryAsync(
+            "dbo.usp_MealSuggestion_GetRecipe",
+            [SqlParameterBuilder.Create("@MealSuggestionId", mealSuggestionId), SqlParameterBuilder.Create("@UserId", userId)],
+            reader => TrainerDocumentRowMapper.ReadRecipeAsync(reader, cancellationToken),
+            cancellationToken);
 }

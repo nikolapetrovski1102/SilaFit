@@ -20,9 +20,13 @@ public static class NotificationCategories
     /// <summary>Sent by Silen.Tools.WeeklyPlanGeneration once a user's Sunday AI split/diet plan is ready.</summary>
     public const string WeeklyAiPlanReady = "WeeklyAiPlanReady";
 
+    /// <summary>Sent when a trainer assigns a split / diet plan or shares a program PDF from the console.</summary>
+    public const string TrainerProgramAssigned = "TrainerProgramAssigned";
+
     public static bool IsValid(string category) => category switch
     {
-        GymReminder or TrackSets or TrackCalories or MealIdea or Motivation or Comeback or MonthlyReviewUpsell or WeeklyAiPlanReady => true,
+        GymReminder or TrackSets or TrackCalories or MealIdea or Motivation or Comeback or MonthlyReviewUpsell or WeeklyAiPlanReady
+            or TrainerProgramAssigned => true,
         _ => false
     };
 }

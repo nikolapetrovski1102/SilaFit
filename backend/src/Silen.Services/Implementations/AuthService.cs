@@ -4,6 +4,7 @@ using Silen.Common.Dtos;
 using Silen.Common.Enums;
 using Silen.Common.Exceptions;
 using Silen.Common.Helpers;
+using Silen.Common.Models;
 using Silen.Common.Options;
 using Silen.Data.Abstractions;
 using Silen.Services.Abstractions;
@@ -41,16 +42,7 @@ public sealed class AuthService(
             var user = await authProvider.GetOrCreateDeviceUserAsync(deviceId, cancellationToken)
                 ?? throw new NotFoundException($"Device login did not return a user row for device tag {LogRedaction.Tag(deviceId)}.");
 
-            var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
-
-            return new AuthResultDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                AccountTier = user.AccountTier.ToString(),
-                Email = user.Email,
-                DisplayName = user.DisplayName
-            };
+            return await IssueSessionAsync(user, cancellationToken);
         });
 
     public Task<ServiceResult<EmailVerificationStartResultDto>> StartEmailRegistrationAsync(EmailRegisterRequest request, CancellationToken cancellationToken = default) =>
@@ -147,16 +139,7 @@ public sealed class AuthService(
             var user = await authProvider.GetUserByIdAsync(userId, cancellationToken)
                 ?? throw new NotFoundException($"User '{userId}' was registered but could not be re-read.");
 
-            var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
-
-            return new AuthResultDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                AccountTier = user.AccountTier.ToString(),
-                Email = user.Email,
-                DisplayName = user.DisplayName
-            };
+            return await IssueSessionAsync(user, cancellationToken);
         });
 
     public Task<ServiceResult<EmailVerificationStartResultDto>> ResendEmailVerificationAsync(ResendEmailVerificationRequest request, CancellationToken cancellationToken = default) =>
@@ -214,17 +197,9 @@ public sealed class AuthService(
             }
 
             await authProvider.UpdateLastLoginAsync(user.UserId, cancellationToken);
+            await LinkCallerDeviceAsync(request.ExistingUserId, user.UserId, cancellationToken);
 
-            var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
-
-            return new AuthResultDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                AccountTier = user.AccountTier.ToString(),
-                Email = user.Email,
-                DisplayName = user.DisplayName
-            };
+            return await IssueSessionAsync(user, cancellationToken);
         });
 
     public Task<ServiceResult<AuthResultDto>> LoginOrLinkGoogleAsync(GoogleLoginRequest request, CancellationToken cancellationToken = default) =>
@@ -246,17 +221,9 @@ public sealed class AuthService(
                 ?? throw new NotFoundException($"User '{userId}' was linked to Google but could not be re-read.");
 
             await authProvider.UpdateLastLoginAsync(user.UserId, cancellationToken);
+            await LinkCallerDeviceAsync(request.ExistingUserId, user.UserId, cancellationToken);
 
-            var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
-
-            return new AuthResultDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                AccountTier = user.AccountTier.ToString(),
-                Email = user.Email,
-                DisplayName = user.DisplayName
-            };
+            return await IssueSessionAsync(user, cancellationToken);
         });
 
     public Task<ServiceResult<AuthResultDto>> LoginOrLinkAppleAsync(AppleLoginRequest request, CancellationToken cancellationToken = default) =>
@@ -278,6 +245,7 @@ public sealed class AuthService(
                 ?? throw new NotFoundException($"User '{userId}' was linked to Apple but could not be re-read.");
 
             await authProvider.UpdateLastLoginAsync(user.UserId, cancellationToken);
+            await LinkCallerDeviceAsync(request.ExistingUserId, user.UserId, cancellationToken);
 
             // Refreshed on every Apple login (codes are single-use and short-lived),
             // so account deletion always has a live token to revoke.
@@ -286,17 +254,82 @@ public sealed class AuthService(
                 await appleSignInRevoker.StoreAuthorizationAsync(user.UserId, request.AuthorizationCode, cancellationToken);
             }
 
-            var token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email);
-
-            return new AuthResultDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                AccountTier = user.AccountTier.ToString(),
-                Email = user.Email,
-                DisplayName = user.DisplayName
-            };
+            return await IssueSessionAsync(user, cancellationToken);
         });
+
+    public Task<ServiceResult<AuthResultDto>> RefreshSessionAsync(RefreshSessionRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                var owner = await authProvider.UseRefreshTokenAsync(
+                    RefreshTokenFactory.Hash(request.RefreshToken), RefreshTokenExpiry(), cancellationToken)
+                    ?? throw new UnauthorizedAppException("Refresh token is unknown, expired or revoked.", "Your session has expired. Please sign in again.");
+
+                // Not rotated: a rotation whose response never reached the phone (gym
+                // Wi-Fi) would strand the app with a dead token and sign the user out -
+                // exactly what this exists to prevent. Revocation is sign-out.
+                return BuildResult(owner, request.RefreshToken);
+            }
+
+            // A session from before refresh tokens existed: its still-valid access
+            // token proves who it is, so hand it its first refresh token.
+            if (request.CallerUserId is not { } callerUserId)
+            {
+                throw new UnauthorizedAppException("Session refresh called with neither a refresh token nor a valid access token.", "Your session has expired. Please sign in again.");
+            }
+
+            var user = await authProvider.GetUserByIdAsync(callerUserId, cancellationToken);
+            if (user is null || !user.IsActive)
+            {
+                throw new UnauthorizedAppException($"Session refresh for missing or inactive user '{callerUserId}'.", "Your session has expired. Please sign in again.");
+            }
+
+            return await IssueSessionAsync(user, cancellationToken);
+        });
+
+    public Task<ServiceResult<bool>> RevokeSessionAsync(RevokeSessionRequest request, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            await authProvider.RevokeRefreshTokenAsync(RefreshTokenFactory.Hash(request.RefreshToken), cancellationToken);
+            return true;
+        });
+
+    /// <summary>A fresh access token plus a newly stored refresh token - what every sign-in returns.</summary>
+    private async Task<AuthResultDto> IssueSessionAsync(UserAccountModel user, CancellationToken cancellationToken)
+    {
+        var refreshToken = RefreshTokenFactory.Create();
+        await authProvider.CreateRefreshTokenAsync(
+            user.UserId, RefreshTokenFactory.Hash(refreshToken), RefreshTokenExpiry(), cancellationToken);
+        return BuildResult(user, refreshToken);
+    }
+
+    private AuthResultDto BuildResult(UserAccountModel user, string refreshToken) => new()
+    {
+        Token = JwtTokenFactory.CreateToken(jwtOptions.Value, user.UserId, user.AccountTier, user.Email),
+        RefreshToken = refreshToken,
+        UserId = user.UserId,
+        AccountTier = user.AccountTier.ToString(),
+        Email = user.Email,
+        DisplayName = user.DisplayName
+    };
+
+    private DateTime RefreshTokenExpiry() => DateTime.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays);
+
+    /// <summary>
+    /// When the caller's session (a Guest device shell, in the common case) signed
+    /// in to a different, already existing account, points that device at the
+    /// account. Without it device login keeps answering with the Guest, so the
+    /// app's silent re-login on an expired token cannot restore the account and
+    /// signs the user out instead.
+    /// </summary>
+    private async Task LinkCallerDeviceAsync(Guid? callerUserId, Guid accountUserId, CancellationToken cancellationToken)
+    {
+        if (callerUserId is { } deviceUserId && deviceUserId != accountUserId)
+        {
+            await authProvider.LinkDeviceToAccountAsync(deviceUserId, accountUserId, cancellationToken);
+        }
+    }
 
     /// <summary>
     /// Picks the account an OAuth identity should be linked to. The caller's

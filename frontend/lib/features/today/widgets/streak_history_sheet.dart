@@ -6,6 +6,7 @@ import '../../../core/state/resource_state.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/mascot/streak_flame.dart';
 import '../../../core/widgets/section_eyebrow.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../plans/plans_repository.dart';
@@ -123,14 +124,26 @@ class _StreakHistorySheetState extends State<StreakHistorySheet> {
           children: [
             Row(
               children: [
-                Icon(Icons.local_fire_department_rounded,
-                    color: AppColors.accent, size: 26),
-                const SizedBox(width: AppSpacing.xs),
-                Text('${widget.currentStreakDays} day streak',
-                    style: AppTypography.headlineMd),
+                StreakFlame(streakDays: widget.currentStreakDays, size: 56),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${widget.currentStreakDays} day streak',
+                          style: AppTypography.headlineMd),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        _flameCaption(widget.currentStreakDays),
+                        style: AppTypography.bodySm
+                            .copyWith(color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: AppSpacing.xxs),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               'This week is ${widget.weeklyCompliancePercent} percent complete.',
               style: AppTypography.bodyMd
@@ -390,4 +403,15 @@ class _HistoryDot extends StatelessWidget {
                   size: tappable ? 14 : 11, color: AppColors.background),
     );
   }
+}
+
+/// The line under the streak count that says how far the flame is from its
+/// next stage (see [StreakFlame]).
+String _flameCaption(int streakDays) {
+  final next = StreakFlame.nextStageAt(streakDays);
+  if (streakDays <= 0) return 'Finish a workout to light your flame.';
+  if (next == null) return 'Your flame is a full blaze. Keep it burning!';
+  final left = next - streakDays;
+  final stage = next == StreakFlame.flameAt ? 'a flame' : 'a blaze';
+  return '$left more ${left == 1 ? 'day' : 'days'} to grow into $stage.';
 }

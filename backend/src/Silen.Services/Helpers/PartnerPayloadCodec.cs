@@ -100,6 +100,73 @@ public static class PartnerPayloadCodec
         return (email, displayName, provider);
     }
 
+    /// <summary>The provision's optional profile as the request the app's own profile save
+    /// uses, checked against the same rules, with every choice in its canonical casing.
+    /// Null when the partner sent no profile.</summary>
+    public static UpsertUserProfileRequest? RequireProfile(PartnerLeadProfile? profile)
+    {
+        if (profile is null)
+        {
+            return null;
+        }
+
+        if (profile.AgeYears is null or < UserProfileRules.MinAgeYears or > UserProfileRules.MaxAgeYears)
+        {
+            throw Invalid("ageYears", $"is required, a whole number from {UserProfileRules.MinAgeYears} to {UserProfileRules.MaxAgeYears}.");
+        }
+
+        if (profile.HeightCm is null or < UserProfileRules.MinHeightCm or > UserProfileRules.MaxHeightCm)
+        {
+            throw Invalid("heightCm", $"is required, in centimetres from {UserProfileRules.MinHeightCm} to {UserProfileRules.MaxHeightCm}.");
+        }
+
+        if (profile.WeightKg is null or < UserProfileRules.MinWeightKg or > UserProfileRules.MaxWeightKg)
+        {
+            throw Invalid("weightKg", $"is required, in kilograms from {UserProfileRules.MinWeightKg} to {UserProfileRules.MaxWeightKg}.");
+        }
+
+        if (profile.TrainingDaysPerWeek is < UserProfileRules.MinTrainingDaysPerWeek or > UserProfileRules.MaxTrainingDaysPerWeek)
+        {
+            throw Invalid("trainingDaysPerWeek", $"must be from {UserProfileRules.MinTrainingDaysPerWeek} to {UserProfileRules.MaxTrainingDaysPerWeek}.");
+        }
+
+        if (profile.SessionDurationMinutes is < UserProfileRules.MinSessionDurationMinutes or > UserProfileRules.MaxSessionDurationMinutes)
+        {
+            throw Invalid("sessionDurationMinutes", $"must be from {UserProfileRules.MinSessionDurationMinutes} to {UserProfileRules.MaxSessionDurationMinutes}.");
+        }
+
+        return new UpsertUserProfileRequest
+        {
+            Gender = RequireChoice("gender", profile.Gender, UserProfileRules.Genders)!,
+            AgeYears = (byte)profile.AgeYears.Value,
+            HeightCm = Math.Round(profile.HeightCm.Value, 1),
+            WeightKg = Math.Round(profile.WeightKg.Value, 1),
+            Goal = RequireChoice("goal", profile.Goal, UserProfileRules.Goals)!,
+            TrainingDaysPerWeek = profile.TrainingDaysPerWeek,
+            SessionDurationMinutes = profile.SessionDurationMinutes ?? UserProfileRules.DefaultSessionDurationMinutes,
+            TrainingExperience = RequireChoice("trainingExperience", profile.TrainingExperience, UserProfileRules.TrainingExperiences, optional: true),
+            EquipmentAccess = RequireChoice("equipmentAccess", profile.EquipmentAccess, UserProfileRules.EquipmentAccesses, optional: true),
+            DailyActivityLevel = RequireChoice("dailyActivityLevel", profile.DailyActivityLevel, UserProfileRules.DailyActivityLevels, optional: true)
+        };
+    }
+
+    /// <summary>The allowed value matching <paramref name="value"/> ignoring case, or null for
+    /// an absent optional field.</summary>
+    private static string? RequireChoice(string field, string? value, string[] allowed, bool optional = false)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed) && optional)
+        {
+            return null;
+        }
+
+        return allowed.FirstOrDefault(choice => string.Equals(choice, trimmed, StringComparison.OrdinalIgnoreCase))
+            ?? throw Invalid(field, $"must be one of {string.Join(", ", allowed)}{(optional ? "" : " (required)")}.");
+    }
+
+    private static ValidationException Invalid(string field, string rule) =>
+        new($"Partner provision profile has an invalid {field}.", $"profile.{field} {rule}");
+
     private static byte[] ReadKey(PartnerOptions options)
     {
         try

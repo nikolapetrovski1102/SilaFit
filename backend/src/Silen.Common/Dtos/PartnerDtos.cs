@@ -33,6 +33,36 @@ public sealed class PartnerProvisionPayload
     /// PartnerOptions.MaxPayloadAgeSeconds of the server clock, and not older than the last
     /// request applied to the same lead.</summary>
     public DateTimeOffset? IssuedAtUtc { get; set; }
+
+    /// <summary>Optional answers to the app's onboarding questions, collected on the partner
+    /// website. Seeds the account's profile so the app does not ask them again.</summary>
+    public PartnerLeadProfile? Profile { get; set; }
+}
+
+/// <summary>The app's onboarding answers as the partner sends them. Gender, age, height,
+/// weight and goal are required once a profile is sent; the rest are optional, and the app
+/// asks for any that are missing. The allowed values are Silen.Services.Helpers.UserProfileRules.</summary>
+public sealed class PartnerLeadProfile
+{
+    public string? Gender { get; set; }
+
+    public int? AgeYears { get; set; }
+
+    public decimal? HeightCm { get; set; }
+
+    public decimal? WeightKg { get; set; }
+
+    public string? Goal { get; set; }
+
+    public int? TrainingDaysPerWeek { get; set; }
+
+    public int? SessionDurationMinutes { get; set; }
+
+    public string? TrainingExperience { get; set; }
+
+    public string? EquipmentAccess { get; set; }
+
+    public string? DailyActivityLevel { get; set; }
 }
 
 /// <summary>Decrypted payload of POST /api/partner/leads/cancel - ends the lead's PRO immediately.</summary>
@@ -71,4 +101,8 @@ public sealed class PartnerLeadResultDto
     /// <summary>True when the partner PRO grant is in place. False on provision only when the
     /// user already had a live plan of their own, which stays in charge.</summary>
     public bool ProGranted { get; set; }
+
+    /// <summary>True when the provision's profile was saved to the account. False when no
+    /// profile was sent, or the account already had onboarding answers, which are kept.</summary>
+    public bool ProfileSaved { get; set; }
 }

@@ -83,6 +83,7 @@ services:
       Jwt__Audience: "SilenApp"
       Jwt__SigningKey: "${JWT_SIGNING_KEY}"
       Jwt__ExpiryMinutes: "${JWT_EXPIRY_MINUTES:-1440}"
+      Jwt__RefreshTokenDays: "${JWT_REFRESH_TOKEN_DAYS:-180}"
       # AES-256-GCM key for application-level column encryption (FieldCipher) -
       # kept out of source control the same way as Jwt__SigningKey, see deploy/.env
       Encryption__MasterKeyBase64: "${ENCRYPTION_MASTER_KEY}"
@@ -144,6 +145,10 @@ services:
       Partner__Username: "${PARTNER_USERNAME:-}"
       Partner__Password: "${PARTNER_PASSWORD:-}"
       Partner__PayloadKeyBase64: "${PARTNER_PAYLOAD_KEY:-}"
+      # Trainer documents (TrainerDocumentsController): the in-app viewer link the
+      # app opens is built on this origin. ImportModel reads uploaded programs.
+      TrainerDocuments__PublicBaseUrl: "${TRAINER_DOCUMENTS_PUBLIC_BASE_URL:-https://api.sila.fitness}"
+      TrainerDocuments__ImportModel: "${TRAINER_DOCUMENTS_IMPORT_MODEL:-openai/gpt-4.1}"
     ports:
       - "127.0.0.1:${API_PORT:-5010}:8080"   # localhost only — nginx proxies to it
     volumes:
@@ -153,6 +158,10 @@ services:
       # vhost (deploy/nginx-sila.fitness.conf) serves this same host directory
       # straight off disk - the API is only ever hit to write a new file here.
       - ./uploads:/app/uploads
+      # Trainer PDFs (TrainerDocumentOptions.StoragePath "trainer-documents"). Unlike
+      # uploads/ nothing serves this directory directly: every read goes through the
+      # API's ticket check (DocumentViewerController), so it stays private to the UID.
+      - ./trainer-documents:/app/trainer-documents
     restart: unless-stopped
     # Backstop like the db service's mem_limit above: without a ceiling, a leak can
     # let the API eat all host RAM and push everything (including PostgreSQL) into

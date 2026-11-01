@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/mascot/talking_mascot.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 
@@ -31,6 +32,9 @@ class QuestionScaffold extends StatelessWidget {
   /// the split creation wizard).
   final String title;
 
+  /// When set, Sila appears above the headline and "says" this line.
+  final MascotLine? mascot;
+
   const QuestionScaffold({
     super.key,
     required this.onBack,
@@ -46,6 +50,7 @@ class QuestionScaffold extends StatelessWidget {
     this.footer,
     this.onSkip,
     this.title = 'Assessment',
+    this.mascot,
   });
 
   @override
@@ -88,12 +93,17 @@ class QuestionScaffold extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: AppSpacing.xxxl),
+            SizedBox(
+                height: mascot == null ? AppSpacing.xxxl : AppSpacing.lg),
             Expanded(
               child: OnboardingStepContentTransition(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (mascot != null) ...[
+                      TalkingMascot(line: mascot!),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
                     Text(headline,
                         style: AppTypography.headlineLg.copyWith(
                           fontSize: 32,

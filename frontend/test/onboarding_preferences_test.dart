@@ -5,6 +5,7 @@ import 'package:silafit/core/api/api_client.dart';
 import 'package:silafit/core/session/session_store.dart';
 import 'package:silafit/features/notifications/notifications_repository.dart';
 import 'package:silafit/features/onboarding/onboarding_controller.dart';
+import 'package:silafit/features/onboarding/onboarding_mascot_lines.dart';
 import 'package:silafit/features/onboarding/onboarding_models.dart';
 import 'package:silafit/features/onboarding/onboarding_repository.dart';
 import 'package:silafit/features/onboarding/widgets/age_wheel_picker.dart';
@@ -89,6 +90,7 @@ void main() {
                 step: OnboardingStep.trainingDays,
                 progressStep: 6,
                 progressStepCount: 11,
+                mascot: mascotLineFor(OnboardingStep.trainingDays),
                 onBack: () {},
                 onNext: () {}))));
     await tester.drag(
@@ -114,6 +116,7 @@ void main() {
           onBack: () {},
           progressStep: 2,
           progressStepCount: 11,
+          mascot: mascotLineFor(OnboardingStep.age),
           headline: 'What is your age?',
           body: StatefulBuilder(builder: (context, setState) {
             return Center(
@@ -135,6 +138,7 @@ void main() {
     expect(find.byKey(const Key('assessment-step-badge')), findsOneWidget);
     expect(find.text('What is your age?'), findsOneWidget);
     expect(find.text('18'), findsOneWidget);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
@@ -152,6 +156,7 @@ void main() {
           onBack: () {},
           progressStep: 8,
           progressStepCount: 11,
+          mascot: mascotLineFor(OnboardingStep.trainingExperience),
           headline: 'How would you rate your fitness level?',
           body: StatefulBuilder(builder: (context, setState) {
             return ArcRatingSlider(

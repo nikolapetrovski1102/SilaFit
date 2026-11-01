@@ -26,6 +26,10 @@ public interface IMealPlanningService
     /// nutrition targets and returned best-first.</summary>
     Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(Guid userId, int? month, CancellationToken cancellationToken = default);
 
+    /// <summary>A meal's ingredients and preparation steps. A trainer's own meal is only
+    /// readable by a user who holds that trainer's plan.</summary>
+    Task<ServiceResult<MealRecipeModel>> GetRecipeAsync(Guid userId, Guid mealSuggestionId, CancellationToken cancellationToken = default);
+
     /// <summary>Bulk-creates Planned meal logs from <paramref name="requests"/>, skipping
     /// any request whose date already has a log of the same meal type + title - so
     /// applying a diet plan repeatedly (or over meals the user already edited/logged)

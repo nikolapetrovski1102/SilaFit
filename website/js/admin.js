@@ -193,7 +193,7 @@
   var myPermissions = [];
   function has(permission) { return myPermissions.indexOf(permission) > -1; }
 
-  var CONTENT_NAV_IDS = ['navSplits', 'navDietPlans', 'navSuggestions', 'navExercises', 'navPlans', 'navUsers'];
+  var CONTENT_NAV_IDS = ['navSplits', 'navDietPlans', 'navSuggestions', 'navExercises', 'navPlans', 'navProviders', 'navUsers'];
 
   function applyContentNavGating() {
     CONTENT_NAV_IDS.forEach(function (id) {
@@ -318,6 +318,42 @@
       }).join('');
   }
 
+  /* ---- Multi-week programs (up to 26 weeks) ----
+     Day N of a program lives in week ceil(N/7) on weekday ((N-1) % 7) + 1, the
+     same arithmetic the app and the AI importer use. A program that never goes
+     past day 7 keeps the plain "Day N" labels. */
+  var WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  function isMultiWeek(days) {
+    return (days || []).some(function (d) { return d.dayIndex > 7; });
+  }
+
+  function dayTabLabel(dayIndex, days) {
+    if (!isMultiWeek(days)) return 'Day ' + dayIndex;
+    return 'W' + Math.ceil(dayIndex / 7) + ' · ' + WEEKDAYS[(dayIndex - 1) % 7];
+  }
+
+  /* Tab markup with a "Week k" divider before the first day of each week. */
+  function weekGroupedTabs(days, tabHtml) {
+    var multi = isMultiWeek(days);
+    var lastWeek = 0;
+    return days.map(function (d) {
+      var week = Math.ceil(d.dayIndex / 7);
+      var divider = '';
+      if (multi && week !== lastWeek) {
+        divider = '<span class="week-tabs__sep">Week ' + week + '</span>';
+        lastWeek = week;
+      }
+      return divider + tabHtml(d);
+    }).join('');
+  }
+
+  function durationChip(durationDays) {
+    return durationDays > 7 && durationDays % 7 === 0
+      ? durationDays / 7 + ' weeks'
+      : durationDays + ' days';
+  }
+
   /* ================================================================
      OVERVIEW
      ================================================================ */
@@ -429,7 +465,7 @@
     if (!splits.length) {
       grid.innerHTML =
         '<div class="card empty-state" style="grid-column:1/-1">' +
-          '<img src="assets/img/mascot/ready.png" alt="Mascot ready" />' +
+          window.Sila.html('determined', { glow: true, alive: true, className: 'empty-state__sila' }) +
           '<div class="headline-sm">No splits yet</div>' +
           '<p class="body-sm">Create a split, then add its days and exercises.</p>' +
         '</div>';
@@ -451,6 +487,7 @@
       var foot = '';
       if (s.canManage) {
         foot += '<button class="btn btn--secondary btn--sm" data-manage-days="' + s.splitId + '">Manage days</button>';
+        foot += '<button class="btn btn--ghost btn--sm" data-split-docs="' + s.splitId + '">Documents</button>';
         if (has('content.splits.assign')) {
           foot += '<button class="btn btn--primary btn--sm" data-assign-split="' + s.splitId + '">Assign to clients</button>';
         }
@@ -476,7 +513,7 @@
           '</div>' +
           '<div class="mp-card__targets">' +
             '<span class="chip">' + esc(s.visibility || 'Public') + '</span>' +
-            '<span class="chip">' + s.durationDays + ' days</span>' +
+            '<span class="chip">' + durationChip(s.durationDays) + '</span>' +
             '<span class="chip">' + s.dayCount + ' scheduled</span>' +
             '<span class="chip">' + s.exerciseCount + ' exercises</span>' +
             (s.ownerUsername ? '<span class="chip">by ' + esc(s.ownerUsername) + '</span>' : '') +
@@ -497,6 +534,12 @@
     });
     $$('[data-assign-split]').forEach(function (b) {
       b.addEventListener('click', function () { openSplitAssignments(b.getAttribute('data-assign-split')); });
+    });
+    $$('[data-split-docs]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var s = splitsCache.find(function (x) { return x.splitId === b.getAttribute('data-split-docs'); });
+        if (s) openDocuments('Split', s.splitId, s.name);
+      });
     });
     $$('[data-del-split]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -540,7 +583,8 @@
         '<div class="field field--full"><span class="label-sm" style="color:var(--on-surface-variant)">' +
           'Private: only you. Public: every app user. Shared: only the clients you assign it to.' +
         '</span></div>' +
-        '<div class="field"><label>Duration (days)</label><input class="input" type="number" min="1" max="14" id="spDuration" value="' + s.durationDays + '" /></div>' +
+        '<div class="field"><label>Duration (days)</label><input class="input" type="number" min="1" max="182" id="spDuration" value="' + s.durationDays + '" />' +
+          '<span class="label-sm" style="color:var(--on-surface-variant)">Up to 182 (26 weeks). Past day 7, days are grouped into weeks and the app moves to the next week every 7 days, then starts over.</span></div>' +
         '<div class="field"><label>Recommended goal</label>' +
           '<select class="select" id="spGoal">' +
             '<option value="">No specific goal</option>' +
@@ -668,7 +712,7 @@
 
       panel.innerHTML = detail.days.map(function (d) {
         var rows = (byDay[d.splitDayId] || []).sort(function (a, b) { return a.sortOrder - b.sortOrder; });
-        var heading = 'Day ' + d.dayIndex + (d.title ? ' — ' + esc(d.title) : '') + (d.isRestDay ? ' (rest)' : '');
+        var heading = dayTabLabel(d.dayIndex, detail.days) + (d.title ? ' — ' + esc(d.title) : '') + (d.isRestDay ? ' (rest)' : '');
         var rowsHtml = rows.length
           ? rows.map(function (ex) {
               return '<div class="meal-slot" style="padding:8px 12px;">' +
@@ -704,11 +748,11 @@
     }
 
     function renderTabs() {
-      var tabs = detail.days.map(function (d) {
+      var tabs = weekGroupedTabs(detail.days, function (d) {
         var isActive = !draftDay && d.splitDayId === activeDayId;
         return '<button class="week-tab' + (isActive ? ' is-active' : '') + '" data-day-id="' + d.splitDayId + '">' +
-          'Day ' + d.dayIndex + (d.isRestDay ? ' · rest' : '') + '</button>';
-      }).join('');
+          dayTabLabel(d.dayIndex, detail.days) + (d.isRestDay ? ' · rest' : '') + '</button>';
+      });
       tabs += '<button class="week-tab' + (draftDay ? ' is-active' : '') + '" id="addDayTab">+ Add day</button>';
       $('#splitDayTabs').innerHTML = tabs;
 
@@ -1139,7 +1183,7 @@
     if (!plans.length) {
       grid.innerHTML =
         '<div class="card empty-state" style="grid-column:1/-1">' +
-          '<img src="assets/img/mascot/ready.png" alt="Mascot ready" />' +
+          window.Sila.html('determined', { glow: true, alive: true, className: 'empty-state__sila' }) +
           '<div class="headline-sm">No diet plans yet</div>' +
           '<p class="body-sm">Create a plan, then add its days and meals.</p>' +
         '</div>';
@@ -1161,6 +1205,7 @@
       var foot = '';
       if (p.canManage) {
         foot += '<button class="btn btn--secondary btn--sm" data-manage-diet-days="' + p.dietPlanId + '">Manage days</button>';
+        foot += '<button class="btn btn--ghost btn--sm" data-diet-docs="' + p.dietPlanId + '">Documents</button>';
         if (has('content.diet_plans.assign')) {
           foot += '<button class="btn btn--primary btn--sm" data-assign-diet-plan="' + p.dietPlanId + '">Assign to clients</button>';
         }
@@ -1180,7 +1225,7 @@
           '</div>' +
           '<div class="mp-card__targets">' +
             '<span class="chip">' + esc(p.visibility || 'Public') + '</span>' +
-            '<span class="chip">' + p.durationDays + ' days</span>' +
+            '<span class="chip">' + durationChip(p.durationDays) + '</span>' +
             '<span class="chip">' + p.dayCount + ' scheduled</span>' +
             '<span class="chip">' + p.mealCount + ' meals</span>' +
             (p.ownerUsername ? '<span class="chip">by ' + esc(p.ownerUsername) + '</span>' : '') +
@@ -1200,6 +1245,12 @@
     });
     $$('[data-assign-diet-plan]').forEach(function (b) {
       b.addEventListener('click', function () { openDietPlanAssignments(b.getAttribute('data-assign-diet-plan')); });
+    });
+    $$('[data-diet-docs]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = dietPlansCache.find(function (x) { return x.dietPlanId === b.getAttribute('data-diet-docs'); });
+        if (p) openDocuments('DietPlan', p.dietPlanId, p.name);
+      });
     });
     $$('[data-del-diet-plan]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1239,7 +1290,8 @@
         '<div class="field field--full"><span class="label-sm" style="color:var(--on-surface-variant)">' +
           'Private: only you. Public: every app user. Shared: only the clients you assign it to.' +
         '</span></div>' +
-        '<div class="field"><label>Duration (days)</label><input class="input" type="number" min="1" max="31" id="dpDuration" value="' + p.durationDays + '" /></div>' +
+        '<div class="field"><label>Duration (days)</label><input class="input" type="number" min="1" max="182" id="dpDuration" value="' + p.durationDays + '" />' +
+          '<span class="label-sm" style="color:var(--on-surface-variant)">Up to 182 (26 weeks). Day 8 is week 2, Monday.</span></div>' +
         '<div class="field field--full"><label>Description</label>' +
           '<textarea class="textarea" id="dpDesc" placeholder="Who is this plan for?">' + esc(p.description || '') + '</textarea></div>' +
         '<div class="field field--full"><label>Hero image URL</label><input class="input" id="dpHero" value="' + esc(p.heroImageUrl || '') + '" placeholder="https://…" /></div>' +
@@ -1311,11 +1363,11 @@
     }
 
     function renderTabs() {
-      var tabs = detail.days.map(function (d) {
+      var tabs = weekGroupedTabs(detail.days, function (d) {
         var isActive = !draftDay && d.dietPlanDayId === activeDayId;
         return '<button class="week-tab' + (isActive ? ' is-active' : '') + '" data-day-id="' + d.dietPlanDayId + '">' +
-          'Day ' + d.dayIndex + '</button>';
-      }).join('');
+          dayTabLabel(d.dayIndex, detail.days) + '</button>';
+      });
       tabs += '<button class="week-tab' + (draftDay ? ' is-active' : '') + '" id="addDietDayTab">+ Add day</button>';
       $('#dietPlanDayTabs').innerHTML = tabs;
 
@@ -1717,7 +1769,7 @@
     var head =
       '<thead><tr>' +
         '<th>Meal</th><th>Type</th><th>Month</th><th class="num">Kcal</th>' +
-        '<th class="num">P</th><th class="num">C</th><th class="num">F</th><th>Split</th><th></th>' +
+        '<th class="num">P</th><th class="num">C</th><th class="num">F</th><th>Split</th><th>Recipe</th><th></th>' +
       '</tr></thead>';
 
     var body = rows.map(function (s) {
@@ -1731,6 +1783,11 @@
           '<td class="num">' + s.carbsG + 'g</td>' +
           '<td class="num">' + s.fatsG + 'g</td>' +
           '<td>' + macroMini(s) + '</td>' +
+          '<td><button class="chip' + (s.stepCount ? ' chip--accent' : '') + '" data-recipe-suggestion="' + s.mealSuggestionId + '" title="Ingredients and steps">' +
+            (s.stepCount || s.ingredientCount
+              ? (s.ingredientCount || 0) + ' ingr · ' + (s.stepCount || 0) + ' steps'
+              : 'Add recipe') +
+          '</button></td>' +
           '<td><div class="row-actions">' +
             '<button class="icon-btn" data-edit-suggestion="' + s.mealSuggestionId + '" title="Edit">' +
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
@@ -1744,11 +1801,14 @@
     }).join('');
 
     $('#suggestionsTable').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="9"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">Nothing matches</div><div class="body-sm">Try another search or month filter.</div></div></td></tr>') +
+      (body || '<tr><td colspan="10"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">Nothing matches</div><div class="body-sm">Try another search or month filter.</div></div></td></tr>') +
       '</tbody>';
 
     $$('[data-edit-suggestion]').forEach(function (b) {
       b.addEventListener('click', function () { openSuggestionEditor(b.getAttribute('data-edit-suggestion')); });
+    });
+    $$('[data-recipe-suggestion]').forEach(function (b) {
+      b.addEventListener('click', function () { openRecipeEditor(b.getAttribute('data-recipe-suggestion')); });
     });
     $$('[data-del-suggestion]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1877,7 +1937,7 @@
     }).join('');
 
     $('#exercisesTable').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="6"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No exercises match</div></div></td></tr>') +
+      (body || '<tr><td colspan="6"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">No exercises match</div></div></td></tr>') +
       '</tbody>';
 
     $$('[data-edit-exercise]').forEach(function (b) {
@@ -2249,7 +2309,7 @@
     }).join('');
 
     $('#usersTable').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="' + (hasActions ? 6 : 5) + '"><div class="empty-state"><img src="assets/img/mascot/resting.png" alt="" /><div class="headline-sm">No users match</div></div></td></tr>') +
+      (body || '<tr><td colspan="' + (hasActions ? 6 : 5) + '"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">No users match</div></div></td></tr>') +
     '</tbody>';
 
     if (canViewClient) {
@@ -2556,12 +2616,564 @@
   }
 
   /* ================================================================
+     TRAINER DOCUMENTS — a PDF/Word program attached to a split or diet
+     plan. Word files are converted to PDF on the server. "Import" lets AI
+     read the document and build a new split / plan from it (up to 26
+     weeks); "Documents" on a card attaches files to an existing one. A
+     client only ever reads a document the trainer handed them (a grant),
+     inside the app's locked, watermarked viewer.
+     ================================================================ */
+  var DOCUMENT_ACCEPT = '.pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword';
+  var DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
+
+  function kindLabel(kind) { return kind === 'Split' ? 'split' : 'diet plan'; }
+  function assignPermission(kind) { return kind === 'Split' ? 'content.splits.assign' : 'content.diet_plans.assign'; }
+  function writePermission(kind) { return kind === 'Split' ? 'content.splits.write' : 'content.diet_plans.write'; }
+
+  function fmtSize(bytes) {
+    if (!bytes) return '';
+    return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  function checkDocumentFile(file) {
+    if (!file) { toast('Choose a PDF or Word file first', true); return false; }
+    if (!/\.(pdf|docx|doc)$/i.test(file.name)) { toast('Only PDF or Word (.docx, .doc) files', true); return false; }
+    if (file.size > DOCUMENT_MAX_BYTES) { toast('That file is over 20 MB', true); return false; }
+    return true;
+  }
+
+  function openDocumentImport(kind) {
+    var noun = kindLabel(kind);
+    var backdrop = openModal(
+      modalHead('Import a ' + noun + ' from a document') +
+      '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
+        'Upload the program as PDF or Word. AI reads it and builds a new private ' + noun +
+        (kind === 'Split' ? ' with every day, exercise, set and rep range' : ' with every day and meal, including ingredients and steps') +
+        '. Programs longer than a week are kept week by week (up to 26 weeks). ' +
+        'The document is attached to the new ' + noun + ' so you can hand it to clients, and you can still edit everything afterwards.' +
+      '</p>' +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Document</label>' +
+          '<input class="input" type="file" id="docImportFile" accept="' + DOCUMENT_ACCEPT + '" /></div>' +
+        '<div class="field field--full"><label>Title (optional)</label>' +
+          '<input class="input" id="docImportTitle" maxlength="200" placeholder="Defaults to the file name" /></div>' +
+      '</div>' +
+      '<div id="docImportStatus" class="body-sm" style="margin-top:10px;color:var(--on-surface-variant)"></div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
+        '<button class="btn btn--primary" id="docImportGo">Read document and create ' + noun + '</button>' +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    $('#docImportGo').addEventListener('click', function () {
+      var file = $('#docImportFile').files[0];
+      if (!checkDocumentFile(file)) return;
+      var button = $('#docImportGo');
+      button.disabled = true;
+      $('#docImportStatus').textContent = 'Reading the document… long programs can take a minute or two. Keep this window open.';
+      auth.uploadDocument(kind, null, $('#docImportTitle').value.trim(), true, file).then(function (result) {
+        if (!document.body.contains(button)) return; // closed meanwhile
+        button.disabled = false;
+        if (!toastOnFailure(result, 'Could not read that document.')) {
+          $('#docImportStatus').textContent = result.message || '';
+          return;
+        }
+        var data = result.data || {};
+        toast(data.message || (noun + ' created.'));
+        closeModal();
+        if (kind === 'Split') {
+          loadSplits().then(function () { if (data.targetId) openSplitDaysEditor(data.targetId); });
+        } else {
+          loadDietPlans().then(function () { if (data.targetId) openDietPlanDaysEditor(data.targetId); });
+        }
+      });
+    });
+  }
+
+  function openDocuments(kind, targetId, targetName) {
+    var canWrite = has(writePermission(kind));
+    var canAssign = has(assignPermission(kind));
+    var documents = [];
+
+    var backdrop = openModal(
+      modalHead('Documents · ' + targetName) +
+      '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
+        'Clients open these only in the app, in a locked viewer with their name across every page. ' +
+        'Nobody sees a document until you hand it to them.' +
+      '</p>' +
+      '<div id="docList"></div>' +
+      (canWrite ? (
+        '<div class="eyebrow" style="margin:20px 0 10px;">Attach a document</div>' +
+        '<div class="form-grid">' +
+          '<div class="field field--full"><label>PDF or Word file (20 MB max)</label>' +
+            '<input class="input" type="file" id="docAttachFile" accept="' + DOCUMENT_ACCEPT + '" /></div>' +
+          '<div class="field field--full"><label>Title (optional)</label>' +
+            '<input class="input" id="docAttachTitle" maxlength="200" placeholder="Defaults to the file name" /></div>' +
+        '</div>'
+      ) : '') +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Close</button>' +
+        (canWrite ? '<button class="btn btn--primary" id="docAttachGo">Attach</button>' : '') +
+      '</div>',
+      true
+    );
+    wireClose(backdrop);
+
+    function render() {
+      $('#docList').innerHTML = documents.length ? documents.map(function (d) {
+        return (
+          '<div class="activity-item doc-row">' +
+            '<div class="doc-row__icon" aria-hidden="true">' +
+              '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>' +
+            '</div>' +
+            '<div class="body-md" style="font-size:13.5px;flex:1;min-width:0">' +
+              '<b>' + esc(d.title) + '</b>' +
+              '<div class="row-sub">' + esc(d.originalFileName) + ' · ' + fmtSize(d.sizeBytes) + ' · ' + fmtDate(d.createdAtUtc) +
+                (d.ownerUsername ? ' · by ' + esc(d.ownerUsername) : '') + '</div>' +
+            '</div>' +
+            '<span class="chip' + (d.activeGrantCount ? ' chip--gold' : '') + '">' + d.activeGrantCount + ' client' + (d.activeGrantCount === 1 ? '' : 's') + '</span>' +
+            '<a class="btn btn--ghost btn--sm" href="' + esc(auth.documentPreviewUrl(d.documentId)) + '" target="_blank" rel="noopener noreferrer">Preview</a>' +
+            (canAssign ? '<button class="btn btn--secondary btn--sm" data-doc-grants="' + d.documentId + '">Clients</button>' : '') +
+            (canWrite ? (
+              '<button class="icon-btn icon-btn--danger" data-doc-delete="' + d.documentId + '" title="Delete document">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
+              '</button>'
+            ) : '') +
+          '</div>'
+        );
+      }).join('') : '<div class="empty-state" style="padding:16px"><div class="body-sm">No documents attached yet.</div></div>';
+
+      $$('[data-doc-grants]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var d = documents.find(function (x) { return x.documentId === b.getAttribute('data-doc-grants'); });
+          if (d) openDocumentGrants(kind, targetId, targetName, d);
+        });
+      });
+      $$('[data-doc-delete]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var d = documents.find(function (x) { return x.documentId === b.getAttribute('data-doc-delete'); });
+          if (!d) return;
+          confirmDelete('Delete "' + d.title + '"?', 'Every client loses access to it right away. The ' + kindLabel(kind) + ' itself stays.', function () {
+            auth.deleteDocument(d.documentId).then(function (result) {
+              if (!toastOnFailure(result, 'Could not delete the document.')) return;
+              toast((result.data && result.data.message) || 'Document deleted.');
+              openDocuments(kind, targetId, targetName);
+            });
+          });
+        });
+      });
+    }
+
+    function load() {
+      return auth.getDocuments(kind, targetId).then(function (result) {
+        if (!toastOnFailure(result, 'Could not load documents.')) return;
+        documents = result.data || [];
+        if (document.body.contains($('#docList'))) render();
+      });
+    }
+
+    var attach = $('#docAttachGo');
+    if (attach) {
+      attach.addEventListener('click', function () {
+        var file = $('#docAttachFile').files[0];
+        if (!checkDocumentFile(file)) return;
+        attach.disabled = true;
+        attach.textContent = 'Uploading…';
+        auth.uploadDocument(kind, targetId, $('#docAttachTitle').value.trim(), false, file).then(function (result) {
+          attach.disabled = false;
+          attach.textContent = 'Attach';
+          if (!toastOnFailure(result, 'Could not attach the document.')) return;
+          toast((result.data && result.data.message) || 'Document attached.');
+          $('#docAttachFile').value = '';
+          $('#docAttachTitle').value = '';
+          load();
+        });
+      });
+    }
+
+    load();
+  }
+
+  function openDocumentGrants(kind, targetId, targetName, doc) {
+    var grants = [];
+    var users = [];
+    var assignedIds = [];
+    var search = '';
+
+    var backdrop = openModal(
+      modalHead('Clients · ' + doc.title) +
+      '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
+        'Each client gets their own link. It opens only inside their SilaFit app (from the document icon on the ' +
+        kindLabel(kind) + '), never from a browser, so a forwarded link shows nothing. ' +
+        'Opening it here shows you a preview of their copy.' +
+      '</p>' +
+      '<div id="grantList"></div>' +
+      '<div class="eyebrow" style="margin:20px 0 10px;">Give a client access</div>' +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Search users</label>' +
+          '<input class="input" id="grantSearch" placeholder="Name or email…" /></div>' +
+        '<div class="field field--full"><label>Client</label><select class="select" id="grantUser"></select></div>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" id="grantBack">Back</button>' +
+        '<button class="btn btn--primary" id="grantSave">Give access</button>' +
+      '</div>',
+      true
+    );
+    wireClose(backdrop);
+    $('#grantBack').addEventListener('click', function () { openDocuments(kind, targetId, targetName); });
+
+    function linkFor(g) {
+      return (auth.apiBase || window.location.origin) + g.viewerPath;
+    }
+
+    function renderGrants() {
+      var live = grants.filter(function (g) { return !g.revokedAtUtc; });
+      $('#grantList').innerHTML = live.length ? live.map(function (g) {
+        return (
+          '<div class="activity-item doc-row">' +
+            '<div class="body-md" style="font-size:13.5px;flex:1;min-width:0">' +
+              '<b>' + esc(g.displayName || g.email || g.userId) + '</b>' +
+              '<div class="row-sub">' + esc(g.email || '') +
+                ' · ' + (g.openCount ? 'opened ' + g.openCount + '×, last ' + fmtDate(g.lastOpenedAtUtc) : 'not opened yet') + '</div>' +
+              '<div class="doc-link"><code>' + esc(linkFor(g)) + '</code></div>' +
+            '</div>' +
+            '<button class="btn btn--ghost btn--sm" data-grant-copy="' + g.grantId + '">Copy link</button>' +
+            '<a class="btn btn--ghost btn--sm" href="' + esc(linkFor(g)) + '" target="_blank" rel="noopener noreferrer">Open</a>' +
+            '<button class="icon-btn icon-btn--danger" data-grant-revoke="' + g.grantId + '" title="Revoke access">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>' +
+            '</button>' +
+          '</div>'
+        );
+      }).join('') : '<div class="empty-state" style="padding:16px"><div class="body-sm">No client has this document yet.</div></div>';
+
+      $$('[data-grant-copy]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var g = grants.find(function (x) { return x.grantId === b.getAttribute('data-grant-copy'); });
+          if (!g) return;
+          var text = linkFor(g);
+          (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () {
+            toast('Link copied. It only opens in the client’s app.');
+          }, function () { window.prompt('Copy this link', text); });
+        });
+      });
+      $$('[data-grant-revoke]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var g = grants.find(function (x) { return x.grantId === b.getAttribute('data-grant-revoke'); });
+          if (!g) return;
+          confirmDelete('Revoke ' + (g.displayName || g.email || 'this client') + '’s access?',
+            'Their link stops working immediately, even if the document is open.', function () {
+              auth.revokeDocumentGrant(doc.documentId, g.grantId).then(function (result) {
+                if (!toastOnFailure(result, 'Could not revoke access.')) return;
+                toast('Access revoked.');
+                openDocumentGrants(kind, targetId, targetName, doc);
+              });
+            });
+        });
+      });
+    }
+
+    function renderUserOptions() {
+      var granted = grants.filter(function (g) { return !g.revokedAtUtc; }).map(function (g) { return g.userId; });
+      var q = search.toLowerCase();
+      var available = users.filter(function (u) {
+        if (granted.indexOf(u.userId) > -1) return false;
+        return !q || ((u.displayName || '') + ' ' + (u.email || '')).toLowerCase().indexOf(q) > -1;
+      });
+      var assigned = available.filter(function (u) { return assignedIds.indexOf(u.userId) > -1; });
+      var others = available.filter(function (u) { return assignedIds.indexOf(u.userId) === -1; });
+      function option(u) {
+        return '<option value="' + u.userId + '">' + esc(u.displayName || u.email || u.userId) +
+          (u.email && u.displayName ? ' — ' + esc(u.email) : '') + '</option>';
+      }
+      $('#grantUser').innerHTML =
+        (assigned.length ? '<optgroup label="On this ' + kindLabel(kind) + '">' + assigned.map(option).join('') + '</optgroup>' : '') +
+        (others.length ? '<optgroup label="Other users">' + others.map(option).join('') + '</optgroup>' : '');
+      $('#grantSave').disabled = !available.length;
+    }
+
+    function load() {
+      var assignmentsCall = kind === 'Split' ? auth.getSplitAssignments(targetId) : auth.getDietPlanAssignments(targetId);
+      return Promise.all([auth.getDocumentGrants(doc.documentId), auth.getUsers(search, 200), assignmentsCall]).then(function (results) {
+        if (!toastOnFailure(results[0], 'Could not load clients.')) return;
+        if (!document.body.contains($('#grantList'))) return;
+        grants = results[0].data || [];
+        users = results[1] && results[1].ok ? (results[1].data || []) : [];
+        assignedIds = results[2] && results[2].ok ? (results[2].data || []).map(function (a) { return a.userId; }) : [];
+        renderGrants();
+        renderUserOptions();
+      });
+    }
+
+    var searchTimer = null;
+    $('#grantSearch').addEventListener('input', function () {
+      search = $('#grantSearch').value.trim();
+      renderUserOptions();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        var q = search;
+        auth.getUsers(q, 200).then(function (r) {
+          if (q !== search) return;
+          users = r && r.ok ? (r.data || []) : [];
+          renderUserOptions();
+        });
+      }, 250);
+    });
+
+    $('#grantSave').addEventListener('click', function () {
+      var userId = $('#grantUser').value;
+      if (!userId) { toast('Pick a client first', true); return; }
+      auth.grantDocument(doc.documentId, userId).then(function (result) {
+        if (!toastOnFailure(result, 'Could not give access.')) return;
+        toast((result.data && result.data.message) || 'Access given.');
+        load();
+      });
+    });
+
+    load();
+  }
+
+  /* ================================================================
+     MEAL RECIPES — ingredients and steps of one meal suggestion, shown in
+     the app's recipe screen and preferred by the weekly AI diet plan.
+     ================================================================ */
+  function openRecipeEditor(mealSuggestionId) {
+    var meal = suggestionsCache.find(function (x) { return x.mealSuggestionId === mealSuggestionId; });
+    if (!meal) return;
+    var canWrite = has('content.suggestions.write');
+
+    var backdrop = openModal(
+      modalHead('Recipe · ' + meal.title) +
+      '<p class="body-sm" style="margin:0 0 12px;color:var(--on-surface-variant)">' +
+        'One per line, in order. The app shows these when a user opens the meal, and the weekly AI plan prefers meals that have steps.' +
+      '</p>' +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Ingredients <span class="label-sm" id="rcIngCount"></span></label>' +
+          '<textarea class="textarea" id="rcIngredients" rows="8" placeholder="150 g chicken breast&#10;100 g basmati rice (dry)&#10;1 tbsp olive oil"' + (canWrite ? '' : ' readonly') + '></textarea></div>' +
+        '<div class="field field--full"><label>Steps <span class="label-sm" id="rcStepCount"></span></label>' +
+          '<textarea class="textarea" id="rcSteps" rows="8" placeholder="Rinse the rice and cook it for 12 minutes.&#10;Season the chicken and grill 5–6 minutes a side."' + (canWrite ? '' : ' readonly') + '></textarea></div>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>' + (canWrite ? 'Cancel' : 'Close') + '</button>' +
+        (canWrite ? '<button class="btn btn--primary" id="rcSave" disabled>Save recipe</button>' : '') +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    function lines(id) {
+      return $(id).value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    }
+    function counts() {
+      $('#rcIngCount').textContent = '(' + lines('#rcIngredients').length + '/40)';
+      $('#rcStepCount').textContent = '(' + lines('#rcSteps').length + '/30)';
+    }
+    $('#rcIngredients').addEventListener('input', counts);
+    $('#rcSteps').addEventListener('input', counts);
+
+    auth.getMealRecipe(mealSuggestionId).then(function (result) {
+      if (!toastOnFailure(result, 'Could not load the recipe.')) return;
+      if (!document.body.contains($('#rcIngredients'))) return;
+      var data = result.data || {};
+      $('#rcIngredients').value = (data.ingredients || []).join('\n');
+      $('#rcSteps').value = (data.steps || []).join('\n');
+      counts();
+      if ($('#rcSave')) $('#rcSave').disabled = false;
+    });
+
+    var save = $('#rcSave');
+    if (save) {
+      save.addEventListener('click', function () {
+        auth.saveMealRecipe(mealSuggestionId, lines('#rcIngredients'), lines('#rcSteps')).then(function (result) {
+          if (!toastOnFailure(result, 'Could not save the recipe.')) return;
+          toast((result.data && result.data.message) || 'Recipe saved.');
+          closeModal();
+          loadSuggestions();
+        });
+      });
+    }
+  }
+
+  /* ================================================================
+     PROVIDERS — partner shops with a discount code. Active ones show in
+     the app's Settings → Providers, and Protein ones are suggested when a
+     user logs a protein-heavy meal.
+     ================================================================ */
+  var PROVIDER_CATEGORIES = ['Protein', 'Supplements', 'Food', 'Gear'];
+  var providersCache = [];
+
+  function loadProviders() {
+    return auth.getProviders().then(function (result) {
+      if (!toastOnFailure(result, 'Could not load providers.')) return;
+      providersCache = result.data || [];
+      renderProviders();
+    });
+  }
+
+  function providerLogo(p, size) {
+    return p.logoUrl
+      ? '<img class="provider-logo" src="' + esc(p.logoUrl) + '" alt="" style="width:' + size + 'px;height:' + size + 'px" />'
+      : '<span class="provider-logo provider-logo--empty" style="width:' + size + 'px;height:' + size + 'px">' + esc((p.name || '?').charAt(0).toUpperCase()) + '</span>';
+  }
+
+  function renderProviders() {
+    var count = $('#countProviders');
+    if (count) count.textContent = providersCache.length || '';
+    var grid = $('#providerGrid');
+    if (!grid) return;
+    var canWrite = has('content.providers.write');
+
+    if (!providersCache.length) {
+      grid.innerHTML =
+        '<div class="card empty-state" style="grid-column:1/-1">' +
+          window.Sila.html('determined', { glow: true, alive: true, className: 'empty-state__sila' }) +
+          '<div class="headline-sm">No providers yet</div>' +
+          '<p class="body-sm">Add a partner shop and its discount code.</p>' +
+        '</div>';
+      return;
+    }
+
+    grid.innerHTML = providersCache.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; }).map(function (p) {
+      return (
+        '<article class="card mp-card">' +
+          '<div class="mp-card__head">' +
+            providerLogo(p, 40) +
+            '<span class="chip chip--accent">' + esc(p.category) + '</span>' +
+            (p.isActive ? '' : '<span class="chip">Hidden</span>') +
+            '<span class="spacer"></span>' +
+            (canWrite ? (
+              '<div class="row-actions">' +
+                '<button class="icon-btn" data-edit-provider="' + p.providerId + '" title="Edit">' +
+                  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/></svg>' +
+                '</button>' +
+                '<button class="icon-btn icon-btn--danger" data-del-provider="' + p.providerId + '" title="Delete">' +
+                  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>' +
+                '</button>' +
+              '</div>'
+            ) : '') +
+          '</div>' +
+          '<div>' +
+            '<div class="headline-sm">' + esc(p.name) + '</div>' +
+            '<div class="mp-card__desc" style="margin-top:6px">' + esc(p.tagline || '') + '</div>' +
+          '</div>' +
+          '<div class="mp-card__targets">' +
+            (p.promoCode ? '<span class="chip chip--gold">Code ' + esc(p.promoCode) + '</span>' : '<span class="chip">No code</span>') +
+            (p.discountLabel ? '<span class="chip">' + esc(p.discountLabel) + '</span>' : '') +
+            (p.shopUrl ? '<a class="chip" href="' + esc(p.shopUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(p.shopUrl.replace(/^https:\/\//, '').replace(/\/$/, '')) + '</a>' : '') +
+          '</div>' +
+        '</article>'
+      );
+    }).join('');
+
+    $$('[data-edit-provider]').forEach(function (b) {
+      b.addEventListener('click', function () { openProviderEditor(b.getAttribute('data-edit-provider')); });
+    });
+    $$('[data-del-provider]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = providersCache.find(function (x) { return x.providerId === b.getAttribute('data-del-provider'); });
+        if (!p) return;
+        confirmDelete('Delete "' + p.name + '"?', 'It disappears from the app. To pause it instead, edit it and switch it off.', function () {
+          auth.deleteProvider(p.providerId).then(function (result) {
+            if (!toastOnFailure(result, 'Could not delete provider.')) return;
+            toast((result.data && result.data.message) || 'Provider deleted.');
+            loadProviders();
+          });
+        });
+      });
+    });
+  }
+
+  function openProviderEditor(providerId) {
+    var isNew = !providerId;
+    var p = isNew
+      ? { name: '', tagline: '', logoUrl: '', promoCode: '', discountLabel: '', shopUrl: 'https://', category: 'Protein', isActive: true, sortOrder: providersCache.length }
+      : providersCache.find(function (x) { return x.providerId === providerId; });
+    if (!isNew && !p) return;
+
+    var backdrop = openModal(
+      modalHead(isNew ? 'New provider' : 'Edit provider') +
+      '<div class="form-grid">' +
+        '<div class="field field--full"><label>Name</label>' +
+          '<input class="input" id="pvName" maxlength="120" value="' + esc(p.name) + '" placeholder="Proteini.si Macedonia" /></div>' +
+        '<div class="field field--full"><label>Tagline</label>' +
+          '<input class="input" id="pvTagline" maxlength="200" value="' + esc(p.tagline || '') + '" placeholder="Whey, isolates and supplements" /></div>' +
+        '<div class="field"><label>Discount code</label>' +
+          '<input class="input" id="pvCode" maxlength="60" value="' + esc(p.promoCode || '') + '" placeholder="SILAFIT" style="text-transform:uppercase" /></div>' +
+        '<div class="field"><label>Discount label</label>' +
+          '<input class="input" id="pvLabel" maxlength="60" value="' + esc(p.discountLabel || '') + '" placeholder="10% off" /></div>' +
+        '<div class="field field--full"><label>Shop link (https)</label>' +
+          '<input class="input" id="pvShop" maxlength="500" value="' + esc(p.shopUrl || '') + '" placeholder="https://…" /></div>' +
+        '<div class="field"><label>Category</label>' +
+          '<select class="select" id="pvCategory">' +
+            PROVIDER_CATEGORIES.map(function (c) { return '<option' + (p.category === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+          '</select>' +
+          '<span class="label-sm" style="color:var(--on-surface-variant)">Protein providers are suggested when a user logs a protein-heavy meal.</span></div>' +
+        '<div class="field"><label>Order</label><input class="input" type="number" id="pvSort" value="' + (p.sortOrder || 0) + '" /></div>' +
+        '<div class="field field--full"><label>Logo</label>' +
+          '<div style="display:flex;align-items:center;gap:12px">' +
+            '<span id="pvLogoPreview">' + providerLogo(p, 48) + '</span>' +
+            '<input type="file" id="pvLogoFile" accept="image/png,image/jpeg,image/webp" style="display:none" />' +
+            '<button type="button" class="btn btn--ghost btn--sm" id="pvLogoBtn">Upload logo…</button>' +
+            '<span class="label-sm" id="pvLogoStatus" style="color:var(--on-surface-variant)">Square, at least 256×256.</span>' +
+          '</div>' +
+          '<input type="hidden" id="pvLogo" value="' + esc(p.logoUrl || '') + '" /></div>' +
+        '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
+          '<label class="switch"><input type="checkbox" id="pvActive"' + (p.isActive ? ' checked' : '') + ' /><span class="track"></span></label>' +
+          '<span class="label-sm">Show in the app</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
+        '<button class="btn btn--primary" id="pvSave">' + (isNew ? 'Add provider' : 'Save changes') + '</button>' +
+      '</div>'
+    );
+    wireClose(backdrop);
+
+    $('#pvLogoBtn').addEventListener('click', function () { $('#pvLogoFile').click(); });
+    $('#pvLogoFile').addEventListener('change', function () {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      $('#pvLogoStatus').textContent = 'Uploading…';
+      auth.uploadProviderLogo(file).then(function (result) {
+        if (!toastOnFailure(result, 'Could not upload the logo.')) { $('#pvLogoStatus').textContent = ''; return; }
+        var url = result.data && result.data.url;
+        $('#pvLogo').value = url || '';
+        $('#pvLogoPreview').innerHTML = providerLogo({ logoUrl: url, name: $('#pvName').value }, 48);
+        $('#pvLogoStatus').textContent = 'Uploaded. Save to apply.';
+      });
+    });
+
+    $('#pvSave').addEventListener('click', function () {
+      var shop = $('#pvShop').value.trim();
+      var payload = {
+        providerId: isNew ? null : p.providerId,
+        name: $('#pvName').value.trim(),
+        tagline: $('#pvTagline').value.trim() || null,
+        logoUrl: $('#pvLogo').value.trim() || null,
+        promoCode: $('#pvCode').value.trim().toUpperCase() || null,
+        discountLabel: $('#pvLabel').value.trim() || null,
+        shopUrl: shop === 'https://' ? null : (shop || null),
+        category: $('#pvCategory').value,
+        isActive: $('#pvActive').checked,
+        sortOrder: num($('#pvSort').value)
+      };
+      if (!payload.name) { toast('Give the provider a name first', true); return; }
+      auth.saveProvider(payload).then(function (result) {
+        if (!toastOnFailure(result, 'Could not save provider.')) return;
+        toast((result.data && result.data.message) || 'Provider saved.');
+        closeModal();
+        loadProviders();
+      });
+    });
+  }
+
+  /* ================================================================
      Confirm-delete modal
      ================================================================ */
   function confirmDelete(title, body, onConfirm) {
     var backdrop = openModal(
       '<div style="text-align:center;padding:8px 0 4px;">' +
-        '<img src="assets/img/mascot/proud.png" alt="" style="width:88px;margin:0 auto 14px;" />' +
+        window.Sila.html('shocked', { glow: true, className: 'modal__sila' }) +
         '<div class="headline-md">' + esc(title) + '</div>' +
         '<p class="body-sm" style="margin-top:8px;">' + esc(body) + '</p>' +
       '</div>' +
@@ -2586,6 +3198,9 @@
     else if (kind === 'suggestion') openSuggestionEditor(null);
     else if (kind === 'exercise') openExerciseEditor(null);
     else if (kind === 'plan') openSubPlanEditor(null);
+    else if (kind === 'split-import') openDocumentImport('Split');
+    else if (kind === 'diet-plan-import') openDocumentImport('DietPlan');
+    else if (kind === 'provider') openProviderEditor(null);
   }
 
   $$('[data-open-create]').forEach(function (b) {
@@ -2648,6 +3263,11 @@
     if (has('content.suggestions.read') || has('content.diet_plans.write')) loaders.push(loadSuggestions());
     if (has('content.exercises.read') || has('content.splits.write')) loaders.push(loadExercises());
     if (has('content.plans.read')) loaders.push(loadPlans());
+    if (has('content.providers.read')) loaders.push(loadProviders());
+    // Import buttons only for operators who may create that kind of program.
+    $$('[data-open-create="split-import"]').forEach(function (b) { b.hidden = !has('content.splits.write'); });
+    $$('[data-open-create="diet-plan-import"]').forEach(function (b) { b.hidden = !has('content.diet_plans.write'); });
+    $$('[data-open-create="provider"]').forEach(function (b) { b.hidden = !has('content.providers.write'); });
     if (has('users.read')) loaders.push(loadUsers());
 
     Promise.all(loaders).then(renderOverview);

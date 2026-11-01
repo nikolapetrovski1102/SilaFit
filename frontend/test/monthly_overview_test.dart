@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:silafit/features/progress/recap_animation.dart';
 import 'package:provider/provider.dart';
 import 'package:silafit/core/api/api_client.dart';
+import 'package:silafit/core/session/session_store.dart';
 import 'package:silafit/features/today/today_controller.dart';
 import 'package:silafit/features/today/today_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +24,8 @@ Future<_OverviewApi> _openRecap(WidgetTester tester,
   await tester.pumpWidget(MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: api),
+        // SplitDetailScreen's hero art reads the profile gender from here.
+        Provider<SessionStore>.value(value: SessionStore()),
         ChangeNotifierProvider<TodayController>.value(
             value: _SuccessfulWeightController(api)),
       ],

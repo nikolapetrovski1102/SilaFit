@@ -51,6 +51,7 @@ void main() {
   });
 
   tearDown(() async {
+    await cache.flush();
     if (await dir.exists()) await dir.delete(recursive: true);
   });
 
@@ -58,7 +59,7 @@ void main() {
     final api = client();
     expect(await api.get('/settings', parse, cache: true), 'fresh');
     // Let the fire-and-forget write land.
-    await Future<void>.delayed(Duration.zero);
+    await cache.flush();
 
     online = false;
     expect(await api.get('/settings', parse, cache: true), 'fresh');
@@ -68,12 +69,8 @@ void main() {
   test('the saved copy survives an app restart (new cache instance)',
       () async {
     await client().get('/settings', parse, cache: true);
-    // The disk write is fire-and-forget - wait for the file itself.
-    final file =
-        File('${dir.path}/${ResponseCache.keyFor('user-1', '/settings')}.json');
-    for (var i = 0; i < 100 && !await file.exists(); i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
+    // The disk write is fire-and-forget - wait for it to land.
+    await cache.flush();
 
     cache = ResponseCache(directory: () async => dir);
     online = false;
@@ -83,7 +80,7 @@ void main() {
   test('a 5xx falls back to the saved copy too', () async {
     final api = client();
     await api.get('/splits', parse, cache: true);
-    await Future<void>.delayed(Duration.zero);
+    await cache.flush();
 
     status = 503;
     expect(await api.get('/splits', parse, cache: true), 'fresh');
@@ -113,7 +110,7 @@ void main() {
   test('query parameters get their own entry', () async {
     final api = client();
     await api.get('/meals/day', parse, query: {'n': 'a'}, cache: true);
-    await Future<void>.delayed(Duration.zero);
+    await cache.flush();
 
     online = false;
     expect(
@@ -142,7 +139,7 @@ void main() {
   test('entries are scoped per user and wiped by clearCache', () async {
     final api = client();
     await api.get('/settings', parse, cache: true);
-    await Future<void>.delayed(Duration.zero);
+    await cache.flush();
 
     expect(await cache.read(ResponseCache.keyFor('user-2', '/settings')),
         isNull);

@@ -85,6 +85,7 @@ BEGIN
     DELETE FROM dbo.userprofiles WHERE userid = p_userid;
     DELETE FROM dbo.usersettings WHERE userid = p_userid;
     DELETE FROM dbo.userauthidentities WHERE userid = p_userid;
+    DELETE FROM dbo.refreshtokens WHERE userid = p_userid;
     DELETE FROM dbo.pendingemailverifications WHERE existinguserid = p_userid;
     -- The partner's later cancel for this lead then finds nothing and is a no-op.
     DELETE FROM dbo.partnerleads WHERE userid = p_userid;

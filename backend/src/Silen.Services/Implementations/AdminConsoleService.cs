@@ -17,7 +17,8 @@ public sealed class AdminConsoleService(
     IAdminContentProvider contentProvider,
     IMockDataSeeder mockDataSeeder,
     IImageUploadService imageUploadService,
-    IDietPlanService dietPlanService) : IAdminConsoleService
+    IDietPlanService dietPlanService,
+    ITrainerAssignmentNotifier assignmentNotifier) : IAdminConsoleService
 {
     /* ------------------------------- exercises ------------------------------ */
 
@@ -126,6 +127,41 @@ public sealed class AdminConsoleService(
             var mutation = await contentProvider.DeleteMealSuggestionAsync(mealSuggestionId, actor, cancellationToken);
             return AdminMutationOutcomeMapper.Resolve(mutation, "Suggestion deleted.");
         });
+
+    public Task<ServiceResult<AdminMealRecipeModel>> GetMealRecipeAsync(string? sessionToken, Guid mealSuggestionId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            await RequireAsync(sessionToken, AdminPermissions.SuggestionsRead, null, cancellationToken);
+            return await contentProvider.GetMealRecipeAsync(mealSuggestionId, cancellationToken);
+        });
+
+    public Task<ServiceResult<AdminWriteResultDto>> SaveMealRecipeAsync(string? sessionToken, AdminMealRecipeRequest request, string? clientIp, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+        {
+            var actor = await RequireAsync(sessionToken, AdminPermissions.SuggestionsWrite, clientIp, cancellationToken);
+
+            request.Ingredients = CleanRecipeLines(request.Ingredients, 40, 300, "ingredient");
+            request.Steps = CleanRecipeLines(request.Steps, 30, 1000, "step");
+
+            var mutation = await contentProvider.SetMealRecipeAsync(request, actor, cancellationToken);
+            return AdminMutationOutcomeMapper.Resolve(mutation, "Ingredients and steps saved.");
+        });
+
+    /// <summary>Blank lines dropped, each line trimmed; too many or too long is refused
+    /// rather than silently cut, so the operator sees what didn't fit.</summary>
+    public static List<string> CleanRecipeLines(List<string>? lines, int maxCount, int maxLength, string label)
+    {
+        var cleaned = (lines ?? []).Select(line => line?.Trim() ?? string.Empty).Where(line => line.Length > 0).ToList();
+        if (cleaned.Count > maxCount)
+        {
+            throw new ValidationException($"Recipe with {cleaned.Count} {label}s.", $"Keep it to {maxCount} {label}s.");
+        }
+        if (cleaned.Any(line => line.Length > maxLength))
+        {
+            throw new ValidationException($"Recipe {label} over {maxLength} characters.", $"Each {label} can be at most {maxLength} characters.");
+        }
+        return cleaned;
+    }
 
     /* --------------------------------- plans -------------------------------- */
 
@@ -255,9 +291,9 @@ public sealed class AdminConsoleService(
             AdminContentFieldRules.ThrowIfUnknown(request.Category, AdminContentFieldRules.SplitCategories, "category");
             AdminContentFieldRules.ThrowIfUnknown(request.Level, AdminContentFieldRules.SplitLevels, "level");
             AdminContentFieldRules.ThrowIfUnknownWhenSet(request.RecommendedGoal, AdminContentFieldRules.RecommendedGoals, "recommended goal");
-            if (request.DurationDays is < 1 or > 14)
+            if (request.DurationDays is < 1 or > 182)
             {
-                throw new ValidationException($"Split upsert called with out-of-range duration {request.DurationDays}.", "Duration must be between 1 and 14 days.");
+                throw new ValidationException($"Split upsert called with out-of-range duration {request.DurationDays}.", "Duration must be between 1 and 182 days (26 weeks).");
             }
 
             // A trainer defaults to Private work unless they deliberately publish it;
@@ -299,7 +335,12 @@ public sealed class AdminConsoleService(
             }
 
             var mutation = await contentProvider.AssignSplitAsync(request, actor, canManageAll, cancellationToken);
-            return AdminMutationOutcomeMapper.Resolve(mutation, request.SetActive ? "Split assigned and set active." : "Split assigned.");
+            var result = AdminMutationOutcomeMapper.Resolve(mutation, request.SetActive ? "Split assigned and set active." : "Split assigned.");
+
+            // Shares the split's PDFs with the client, then pushes + emails them. Never throws.
+            await assignmentNotifier.NotifyProgramAssignedAsync(
+                TrainerDocumentService.KindSplit, request.SplitId, request.UserId, actor, canManageAll, cancellationToken);
+            return result;
         });
 
     public Task<ServiceResult<AdminWriteResultDto>> RemoveSplitAssignmentAsync(string? sessionToken, Guid splitId, Guid userId, string? clientIp, CancellationToken cancellationToken = default) =>
@@ -404,9 +445,9 @@ public sealed class AdminConsoleService(
                 throw new ValidationException("Diet plan upsert called with a blank name.", "Give the plan a name.");
             }
             AdminContentFieldRules.ThrowIfUnknown(request.PeriodType, AdminContentFieldRules.DietPlanPeriodTypes, "period type");
-            if (request.DurationDays is < 1 or > 31)
+            if (request.DurationDays is < 1 or > 182)
             {
-                throw new ValidationException($"Diet plan upsert called with out-of-range duration {request.DurationDays}.", "Duration must be between 1 and 31 days.");
+                throw new ValidationException($"Diet plan upsert called with out-of-range duration {request.DurationDays}.", "Duration must be between 1 and 182 days (26 weeks).");
             }
 
             // A trainer defaults to Private work unless they deliberately publish it;
@@ -460,6 +501,9 @@ public sealed class AdminConsoleService(
                 await dietPlanService.ApplyToUpcomingWeekAsync(request.UserId, request.DietPlanId, cancellationToken);
             }
 
+            // Shares the plan's PDFs with the client, then pushes + emails them. Never throws.
+            await assignmentNotifier.NotifyProgramAssignedAsync(
+                TrainerDocumentService.KindDietPlan, request.DietPlanId, request.UserId, actor, canManageAll, cancellationToken);
             return result;
         });
 

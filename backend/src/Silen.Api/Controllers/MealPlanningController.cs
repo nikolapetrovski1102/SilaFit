@@ -57,6 +57,14 @@ public sealed class MealPlanningController(IMealPlanningService mealPlanningServ
 
     /// <summary>Curated meal ideas for the given month (1-12); defaults to the current UTC
     /// month. Scored against the caller's nutrition targets and returned best-first.</summary>
+    /// <summary>A meal's ingredients and how to make it.</summary>
+    [HttpGet("suggestions/{mealSuggestionId:guid}/recipe")]
+    public async Task<IActionResult> GetRecipe(Guid mealSuggestionId, CancellationToken cancellationToken)
+    {
+        var result = await mealPlanningService.GetRecipeAsync(User.GetUserId(), mealSuggestionId, cancellationToken);
+        return result.ToActionResult(logger);
+    }
+
     [HttpGet("suggestions")]
     public async Task<IActionResult> GetSuggestions([FromQuery] int? month, CancellationToken cancellationToken)
     {

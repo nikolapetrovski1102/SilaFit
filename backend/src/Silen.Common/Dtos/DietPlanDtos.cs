@@ -11,6 +11,10 @@ public sealed class DietPlanDetailDto
     /// plan - the week's shopping list. Empty when none of the referenced meal
     /// suggestions have ingredient data (see dbo.MealSuggestionIngredients).</summary>
     public List<string> ShoppingList { get; set; } = new();
+
+    /// <summary>When the caller activated this plan - set only on the active-plan read,
+    /// so the app can follow the same week-by-week rotation (DietPlanRotation).</summary>
+    public DateTime? ActivatedAtUtc { get; set; }
 }
 
 public sealed class DietPlanDayWithMealsDto

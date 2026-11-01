@@ -8,8 +8,8 @@
   <title>SilaFit Admin — Precision Kinetic Console</title>
   <meta name="robots" content="noindex, nofollow" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
-  <link rel="stylesheet" href="css/base.css?v=20260915-teal" />
-  <link rel="stylesheet" href="css/admin.css?v=20260925-responsive" />
+  <link rel="stylesheet" href="css/base.css?v=20261101-sila" />
+  <link rel="stylesheet" href="css/admin.css?v=20261101-sila" />
   <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
   <script>
     (function () {
@@ -32,7 +32,7 @@
     <!-- ================= Sidebar ================= -->
     <aside class="sidebar" id="sidebar">
       <a class="sidebar__logo" href="https://sila.fitness/">
-        <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit" />
+        <img src="assets/img/branding/app_icon_96.webp" width="36" height="36" alt="SilaFit" />
         SilaFit
         <span class="chip chip--accent">Admin</span>
       </a>
@@ -53,6 +53,10 @@
       <button class="side-link" data-view="suggestions" data-permission="content.suggestions.read" id="navSuggestions" hidden>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 3Zm-3 17h6"/></svg>
         Meal Suggestions <span class="count" id="countSuggestions"></span>
+      </button>
+      <button class="side-link" data-view="providers" data-permission="content.providers.read" id="navProviders" hidden>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        Providers <span class="count" id="countProviders"></span>
       </button>
       <button class="side-link" data-view="exercises" data-permission="content.exercises.read" id="navExercises" hidden>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/></svg>
@@ -221,6 +225,10 @@
           </div>
           <div class="topbar__actions">
             <select class="select" id="splitCategoryFilter" style="width:160px;height:38px;font-size:13px;"></select>
+            <button class="btn btn--ghost btn--sm" data-open-create="split-import" hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+              Import from document
+            </button>
             <button class="btn btn--primary btn--sm" data-open-create="split" id="createSplitBtn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
               New split
@@ -244,6 +252,10 @@
           </div>
           <div class="topbar__actions">
             <select class="select" id="dietPlanPeriodFilter" style="width:160px;height:38px;font-size:13px;"></select>
+            <button class="btn btn--ghost btn--sm" data-open-create="diet-plan-import" hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+              Import from document
+            </button>
             <button class="btn btn--primary btn--sm" data-open-create="diet-plan" id="createDietPlanBtn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
               New plan
@@ -283,6 +295,28 @@
               <table class="data" id="suggestionsTable"></table>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- ======= Providers ======= -->
+      <section class="view" id="view-providers">
+        <div class="topbar">
+          <button class="admin-menu-btn" aria-label="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1>Providers</h1>
+            <div class="sub">Partner shops and their discount codes, listed in the app's Settings. Protein providers are suggested when users log protein-heavy meals.</div>
+          </div>
+          <div class="topbar__actions">
+            <button class="btn btn--primary btn--sm" data-open-create="provider" hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New provider
+            </button>
+          </div>
+        </div>
+        <div class="view-body">
+          <div class="plan-grid" id="providerGrid"></div>
         </div>
       </section>
 
@@ -511,7 +545,7 @@
               </p>
             </div>
             <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;">
-              <img src="assets/img/mascot/resting.png" alt="Mascot resting" style="width:120px;opacity:0.88;" />
+              <span class="sila sila--glow sila--alive empty-state__sila" data-sila="smug" aria-hidden="true" style="--sila-size:120px"><img class="sila__art sila__art--dark" src="assets/img/mascot/flame/dark/smug.webp" width="384" height="384" alt="" loading="lazy" decoding="async" /><img class="sila__art sila__art--light" src="assets/img/mascot/flame/light/smug.webp" width="384" height="384" alt="" loading="lazy" decoding="async" /></span>
               <div class="headline-sm">Everything looks good.</div>
               <p class="body-sm" style="max-width:220px;line-height:18px;">
                 Every screen in this console reads and writes the real SilaFit database over the API.
@@ -533,6 +567,7 @@
 
   <script src="js/theme.js"></script>
   <script src="js/admin-auth.js"></script>
+  <script src="js/sila.js?v=20261101"></script>
   <script src="js/admin.js"></script>
   <!-- Vendored, not CDN-loaded: the otpauth URI it renders carries a raw TOTP
        secret, and that must never leave the browser to a third-party QR service. -->

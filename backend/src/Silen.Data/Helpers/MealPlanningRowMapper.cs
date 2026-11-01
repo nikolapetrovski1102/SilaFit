@@ -64,6 +64,7 @@ public static class MealPlanningRowMapper
         HasIngredients = reader.GetBoolValue("HasIngredients"),
         IngredientPreview = reader.GetNullableString("IngredientPreview"),
         IngredientCount = reader.GetInt32Value("IngredientCount"),
+        StepCount = reader.GetInt32Value("StepCount"),
         SuggestedMonth = reader.IsDBNull(reader.GetOrdinal("SuggestedMonth")) ? null : reader.GetByteValue("SuggestedMonth"),
         IsSystemDefault = reader.GetBoolValue("IsSystemDefault"),
         SortOrder = reader.GetInt32Value("SortOrder")

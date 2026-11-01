@@ -48,7 +48,18 @@ The plaintext is UTF-8 JSON.
   "email": "lead@example.com",
   "displayName": "Ana",
   "provider": "Google",
-  "issuedAtUtc": "2026-10-22T10:15:30.123Z"
+  "issuedAtUtc": "2026-10-22T10:15:30.123Z",
+  "profile": {
+    "gender": "Female",
+    "ageYears": 29,
+    "heightCm": 168,
+    "weightKg": 64,
+    "goal": "LoseFat",
+    "trainingDaysPerWeek": 4,
+    "trainingExperience": "Beginner",
+    "equipmentAccess": "Dumbbells",
+    "dailyActivityLevel": "LightlyActive"
+  }
 }
 ```
 
@@ -59,6 +70,7 @@ The plaintext is UTF-8 JSON.
 | `displayName`   | Optional. Trimmed and cut to 100 characters.                                              |
 | `provider`      | `Apple`, `Google` or `Email`: how the lead signed up with you.                            |
 | `issuedAtUtc`   | Required, ISO 8601. Set it to the current time when you build the request.                |
+| `profile`       | Optional. The lead's answers to the app's onboarding questions. See [Onboarding profile](#onboarding-profile). |
 
 ### Cancel payload
 
@@ -117,6 +129,69 @@ await call("leads", "provision", { partnerUserId: "lead-123", email: "ana@exampl
 await call("leads/cancel", "cancel", { partnerUserId: "lead-123" });
 ```
 
+## Onboarding profile
+
+### How onboarding works in the app
+
+On first launch the app shows two intro slides, then nine questions, one per screen, then a
+notification permission screen. The answers are saved together at the end as the user's
+profile. SilaFit uses the profile to recommend a workout split, pick exercises and work out
+daily calorie and macro targets.
+
+| # | Screen in the app                         | Profile field          |
+|---|-------------------------------------------|------------------------|
+| 1 | What's your gender?                       | `gender`               |
+| 2 | What is your age?                         | `ageYears`             |
+| 3 | What's your height? (cm or ft)            | `heightCm`             |
+| 4 | What's your current weight? (kg or lb)    | `weightKg`             |
+| 5 | What's your main goal?                    | `goal`                 |
+| 6 | Training days per week?                   | `trainingDaysPerWeek`  |
+| 7 | How would you rate your fitness level?    | `trainingExperience`   |
+| 8 | What equipment can you use?               | `equipmentAccess`      |
+| 9 | How active is your day?                   | `dailyActivityLevel`   |
+
+The app does not ask for session length. It saves 45 minutes, and the user can change it later
+in Settings.
+
+When a lead signs in to an account that has no complete profile, the app shows the same nine
+questions, filled in with any answers it already has. If you send `profile` with every field,
+the lead goes straight into the app with a plan that fits them. If you send only some fields,
+the app asks again, with your answers already selected.
+
+### Profile fields
+
+Send the values exactly as listed. Choices are matched without regard to case and come back
+in the casing shown. Height is always in centimetres and weight in kilograms, so convert ft/in
+and lb on your side.
+
+| Field                    | Required        | Type    | Allowed values and rules                                                                  |
+|--------------------------|-----------------|---------|-------------------------------------------------------------------------------------------|
+| `gender`                 | Yes             | string  | `Male`, `Female`, `Other`                                                                 |
+| `ageYears`               | Yes             | integer | 13 to 100                                                                                 |
+| `heightCm`               | Yes             | number  | 100 to 250. Stored to one decimal place.                                                  |
+| `weightKg`               | Yes             | number  | 30 to 300. Stored to one decimal place.                                                   |
+| `goal`                   | Yes             | string  | `BuildMuscle` (Build muscle), `LoseFat` (Lose fat), `MaintainActive` (Stay active)        |
+| `trainingDaysPerWeek`    | No              | integer | 1 to 7. The app offers 1–2 days (`2`), 3–4 days (`4`), 5 days (`5`) and 6+ days (`6`).    |
+| `trainingExperience`     | No              | string  | `Beginner` (Getting started), `Intermediate` (Somewhat athletic), `Advanced` (Very athletic) |
+| `equipmentAccess`        | No              | string  | `FullGym` (Full gym), `Dumbbells` (Dumbbells), `Bodyweight` (Bodyweight only)             |
+| `dailyActivityLevel`     | No              | string  | `Sedentary` (Mostly sitting), `LightlyActive` (Some walking), `Active` (Mostly on my feet), `VeryActive` (Physical work) |
+| `sessionDurationMinutes` | No (default 45) | integer | 15 to 180                                                                                 |
+
+The text in brackets is what the app shows for each value. Use the same wording in your own
+questionnaire so the lead's answers mean the same thing on both sides.
+
+### Rules
+
+- Once you send `profile`, `gender`, `ageYears`, `heightCm`, `weightKg` and `goal` are
+  required. Leave out `profile` entirely if you don't have them.
+- An optional field that is missing or `null` is left empty, and the app asks for it.
+- An invalid value rejects the whole request with `400` before anything is saved. `message`
+  names the field, for example `profile.goal must be one of BuildMuscle, LoseFat, MaintainActive (required).`
+- The profile only fills in an account that has no answers yet. It never overwrites answers
+  already on the account, whether the user gave them in the app or an earlier provision sent
+  them. The response's `profileSaved` tells you whether yours was used.
+- The profile is stored encrypted, like every SilaFit profile.
+
 ## Responses
 
 Every response uses the SilaFit envelope. On success, `data.payload` is the result sealed
@@ -135,6 +210,7 @@ Decrypted, the payload is:
   "status": "Active",
   "isNewAccount": true,
   "proGranted": true,
+  "profileSaved": true,
   "requestIssuedAtUtc": "2026-10-22T10:15:30.123Z"
 }
 ```
@@ -149,6 +225,9 @@ Decrypted, the payload is:
 - `proGranted` is `false` when that account already has its own live paid plan (an App Store or
   Play subscription). That plan is left untouched and keeps the user on PRO. Cancelling the lead
   never ends a plan the user pays for themselves.
+- `profileSaved` is `true` when your `profile` was saved to the account. It is `false` when you
+  sent no profile, or the account already had onboarding answers, which are kept. Cancel
+  always returns `false`.
 
 | Status | Meaning                                                                                                                   |
 |--------|---------------------------------------------------------------------------------------------------------------------------|
@@ -162,6 +241,11 @@ Decrypted, the payload is:
 ## How the lead lands on the account in the app
 
 The account is found by **email**, so send the same email the lead will use in the app.
+
+Tell the lead to tap **Log in** on the app's first screen. That skips the onboarding questions
+and goes straight to sign-in. Once they sign in, the app uses the profile you sent. Answers a
+lead gives before signing in belong to a temporary guest session and are not moved to the
+provisioned account.
 
 - **Google:** signing in to the app with the same Google account links to the provisioned account.
 - **Apple:** the same, as long as Apple gives SilaFit the same email. If the lead chose

@@ -8,6 +8,7 @@ using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Common.Options;
 using Silen.Data.Abstractions;
+using Silen.Services.Abstractions;
 using Silen.Services.Implementations;
 using Xunit;
 
@@ -16,12 +17,14 @@ namespace Silen.Tests.Implementations;
 public class PartnerServiceTests
 {
     private readonly Mock<IPartnerLeadsProvider> partnerLeadsProvider = new(MockBehavior.Strict);
+    private readonly Mock<IUserProfileProvider> userProfileProvider = new(MockBehavior.Strict);
+    private readonly Mock<IMealPlanningService> mealPlanningService = new();
     private readonly byte[] key = RandomNumberGenerator.GetBytes(32);
     private readonly PartnerService sut;
 
     public PartnerServiceTests()
     {
-        sut = new PartnerService(partnerLeadsProvider.Object, Options.Create(new PartnerOptions
+        sut = new PartnerService(partnerLeadsProvider.Object, userProfileProvider.Object, mealPlanningService.Object, Options.Create(new PartnerOptions
         {
             Username = "partner",
             Password = "secret",
@@ -36,15 +39,30 @@ public class PartnerServiceTests
     };
 
     private PartnerEncryptedRequest Provision(
-        string partnerUserId = "lead-1", string email = "lead@example.com", string provider = "google", DateTime? issuedAtUtc = null) =>
+        string partnerUserId = "lead-1", string email = "lead@example.com", string provider = "google", DateTime? issuedAtUtc = null,
+        object? profile = null) =>
         Encrypted(new
         {
             partnerUserId,
             email,
             displayName = "  Lead Person  ",
             provider,
-            issuedAtUtc = issuedAtUtc ?? DateTime.UtcNow
+            issuedAtUtc = issuedAtUtc ?? DateTime.UtcNow,
+            profile
         }, PartnerPayloadCipher.ProvisionPurpose);
+
+    private static object FullProfile(string gender = "female", int ageYears = 29, decimal heightCm = 168.04m, string goal = "losefat") => new
+    {
+        gender,
+        ageYears,
+        heightCm,
+        weightKg = 64,
+        goal,
+        trainingDaysPerWeek = 4,
+        trainingExperience = "Beginner",
+        equipmentAccess = "dumbbells",
+        dailyActivityLevel = "LightlyActive"
+    };
 
     private PartnerLeadResultDto Open(ServiceResult<PartnerEncryptedResponse> result, string purpose)
     {
@@ -174,6 +192,76 @@ public class PartnerServiceTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(409, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProvisionLeadAsync_WithProfile_SeedsCanonicalProfileAndRecomputesTargets()
+    {
+        var userId = Guid.NewGuid();
+        SetupProvision(new PartnerLeadOutcomeModel { Outcome = "Ok", UserId = userId, IsNewAccount = true, ProGranted = true });
+        UpsertUserProfileRequest? saved = null;
+        userProfileProvider.Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync((UserProfileModel?)null);
+        userProfileProvider.Setup(p => p.UpsertAsync(userId, It.IsAny<UpsertUserProfileRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, UpsertUserProfileRequest, CancellationToken>((_, request, _) => saved = request)
+            .ReturnsAsync(new UserProfileModel { UserId = userId });
+
+        var result = await sut.ProvisionLeadAsync(Provision(profile: FullProfile()));
+
+        Assert.True(Open(result, PartnerPayloadCipher.ProvisionResponsePurpose).ProfileSaved);
+        Assert.NotNull(saved);
+        Assert.Equal("Female", saved.Gender);
+        Assert.Equal(29, saved.AgeYears);
+        Assert.Equal(168.0m, saved.HeightCm);
+        Assert.Equal("LoseFat", saved.Goal);
+        Assert.Equal(45, saved.SessionDurationMinutes);
+        Assert.Equal("Dumbbells", saved.EquipmentAccess);
+        mealPlanningService.Verify(m => m.RecomputeTargetsAsync(userId, It.IsAny<UserProfileModel>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProvisionLeadAsync_AccountAlreadyHasProfile_KeepsIt()
+    {
+        var userId = Guid.NewGuid();
+        SetupProvision(new PartnerLeadOutcomeModel { Outcome = "Ok", UserId = userId, ProGranted = true });
+        userProfileProvider.Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserProfileModel { UserId = userId, Gender = "Male" });
+
+        var result = await sut.ProvisionLeadAsync(Provision(profile: FullProfile()));
+
+        // Strict mock: an UpsertAsync call would throw.
+        Assert.False(Open(result, PartnerPayloadCipher.ProvisionResponsePurpose).ProfileSaved);
+    }
+
+    [Fact]
+    public async Task ProvisionLeadAsync_WithoutProfile_DoesNotTouchProfile()
+    {
+        SetupProvision(new PartnerLeadOutcomeModel { Outcome = "Ok", UserId = Guid.NewGuid(), ProGranted = true });
+
+        var result = await sut.ProvisionLeadAsync(Provision());
+
+        Assert.False(Open(result, PartnerPayloadCipher.ProvisionResponsePurpose).ProfileSaved);
+    }
+
+    [Theory]
+    [InlineData("Robot", 29, 168, "LoseFat")]
+    [InlineData("Female", 12, 168, "LoseFat")]
+    [InlineData("Female", 29, 99, "LoseFat")]
+    [InlineData("Female", 29, 168, "GetStrong")]
+    public async Task ProvisionLeadAsync_InvalidProfile_Returns400BeforeProvisioning(string gender, int ageYears, int heightCm, string goal)
+    {
+        // Strict mocks: provisioning or a profile write would throw.
+        var result = await sut.ProvisionLeadAsync(Provision(profile: FullProfile(gender, ageYears, heightCm, goal)));
+
+        Assert.Equal(400, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProvisionLeadAsync_ProfileMissingRequiredField_Returns400()
+    {
+        var result = await sut.ProvisionLeadAsync(Provision(profile: new { gender = "Male", ageYears = 30, heightCm = 180, weightKg = 80 }));
+
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("profile.goal", result.UserMessage);
     }
 
     // ---- CancelLeadAsync ----

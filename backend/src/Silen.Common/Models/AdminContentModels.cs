@@ -106,6 +106,10 @@ public sealed class AdminMealSuggestionModel
     public bool IsSystemDefault { get; set; }
     public int SortOrder { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+
+    /// <summary>Recipe completeness the console shows next to each meal.</summary>
+    public int IngredientCount { get; set; }
+    public int StepCount { get; set; }
 }
 
 /// <summary>A subscription plan with its feature count and how many subscribers it currently has.</summary>

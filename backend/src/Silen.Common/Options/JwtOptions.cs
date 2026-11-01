@@ -12,4 +12,8 @@ public sealed class JwtOptions
     public string SigningKey { get; set; } = string.Empty;
 
     public int ExpiryMinutes { get; set; } = 60 * 24 * 30;
+
+    /// <summary>How long a refresh token stays valid without being used. Slides
+    /// forward on every use, so an app opened at least this often never signs out.</summary>
+    public int RefreshTokenDays { get; set; } = 180;
 }

@@ -327,6 +327,13 @@ mkdir -p "$SCRIPT_DIR/uploads"
 chown -R "$API_UID:$API_UID" "$SCRIPT_DIR/uploads"
 chmod 755 "$SCRIPT_DIR/uploads"
 
+# ---- 6d. trainer-document storage -------------------------------------------
+# Bind-mounted into silen-api at /app/trainer-documents. Only the API reads it
+# (behind the per-user ticket check), so it is private to the container's UID.
+mkdir -p "$SCRIPT_DIR/trainer-documents"
+chown -R "$API_UID:$API_UID" "$SCRIPT_DIR/trainer-documents"
+chmod 700 "$SCRIPT_DIR/trainer-documents"
+
 # ---- 7. migrations, functions, seed + app role -------------------------------
 # database/apply.sh applies each new migration once, reloads every function, and
 # seeds reference data on a brand-new database only. It also (re)creates the

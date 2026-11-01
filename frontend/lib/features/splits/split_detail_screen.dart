@@ -18,6 +18,9 @@ import 'splits_controller.dart';
 import 'splits_models.dart';
 import 'splits_repository.dart';
 import 'widgets/split_hero_image.dart';
+import '../documents/trainer_document_action.dart';
+import '../documents/trainer_document_models.dart';
+import '../../core/widgets/week_header.dart';
 
 class SplitDetailScreen extends StatefulWidget {
   final SplitDetailController controller;
@@ -82,6 +85,9 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
         elevation: 0,
         title: Text(widget.splitName, style: AppTypography.headlineSm),
         actions: [
+          TrainerDocumentAction(
+              kind: TrainerDocumentKind.split,
+              targetId: widget.controller.splitId),
           if (widget.controller.state.data?.split.isEditableByMe == true)
             IconButton(
               icon: const Icon(Icons.edit_outlined),
@@ -215,8 +221,15 @@ class _DetailBody extends StatelessWidget {
               // day for (a gap like Day 3, or the days past the last one)
               // rests by default, same as the backend resolves a day it has
               // no session for.
-              for (final day in daysWithImplicitRest(
-                  detail.days, detail.split.durationDays)) ...[
+              // Programs longer than a week (up to 26 weeks) get a WEEK k
+              // header every seven days; the rotation moves on each Monday.
+              for (final (i, day) in daysWithImplicitRest(
+                      detail.days, detail.split.durationDays)
+                  .indexed) ...[
+                if (i % 7 == 0 &&
+                    splitCycleLength(detail.days, detail.split.durationDays) >
+                        7)
+                  WeekHeader(week: i ~/ 7 + 1, first: i == 0),
                 _DayCard(day: day),
                 const SizedBox(height: AppSpacing.sm),
               ],

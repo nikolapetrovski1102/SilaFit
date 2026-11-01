@@ -53,6 +53,12 @@ public interface IAdminConsoleService
     /// <summary>Requires content.suggestions.write.</summary>
     Task<ServiceResult<AdminWriteResultDto>> DeleteMealSuggestionAsync(string? sessionToken, Guid mealSuggestionId, string? clientIp, CancellationToken cancellationToken = default);
 
+    /// <summary>Requires content.suggestions.read.</summary>
+    Task<ServiceResult<AdminMealRecipeModel>> GetMealRecipeAsync(string? sessionToken, Guid mealSuggestionId, CancellationToken cancellationToken = default);
+
+    /// <summary>Requires content.suggestions.write. Replaces both lists in order.</summary>
+    Task<ServiceResult<AdminWriteResultDto>> SaveMealRecipeAsync(string? sessionToken, AdminMealRecipeRequest request, string? clientIp, CancellationToken cancellationToken = default);
+
     /* --------------------------------- plans -------------------------------- */
 
     /// <summary>Requires content.plans.read.</summary>

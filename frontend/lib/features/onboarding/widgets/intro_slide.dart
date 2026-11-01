@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/dumbbell_icon.dart';
+import '../../../core/widgets/mascot/flame_mascot.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 
@@ -338,6 +339,18 @@ class DumbbellIconMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return OnboardingIconMark(
       child: SoftDumbbellIcon(size: 130, color: AppColors.accent),
+    );
+  }
+}
+
+/// Slide 1's mark: Sila, the flame mascot, greeting the user.
+class SilaIconMark extends StatelessWidget {
+  const SilaIconMark({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const OnboardingIconMark(
+      child: FlameMascot(FlameArt.laughing, size: 150),
     );
   }
 }

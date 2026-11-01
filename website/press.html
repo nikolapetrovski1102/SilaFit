@@ -9,10 +9,10 @@
   <meta name="description" content="SilaFit brand assets, boilerplate description, and media contact." />
   <link rel="canonical" href="https://sila.fitness/press.html" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" />
-  <link rel="stylesheet" href="css/base.css?v=20260915-teal" />
+  <link rel="stylesheet" href="css/base.css?v=20261101-sila" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261016" />
-  <link rel="stylesheet" href="css/legal.css?v=20260925-motion" />
+  <link rel="stylesheet" href="css/site.css?v=20261101-sila" />
+  <link rel="stylesheet" href="css/legal.css?v=20261101-sila" />
   <script>
     (function () {
       var stored = null;
@@ -28,13 +28,19 @@
     .press-asset { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px 20px; border-radius: var(--r-media); background: var(--surface-low); text-align: center; }
     .press-asset img { width: 88px; height: 88px; object-fit: contain; }
     .press-asset span { font-size: 15px; color: var(--on-surface-variant); }
+    /* Each mascot variant sits on the surface it was drawn for, in either site theme. */
+    .press-asset__art { display: grid; place-items: center; width: 120px; height: 120px; border-radius: 28px; transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .press-asset__art:hover { transform: translateY(-3px) rotate(-2deg); }
+    .press-asset__art img { width: 96px; height: 96px; }
+    .press-asset__art--light { background: radial-gradient(circle at 50% 70%, #fff3d6, #f5eedd 70%); }
+    .press-asset__art--dark { background: radial-gradient(circle at 50% 70%, #2b423f, #172d30 70%); }
   </style>
 </head>
 <body>
   <header class="nav">
     <div class="nav__inner">
       <a class="nav__logo" href="index.html">
-        <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit logo" />
+        <img src="assets/img/branding/app_icon_96.webp" width="36" height="36" alt="SilaFit logo" />
         SilaFit
       </a>
       <nav class="nav__links">
@@ -80,12 +86,12 @@
               <span>Icon (transparent)</span>
             </div>
             <div class="press-asset">
-              <img src="assets/img/mascot/lifting.png" alt="SilaFit mascot lifting a barbell" />
-              <span>Mascot — lifting</span>
+              <a class="press-asset__art press-asset__art--light" href="assets/img/mascot/flame/light/sila-press.png" download><img src="assets/img/mascot/flame/light/flame.webp" alt="Sila, the SilaFit flame mascot, light-mode colours" loading="lazy" /></a>
+              <span>Sila, light mode</span>
             </div>
             <div class="press-asset">
-              <img src="assets/img/mascot/celebrating.png" alt="SilaFit mascot celebrating" />
-              <span>Mascot — celebrating</span>
+              <a class="press-asset__art press-asset__art--dark" href="assets/img/mascot/flame/dark/sila-press.png" download><img src="assets/img/mascot/flame/dark/flame.webp" alt="Sila, the SilaFit flame mascot, dark-mode colours" loading="lazy" /></a>
+              <span>Sila, dark mode</span>
             </div>
           </div>
         </section>
@@ -103,7 +109,7 @@
       <div class="footer__grid">
         <div class="footer__brand">
           <a class="nav__logo" href="index.html">
-            <img src="assets/img/branding/app_icon_transparent.png" alt="SilaFit logo" />
+            <img src="assets/img/branding/app_icon_96.webp" width="36" height="36" alt="SilaFit logo" />
             SilaFit
           </a>
           <p>Workout tracking, training splits, and meal plans in one app, with streaks that respect recovery.</p>
@@ -143,6 +149,6 @@
     </div>
   </footer>
   <script src="js/theme.js"></script>
-  <script src="js/motion.js?v=20261016"></script>
+  <script src="js/motion.js?v=20261101-sila"></script>
 </body>
 </html>

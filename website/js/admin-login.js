@@ -42,7 +42,15 @@
     'signed-out-all': 'You have been signed out on every device.'
   };
 
+  /* Sila keeps the operator company: focused while they type, shocked when
+     something fails, smug once the password lands, laughing on the way in. */
+  var sila = document.getElementById('loginSila');
+  function mood(art) {
+    if (sila && window.Sila) window.Sila.set(sila, art);
+  }
+
   function showAlert(message, kind) {
+    mood(kind === 'info' ? (codeForm.hidden ? 'flame' : 'smug') : 'shocked');
     alertBox.textContent = message;
     alertBox.hidden = false;
     alertBox.classList.toggle('login-alert--info', kind === 'info');
@@ -63,6 +71,7 @@
       item.classList.toggle('is-done', index < step);
     });
 
+    mood(step === 1 ? 'flame' : 'smug');
     (step === 1 ? usernameEl : codeEl).focus();
   }
 
@@ -152,6 +161,7 @@
       if (result.ok && result.data) {
         window.clearInterval(timerHandle);
         // Full navigation (not fetch) so nginx sees the fresh cookie on the way in.
+        mood('laughing');
         location.assign(destination);
         return;
       }
@@ -248,6 +258,12 @@
     if (result.ok && result.data) {
       location.replace(destination);
     }
+  });
+
+  [usernameEl, passwordEl, codeEl].forEach(function (input) {
+    input.addEventListener('input', function () {
+      mood(codeForm.hidden ? 'determined' : 'smug');
+    });
   });
 
   usernameEl.focus();

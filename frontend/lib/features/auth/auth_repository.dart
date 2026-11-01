@@ -84,4 +84,12 @@ class AuthRepository {
             'authorizationCode': authorizationCode,
         },
       );
+
+  /// Gives a session saved before refresh tokens existed its first one.
+  /// Best-effort; never throws.
+  Future<void> ensureRefreshToken() => _client.ensureRefreshToken();
+
+  /// Sign-out: revokes this session's refresh token server-side.
+  /// Best-effort; never throws.
+  Future<void> revokeSession() => _client.revokeRefreshToken();
 }

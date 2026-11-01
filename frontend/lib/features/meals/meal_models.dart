@@ -21,6 +21,13 @@ class NutritionTargets {
       targetFatsG: map['targetFatsG'] as int,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'targetCalories': targetCalories,
+        'targetProteinG': targetProteinG,
+        'targetCarbsG': targetCarbsG,
+        'targetFatsG': targetFatsG,
+      };
 }
 
 /// Mirrors `Silen.Common.Models.MealLogModel`. Planned and logged meals are
@@ -530,6 +537,61 @@ class FoodScanResult {
       ],
       notes: map['notes'] as String? ?? '',
       quota: FoodScanQuota.fromJson(map['quota']),
+    );
+  }
+}
+
+/// A meal suggestion's full recipe: `GET api/meals/suggestions/{id}/recipe`.
+class MealRecipe {
+  final String mealSuggestionId;
+  final String title;
+  final String mealType;
+  final String? description;
+  final int caloriesKcal;
+  final int proteinG;
+  final int carbsG;
+  final int fatsG;
+  final String? imageUrl;
+  final String? servingSuggestion;
+  final List<String> ingredients;
+  final List<String> steps;
+
+  const MealRecipe({
+    required this.mealSuggestionId,
+    required this.title,
+    required this.mealType,
+    this.description,
+    required this.caloriesKcal,
+    required this.proteinG,
+    required this.carbsG,
+    required this.fatsG,
+    this.imageUrl,
+    this.servingSuggestion,
+    this.ingredients = const [],
+    this.steps = const [],
+  });
+
+  bool get isEmpty => ingredients.isEmpty && steps.isEmpty;
+
+  factory MealRecipe.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    List<String> lines(String key) => (map[key] as List<dynamic>? ?? const [])
+        .map((e) => e.toString())
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+    return MealRecipe(
+      mealSuggestionId: map['mealSuggestionId'] as String,
+      title: map['title'] as String? ?? '',
+      mealType: map['mealType'] as String? ?? '',
+      description: map['description'] as String?,
+      caloriesKcal: (map['caloriesKcal'] as num?)?.toInt() ?? 0,
+      proteinG: (map['proteinG'] as num?)?.toInt() ?? 0,
+      carbsG: (map['carbsG'] as num?)?.toInt() ?? 0,
+      fatsG: (map['fatsG'] as num?)?.toInt() ?? 0,
+      imageUrl: map['imageUrl'] as String?,
+      servingSuggestion: map['servingSuggestion'] as String?,
+      ingredients: lines('ingredients'),
+      steps: lines('steps'),
     );
   }
 }

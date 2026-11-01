@@ -14,6 +14,12 @@ public interface IOpenRouterClient
         string systemPrompt, string userPrompt, JsonElement schema, string? model = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>The same text call with a caller-chosen output budget, for answers longer
+    /// than the default 4000 tokens allow (a multi-week program read from a document).</summary>
+    Task<string> GenerateJsonAsync(
+        string systemPrompt, string userPrompt, JsonElement schema, string? model, int maxTokens,
+        CancellationToken cancellationToken = default);
+
     /// <summary>The same structured call with one image attached to the user turn, for a
     /// vision model. <paramref name="reasoningEffort"/> ("low"/"medium"/"high") is passed to
     /// reasoning models; <paramref name="maxTokens"/> caps reasoning plus answer, which is

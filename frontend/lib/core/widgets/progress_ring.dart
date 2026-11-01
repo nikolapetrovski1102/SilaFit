@@ -19,6 +19,11 @@ class RadialProgressRing extends StatelessWidget {
   final Widget? child;
   final Duration duration;
 
+  /// Where the arc starts on first build - defaults to empty. A ring that
+  /// takes over from another (a Hero landing) passes its current progress
+  /// so it doesn't sweep in from zero again.
+  final double? initialProgress;
+
   const RadialProgressRing({
     super.key,
     required this.progress,
@@ -28,6 +33,7 @@ class RadialProgressRing extends StatelessWidget {
     this.activeColor,
     this.child,
     this.duration = const Duration(milliseconds: 600),
+    this.initialProgress,
   });
 
   @override
@@ -37,7 +43,8 @@ class RadialProgressRing extends StatelessWidget {
       width: size,
       height: size,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: clamped),
+        tween:
+            Tween(begin: (initialProgress ?? 0).clamp(0.0, 1.0), end: clamped),
         duration: duration,
         curve: Curves.easeOutCubic,
         builder: (context, value, _) {

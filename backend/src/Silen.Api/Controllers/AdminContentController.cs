@@ -77,6 +77,17 @@ public sealed class AdminContentController(
     public async Task<IActionResult> SaveMealSuggestion([FromBody] AdminMealSuggestionUpsertRequest request, CancellationToken cancellationToken) =>
         (await consoleService.SaveMealSuggestionAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
 
+    [HttpGet("meal-suggestions/{mealSuggestionId:guid}/recipe")]
+    public async Task<IActionResult> GetMealRecipe(Guid mealSuggestionId, CancellationToken cancellationToken) =>
+        (await consoleService.GetMealRecipeAsync(SessionToken, mealSuggestionId, cancellationToken)).ToActionResult(logger);
+
+    [HttpPut("meal-suggestions/{mealSuggestionId:guid}/recipe")]
+    public async Task<IActionResult> SaveMealRecipe(Guid mealSuggestionId, [FromBody] AdminMealRecipeRequest request, CancellationToken cancellationToken)
+    {
+        request.MealSuggestionId = mealSuggestionId;
+        return (await consoleService.SaveMealRecipeAsync(SessionToken, request, ClientIp, cancellationToken)).ToActionResult(logger);
+    }
+
     [HttpDelete("meal-suggestions/{mealSuggestionId:guid}")]
     public async Task<IActionResult> DeleteMealSuggestion(Guid mealSuggestionId, CancellationToken cancellationToken) =>
         (await consoleService.DeleteMealSuggestionAsync(SessionToken, mealSuggestionId, ClientIp, cancellationToken)).ToActionResult(logger);

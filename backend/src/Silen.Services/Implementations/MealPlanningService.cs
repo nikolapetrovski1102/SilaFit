@@ -232,6 +232,11 @@ public sealed class MealPlanningService(
             return await SeedTargetsFromProfileAsync(userId, profile, cancellationToken);
         });
 
+    public Task<ServiceResult<MealRecipeModel>> GetRecipeAsync(Guid userId, Guid mealSuggestionId, CancellationToken cancellationToken = default) =>
+        ServiceExecutor.RunAsync(async () =>
+            await mealPlanningProvider.GetRecipeAsync(mealSuggestionId, userId, cancellationToken)
+            ?? throw new NotFoundException($"No readable meal suggestion {mealSuggestionId} for user {userId}.", "That meal is no longer available."));
+
     public Task<ServiceResult<List<MealSuggestionModel>>> GetSuggestionsAsync(Guid userId, int? month, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {

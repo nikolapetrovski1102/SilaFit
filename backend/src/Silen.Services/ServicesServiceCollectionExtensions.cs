@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Silen.Common.Options;
 using Silen.Services.Abstractions;
@@ -41,11 +42,20 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IImageUploadService, ImageUploadService>();
         services.AddScoped<ISubscriptionReceiptService, SubscriptionReceiptService>();
         services.AddScoped<IPartnerService, PartnerService>();
+        services.AddScoped<IDocumentProcessor, DocumentProcessor>();
+        services.AddScoped<ITrainerDocumentAiImporter, TrainerDocumentAiImporter>();
+        services.AddScoped<ITrainerDocumentService, TrainerDocumentService>();
+        services.AddScoped<ITrainerAssignmentNotifier, TrainerAssignmentNotifier>();
+        services.AddScoped<ISupplementProviderService, SupplementProviderService>();
+        services.AddScoped<IMotivationalQuoteService, MotivationalQuoteService>();
+        services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddHttpClient<IAppleTokenVerifier, AppleTokenVerifier>();
         services.AddHttpClient<IAppleSignInRevoker, AppleSignInRevoker>();
-        services.AddHttpClient<IOpenRouterClient, OpenRouterClient>();
+        // A document import asks for a long answer (up to 26 weeks of program), which
+        // can take well past HttpClient's 100-second default to stream back.
+        services.AddHttpClient<IOpenRouterClient, OpenRouterClient>(client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient<IAppStoreServerClient, AppStoreServerClient>();
         services.AddHttpClient<IGooglePlayDeveloperClient, GooglePlayDeveloperClient>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();

@@ -16,6 +16,11 @@ public sealed class OpenRouterClient(HttpClient httpClient, IOptions<OpenRouterO
 {
     public Task<string> GenerateJsonAsync(
         string systemPrompt, string userPrompt, JsonElement schema, string? model = null,
+        CancellationToken cancellationToken = default) =>
+        GenerateJsonAsync(systemPrompt, userPrompt, schema, model, 4000, cancellationToken);
+
+    public Task<string> GenerateJsonAsync(
+        string systemPrompt, string userPrompt, JsonElement schema, string? model, int maxTokens,
         CancellationToken cancellationToken = default)
     {
         // The prompt template's own model wins: the deployment-wide OpenRouter:Model
@@ -32,7 +37,7 @@ public sealed class OpenRouterClient(HttpClient httpClient, IOptions<OpenRouterO
                 new { role = "user", content = userPrompt }
             },
             response_format = JsonSchemaFormat(schema),
-            max_tokens = 4000,
+            max_tokens = maxTokens,
             temperature = 0.05
         };
 

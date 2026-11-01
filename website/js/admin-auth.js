@@ -98,6 +98,39 @@
       });
   }
 
+  // Trainer-document upload: the file plus the fields AdminDocumentsController
+  // binds with [FromForm]. Same envelope handling as uploadFile().
+  function uploadDocumentForm(fields, file) {
+    var formData = new FormData();
+    formData.append('file', file);
+    Object.keys(fields).forEach(function (key) {
+      if (fields[key] !== null && fields[key] !== undefined && fields[key] !== '') formData.append(key, String(fields[key]));
+    });
+
+    return fetch(API_BASE + '/api/admin/documents', { method: 'POST', credentials: 'include', body: formData })
+      .then(function (response) {
+        return response.json().then(function (payload) {
+          return {
+            ok: response.ok,
+            status: response.status,
+            data: payload && payload.success ? payload.data : null,
+            message: payload && payload.message ? payload.message : null
+          };
+        }, function () {
+          var message = response.status === 413 ? 'That file is too large (20 MB max).' :
+            response.status === 504 ? 'Reading the document took too long. Try a shorter document, or attach it without AI.' : null;
+          return { ok: response.ok, status: response.status, data: null, message: message };
+        });
+      }, function () {
+        return {
+          ok: false,
+          status: 0,
+          data: null,
+          message: 'Could not reach the SilaFit API. Check your connection and try again.'
+        };
+      });
+  }
+
   global.SilaAdminAuth = {
     /* Where the API lives - '' (same origin) in production. */
     apiBase: API_BASE,
@@ -299,6 +332,68 @@
     },
 
     /* Clients a split is assigned to, and the assign/unassign mutations. */
+    /* ---- Trainer documents (PDF/Word attached to a split or diet plan) ---- */
+    getDocuments: function (kind, targetId) {
+      return request('/api/admin/documents?kind=' + encodeURIComponent(kind) +
+        '&targetId=' + encodeURIComponent(targetId), 'GET');
+    },
+
+    // generate=true with no targetId: AI reads the document and creates a new
+    // split / plan from it. With a targetId the file is just attached.
+    uploadDocument: function (kind, targetId, title, generate, file) {
+      return uploadDocumentForm({ kind: kind, targetId: targetId, title: title, generate: !!generate }, file);
+    },
+
+    deleteDocument: function (documentId) {
+      return request('/api/admin/documents/' + encodeURIComponent(documentId), 'DELETE');
+    },
+
+    getDocumentGrants: function (documentId) {
+      return request('/api/admin/documents/' + encodeURIComponent(documentId) + '/grants', 'GET');
+    },
+
+    grantDocument: function (documentId, userId) {
+      return request('/api/admin/documents/' + encodeURIComponent(documentId) + '/grants', 'POST',
+        { documentId: documentId, userId: userId });
+    },
+
+    revokeDocumentGrant: function (documentId, grantId) {
+      return request('/api/admin/documents/' + encodeURIComponent(documentId) +
+        '/grants/' + encodeURIComponent(grantId), 'DELETE');
+    },
+
+    // The trainer's own watermarked preview, rendered by the API on this origin.
+    documentPreviewUrl: function (documentId) {
+      return API_BASE + '/api/documents/preview/' + encodeURIComponent(documentId);
+    },
+
+    /* ---- Meal recipes (ingredients + steps of a meal suggestion) ---- */
+    getMealRecipe: function (mealSuggestionId) {
+      return request('/api/admin/content/meal-suggestions/' + encodeURIComponent(mealSuggestionId) + '/recipe', 'GET');
+    },
+
+    saveMealRecipe: function (mealSuggestionId, ingredients, steps) {
+      return request('/api/admin/content/meal-suggestions/' + encodeURIComponent(mealSuggestionId) + '/recipe', 'PUT',
+        { mealSuggestionId: mealSuggestionId, ingredients: ingredients, steps: steps });
+    },
+
+    /* ---- Partner providers (discount codes shown in the app) ---- */
+    getProviders: function () {
+      return request('/api/admin/providers', 'GET');
+    },
+
+    saveProvider: function (provider) {
+      return request('/api/admin/providers', 'POST', provider);
+    },
+
+    deleteProvider: function (providerId) {
+      return request('/api/admin/providers/' + encodeURIComponent(providerId), 'DELETE');
+    },
+
+    uploadProviderLogo: function (file) {
+      return uploadFile('/api/admin/providers/logo', file);
+    },
+
     getSplitAssignments: function (splitId) {
       return request('/api/admin/content/splits/' + encodeURIComponent(splitId) + '/assignments', 'GET');
     },

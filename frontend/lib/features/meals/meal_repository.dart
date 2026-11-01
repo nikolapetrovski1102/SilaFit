@@ -11,7 +11,8 @@ class MealRepository {
 
   MealRepository(this._client);
 
-  static String isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
+  static String isoDate(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 
@@ -19,6 +20,20 @@ class MealRepository {
         '/meals/day',
         MealDay.fromJson,
         query: {'date': isoDate(date)},
+        cache: true,
+      );
+
+  /// Saves the user's own daily targets. The server pins them as a manual
+  /// override, so a later profile change won't recompute over them.
+  Future<NutritionTargets> updateTargets(NutritionTargets targets) =>
+      _client.put('/meals/targets', NutritionTargets.fromJson,
+          body: targets.toJson());
+
+  /// Ingredients and steps of one meal suggestion. Cached so a recipe opened
+  /// once still reads in the kitchen with no signal.
+  Future<MealRecipe> getRecipe(String mealSuggestionId) => _client.get(
+        '/meals/suggestions/$mealSuggestionId/recipe',
+        MealRecipe.fromJson,
         cache: true,
       );
 
@@ -65,14 +80,12 @@ class MealRepository {
   /// Saves [meal] as-is. Its [MealLog.items] are only sent when non-empty:
   /// the server keeps a meal's stored foods when none are sent, so a status
   /// flip never drops them.
-  Future<MealLog> updateLog(MealLog meal) => _client.put(
-      logPath(meal.mealLogId), MealLog.fromJson,
-      body: logBody(meal),
-      timeout: queuedWriteTimeout);
+  Future<MealLog> updateLog(MealLog meal) =>
+      _client.put(logPath(meal.mealLogId), MealLog.fromJson,
+          body: logBody(meal), timeout: queuedWriteTimeout);
 
-  Future<void> deleteLog(String mealLogId) => _client.delete(
-      logPath(mealLogId), (_) => null,
-      timeout: queuedWriteTimeout);
+  Future<void> deleteLog(String mealLogId) => _client
+      .delete(logPath(mealLogId), (_) => null, timeout: queuedWriteTimeout);
 
   static String logPath(String mealLogId) => '/meals/log/$mealLogId';
 

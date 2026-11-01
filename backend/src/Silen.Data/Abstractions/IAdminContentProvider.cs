@@ -34,6 +34,11 @@ public interface IAdminContentProvider
 
     Task<AdminMutationResultModel> DeleteMealSuggestionAsync(Guid mealSuggestionId, AdminActorModel actor, CancellationToken cancellationToken = default);
 
+    Task<AdminMealRecipeModel> GetMealRecipeAsync(Guid mealSuggestionId, CancellationToken cancellationToken = default);
+
+    /// <summary>Replaces the suggestion's ingredient and step lists in one transaction.</summary>
+    Task<AdminMutationResultModel> SetMealRecipeAsync(AdminMealRecipeRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
+
     Task<List<AdminPlanModel>> GetPlansAsync(CancellationToken cancellationToken = default);
 
     Task<AdminMutationResultModel> UpsertPlanAsync(AdminPlanUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);

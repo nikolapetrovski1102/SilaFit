@@ -229,8 +229,7 @@ class MealController extends ChangeNotifier {
     final totals = MealTotals.of(items);
     final meal = MealLog(
       mealLogId: existing?.mealLogId ?? const Uuid().v4(),
-      logDateUtc:
-          existing?.logDateUtc ?? MealRepository.isoDate(_selectedDate),
+      logDateUtc: existing?.logDateUtc ?? MealRepository.isoDate(_selectedDate),
       mealType: mealType,
       title: title,
       caloriesKcal: totals.caloriesKcal.round(),
@@ -410,6 +409,38 @@ class MealController extends ChangeNotifier {
       actionError = ApiException.genericMessage;
       notifyListeners();
     }
+  }
+
+  /// Saves new daily targets and repaints the day with them straight away,
+  /// then refetches (the day and the suggestions scored against them).
+  /// False with [actionError] set when the server refused or wasn't reached.
+  Future<bool> updateTargets(NutritionTargets targets) async {
+    actionError = null;
+    try {
+      final saved = await _repository.updateTargets(targets);
+      final current = state.data;
+      if (current != null) {
+        state = ResourceState.data(MealDay(
+          targets: saved,
+          meals: current.meals,
+          consumedCalories: current.consumedCalories,
+          remainingCalories: saved.targetCalories - current.consumedCalories,
+          consumedProteinG: current.consumedProteinG,
+          consumedCarbsG: current.consumedCarbsG,
+          consumedFatsG: current.consumedFatsG,
+        ));
+      }
+      notifyListeners();
+      _loadFor(_selectedDate, force: true);
+      _loadSuggestions(force: true);
+      return true;
+    } on ApiException catch (e) {
+      actionError = e.userMessage;
+    } catch (_) {
+      actionError = ApiException.genericMessage;
+    }
+    notifyListeners();
+    return false;
   }
 
   /// Recomputes the day's consumed/remaining totals locally from a Logged

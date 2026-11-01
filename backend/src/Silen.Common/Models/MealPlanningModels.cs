@@ -86,6 +86,10 @@ public sealed class MealSuggestionModel
     /// indicator when <see cref="IngredientPreview"/> is truncated.</summary>
     public int IngredientCount { get; set; }
 
+    /// <summary>Preparation steps on file. Meals with steps open as a full recipe in the
+    /// app, so the weekly plan prefers them.</summary>
+    public int StepCount { get; set; }
+
     /// <summary>1-12, or null when the suggestion is evergreen (shown every month).</summary>
     public byte? SuggestedMonth { get; set; }
     public bool IsSystemDefault { get; set; }

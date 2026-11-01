@@ -84,7 +84,9 @@ public static class AdminContentRowMapper
         SuggestedMonth = reader.GetNullableByte("SuggestedMonth") is { } month ? month : null,
         IsSystemDefault = reader.GetBoolValue("IsSystemDefault"),
         SortOrder = reader.GetInt32Value("SortOrder"),
-        CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc")
+        CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
+        IngredientCount = reader.GetInt32Value("IngredientCount"),
+        StepCount = reader.GetInt32Value("StepCount")
     };
 
     public static AdminPlanModel MapPlan(NpgsqlDataReader reader) => new()

@@ -577,8 +577,14 @@ public sealed class WeeklyPlanGenerationService(
 
         var candidatesBySlot = MealSlots.ToDictionary(
             slot => slot,
+            // Among the best-fitting meals, the ones with preparation steps go first:
+            // the week's meals open as a full recipe in the app, so a cookable plan
+            // beats one the user has to guess how to make. The wider window keeps
+            // fit the primary filter.
             slot => ranked
                 .Where(m => string.Equals(m.MealType, slot, StringComparison.OrdinalIgnoreCase))
+                .Take(opts.MealCandidatePoolSizePerType * 2)
+                .OrderByDescending(m => m.StepCount > 0)
                 .Take(opts.MealCandidatePoolSizePerType)
                 .ToList(),
             StringComparer.OrdinalIgnoreCase);
@@ -624,7 +630,8 @@ public sealed class WeeklyPlanGenerationService(
             carbsG = m.CarbsG,
             fatsG = m.FatsG,
             ingredientPreview = m.IngredientPreview,
-            ingredientCount = m.IngredientCount
+            ingredientCount = m.IngredientCount,
+            hasRecipeSteps = m.StepCount > 0
         }));
 
         var userPrompt = template.UserPromptTemplate
@@ -640,7 +647,9 @@ public sealed class WeeklyPlanGenerationService(
             + "healthy whole foods while keeping each day close to the targets. Review the compact ingredient preview as well as the macros: "
             + "prefer meals with a clear whole-food protein, useful produce or fiber, and avoid building a "
             + "week dominated by highly processed or nutritionally repetitive choices. The preview is capped "
-            + "at four ingredients; ingredientCount tells you when the recipe contains more."
+            + "at four ingredients; ingredientCount tells you when the recipe contains more. "
+            + "hasRecipeSteps=true means the user can open step-by-step instructions for that meal in the app; "
+            + "when two meals fit equally well, prefer the one with steps."
             + "\nGive the plan a concise, appetizing name and a one- or two-sentence description explaining its "
             + "nutrition strategy and variety. These are shown verbatim in the app preview. Do not claim that "
             + "ingredients or benefits exist unless they are supported by the supplied meal catalog."
@@ -831,76 +840,9 @@ public sealed class WeeklyPlanGenerationService(
         return notified;
     }
 
-    private async Task<bool> DeliverPushAsync(
-        Guid userId, UserNotificationModel notification, CancellationToken cancellationToken)
-    {
-        var tokens = await notificationProvider.GetActiveDeviceTokensAsync(userId, cancellationToken).ConfigureAwait(false);
-        if (tokens.Count == 0)
-        {
-            await notificationProvider
-                .MarkSkippedAsync(notification.NotificationId, "No active device tokens.", cancellationToken)
-                .ConfigureAwait(false);
-            return false;
-        }
-
-        var delivered = false;
-        string? providerMessageId = null;
-        var errors = new List<string>();
-
-        foreach (var token in tokens)
-        {
-            var message = new PushNotificationMessage
-            {
-                Token = token.PushToken,
-                Title = notification.Title,
-                Body = notification.Body,
-                Data = new Dictionary<string, string>
-                {
-                    ["notificationId"] = notification.NotificationId.ToString(),
-                    ["category"] = notification.Category,
-                    ["screen"] = notification.DeepLink ?? "splits"
-                }
-            };
-
-            PushSendResult result;
-            try
-            {
-                result = await pushSender.SendAsync(message, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                result = PushSendResult.Failed(ex.Message);
-            }
-
-            if (result.Success)
-            {
-                delivered = true;
-                providerMessageId ??= result.ProviderMessageId;
-                continue;
-            }
-
-            errors.Add($"{token.Platform}: {result.Error}");
-            if (result.TokenInvalid)
-            {
-                await notificationProvider.DeactivateDeviceTokenAsync(userId, token.PushToken, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
-
-        if (delivered)
-        {
-            await notificationProvider
-                .MarkSentAsync(notification.NotificationId, notification.Category, providerMessageId, DateTime.UtcNow, cancellationToken)
-                .ConfigureAwait(false);
-            return true;
-        }
-
-        var error = errors.Count > 0 ? string.Join("; ", errors) : "Push delivery failed.";
-        await notificationProvider
-            .MarkFailedAsync(notification.NotificationId, Truncate(error, MaxErrorMessageLength) ?? error, cancellationToken)
-            .ConfigureAwait(false);
-        return false;
-    }
+    private Task<bool> DeliverPushAsync(
+        Guid userId, UserNotificationModel notification, CancellationToken cancellationToken) =>
+        UserPushDelivery.DeliverAsync(notificationProvider, pushSender, notification, "splits", cancellationToken);
 
     private async Task RecordAsync(
         Guid runId,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -62,6 +64,11 @@ class AuthController extends ChangeNotifier {
     await _sessionStore.restore();
     if (_sessionStore.current == null) {
       await _bootstrapDeviceLogin();
+    } else if (_sessionStore.current!.refreshToken == null) {
+      // Saved by an app version from before refresh tokens: pick one up now,
+      // while the stored access token may still be valid, so this session
+      // survives that token expiring. Not awaited - startup never waits on it.
+      unawaited(_repository.ensureRefreshToken());
     }
     _isBootstrapping = false;
     notifyListeners();
@@ -181,6 +188,11 @@ class AuthController extends ChangeNotifier {
   /// this controller - so the fresh [AuthController] bootstraps a brand-new
   /// guest device and lands on Today with no trace of the account just left.
   Future<void> logout() async {
+    // Revoke the refresh token while we still have it, so it can't mint
+    // another access token. Short and best-effort - never blocks sign-out.
+    try {
+      await _repository.revokeSession();
+    } catch (_) {}
     // Clear the local session first - that's what the app actually trusts.
     // A storage failure must not trap the user in the old account: the
     // reload below still discards every in-memory trace of it, and the

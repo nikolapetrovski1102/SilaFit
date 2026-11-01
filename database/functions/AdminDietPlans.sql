@@ -82,8 +82,8 @@ BEGIN
         RETURN;
     END IF;
 
-    IF p_durationdays < 1 OR p_durationdays > 31 THEN
-        RETURN NEXT dbo.outcome_cursor(3, NULL, 'A plan lasts between 1 and 31 days.');
+    IF p_durationdays < 1 OR p_durationdays > 182 THEN
+        RETURN NEXT dbo.outcome_cursor(3, NULL, 'A plan lasts between 1 and 182 days (26 weeks).');
         RETURN;
     END IF;
 
@@ -255,8 +255,8 @@ BEGIN
         RETURN;
     END IF;
 
-    IF p_dayindex < 1 OR p_dayindex > 31 THEN
-        RETURN NEXT dbo.outcome_cursor(3, p_dietplanid, 'Day index must be between 1 and 31.');
+    IF p_dayindex < 1 OR p_dayindex > 182 THEN
+        RETURN NEXT dbo.outcome_cursor(3, p_dietplanid, 'Day index must be between 1 and 182.');
         RETURN;
     END IF;
 

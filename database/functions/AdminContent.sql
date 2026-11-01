@@ -156,9 +156,15 @@ BEGIN
            suggestedmonth,
            issystemdefault,
            sortorder,
-           createdatutc
+           createdatutc,
+           (SELECT COUNT(*)::int FROM dbo.mealsuggestioningredients i
+            WHERE i.mealsuggestionid = mealsuggestions.mealsuggestionid) AS ingredientcount,
+           (SELECT COUNT(*)::int FROM dbo.mealsuggestioninstructions st
+            WHERE st.mealsuggestionid = mealsuggestions.mealsuggestionid) AS stepcount
     FROM dbo.mealsuggestions
     WHERE owneruserid IS NULL
+      -- Meals a trainer's document import created live only in that plan.
+      AND owneradminuserid IS NULL
       AND (p_suggestedmonth IS NULL OR suggestedmonth = p_suggestedmonth)
       AND (v_mealtype IS NULL OR mealtype = v_mealtype)
       AND (v_search IS NULL OR title LIKE '%' || v_search || '%')
@@ -681,4 +687,74 @@ BEGIN
             p_actorip);
 
     RETURN NEXT dbo.outcome_cursor(0, p_userid, NULL);
+END $$;
+
+-- =============================================================================
+-- Recipe editing: a meal suggestion's ingredient lines and preparation steps,
+-- which the app's recipe screen shows. Saved as a whole list each time (the
+-- console edits them as two textareas), replacing what was there.
+-- =============================================================================
+CREATE OR REPLACE FUNCTION dbo.usp_admin_mealsuggestion_getrecipe(
+    p_mealsuggestionid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+    c2 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT ingredienttext FROM dbo.mealsuggestioningredients
+    WHERE mealsuggestionid = p_mealsuggestionid
+    ORDER BY sortorder;
+    RETURN NEXT c1;
+
+    OPEN c2 FOR
+    SELECT instructiontext FROM dbo.mealsuggestioninstructions
+    WHERE mealsuggestionid = p_mealsuggestionid
+    ORDER BY sortorder;
+    RETURN NEXT c2;
+END $$;
+
+CREATE OR REPLACE FUNCTION dbo.usp_admin_mealsuggestion_setrecipe(
+    p_mealsuggestionid uuid,
+    p_ingredients text[] DEFAULT '{}',
+    p_steps text[] DEFAULT '{}',
+    p_actoradminuserid uuid DEFAULT NULL,
+    p_actorusername text DEFAULT NULL,
+    p_actorip text DEFAULT NULL
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    v_title text;
+    v_ingredientcount integer;
+    v_stepcount integer;
+BEGIN
+    SELECT title INTO v_title
+    FROM dbo.mealsuggestions
+    WHERE mealsuggestionid = p_mealsuggestionid AND owneruserid IS NULL;
+
+    IF v_title IS NULL THEN
+        RETURN NEXT dbo.outcome_cursor(1, p_mealsuggestionid, 'That suggestion no longer exists.');
+        RETURN;
+    END IF;
+
+    DELETE FROM dbo.mealsuggestioningredients WHERE mealsuggestionid = p_mealsuggestionid;
+    DELETE FROM dbo.mealsuggestioninstructions WHERE mealsuggestionid = p_mealsuggestionid;
+
+    INSERT INTO dbo.mealsuggestioningredients (mealsuggestionid, sortorder, ingredienttext)
+    SELECT p_mealsuggestionid, (row_number() OVER (ORDER BY x.ord))::smallint, left(btrim(x.line), 1000)
+    FROM unnest(COALESCE(p_ingredients, '{}')) WITH ORDINALITY AS x(line, ord)
+    WHERE NULLIF(btrim(x.line), '') IS NOT NULL;
+    GET DIAGNOSTICS v_ingredientcount = ROW_COUNT;
+
+    INSERT INTO dbo.mealsuggestioninstructions (mealsuggestionid, sortorder, instructiontext)
+    SELECT p_mealsuggestionid, (row_number() OVER (ORDER BY x.ord))::smallint, left(btrim(x.line), 2000)
+    FROM unnest(COALESCE(p_steps, '{}')) WITH ORDINALITY AS x(line, ord)
+    WHERE NULLIF(btrim(x.line), '') IS NOT NULL;
+    GET DIAGNOSTICS v_stepcount = ROW_COUNT;
+
+    INSERT INTO dbo.adminauditlog (adminuserid, username, action, entitytype, entityid, summary, createdfromip)
+    VALUES (p_actoradminuserid, p_actorusername, 'Update', 'MealSuggestion', p_mealsuggestionid::text,
+            'Updated recipe of ''' || v_title || ''' (' || v_ingredientcount::text || ' ingredients, '
+            || v_stepcount::text || ' steps)', p_actorip);
+
+    RETURN NEXT dbo.outcome_cursor(0, p_mealsuggestionid, NULL);
 END $$;

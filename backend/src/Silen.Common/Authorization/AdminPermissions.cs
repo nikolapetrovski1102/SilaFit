@@ -43,6 +43,10 @@ public static class AdminPermissions
     public const string SuggestionsRead = "content.suggestions.read";
     public const string SuggestionsWrite = "content.suggestions.write";
 
+    /// <summary>Partner shops and their discount codes, shown in the app's Settings > Providers.</summary>
+    public const string ProvidersRead = "content.providers.read";
+    public const string ProvidersWrite = "content.providers.write";
+
     public const string UsersRead = "users.read";
 
     /// <summary>
@@ -103,7 +107,9 @@ public static class AdminPermissions
         new(ExercisesRead, "Exercises", "View exercises", "The exercise library and where each exercise is used."),
         new(ExercisesWrite, "Exercises", "Edit exercises", "Add, change and remove exercises."),
         new(SuggestionsRead, "Meal suggestions", "View meal suggestions", "The month-tagged suggestion catalog."),
-        new(SuggestionsWrite, "Meal suggestions", "Edit meal suggestions", "Add, change and remove suggestions."),
+        new(SuggestionsWrite, "Meal suggestions", "Edit meal suggestions", "Add, change and remove suggestions, their ingredients and steps."),
+        new(ProvidersRead, "Providers", "View providers", "Partner shops and the discount codes the app shows."),
+        new(ProvidersWrite, "Providers", "Edit providers", "Add, change and hide partner shops, their logos and codes."),
         new(UsersRead, "Users", "View app users", "Account tier, join date and current subscription - never anyone's logs or body data."),
         new(UsersDataRead, "Users", "View client logs", "One user's onboarding profile and the workouts/sets, meals, bodyweight and hydration they logged."),
         new(UsersDataReadAll, "Users", "View any client's logs", "Open a user who is not one of your assigned clients."),

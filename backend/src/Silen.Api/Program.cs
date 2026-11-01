@@ -33,6 +33,7 @@ builder.Services.Configure<ImageUploadOptions>(builder.Configuration.GetSection(
 builder.Services.Configure<AppStoreServerOptions>(builder.Configuration.GetSection(AppStoreServerOptions.SectionName));
 builder.Services.Configure<GooglePlayOptions>(builder.Configuration.GetSection(GooglePlayOptions.SectionName));
 builder.Services.Configure<PartnerOptions>(builder.Configuration.GetSection(PartnerOptions.SectionName));
+builder.Services.Configure<TrainerDocumentOptions>(builder.Configuration.GetSection(TrainerDocumentOptions.SectionName));
 
 builder.Services.AddSilenData();
 builder.Services.AddSilenServices();
@@ -113,6 +114,17 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy(RateLimitPolicies.SessionRefresh, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -275,6 +287,11 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.GetFullPath(imageUploadOptions.StoragePath)),
     RequestPath = "/uploads"
 });
+
+// Trainer documents live in their own private directory, never under /uploads:
+// they are streamed only through DocumentViewerController after an access check.
+var trainerDocumentOptions = builder.Configuration.GetSection(TrainerDocumentOptions.SectionName).Get<TrainerDocumentOptions>() ?? new TrainerDocumentOptions();
+Directory.CreateDirectory(trainerDocumentOptions.StoragePath);
 
 // Built-in artwork that ships with the API (StaticAssets/, copied to the publish
 // output) - today the auto-assigned split hero images, requested by the app as

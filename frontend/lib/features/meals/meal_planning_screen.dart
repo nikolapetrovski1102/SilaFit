@@ -8,14 +8,15 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
-import '../../core/widgets/progress_ring.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../diet_plans/diet_plan_controller.dart';
 import '../diet_plans/widgets/locked_diet_plans.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
 import 'meal_tracker_screen.dart';
+import 'nutrition_targets_screen.dart';
 import 'widgets/active_diet_plan_section.dart';
+import 'widgets/calorie_ring.dart';
 import 'widgets/macro_bar.dart';
 import 'widgets/meal_log_card.dart';
 import '../today/widgets/day_preview.dart';
@@ -76,41 +77,53 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
           body: SingleChildScrollView(
             // Extra room at the end so the last meal can scroll clear of
             // the FAB.
-            padding: EdgeInsets.fromLTRB(AppSpacing.marginMobile, AppSpacing.lg,
-                AppSpacing.marginMobile, AppSpacing.sm + navReserved + 72),
+            // No horizontal padding here: the day strip runs edge to edge
+            // (scrolling or not, its pills are never cut off by the page
+            // margin), so every other block insets itself with [_inset].
+            padding: EdgeInsets.fromLTRB(
+                0, AppSpacing.lg, 0, AppSpacing.sm + navReserved + 72),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SectionEyebrow('Fuel & Macros', color: AppColors.accent),
+                _inset(
+                    SectionEyebrow('Fuel & Macros', color: AppColors.accent)),
                 const SizedBox(height: 4),
-                Text('Nutrition', style: AppTypography.headlineLg),
+                _inset(Text('Nutrition', style: AppTypography.headlineLg)),
                 const SizedBox(height: AppSpacing.lg),
-                ResourceBuilder<MealDay>(
-                  state: _controller.state,
-                  onRetry: _controller.load,
-                  builder: (context, day) {
-                    final content =
-                        _MealDayContent(controller: _controller, day: day);
-                    if (widget.spotlightKey != null) {
-                      return KeyedSubtree(
-                          key: widget.spotlightKey!, child: content);
-                    }
-                    return content;
-                  },
+                // Loaded content insets itself (around the full-bleed day
+                // strip); the skeleton and error card take the margin here.
+                Padding(
+                  padding: _controller.state.hasData
+                      ? EdgeInsets.zero
+                      : const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.marginMobile),
+                  child: ResourceBuilder<MealDay>(
+                    state: _controller.state,
+                    onRetry: () => _controller.load(force: true),
+                    builder: (context, day) {
+                      final content =
+                          _MealDayContent(controller: _controller, day: day);
+                      if (widget.spotlightKey != null) {
+                        return KeyedSubtree(
+                            key: widget.spotlightKey!, child: content);
+                      }
+                      return content;
+                    },
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 // Free accounts keep following a plan they already had, but
                 // browsing/creating plans is Pro - show the locked preview.
                 if (dietPlans.requiresUpgrade && !hasActivePlan) ...[
-                  const SectionEyebrow('Diet Plans · Pro'),
+                  _inset(const SectionEyebrow('Diet Plans · Pro')),
                   const SizedBox(height: AppSpacing.sm),
-                  LockedDietPlans(onReturn: () {
+                  _inset(LockedDietPlans(onReturn: () {
                     if (!mounted) return;
                     dietPlans.load(force: true);
                     activePlan.load(force: true);
-                  }),
+                  })),
                 ] else
-                  ActiveDietPlanSection(mealController: _controller),
+                  _inset(ActiveDietPlanSection(mealController: _controller)),
                 const SizedBox(height: AppSpacing.xl),
               ],
             ),
@@ -120,6 +133,12 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
     );
   }
 }
+
+/// The page margin, for every block except the edge-to-edge day strip.
+Widget _inset(Widget child) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.marginMobile),
+      child: child,
+    );
 
 /// The 7-day strip, now living *below* the calorie ring/macro row: the
 /// selected pill grows a thin accent line up out of its own top edge (via
@@ -131,37 +150,85 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
 /// them thin and left barely any breathing room) - on a narrow phone the
 /// full week can run a little wider than the screen, so this scrolls
 /// horizontally instead of shrinking the pills to force-fit.
-class _DayStrip extends StatelessWidget {
+class _DayStrip extends StatefulWidget {
   final MealController controller;
 
   const _DayStrip({required this.controller});
 
+  @override
+  State<_DayStrip> createState() => _DayStripState();
+}
+
+class _DayStripState extends State<_DayStrip> {
   static const _pillGap = 10.0;
+  static const _minPillWidth = 60.0;
+
+  /// Created lazily on the first scrolling layout so its initial offset can
+  /// centre today's pill (the middle of the week) in the viewport.
+  ScrollController? _scroll;
+
+  @override
+  void dispose() {
+    _scroll?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final today = dateOnly(DateTime.now());
     final days = List.generate(7, (i) => addDays(today, i - 3));
 
     return SizedBox(
       height: _DayPill.connectorHeight + _DayPill.pillHeight,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const ClampingScrollPhysics(),
-        child: Row(
+      child: LayoutBuilder(builder: (context, constraints) {
+        // Wide, fixed-size pills: on wide screens they share the available
+        // width (up to their max oval width); on phones, where seven of them
+        // don't fit, the strip scrolls edge to edge and starts centred on
+        // today so the days either side are reachable with a swipe.
+        const margin = AppSpacing.marginMobile;
+        final room = constraints.maxWidth - margin * 2;
+        final fitted = (room - _pillGap * (days.length - 1)) / days.length;
+        final fits = fitted >= _minPillWidth;
+        final pillWidth = fits
+            ? fitted.clamp(_minPillWidth, _DayPill.maxPillWidth)
+            : _minPillWidth;
+
+        final row = Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             for (var i = 0; i < days.length; i++) ...[
-              if (i > 0) const SizedBox(width: _pillGap),
+              if (i > 0 && !fits) const SizedBox(width: _pillGap),
               _DayPill(
                 date: days[i],
+                width: pillWidth,
                 selected: _isSameDate(days[i], controller.selectedDate),
                 isToday: _isSameDate(days[i], today),
                 onTap: () => controller.selectDate(days[i]),
               ),
             ],
           ],
-        ),
-      ),
+        );
+        if (fits) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: margin),
+            child: row,
+          );
+        }
+        final contentWidth =
+            margin * 2 + pillWidth * days.length + _pillGap * (days.length - 1);
+        _scroll ??= ScrollController(
+          initialScrollOffset: ((contentWidth - constraints.maxWidth) / 2)
+              .clamp(0.0, double.infinity),
+        );
+        return SingleChildScrollView(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: margin),
+          child: row,
+        );
+      }),
     );
   }
 
@@ -171,12 +238,14 @@ class _DayStrip extends StatelessWidget {
 
 class _DayPill extends StatelessWidget {
   final DateTime date;
+  final double width;
   final bool selected;
   final bool isToday;
   final VoidCallback onTap;
 
   const _DayPill({
     required this.date,
+    required this.width,
     required this.selected,
     required this.isToday,
     required this.onTap,
@@ -186,11 +255,11 @@ class _DayPill extends StatelessWidget {
   /// (even unselected, as an empty slot) so every pill in the row sits at
   /// the same height and only the selected one's line pops into it.
   static const connectorHeight = 18.0;
-  static const pillHeight = 68.0;
+  static const pillHeight = 84.0;
   // Matches the Home day strip's own oval width - now that this pill sizes
   // itself (rather than stretching to fill an `Expanded` slot), it should
   // read as the same "day oval" shape used elsewhere, not a narrower one.
-  static const pillWidth = 56.0;
+  static const maxPillWidth = 68.0;
 
   @override
   Widget build(BuildContext context) {
@@ -228,7 +297,7 @@ class _DayPill extends StatelessWidget {
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
-            width: pillWidth,
+            width: width,
             height: pillHeight,
             decoration: BoxDecoration(
               color: selected ? AppColors.accent : AppColors.surfaceContainer,
@@ -240,16 +309,17 @@ class _DayPill extends StatelessWidget {
                 Text(
                   DateFormat('E').format(date).substring(0, 1).toUpperCase(),
                   style: AppTypography.labelCaps.copyWith(
+                      fontSize: 13,
                       color: selected
                           ? AppColors.onAccent
                           : AppColors.onSurfaceVariant),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   '${date.day}',
                   style: AppTypography.headlineSm.copyWith(
                     color: selected ? AppColors.onAccent : AppColors.onSurface,
-                    fontSize: 16,
+                    fontSize: 20,
                   ),
                 ),
                 if (isToday && !selected)
@@ -281,70 +351,125 @@ class _MealDayContent extends StatelessWidget {
         ? 0.0
         : (day.consumedCalories / day.targets.targetCalories).clamp(0.0, 1.0);
 
+    final over = day.remainingCalories < 0;
+    void editTargets() {
+      HapticFeedback.lightImpact();
+      openNutritionTargets(context, controller);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Flat, no card - the ring anchors the left, its macro breakdown
         // sits directly beside it on the right, both straight on the
-        // screen's own background.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            RadialProgressRing(
-              progress: ratio,
-              size: 128,
-              strokeWidth: 11,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('${day.remainingCalories}',
-                      style: AppTypography.displayStatMobile
-                          .copyWith(fontSize: 28)),
-                  Text('KCAL LEFT', style: AppTypography.labelCaps),
-                ],
+        // screen's own background. The ring grows with the screen, and a
+        // tap on it (or the target line) flies it into the targets editor.
+        _inset(LayoutBuilder(builder: (context, constraints) {
+          final ringSize = (constraints.maxWidth * 0.38).clamp(120.0, 168.0);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox.square(
+                dimension: ringSize,
+                child: CalorieRing.hero(
+                  onTap: editTargets,
+                  ring: CalorieRing(
+                    progress: ratio,
+                    value: day.remainingCalories.abs(),
+                    label: over ? 'KCAL OVER' : 'KCAL LEFT',
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '${day.consumedCalories} / ${day.targets.targetCalories} kcal',
-                    style: AppTypography.labelSm
-                        .copyWith(color: AppColors.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  MacroBar(
-                    label: 'Protein',
-                    consumedG: day.consumedProteinG,
-                    targetG: day.targets.targetProteinG,
-                    color: AppColors.accent,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  MacroBar(
-                    label: 'Carbs',
-                    consumedG: day.consumedCarbsG,
-                    targetG: day.targets.targetCarbsG,
-                    color: AppColors.tertiaryContainer,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  MacroBar(
-                    label: 'Fats',
-                    consumedG: day.consumedFatsG,
-                    targetG: day.targets.targetFatsG,
-                    color: AppColors.secondary,
-                  ),
-                ],
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TargetLine(
+                      consumed: day.consumedCalories,
+                      target: day.targets.targetCalories,
+                      onTap: editTargets,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    MacroBar(
+                      label: 'Protein',
+                      consumedG: day.consumedProteinG,
+                      targetG: day.targets.targetProteinG,
+                      color: AppColors.accent,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    MacroBar(
+                      label: 'Carbs',
+                      consumedG: day.consumedCarbsG,
+                      targetG: day.targets.targetCarbsG,
+                      color: AppColors.tertiaryContainer,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    MacroBar(
+                      label: 'Fats',
+                      consumedG: day.consumedFatsG,
+                      targetG: day.targets.targetFatsG,
+                      color: AppColors.secondary,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        })),
         const SizedBox(height: AppSpacing.lg),
         _DayStrip(controller: controller),
         const SizedBox(height: AppSpacing.xl),
-        _DayMeals(controller: controller, day: day),
+        _inset(_DayMeals(controller: controller, day: day)),
       ],
+    );
+  }
+}
+
+/// "1200 / 2200 kcal" with an edit pencil - the obvious way into the
+/// targets editor for anyone who doesn't think to tap the ring.
+class _TargetLine extends StatelessWidget {
+  final int consumed;
+  final int target;
+  final VoidCallback onTap;
+
+  const _TargetLine({
+    required this.consumed,
+    required this.target,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: AppColors.surfaceContainer.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    '$consumed / $target kcal',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.labelSm
+                        .copyWith(color: AppColors.onSurfaceVariant),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.edit_rounded, size: 13, color: AppColors.accent),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

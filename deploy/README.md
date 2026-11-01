@@ -598,6 +598,36 @@ endpoint + webhooks) and `silen-subscription-sync`.
   entitlement, kept in sync from the latest applied receipt.
 - Procedures: `database/procedures/SubscriptionReceipts.sql`.
 
+## Trainer documents and partner discounts
+
+Trainers upload a PDF or Word file in the admin console (Splits / Diet plans ->
+**Import from document**, or the document icon on an existing program). The
+API converts Word files to PDF with the LibreOffice bundled in its image, asks
+`TRAINER_DOCUMENTS_IMPORT_MODEL` (through OpenRouter) to draft a split or
+diet plan of up to 26 weeks, and keeps the PDF in the `trainer_documents`
+volume. The trainer then assigns the document to individual clients; each
+client gets their own link.
+
+In the app a document icon appears on the split / diet plan screen for a client
+who has been given one. The viewer opens only with a 10-minute ticket the app
+requests, draws pages to canvas with the client's name watermarked on each,
+and the screen is locked against capture (Android `FLAG_SECURE`; on iOS a
+secure layer plus a blackout while recording). Pasting the link into a browser
+shows only "open this in the app".
+
+Partner discount codes (Settings -> Partner discounts, plus a small protein
+hint in the meal tracker) are managed under **Providers** in the console.
+Proteini.si Macedonia is seeded with a placeholder code and link: set the real
+logo, code and shop URL there.
+
+### Configuration (`.env`)
+
+- `TRAINER_DOCUMENTS_PUBLIC_BASE_URL` — origin of the viewer links (the API
+  host as the app reaches it).
+- `TRAINER_DOCUMENTS_IMPORT_MODEL` — model that reads uploads (default
+  `openai/gpt-4.1`); needs `OPENROUTER_API_KEY`.
+- nginx allows 25 MB uploads and 300 s timeouts for the document routes.
+
 ## App Store / Play Store review account
 
 `REVIEWER_BYPASS_EMAIL` / `REVIEWER_BYPASS_CODE` (`.env`) give app reviewers a

@@ -29,6 +29,7 @@ import '../plans/plans_controller.dart';
 import '../plans/plans_models.dart';
 import '../plans/plans_screen.dart';
 import '../plans/redeem_code_action.dart';
+import '../providers/providers_screen.dart';
 import '../plans/restore_purchases_action.dart';
 import 'ai_consent_gate.dart';
 import 'settings_controller.dart';
@@ -220,6 +221,9 @@ class _SettingsContent extends StatelessWidget {
         const SectionEyebrow('More'),
         const SizedBox(height: AppSpacing.sm),
         _GroupCard(children: [
+          _LinkRow(
+              label: 'Partner discounts',
+              onTap: () => _openSubpage(context, const ProvidersScreen())),
           _LinkRow(
               label: 'Privacy & data',
               onTap: () => _openSubpage(context, const _PrivacyDataPage())),

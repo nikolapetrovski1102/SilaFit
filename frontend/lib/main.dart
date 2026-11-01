@@ -1,24 +1,28 @@
-import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'core/api/api_client.dart';
+import 'core/platform/screen_security.dart';
 import 'core/session/session_store.dart';
 import 'core/sync/sync_queue.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
-import 'core/widgets/soft_glow.dart';
+import 'core/widgets/mascot/flame_loader.dart';
 import 'features/account/account_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/auth_repository.dart';
+import 'features/auth/widgets/auth_blob_background.dart';
 import 'features/diet_guides/diet_guide_controller.dart';
 import 'features/diet_guides/diet_guide_repository.dart';
 import 'features/diet_plans/diet_plan_controller.dart';
 import 'features/diet_plans/diet_plan_repository.dart';
+import 'features/documents/trainer_documents_repository.dart';
 import 'features/exercises/exercises_repository.dart';
 import 'features/meals/meal_controller.dart';
+import 'features/motivation/splash_quote.dart';
 import 'features/meals/meal_repository.dart';
 import 'features/notifications/notifications_repository.dart';
 import 'features/notifications/push_messaging_service.dart';
@@ -33,6 +37,7 @@ import 'features/progress/exercise_progress_controller.dart';
 import 'features/progress/progress_controller.dart';
 import 'features/progress/weekly_analytics_controller.dart';
 import 'features/progress/progress_repository.dart';
+import 'features/providers/supplement_providers_repository.dart';
 import 'features/settings/settings_controller.dart';
 import 'features/settings/settings_repository.dart';
 import 'features/splits/splits_controller.dart';
@@ -47,6 +52,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const SilenApp());
+  // No screenshots or screen recordings anywhere in the app.
+  WidgetsBinding.instance
+      .addPostFrameCallback((_) => ScreenSecurity.lockApp());
 }
 
 /// Wires the whole dependency graph once, at the root, so every feature
@@ -171,6 +179,8 @@ class _AppRun extends StatelessWidget {
         Provider(create: (_) => IapService()),
         Provider(create: (_) => SettingsRepository(apiClient)),
         Provider(create: (_) => MealRepository(apiClient)),
+        Provider(create: (_) => TrainerDocumentsRepository(apiClient)),
+        Provider(create: (_) => SupplementProvidersRepository(apiClient)),
         Provider.value(value: notificationsRepository),
         Provider.value(value: pushMessagingService),
         Provider(create: (_) => AccountRepository(apiClient)),
@@ -244,6 +254,8 @@ class _AppRun extends StatelessWidget {
             builder: (context, child) {
               final brightness = Theme.of(context).brightness;
               AppColors.setBrightness(brightness);
+              ScreenSecurity.setDarkAppearance(
+                  brightness == Brightness.dark);
               final palette = AppColors.paletteFor(brightness);
               // Every screen reads `AppColors`'s static getters directly
               // instead of `Theme.of(context)`, so a plain `notifyListeners`
@@ -296,15 +308,44 @@ class _AppRoot extends StatefulWidget {
   State<_AppRoot> createState() => _AppRootState();
 }
 
+/// How long the cold-start splash stays up at minimum. A returning device's
+/// bootstrap is only a local session restore, which in a release (AOT) build
+/// finishes within a frame or two - without a floor the flame animation never
+/// becomes visible. Long enough to catch the first blink of the loop.
+const _minSplashDuration = Duration(milliseconds: 2200);
+
+/// Only the first launch of the process waits for [_minSplashDuration];
+/// sign-out/account-deletion reloads rebuild `_AppRoot` but should not.
+bool _coldStartSplashShown = false;
+
 class _AppRootState extends State<_AppRoot> {
   bool _settingsLoadTriggered = false;
   bool _pushSyncTriggered = false;
+  bool _minSplashElapsed = _coldStartSplashShown;
+  Timer? _minSplashTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_minSplashElapsed) {
+      _coldStartSplashShown = true;
+      _minSplashTimer = Timer(_minSplashDuration, () {
+        if (mounted) setState(() => _minSplashElapsed = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _minSplashTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, auth, _) {
-        if (auth.isBootstrapping) {
+        if (auth.isBootstrapping || !_minSplashElapsed) {
           return const _SplashScreen();
         }
         // Settings needs a live device/user token, which only exists once
@@ -337,11 +378,12 @@ class _AppRootState extends State<_AppRoot> {
   }
 }
 
-/// Mirrors the native splash screen (see `flutter_native_splash` config in
-/// `pubspec.yaml`) on first frame, then keeps the same mark on-screen -
-/// at the same size and position it holds natively - while a soft blurred
-/// circle drifts behind it for however long the bootstrap login actually
-/// takes, instead of a conventional loader.
+/// Takes over from the static native splash (see `flutter_native_splash` in
+/// `pubspec.yaml`) and shows Sila on fire for however long the bootstrap
+/// login actually takes, instead of a conventional loader. Behind Sila the
+/// same blurred accent blobs as onboarding/login keep gliding from layout to
+/// layout, so the wait feels alive rather than frozen, and a motivational
+/// line fades in and out at the bottom ([SplashQuote]).
 class _SplashScreen extends StatefulWidget {
   const _SplashScreen();
 
@@ -349,22 +391,30 @@ class _SplashScreen extends StatefulWidget {
   State<_SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<_SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _roam;
+class _SplashScreenState extends State<_SplashScreen> {
+  /// Only the four step layouts; the fifth is the tall-form variant with an
+  /// oversized bottom blob, which would look off on a centered splash.
+  static const _layoutCount = 4;
+
+  /// Slightly longer than [AuthBlobBackground]'s 700ms glide, so each move
+  /// eases out and settles for a beat before the next one starts.
+  static const _step = Duration(milliseconds: 900);
+
+  int _layout = 0;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _roam = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 7),
-    )..repeat();
+    _timer = Timer.periodic(_step, (_) {
+      if (!mounted || MediaQuery.disableAnimationsOf(context)) return;
+      setState(() => _layout = (_layout + 1) % _layoutCount);
+    });
   }
 
   @override
   void dispose() {
-    _roam.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -372,38 +422,21 @@ class _SplashScreenState extends State<_SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: SizedBox(
-          width: 220,
-          height: 220,
-          child: AnimatedBuilder(
-            animation: _roam,
-            builder: (context, child) {
-              final angle = _roam.value * 2 * math.pi;
-              final drift = Offset(
-                math.cos(angle) * 44,
-                math.sin(angle * 1.3) * 36,
-              );
-              return Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  Transform.translate(
-                    offset: drift,
-                    child: SoftGlow(
-                      diameter: 100,
-                      sigma: 28,
-                      color: AppColors.accent.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child!,
-                ],
-              );
-            },
-            child: Image.asset('assets/branding/app_icon_transparent.png',
-                width: 120, height: 120),
+      body: Stack(
+        children: [
+          Positioned.fill(child: AuthBlobBackground(layout: _layout)),
+          const Center(child: FlameLoader(size: 180)),
+          const Positioned(
+            left: 32,
+            right: 32,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              minimum: EdgeInsets.only(bottom: 40),
+              child: SplashQuote(),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

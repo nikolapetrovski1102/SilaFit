@@ -521,3 +521,103 @@ input, select, textarea { font-family: var(--font); }
 .gold-text { color: var(--secondary); }
 .num { font-variant-numeric: tabular-nums; }
 .wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+/* ---------- Sila, the flame-spirit mascot ----------
+   Markup (static pages write it by hand, the console uses js/sila.js):
+     <span class="sila sila--glow sila--alive" data-sila="flame">
+       <img class="sila__art sila__art--dark" …/dark/flame.webp>
+       <img class="sila__art sila__art--light" …/light/flame.webp>
+     </span>
+   Both theme variants sit in the same grid cell and CSS shows the one
+   that matches <html data-theme>. The art is square and stands on the
+   bottom edge, so the glow and the contact shadow anchor there. */
+:root {
+  --sila-glow: rgba(222, 251, 146, 0.42);
+  --sila-glow-core: rgba(244, 255, 214, 0.5);
+  --sila-shadow: rgba(4, 16, 18, 0.55);
+}
+[data-theme="light"] {
+  --sila-glow: rgba(240, 160, 64, 0.38);
+  --sila-glow-core: rgba(255, 214, 140, 0.45);
+  --sila-shadow: rgba(96, 22, 30, 0.22);
+}
+.sila {
+  --sila-size: 100%;
+  position: relative;
+  display: inline-grid;
+  width: var(--sila-size);
+  max-width: 100%;
+  aspect-ratio: 1;
+  isolation: isolate;
+  flex-shrink: 0;
+  vertical-align: bottom;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sila__art {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.sila__art--light { display: none; }
+[data-theme="light"] .sila__art--light { display: block; }
+[data-theme="light"] .sila__art--dark { display: none; }
+
+/* Ember glow behind the body and a soft contact shadow under it. */
+.sila--glow::before,
+.sila--glow::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+.sila--glow::before {
+  inset: 16% 8% 4%;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, var(--sila-glow-core), transparent 60%),
+    radial-gradient(closest-side, var(--sila-glow), transparent);
+  filter: blur(14px);
+  opacity: 0.8;
+  animation: sila-glow 3.4s ease-in-out infinite;
+}
+.sila--glow::after {
+  left: 22%;
+  right: 22%;
+  bottom: -3%;
+  height: 8%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--sila-shadow), transparent);
+  animation: sila-shadow 3.4s ease-in-out infinite;
+}
+
+/* A living flame: breathes upward from its base, never bounces. */
+.sila--alive .sila__art { animation: sila-breathe 3.4s ease-in-out infinite; }
+.sila--react .sila__art { animation: sila-react 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes sila-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(0.985, 1.035); }
+}
+@keyframes sila-glow {
+  0%, 100% { opacity: 0.62; transform: scale(0.95); }
+  50% { opacity: 0.95; transform: scale(1.05); }
+}
+@keyframes sila-shadow {
+  0%, 100% { opacity: 0.9; transform: scaleX(1); }
+  50% { opacity: 0.7; transform: scaleX(0.92); }
+}
+@keyframes sila-react {
+  0% { transform: scale(1, 1); }
+  35% { transform: scale(1.08, 0.9); }
+  70% { transform: scale(0.96, 1.06); }
+  100% { transform: scale(1, 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sila--glow::before, .sila--glow::after, .sila--alive .sila__art, .sila--react .sila__art { animation: none; }
+}

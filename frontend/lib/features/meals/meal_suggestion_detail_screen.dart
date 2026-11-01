@@ -10,6 +10,7 @@ import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
+import 'meal_recipe_screen.dart';
 
 /// One curated meal's detail + activate action - mirrors SplitDetailScreen:
 /// a hero summary, then a single primary button that flips from
@@ -161,7 +162,7 @@ class _DetailBody extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.xs),
                     child: Text(
-                      '+${suggestion.ingredientCount - 4} more ingredients in the full recipe',
+                      '+${suggestion.ingredientCount - 4} more in the full recipe',
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant),
                     ),
@@ -170,6 +171,14 @@ class _DetailBody extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: () => openMealRecipe(context,
+              mealSuggestionId: suggestion.mealSuggestionId,
+              title: suggestion.title),
+          icon: const Icon(Icons.menu_book_rounded, size: 18),
+          label: const Text('Ingredients & steps'),
+        ),
         const SizedBox(height: AppSpacing.lg),
         if (readOnly)
           SectionCard(

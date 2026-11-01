@@ -16,6 +16,7 @@ import '../../diet_plans/diet_plans_screen.dart';
 import '../../diet_plans/my_diet_plans_screen.dart';
 import '../meal_controller.dart';
 import '../meal_models.dart';
+import '../meal_recipe_screen.dart';
 
 /// The "Active Diet Plan" block that replaced the old "Logged Meals" list on
 /// Nutrition: shows the user's active plan's meals for the day currently
@@ -123,22 +124,15 @@ class _PlanDayCard extends StatelessWidget {
     'Sunday',
   ];
 
-  int _dayIndexFor(DateTime date, int durationDays) {
-    final days = durationDays <= 0 ? 1 : durationDays;
-    // A weekly plan maps cleanly onto the calendar week (Mon=1..Sun=7). Longer
-    // plans rotate through their days by day-of-year so a monthly plan doesn't
-    // collapse onto only its first seven day slots.
-    if (days == 7) return date.weekday;
-    final dayOfYear = date.difference(DateTime(date.year, 1, 1)).inDays + 1;
-    return ((dayOfYear - 1) % days) + 1;
-  }
-
   @override
   Widget build(BuildContext context) {
     final repository = context.read<DietPlanRepository>();
-    final dayIndex =
-        _dayIndexFor(mealController.selectedDate, plan.plan.durationDays);
-    final planDay = _findDay(dayIndex);
+    final dayIndex = plan.dayIndexFor(mealController.selectedDate);
+    final planDay = plan.dayFor(dayIndex);
+    final multiWeek = plan.cycleLength > 7;
+    final position = multiWeek
+        ? 'Week ${(dayIndex - 1) ~/ 7 + 1} of ${plan.cycleLength ~/ 7} · Day ${(dayIndex - 1) % 7 + 1}'
+        : 'Day $dayIndex';
     final dayLogs = mealController.state.data?.meals ?? const <MealLog>[];
 
     return SectionCard(
@@ -156,7 +150,7 @@ class _PlanDayCard extends StatelessWidget {
                             .copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      '${plan.plan.periodType} · Day $dayIndex'
+                      '${plan.plan.periodType} · $position'
                       ' · ${_kDayNames[mealController.selectedDate.weekday - 1]}',
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant),
@@ -257,14 +251,6 @@ class _PlanDayCard extends StatelessWidget {
       ),
     );
   }
-
-  DietPlanDayWithMeals? _findDay(int dayIndex) {
-    if (plan.days.isEmpty) return null;
-    for (final day in plan.days) {
-      if (day.day.dayIndex == dayIndex) return day;
-    }
-    return plan.days.first;
-  }
 }
 
 class _PlanMealRow extends StatelessWidget {
@@ -292,23 +278,27 @@ class _PlanMealRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(meal.mealType.toUpperCase(),
-                    style: AppTypography.labelCaps
-                        .copyWith(color: AppColors.accent)),
-                const SizedBox(height: 2),
-                Text(meal.title,
-                    style: AppTypography.bodySm,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                Text(
-                  '${meal.caloriesKcal} kcal · P${meal.proteinG} C${meal.carbsG} F${meal.fatsG}',
-                  style: AppTypography.labelSm
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-              ],
+            child: InkWell(
+              onTap: () => openMealRecipe(context,
+                  mealSuggestionId: meal.mealSuggestionId, title: meal.title),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(meal.mealType.toUpperCase(),
+                      style: AppTypography.labelCaps
+                          .copyWith(color: AppColors.accent)),
+                  const SizedBox(height: 2),
+                  Text(meal.title,
+                      style: AppTypography.bodySm,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    '${meal.caloriesKcal} kcal · P${meal.proteinG} C${meal.carbsG} F${meal.fatsG} · Recipe',
+                    style: AppTypography.labelSm
+                        .copyWith(color: AppColors.onSurfaceVariant),
+                  ),
+                ],
+              ),
             ),
           ),
           if (logged)

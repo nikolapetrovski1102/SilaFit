@@ -233,7 +233,7 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
 }
 .media--side .t-stat { margin-top: 16px; }
 .media--side .t-body { max-width: 26ch; }
-.media--side img.mascot { width: 56%; max-width: 240px; height: auto; align-self: flex-end; object-fit: contain; }
+.media--side .mascot { width: 56%; max-width: 240px; align-self: flex-end; margin-top: 12px; }
 
 /* ----------------------------------------------------------------
    App Store badge — mirrors Apple's black badge (black fill, grey
@@ -606,7 +606,33 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
   align-items: end;
 }
 .closing h2 { grid-column: 1 / span 9; }
-.closing__mascot { grid-column: 10 / -1; justify-self: end; width: 100%; max-width: 300px; }
+.closing__mascot { grid-column: 10 / -1; justify-self: end; width: 100%; max-width: 280px; position: relative; display: flex; flex-direction: column; align-items: center; }
+.closing__mascot .sila { width: 100%; }
+
+/* Sila talks: a glass speech bubble that pops in once the closing section arrives. */
+.sila-bubble {
+  position: relative;
+  align-self: flex-start;
+  margin: 0 0 10px;
+  padding: 12px 16px;
+  max-width: 22ch;
+  border-radius: 18px 18px 18px 6px;
+  background: color-mix(in srgb, var(--surface-high) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: inset 0 0 0 1px var(--glass-border), var(--glass-shadow);
+  color: var(--high-emphasis);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  transform-origin: 10% 100%;
+  scale: 0.6;
+  opacity: 0;
+  transition: scale 520ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 240ms ease;
+}
+.sila-bubble.is-shown { scale: 1; opacity: 1; }
+[data-theme="light"] .sila-bubble { background: color-mix(in srgb, var(--surface-lowest) 88%, transparent); }
 .closing__actions { grid-column: 1 / -1; margin-top: clamp(40px, 5vw, 64px); display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
 
 /* ----------------------------------------------------------------
@@ -1156,15 +1182,13 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
   overflow: visible;
 }
 .hero-sticker__ring text { font-size: 21px; font-weight: 700; letter-spacing: 0.06em; fill: var(--accent); }
-.hero-sticker img {
+.hero-sticker .sila {
   position: absolute;
-  inset: 13%;
-  width: 74%;
-  height: 74%;
-  object-fit: contain;
+  inset: 12% 13% 14%;
+  width: auto;
   transition: scale 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.hero-sticker:hover img { scale: 1.15; }
+.hero-sticker:hover .sila { scale: 1.15; }
 @keyframes sticker-in { to { scale: 1; } }
 @keyframes sticker-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
@@ -1187,7 +1211,7 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
   .float-chip--set { left: auto; right: -6px; bottom: 7%; }
   .float-chip--rest { display: none; }
   .media--side { position: relative; }
-  .media--side img.mascot { position: absolute; top: 18px; right: 14px; width: clamp(84px, 28vw, 130px); }
+  .media--side .mascot { position: absolute; top: 18px; right: 14px; width: clamp(84px, 28vw, 130px); margin: 0; }
   .streak-week li { width: 26px; height: 26px; font-size: 10px; }
   .pr-badge { padding: 7px 10px; border-radius: 10px; }
   .pr-badge b { font-size: 15px; }
@@ -1308,3 +1332,8 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
 }
 
 @keyframes menu-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* Without motion the bubble is simply there. */
+@media (prefers-reduced-motion: reduce) {
+  .sila-bubble { scale: 1; opacity: 1; transition: none; }
+}

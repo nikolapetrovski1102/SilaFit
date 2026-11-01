@@ -5,6 +5,7 @@ using Silen.Common.Helpers;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Services.Abstractions;
+using Silen.Services.Helpers;
 
 namespace Silen.Services.Implementations;
 
@@ -13,9 +14,6 @@ public sealed class UserProfileService(
     IUserProfileProvider userProfileProvider,
     IMealPlanningService mealPlanningService) : IUserProfileService
 {
-    private static readonly string[] Genders = ["Male", "Female", "Other"];
-    private static readonly string[] Goals = ["BuildMuscle", "LoseFat", "MaintainActive"];
-
     public Task<ServiceResult<UserProfileModel>> GetAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
             await userProfileProvider.GetAsync(userId, cancellationToken)
@@ -40,38 +38,38 @@ public sealed class UserProfileService(
 
     private static void Validate(UpsertUserProfileRequest request)
     {
-        if (request.TrainingDaysPerWeek is < 1 or > 7)
+        if (request.TrainingDaysPerWeek is < UserProfileRules.MinTrainingDaysPerWeek or > UserProfileRules.MaxTrainingDaysPerWeek)
             throw new ValidationException("Invalid training days.", "Choose between 1 and 7 training days.");
-        if (request.SessionDurationMinutes is < 15 or > 180)
+        if (request.SessionDurationMinutes is < UserProfileRules.MinSessionDurationMinutes or > UserProfileRules.MaxSessionDurationMinutes)
             throw new ValidationException("Invalid session duration.", "Choose a workout duration between 15 and 180 minutes.");
-        if (request.TrainingExperience is not null && !new[] { "Beginner", "Intermediate", "Advanced" }.Contains(request.TrainingExperience))
+        if (request.TrainingExperience is not null && !UserProfileRules.TrainingExperiences.Contains(request.TrainingExperience))
             throw new ValidationException("Invalid training experience.", "Choose a valid training experience option.");
-        if (request.EquipmentAccess is not null && !new[] { "FullGym", "Dumbbells", "Bodyweight" }.Contains(request.EquipmentAccess))
+        if (request.EquipmentAccess is not null && !UserProfileRules.EquipmentAccesses.Contains(request.EquipmentAccess))
             throw new ValidationException("Invalid equipment access.", "Choose a valid equipment access option.");
-        if (request.DailyActivityLevel is not null && !new[] { "Sedentary", "LightlyActive", "Active", "VeryActive" }.Contains(request.DailyActivityLevel))
+        if (request.DailyActivityLevel is not null && !UserProfileRules.DailyActivityLevels.Contains(request.DailyActivityLevel))
             throw new ValidationException("Invalid daily activity.", "Choose a valid daily activity option.");
 
-        if (!Genders.Contains(request.Gender))
+        if (!UserProfileRules.Genders.Contains(request.Gender))
         {
             throw new ValidationException($"Unsupported gender '{request.Gender}'.", "Choose a valid gender option.");
         }
 
-        if (!Goals.Contains(request.Goal))
+        if (!UserProfileRules.Goals.Contains(request.Goal))
         {
             throw new ValidationException($"Unsupported goal '{request.Goal}'.", "Choose a valid goal.");
         }
 
-        if (request.AgeYears is < 13 or > 100)
+        if (request.AgeYears is < UserProfileRules.MinAgeYears or > UserProfileRules.MaxAgeYears)
         {
             throw new ValidationException($"Invalid age '{request.AgeYears}'.", "Enter an age between 13 and 100.");
         }
 
-        if (request.HeightCm is < 100 or > 250)
+        if (request.HeightCm is < UserProfileRules.MinHeightCm or > UserProfileRules.MaxHeightCm)
         {
             throw new ValidationException($"Invalid height '{request.HeightCm}'.", "Enter a valid height.");
         }
 
-        if (request.WeightKg is < 30 or > 300)
+        if (request.WeightKg is < UserProfileRules.MinWeightKg or > UserProfileRules.MaxWeightKg)
         {
             throw new ValidationException($"Invalid weight '{request.WeightKg}'.", "Enter a valid weight.");
         }

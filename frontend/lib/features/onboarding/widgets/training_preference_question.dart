@@ -3,6 +3,7 @@ import '../onboarding_controller.dart';
 import 'arc_rating_slider.dart';
 import 'option_row_selector.dart';
 import 'question_scaffold.dart';
+import '../../../core/widgets/mascot/talking_mascot.dart';
 
 /// Uses the same answer rows, typography, progress and CTA as the original questions.
 class TrainingPreferenceQuestion extends StatelessWidget {
@@ -14,6 +15,9 @@ class TrainingPreferenceQuestion extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback? onSkip;
   final bool isLast;
+
+  /// What Sila says above the question, if anything.
+  final MascotLine? mascot;
   const TrainingPreferenceQuestion(
       {super.key,
       required this.controller,
@@ -23,7 +27,8 @@ class TrainingPreferenceQuestion extends StatelessWidget {
       required this.onBack,
       required this.onNext,
       this.onSkip,
-      this.isLast = false});
+      this.isLast = false,
+      this.mascot});
 
   static const _experienceLabels = {
     'Beginner': 'Getting started',
@@ -37,6 +42,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
       return QuestionScaffold(
         onBack: onBack,
         onSkip: onSkip,
+        mascot: mascot,
         progressStep: progressStep,
         progressStepCount: progressStepCount,
         headline: 'How would you rate your fitness level?',
@@ -126,6 +132,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
     return QuestionScaffold(
       onBack: onBack,
       onSkip: onSkip,
+      mascot: mascot,
       progressStep: progressStep,
       progressStepCount: progressStepCount,
       headline: headline,

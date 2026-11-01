@@ -27,6 +27,11 @@ class ResponseCache {
   final Map<String, CachedPayload> _memory = {};
   Directory? _resolved;
 
+  /// Tail of the disk-operation chain. Writes are fire-and-forget for
+  /// callers, so without ordering a write still in flight could land after
+  /// [clear] and resurrect a signed-out user's file.
+  Future<void> _diskOps = Future.value();
+
   ResponseCache({Future<Directory> Function()? directory})
       : _directory = directory ??
             (() async => Directory(
@@ -58,10 +63,10 @@ class ResponseCache {
     }
   }
 
-  Future<void> write(String key, dynamic data) async {
+  Future<void> write(String key, dynamic data) {
     final payload = CachedPayload(data, DateTime.now().toUtc());
     _memory[key] = payload;
-    try {
+    return _enqueue(() async {
       final dir = await _dir();
       await dir.create(recursive: true);
       // Write-then-rename so a kill mid-write never leaves a torn file
@@ -72,18 +77,26 @@ class ResponseCache {
         'data': data,
       }));
       await tmp.rename('${dir.path}/$key.json');
-    } catch (_) {}
+    });
   }
 
   /// Drops every entry for every user - run on sign-out/account deletion
   /// alongside the other per-user local caches.
-  Future<void> clear() async {
+  Future<void> clear() {
     _memory.clear();
-    try {
+    return _enqueue(() async {
       final dir = await _dir();
       if (await dir.exists()) await dir.delete(recursive: true);
-    } catch (_) {}
+    });
   }
+
+  /// Completes once every write and clear queued so far has reached disk.
+  Future<void> flush() => _diskOps;
+
+  /// Runs [op] after every disk operation queued before it, swallowing its
+  /// failure so one bad write never blocks the ones behind it.
+  Future<void> _enqueue(Future<void> Function() op) =>
+      _diskOps = _diskOps.then((_) => op()).catchError((_) {});
 
   Future<Directory> _dir() async => _resolved ??= await _directory();
 }

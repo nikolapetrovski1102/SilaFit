@@ -10,6 +10,11 @@ public static class RateLimitPolicies
     /// <summary>Anonymous auth endpoints (device/register/login/resend), partitioned per client IP.</summary>
     public const string Auth = "auth";
 
+    /// <summary>Refresh-token exchange and sign-out, partitioned per client IP. Looser than
+    /// <see cref="Auth"/>: a refresh token is 256 random bits, so there is nothing to guess,
+    /// and many phones behind one gym or carrier IP all renew around the same time.</summary>
+    public const string SessionRefresh = "session-refresh";
+
     /// <summary>Admin console sign-in, partitioned per client IP with a tighter window.</summary>
     public const string AdminAuth = "admin-auth";
 

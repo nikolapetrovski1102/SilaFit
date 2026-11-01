@@ -20,4 +20,7 @@ public interface IMealPlanningProvider
     /// <summary>Logged date + calorie pairs in [fromDateUtc, toDateUtc]. Used by AnalyticsProvider
     /// to derive AvgCaloriesLogged now that CaloriesKcal can no longer be aggregated in T-SQL.</summary>
     Task<List<(DateOnly LogDateUtc, int CaloriesKcal)>> GetCaloriesInRangeAsync(Guid userId, DateOnly fromDateUtc, DateOnly toDateUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>A meal's ingredients and steps. Null for an unknown meal or another user's custom one.</summary>
+    Task<MealRecipeModel?> GetRecipeAsync(Guid mealSuggestionId, Guid userId, CancellationToken cancellationToken = default);
 }

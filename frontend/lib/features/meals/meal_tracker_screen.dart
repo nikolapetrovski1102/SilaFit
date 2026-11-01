@@ -11,6 +11,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/silen_button.dart';
 import '../auth/widgets/auth_blob_background.dart';
 import '../plans/plans_screen.dart';
+import '../providers/protein_partner_hint.dart';
 import '../settings/ai_consent_gate.dart';
 import '../splits/widgets/ink_field.dart';
 import 'meal_controller.dart';
@@ -980,7 +981,8 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   }
 
   Widget _buildBottomBar() {
-    final kcal = MealTotals.of(_items).caloriesKcal;
+    final totals = MealTotals.of(_items);
+    final kcal = totals.caloriesKcal;
     final Widget bar = switch (_stage) {
       _Stage.name => PrimaryPillButton(
           key: const ValueKey('bar-name'),
@@ -1001,11 +1003,19 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile, AppSpacing.xs,
           AppSpacing.marginMobile, AppSpacing.md),
-      child: AnimatedSwitcher(
-        duration: kInkQuick,
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeIn,
-        child: bar,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_stage == _Stage.foods)
+            ProteinPartnerHint(
+                proteinG: totals.proteinG, caloriesKcal: totals.caloriesKcal),
+          AnimatedSwitcher(
+            duration: kInkQuick,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeIn,
+            child: bar,
+          ),
+        ],
       ),
     );
   }

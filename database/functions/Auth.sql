@@ -6,12 +6,23 @@ CREATE OR REPLACE FUNCTION dbo.usp_auth_getorcreatedeviceuser(
 DECLARE
     c1 refcursor;
     v_userid uuid;
+    v_accountid uuid;
 BEGIN
     -- Two first launches racing for the same device would otherwise both see no
     -- row and the second insert would fail on the DeviceId unique index.
     PERFORM pg_advisory_xact_lock(hashtextextended('device-user:' || lower(p_deviceid), 0));
 
-    SELECT userid INTO v_userid FROM dbo.users WHERE deviceid = p_deviceid;
+    -- A Guest shell that signed in to an existing account answers as that
+    -- account (see usp_auth_linkdevicetoaccount), so re-login after an expired
+    -- token lands back in the signed-in account rather than the empty Guest.
+    SELECT u.userid, a.userid INTO v_userid, v_accountid
+    FROM dbo.users u
+    LEFT JOIN dbo.users a ON a.userid = u.signedinuserid AND a.isactive
+    WHERE u.deviceid = p_deviceid;
+
+    IF v_accountid IS NOT NULL THEN
+        v_userid := v_accountid;
+    END IF;
 
     IF v_userid IS NULL THEN
         v_userid := gen_random_uuid();
@@ -185,6 +196,78 @@ CREATE OR REPLACE FUNCTION dbo.usp_auth_updatelastlogin(
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 BEGIN
     UPDATE dbo.users SET lastloginatutc = dbo.sysutcdatetime() WHERE userid = p_userid;
+END $$;
+
+-- Points a device's Guest shell at the account it just signed in to, so device
+-- login answers with that account from now on. Only a Guest row that owns a
+-- device id is ever repointed; a registered caller is left alone.
+CREATE OR REPLACE FUNCTION dbo.usp_auth_linkdevicetoaccount(
+    p_deviceuserid uuid,
+    p_accountuserid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE dbo.users
+    SET signedinuserid = p_accountuserid
+    WHERE userid = p_deviceuserid
+      AND userid <> p_accountuserid
+      AND accounttier = 'Guest'
+      AND deviceid IS NOT NULL;
+END $$;
+
+-- Stores a new refresh token (its SHA-256 only) for p_userid. Also drops that
+-- user's expired tokens and keeps at most the 20 most recently used, so a
+-- reinstall-happy device can't grow the table without bound.
+CREATE OR REPLACE FUNCTION dbo.usp_auth_createrefreshtoken(
+    p_userid uuid,
+    p_tokenhash bytea,
+    p_expiresatutc timestamp
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO dbo.refreshtokens (userid, tokenhash, expiresatutc)
+    VALUES (p_userid, p_tokenhash, p_expiresatutc);
+
+    DELETE FROM dbo.refreshtokens
+    WHERE userid = p_userid
+      AND (expiresatutc <= dbo.sysutcdatetime()
+           OR refreshtokenid IN (
+               SELECT refreshtokenid FROM dbo.refreshtokens
+               WHERE userid = p_userid
+               ORDER BY lastusedatutc DESC
+               OFFSET 20));
+END $$;
+
+-- Redeems a refresh token: slides its expiry to p_expiresatutc and returns the
+-- owning user (same shape as usp_auth_getuserbyid). Returns no row when the
+-- token is unknown, expired, revoked, or its account is no longer active.
+CREATE OR REPLACE FUNCTION dbo.usp_auth_userefreshtoken(
+    p_tokenhash bytea,
+    p_expiresatutc timestamp
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+    v_userid uuid;
+BEGIN
+    UPDATE dbo.refreshtokens
+    SET lastusedatutc = dbo.sysutcdatetime(),
+        expiresatutc = p_expiresatutc
+    WHERE tokenhash = p_tokenhash
+      AND expiresatutc > dbo.sysutcdatetime()
+    RETURNING userid INTO v_userid;
+
+    OPEN c1 FOR
+    SELECT userid, deviceid, displayname, email, accounttier, createdatutc, lastloginatutc, isactive
+    FROM dbo.users
+    WHERE userid = v_userid
+      AND isactive;
+    RETURN NEXT c1;
+END $$;
+
+-- Sign-out: forgets the refresh token so it can never mint another access token.
+CREATE OR REPLACE FUNCTION dbo.usp_auth_revokerefreshtoken(
+    p_tokenhash bytea
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+BEGIN
+    DELETE FROM dbo.refreshtokens WHERE tokenhash = p_tokenhash;
 END $$;
 
 -- Starts (or restarts) email/password registration: stashes everything

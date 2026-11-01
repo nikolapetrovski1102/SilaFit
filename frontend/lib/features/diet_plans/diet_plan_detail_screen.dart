@@ -13,6 +13,10 @@ import 'diet_plan_builder_screen.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
 import 'diet_plan_repository.dart';
+import '../documents/trainer_document_action.dart';
+import '../documents/trainer_document_models.dart';
+import '../meals/meal_recipe_screen.dart';
+import '../../core/widgets/week_header.dart';
 
 /// Read-only detail view for a diet plan - the meal-planning equivalent of
 /// `SplitDetailScreen`. Besides browse + (if owned) edit, it offers the
@@ -79,6 +83,9 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
         elevation: 0,
         title: Text(widget.planName, style: AppTypography.headlineSm),
         actions: [
+          TrainerDocumentAction(
+              kind: TrainerDocumentKind.dietPlan,
+              targetId: widget.controller.dietPlanId),
           if (widget.controller.state.data?.plan.isEditableByMe == true)
             IconButton(
               icon: const Icon(Icons.edit_outlined),
@@ -130,8 +137,13 @@ class _DetailBody extends StatelessWidget {
       required this.onActivate,
       required this.onKeep});
 
+  static int _weekOf(DietPlanDayWithMeals day) =>
+      (day.day.dayIndex - 1) ~/ 7 + 1;
+
   @override
   Widget build(BuildContext context) {
+    final sortedDays = [...detail.days]
+      ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -147,7 +159,8 @@ class _DetailBody extends StatelessWidget {
                             MediaQuery.devicePixelRatioOf(context))
                         .round(),
                   )
-                : Image.asset('assets/branding/split_hero.png', fit: BoxFit.cover),
+                : Image.asset('assets/branding/split_hero.png',
+                    fit: BoxFit.cover),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -170,8 +183,7 @@ class _DetailBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
         ],
         PrimaryPillButton(
-          label:
-              controller.activated ? 'Plan Activated' : 'Activate This Plan',
+          label: controller.activated ? 'Plan Activated' : 'Activate This Plan',
           icon: controller.activated
               ? Icons.check_rounded
               : Icons.play_arrow_rounded,
@@ -196,8 +208,11 @@ class _DetailBody extends StatelessWidget {
         ],
         Text('DAY BY DAY', style: AppTypography.labelCaps),
         const SizedBox(height: AppSpacing.sm),
-        for (final day in [...detail.days]
-          ..sort((a, b) => a.day.dayIndex.compareTo(b.day.dayIndex))) ...[
+        for (final (i, day) in sortedDays.indexed) ...[
+          // Multi-week plans: a WEEK k header where each new week starts.
+          if (detail.cycleLength > 7 &&
+              (i == 0 || _weekOf(day) != _weekOf(sortedDays[i - 1])))
+            WeekHeader(week: _weekOf(day), first: i == 0),
           _DayCard(day: day),
           const SizedBox(height: AppSpacing.sm),
         ],
@@ -226,8 +241,8 @@ class _DetailBody extends StatelessWidget {
                         const SizedBox(width: AppSpacing.xs),
                         Expanded(
                           child: Text(ingredient,
-                              style: AppTypography.bodySm.copyWith(
-                                  color: AppColors.onSurface)),
+                              style: AppTypography.bodySm
+                                  .copyWith(color: AppColors.onSurface)),
                         ),
                       ],
                     ),
@@ -250,16 +265,19 @@ class _MetaPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
       decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppRadius.full)),
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(AppRadius.full)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: AppColors.accent),
           const SizedBox(width: 4),
           Text(label,
-              style: AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant)),
+              style: AppTypography.labelSm
+                  .copyWith(color: AppColors.onSurfaceVariant)),
         ],
       ),
     );
@@ -282,10 +300,12 @@ class _DayCard extends StatelessWidget {
               Container(
                 width: 28,
                 height: 28,
-                decoration: BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                    color: AppColors.accent, shape: BoxShape.circle),
                 alignment: Alignment.center,
                 child: Text('${day.day.dayIndex}',
-                    style: AppTypography.labelCaps.copyWith(color: AppColors.onAccent)),
+                    style: AppTypography.labelCaps
+                        .copyWith(color: AppColors.onAccent)),
               ),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
@@ -298,22 +318,35 @@ class _DayCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Divider(color: AppColors.outlineVariant, height: 1),
             const SizedBox(height: AppSpacing.sm),
-            for (final meal in [...day.meals]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 72,
-                      child: Text(meal.mealType,
-                          style: AppTypography.labelSm.copyWith(color: AppColors.accent)),
-                    ),
-                    Expanded(
-                        child: Text(meal.title,
-                            style: AppTypography.bodySm.copyWith(color: AppColors.onSurface))),
-                    Text('${meal.caloriesKcal} kcal',
-                        style: AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant)),
-                  ],
+            for (final meal in [
+              ...day.meals
+            ]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
+              InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.inset),
+                onTap: () => openMealRecipe(context,
+                    mealSuggestionId: meal.mealSuggestionId, title: meal.title),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 72,
+                        child: Text(meal.mealType,
+                            style: AppTypography.labelSm
+                                .copyWith(color: AppColors.accent)),
+                      ),
+                      Expanded(
+                          child: Text(meal.title,
+                              style: AppTypography.bodySm
+                                  .copyWith(color: AppColors.onSurface))),
+                      Text('${meal.caloriesKcal} kcal',
+                          style: AppTypography.labelSm
+                              .copyWith(color: AppColors.onSurfaceVariant)),
+                      const SizedBox(width: AppSpacing.xxs),
+                      Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.onSurfaceVariant),
+                    ],
+                  ),
                 ),
               ),
           ],

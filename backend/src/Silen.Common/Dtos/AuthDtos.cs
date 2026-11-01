@@ -34,6 +34,8 @@ public sealed class EmailRegisterRequest
 
 public sealed class EmailLoginRequest
 {
+    public Guid? ExistingUserId { get; set; }
+
     [Required]
     [EmailAddress]
     [StringLength(256)]
@@ -71,9 +73,33 @@ public sealed class AppleLoginRequest
     public string? AuthorizationCode { get; set; }
 }
 
+public sealed class RefreshSessionRequest
+{
+    /// <summary>The refresh token from an earlier <see cref="AuthResultDto"/>. Optional
+    /// only for sessions issued before refresh tokens existed: those send their
+    /// still-valid access token instead and get their first refresh token back.</summary>
+    [StringLength(200)]
+    public string? RefreshToken { get; set; }
+
+    /// <summary>Set by the controller from a valid bearer token. Not set by the client.</summary>
+    public Guid? CallerUserId { get; set; }
+}
+
+public sealed class RevokeSessionRequest
+{
+    [Required]
+    [StringLength(200, MinimumLength = 1)]
+    public string RefreshToken { get; set; } = string.Empty;
+}
+
 public sealed class AuthResultDto
 {
     public string Token { get; set; } = string.Empty;
+
+    /// <summary>Opaque, long-lived; traded at <c>POST api/auth/refresh</c> for a new
+    /// <see cref="Token"/> once that one expires.</summary>
+    public string RefreshToken { get; set; } = string.Empty;
+
     public Guid UserId { get; set; }
     public string AccountTier { get; set; } = string.Empty;
     public string? Email { get; set; }

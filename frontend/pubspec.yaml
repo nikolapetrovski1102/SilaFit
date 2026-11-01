@@ -118,6 +118,8 @@ flutter:
     - assets/avatars/male/
     - assets/avatars/female/
     - assets/mascot/
+    - assets/mascot/flame/dark/
+    - assets/mascot/flame/light/
     - assets/splits/
     - assets/lottie_animations/
 
@@ -174,6 +176,9 @@ flutter_launcher_icons:
 # so it needs its own explicit light/dark background pair. Colors mirror
 # AppColors.background in each mode; the transparent-background mark reads
 # correctly on both. Run: dart run flutter_native_splash:create
+# The tool always writes iOS images to ios/Runner/Assets.xcassets (the old
+# target name), so afterwards copy LaunchImage.imageset and
+# LaunchBackground.imageset from there into ios/SilaFit/Assets.xcassets.
 flutter_native_splash:
   color: "#f5fbf5"
   color_dark: "#172d30"

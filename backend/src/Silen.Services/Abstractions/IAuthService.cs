@@ -22,4 +22,12 @@ public interface IAuthService
     Task<ServiceResult<AuthResultDto>> LoginOrLinkGoogleAsync(GoogleLoginRequest request, CancellationToken cancellationToken = default);
 
     Task<ServiceResult<AuthResultDto>> LoginOrLinkAppleAsync(AppleLoginRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Trades a refresh token for a new access token (same refresh token back, expiry
+    /// slid forward). With no refresh token, a caller holding a still-valid access token -
+    /// a session from before refresh tokens existed - gets its first pair instead.</summary>
+    Task<ServiceResult<AuthResultDto>> RefreshSessionAsync(RefreshSessionRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Sign-out: the refresh token can't mint another access token.</summary>
+    Task<ServiceResult<bool>> RevokeSessionAsync(RevokeSessionRequest request, CancellationToken cancellationToken = default);
 }
