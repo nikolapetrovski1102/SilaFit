@@ -45,6 +45,51 @@ BEGIN
     RETURN NEXT c1;
 END $$;
 
+-- Splits a trainer handed to this user (a splitassignments row), listed under
+-- My Splits next to the ones they built. They stay read-only for the user: every
+-- usp_usersplit* write below still requires owneruserid = p_userid, which a
+-- trainer's split never has. Newest assignment first.
+CREATE OR REPLACE FUNCTION dbo.usp_usersplits_getassigned(
+    p_userid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT s.splitid,
+           s.name,
+           s.category,
+           s.level,
+           s.durationdays,
+           s.description,
+           s.heroimageurl,
+           s.issystemdefault,
+           s.sortorder,
+           s.recommendedgoal,
+           s.visibility,
+           s.daysperweek,
+           s.programdurationweeks,
+           s.minsessionminutes,
+           s.maxsessionminutes,
+           s.equipmentrequired,
+           s.targetgender,
+           s.workouttypelabel,
+           s.sourcecategoriesjson,
+           s.owneruserid,
+           s.isaigenerated,
+           s.aikeptatutc,
+           COALESCE((SELECT trunc(AVG(d.estimatedminutes))::int
+                     FROM dbo.splitdays d
+                     WHERE d.splitid = s.splitid
+                       AND NOT d.isrestday), 0) AS avgsessionminutes
+    FROM dbo.splitassignments a
+    INNER JOIN dbo.workoutsplits s ON s.splitid = a.splitid
+    WHERE a.userid = p_userid
+      AND s.owneruserid IS DISTINCT FROM p_userid
+    ORDER BY a.assignedatutc DESC, s.name;
+    RETURN NEXT c1;
+END $$;
+
 -- p_isaigenerated is only ever passed true by
 -- Silen.Tools.WeeklyPlanGeneration; the manual builder always leaves it at
 -- its false default. On UPDATE the flag is deliberately left untouched -

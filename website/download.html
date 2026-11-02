@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#172d30" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5eedd" media="(prefers-color-scheme: light)" />
+  <title>Download SilaFit</title>
+  <meta name="description" content="Get SilaFit, the workout tracker, training split and meal planning app. Free on iPhone, coming soon to Android." />
+  <link rel="canonical" href="https://sila.fitness/download" />
+  <meta property="og:title" content="Download SilaFit" />
+  <meta property="og:description" content="Train smarter. Eat right. Recover better. Free on iPhone." />
+  <meta property="og:url" content="https://sila.fitness/download" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png" media="(prefers-color-scheme: light)" />
+  <!-- Runs before anything paints, so phones are sent on without a flash of this page. -->
+  <script src="js/download.js?v=20261102"></script>
+  <link rel="stylesheet" href="css/base.css?v=20261102-ink" />
+  <link rel="stylesheet" href="css/ambient.css?v=20260925" />
+  <link rel="stylesheet" href="css/site.css?v=20261102-ram" />
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) {}
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <style>
+    .download {
+      min-height: calc(100vh - 72px);
+      min-height: calc(100svh - 72px);
+      display: grid;
+      place-items: center;
+      padding: clamp(48px, 8vw, 120px) var(--gutter);
+    }
+    .download__card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      width: 100%;
+      max-width: 640px;
+      text-align: center;
+    }
+    .download__card .sila { --sila-size: clamp(150px, 26vw, 220px); }
+    .download__card h1 {
+      color: var(--high-emphasis);
+      font-size: clamp(44px, 8vw, 88px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      font-weight: 600;
+    }
+    .download__lead {
+      max-width: 36ch;
+      color: var(--on-surface-variant);
+      font-size: clamp(17px, 1.6vw, 20px);
+      line-height: 1.5;
+    }
+    .download__badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+    .store-badge--soon { opacity: 0.55; cursor: default; pointer-events: none; }
+    .store-badge--soon::after { display: none; }
+    .download .store-qr {
+      padding: 14px 18px 14px 14px;
+      border-radius: 18px;
+      background: var(--surface-low);
+      text-align: left;
+    }
+    /* On Android (until Play is live) lead with the "coming soon" note. */
+    [data-platform="android"] .download__note { color: var(--high-emphasis); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav__inner">
+      <a class="nav__logo" href="index.html">
+        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp" width="36" height="36" alt="" aria-hidden="true" />
+        SilaFit
+      </a>
+      <nav class="nav__links">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#nutrition">Nutrition</a>
+        <a href="index.html#pricing">Pricing</a>
+      </nav>
+      <div class="nav__cta">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" title="Switch color theme">
+          <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+          <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="download">
+      <div class="download__card">
+        <span class="sila sila--glow sila--alive" data-sila="standing" role="img" aria-label="Sila, the SilaFit ram mascot"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261102-ink" width="512" height="512" alt="" decoding="async" /></span>
+        <div class="eyebrow eyebrow--accent">Download</div>
+        <h1>Get SilaFit.</h1>
+        <p class="download__lead">Log every set, follow a proven split, and eat to your goal. Free to start, no card required.</p>
+
+        <div class="download__badges">
+          <a class="store-badge" href="https://apps.apple.com/app/id6811345732" aria-label="Download SilaFit on the App Store">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            <span><small>Download on the</small><b>App Store</b></span>
+          </a>
+          <a class="store-badge store-badge--soon" data-play-badge aria-disabled="true" aria-label="SilaFit on Google Play, coming soon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.6 2.3c-.2.2-.3.6-.3 1v17.4c0 .4.1.8.3 1l9.7-9.7L3.6 2.3zm10.9 10.9 2.6 2.6-11.4 6.5 8.8-9.1zm3.9-3.9 2.8 1.6c.8.5.8 1.7 0 2.2l-2.8 1.6-2.8-2.7 2.8-2.7zM5.7 1.7l11.4 6.5-2.6 2.6-8.8-9.1z"/></svg>
+            <span><small data-play-soon>Coming soon to</small><b>Google Play</b></span>
+          </a>
+        </div>
+
+        <p class="store-note download__note" data-download-note>Free on iPhone · Android coming soon</p>
+
+        <div class="store-qr" id="downloadQr" hidden>
+          <div class="store-qr__code" aria-hidden="true"></div>
+          <span>Scan with your phone camera to get the app</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/theme.js"></script>
+  <script src="js/vendor-qrcode.js"></script>
+  <script src="js/sila.js?v=20261102-ink"></script>
+  <script src="js/motion.js?v=20261102-ram"></script>
+</body>
+</html>

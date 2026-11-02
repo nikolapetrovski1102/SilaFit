@@ -178,11 +178,6 @@ class _SettingsContent extends StatelessWidget {
           subtitle: auth.isRegistered
               ? (session?.email ?? 'Registered account')
               : 'Guest device - progress not linked',
-          tierLabel: !auth.isRegistered
-              ? 'Guest'
-              : (subscription?.isPaid ?? false)
-                  ? subscription!.planName
-                  : 'Member',
           profile: profile,
           onEditProfile: onEditProfile,
           controller: controller,
@@ -589,7 +584,6 @@ class _SubscriptionCard extends StatelessWidget {
 class _ProfileRow extends StatelessWidget {
   final String name;
   final String subtitle;
-  final String tierLabel;
   final UserProfile? profile;
   final VoidCallback onEditProfile;
   final SettingsController controller;
@@ -597,7 +591,6 @@ class _ProfileRow extends StatelessWidget {
   const _ProfileRow(
       {required this.name,
       required this.subtitle,
-      required this.tierLabel,
       required this.controller,
       required this.onEditProfile,
       this.profile});
@@ -667,7 +660,6 @@ class _ProfileRow extends StatelessWidget {
               ),
             ),
           ),
-          PillChip(label: tierLabel),
         ],
       ),
     );

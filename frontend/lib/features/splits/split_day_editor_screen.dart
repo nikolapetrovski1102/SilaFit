@@ -16,6 +16,7 @@ import 'splits_models.dart';
 import 'widgets/ink_field.dart';
 import 'widgets/muscle_focus_field.dart';
 import 'widgets/reorder_sheet.dart';
+import 'widgets/sets_reps_sheet.dart';
 
 // New exercises start on the same target as the creation wizard's; tapping
 // a chip tunes it.
@@ -503,47 +504,13 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     int initialSets = _kDefaultSets,
     int initialLow = _kDefaultRepsLow,
     int initialHigh = _kDefaultRepsHigh,
-  }) {
-    final sets = TextEditingController(text: initialSets.toString());
-    final low = TextEditingController(text: initialLow.toString());
-    final high = TextEditingController(text: initialHigh.toString());
-    Widget number(TextEditingController controller, String label) => Expanded(
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(labelText: label),
-          ),
-        );
-    return showDialog<(int, int, int)>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sets and reps'),
-        content: Row(
-          children: [
-            number(sets, 'Sets'),
-            const SizedBox(width: AppSpacing.xs),
-            number(low, 'Reps low'),
-            const SizedBox(width: AppSpacing.xs),
-            number(high, 'Reps high'),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop((
-              int.tryParse(sets.text.trim()) ?? initialSets,
-              int.tryParse(low.text.trim()) ?? initialLow,
-              int.tryParse(high.text.trim()) ?? initialHigh,
-            )),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
+  }) =>
+      showSetsRepsSheet(
+        context,
+        initialSets: initialSets,
+        initialLow: initialLow,
+        initialHigh: initialHigh,
+      );
 
   /* --------------------------------- build --------------------------------- */
 

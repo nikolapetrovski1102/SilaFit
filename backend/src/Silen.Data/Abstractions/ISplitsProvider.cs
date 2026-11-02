@@ -25,6 +25,9 @@ public interface ISplitsProvider
     /// <summary>Every split this user has built themselves (usp_UserSplits_GetOwned).</summary>
     Task<List<WorkoutSplitModel>> GetOwnedSplitsAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>Splits a trainer assigned to this user (usp_UserSplits_GetAssigned). Read-only for the user.</summary>
+    Task<List<WorkoutSplitModel>> GetAssignedSplitsAsync(Guid userId, CancellationToken cancellationToken = default);
+
     Task<AdminMutationResultModel> UpsertUserSplitAsync(UserSplitUpsertRequest request, Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>Marks an AI-generated split permanent (usp_UserSplit_Keep) - a no-op, not an

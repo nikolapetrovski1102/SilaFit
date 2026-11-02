@@ -15,6 +15,7 @@ import '../plans/plans_screen.dart';
 import '../today/today_controller.dart';
 import 'split_builder_screen.dart';
 import 'split_creation_wizard_screen.dart';
+import 'split_detail_screen.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
 import 'splits_repository.dart';
@@ -22,7 +23,9 @@ import 'splits_screen.dart';
 import 'widgets/split_hero_image.dart';
 
 /// The user's own splits - built via the in-app builder, always fully
-/// editable. This is the Home "MY SPLIT" card's destination: a premium
+/// editable - plus any split a trainer assigned them, which is listed
+/// locked: it opens the read-only [SplitDetailScreen] and offers no
+/// duplicate/delete. This is the Home "MY SPLIT" card's destination: a premium
 /// listing of what the user has created, a big "Create Split" entry point
 /// into the step-by-step wizard, and a link out to the full ranked/browsable
 /// library ([SplitsScreen]) for anyone still looking for a starting point.
@@ -59,6 +62,19 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => SplitBuilderScreen(
         controller: SplitBuilderController(repository, splitId: splitId),
+      ),
+    ));
+    if (!mounted) return;
+    _controller.load(force: true);
+  }
+
+  /// A trainer-assigned split: viewable and activatable, never editable.
+  void _openReadOnly(WorkoutSplit split) async {
+    final repository = context.read<SplitsRepository>();
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SplitDetailScreen(
+        controller: SplitDetailController(repository, split.splitId),
+        splitName: split.name,
       ),
     ));
     if (!mounted) return;
@@ -218,34 +234,44 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                             const SectionEyebrow('Your splits'),
                             const SizedBox(height: AppSpacing.sm),
                             for (final split in splits) ...[
-                              SwipeActionTile(
-                                key: ValueKey(split.splitId),
-                                sheetTitle: split.name,
-                                showHint: split == splits.first,
-                                borderRadius: AppRadius.card,
-                                actions: [
-                                  SwipeAction(
-                                    label: 'Duplicate',
-                                    icon: Icons.copy_rounded,
-                                    onTap: () => _duplicateSplit(split),
+                              if (split.isEditableByMe)
+                                SwipeActionTile(
+                                  key: ValueKey(split.splitId),
+                                  sheetTitle: split.name,
+                                  showHint: split == splits.first,
+                                  borderRadius: AppRadius.card,
+                                  actions: [
+                                    SwipeAction(
+                                      label: 'Duplicate',
+                                      icon: Icons.copy_rounded,
+                                      onTap: () => _duplicateSplit(split),
+                                    ),
+                                    SwipeAction(
+                                      label: 'Delete',
+                                      icon: Icons.delete_outline_rounded,
+                                      isDestructive: true,
+                                      onTap: () => _deleteSplit(split,
+                                          isActive: activeSplit?.splitId ==
+                                              split.splitId),
+                                    ),
+                                  ],
+                                  child: _MySplitCard(
+                                    split: split,
+                                    isActive:
+                                        activeSplit?.splitId == split.splitId,
+                                    onTap: () => _openBuilder(split.splitId),
+                                    onActivate: () => _activateSplit(split),
                                   ),
-                                  SwipeAction(
-                                    label: 'Delete',
-                                    icon: Icons.delete_outline_rounded,
-                                    isDestructive: true,
-                                    onTap: () => _deleteSplit(split,
-                                        isActive: activeSplit?.splitId ==
-                                            split.splitId),
-                                  ),
-                                ],
-                                child: _MySplitCard(
+                                )
+                              else
+                                _MySplitCard(
+                                  key: ValueKey(split.splitId),
                                   split: split,
                                   isActive:
                                       activeSplit?.splitId == split.splitId,
-                                  onTap: () => _openBuilder(split.splitId),
+                                  onTap: () => _openReadOnly(split),
                                   onActivate: () => _activateSplit(split),
                                 ),
-                              ),
                               const SizedBox(height: AppSpacing.sm),
                             ],
                           ],
@@ -334,6 +360,7 @@ class _MySplitCard extends StatefulWidget {
   final Future<void> Function() onActivate;
 
   const _MySplitCard({
+    super.key,
     required this.split,
     required this.isActive,
     required this.onTap,
@@ -375,6 +402,29 @@ class _MySplitCardState extends State<_MySplitCard> {
                     child: SplitHeroImage(split.heroImageUrl),
                   ),
                 ),
+                if (!split.isEditableByMe)
+                  Positioned(
+                    top: AppSpacing.sm,
+                    right: AppSpacing.sm,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(AppRadius.full)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_rounded,
+                              size: 12, color: AppColors.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text('FROM YOUR TRAINER',
+                              style: AppTypography.labelCaps.copyWith(
+                                  color: AppColors.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (widget.isActive)
                   Positioned(
                     top: AppSpacing.sm,

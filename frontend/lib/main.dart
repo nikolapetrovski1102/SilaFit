@@ -10,7 +10,7 @@ import 'core/session/session_store.dart';
 import 'core/sync/sync_queue.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
-import 'core/widgets/mascot/flame_loader.dart';
+import 'core/widgets/mascot/ram_loader.dart';
 import 'features/account/account_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/auth_repository.dart';
@@ -310,7 +310,7 @@ class _AppRoot extends StatefulWidget {
 
 /// How long the cold-start splash stays up at minimum. A returning device's
 /// bootstrap is only a local session restore, which in a release (AOT) build
-/// finishes within a frame or two - without a floor the flame animation never
+/// finishes within a frame or two - without a floor the ram animation never
 /// becomes visible. Long enough to catch the first blink of the loop.
 const _minSplashDuration = Duration(milliseconds: 2200);
 
@@ -379,7 +379,7 @@ class _AppRootState extends State<_AppRoot> {
 }
 
 /// Takes over from the static native splash (see `flutter_native_splash` in
-/// `pubspec.yaml`) and shows Sila on fire for however long the bootstrap
+/// `pubspec.yaml`) and shows Sila charging up for however long the bootstrap
 /// login actually takes, instead of a conventional loader. Behind Sila the
 /// same blurred accent blobs as onboarding/login keep gliding from layout to
 /// layout, so the wait feels alive rather than frozen, and a motivational
@@ -425,7 +425,7 @@ class _SplashScreenState extends State<_SplashScreen> {
       body: Stack(
         children: [
           Positioned.fill(child: AuthBlobBackground(layout: _layout)),
-          const Center(child: FlameLoader(size: 180)),
+          const Center(child: RamLoader(size: 180)),
           const Positioned(
             left: 32,
             right: 32,

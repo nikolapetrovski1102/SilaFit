@@ -20,7 +20,8 @@
 
   var nav = $('#mainNav');
 
-  var APP_STORE_URL = 'https://apps.apple.com/app/id6811345732';
+  /* The QR points at the smart link, which sends each phone to its own store. */
+  var DOWNLOAD_URL = 'https://sila.fitness/download';
 
   /* Active nav link on scroll */
   var sections = $$('section[id], div[id="top"]');
@@ -182,7 +183,7 @@
           '</div>' +
           '<p class="plan__tagline">' + escapeHtml(p.tagline || '') + '</p>' +
           '<ul>' + features + '</ul>' +
-          '<a class="btn btn--lg ' + (featured ? 'btn--primary' : 'btn--secondary') + '" href="' + APP_STORE_URL + '">' +
+          '<a class="btn btn--lg ' + (featured ? 'btn--primary' : 'btn--secondary') + '" href="/download">' +
             (p.monthlyPrice === 0 ? 'Start free' : 'Get ' + escapeHtml(p.name.replace(' Tier', '')) + ' in the app') +
           '</a>' +
         '</article>'
@@ -298,7 +299,7 @@
   });
 
   /* ----------------------------------------------------------------
-     App Store QR — desktop visitors can't tap the badge through to
+     Download QR — desktop visitors can't tap the badge through to
      their phone, so give them a code to scan instead.
      ---------------------------------------------------------------- */
   function renderStoreQr() {
@@ -309,7 +310,7 @@
     if (isMobile) return;
     try {
       var qr = window.qrcode(0, 'M');
-      qr.addData(APP_STORE_URL);
+      qr.addData(DOWNLOAD_URL);
       qr.make();
       $('.store-qr__code', box).innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
       box.hidden = false;

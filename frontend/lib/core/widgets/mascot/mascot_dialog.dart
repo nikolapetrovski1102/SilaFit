@@ -5,12 +5,12 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import '../silen_button.dart';
 import 'confetti_burst.dart';
-import 'mascot_pose.dart';
+import 'ram_mascot.dart';
 
 /// The mascot's modal moment - custom alerts, congratulations, milestones.
 /// Scale+fade entrance via [Curves.easeOutBack] for a springy, premium feel.
 class MascotDialog extends StatelessWidget {
-  final MascotPose pose;
+  final RamArt pose;
   final String title;
   final String message;
   final String actionLabel;
@@ -30,7 +30,7 @@ class MascotDialog extends StatelessWidget {
   /// Shows the dialog with the shared scale+fade+easeOutBack entrance.
   static Future<void> show(
     BuildContext context, {
-    required MascotPose pose,
+    required RamArt pose,
     required String title,
     required String message,
     String actionLabel = 'Nice',

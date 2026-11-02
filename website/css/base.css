@@ -522,23 +522,31 @@ input, select, textarea { font-family: var(--font); }
 .num { font-variant-numeric: tabular-nums; }
 .wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
 
-/* ---------- Sila, the flame-spirit mascot ----------
+/* ---------- Brand mark ----------
+   Every logo ships both app-icon variants: lime on teal for the dark
+   theme, burgundy on cream for the light theme. CSS shows the one that
+   matches <html data-theme>, so toggling never refetches or flashes. */
+.brand-mark--light { display: none; }
+[data-theme="light"] .brand-mark--light { display: inline-block; }
+[data-theme="light"] .brand-mark--dark { display: none; }
+
+/* ---------- Sila, the ram mascot ----------
    Markup (static pages write it by hand, the console uses js/sila.js):
-     <span class="sila sila--glow sila--alive" data-sila="flame">
-       <img class="sila__art sila__art--dark" …/dark/flame.webp>
-       <img class="sila__art sila__art--light" …/light/flame.webp>
+     <span class="sila sila--glow sila--alive" data-sila="standing">
+       <img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261102-ink">
      </span>
-   Both theme variants sit in the same grid cell and CSS shows the one
-   that matches <html data-theme>. The art is square and stands on the
-   bottom edge, so the glow and the contact shadow anchor there. */
+   The art has a clean dark ink edge (no sticker border) that reads on both
+   site themes, so there is one image.
+   It is square and stands on the bottom edge, so the glow and the contact
+   shadow anchor there. */
 :root {
   --sila-glow: rgba(222, 251, 146, 0.42);
   --sila-glow-core: rgba(244, 255, 214, 0.5);
   --sila-shadow: rgba(4, 16, 18, 0.55);
 }
 [data-theme="light"] {
-  --sila-glow: rgba(240, 160, 64, 0.38);
-  --sila-glow-core: rgba(255, 214, 140, 0.45);
+  --sila-glow: rgba(170, 214, 60, 0.32);
+  --sila-glow-core: rgba(226, 250, 160, 0.45);
   --sila-shadow: rgba(96, 22, 30, 0.22);
 }
 .sila {
@@ -564,11 +572,8 @@ input, select, textarea { font-family: var(--font); }
   pointer-events: none;
   -webkit-user-drag: none;
 }
-.sila__art--light { display: none; }
-[data-theme="light"] .sila__art--light { display: block; }
-[data-theme="light"] .sila__art--dark { display: none; }
 
-/* Ember glow behind the body and a soft contact shadow under it. */
+/* Soft glow behind the body and a soft contact shadow under it. */
 .sila--glow::before,
 .sila--glow::after {
   content: '';
@@ -596,7 +601,7 @@ input, select, textarea { font-family: var(--font); }
   animation: sila-shadow 3.4s ease-in-out infinite;
 }
 
-/* A living flame: breathes upward from its base, never bounces. */
+/* Alive: breathes upward from its base, never bounces. */
 .sila--alive .sila__art { animation: sila-breathe 3.4s ease-in-out infinite; }
 .sila--react .sila__art { animation: sila-react 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
 

@@ -117,7 +117,7 @@ public sealed class FoodScanService(
 
             var settings = await userSettingsProvider.GetAsync(userId, cancellationToken).ConfigureAwait(false);
             var used = await foodScanProvider
-                .CountSinceAsync(userId, LocalDayStartUtc(settings?.TimeZoneId, DateTime.UtcNow), cancellationToken)
+                .CountSinceAsync(userId, UserTimeZoneResolver.LocalDayStartUtc(settings?.TimeZoneId, DateTime.UtcNow), cancellationToken)
                 .ConfigureAwait(false);
             return Quota(used);
         });
@@ -148,7 +148,7 @@ public sealed class FoodScanService(
             }
 
             var reservation = await foodScanProvider
-                .TryReserveAsync(userId, LocalDayStartUtc(settings.TimeZoneId, DateTime.UtcNow), DailyScanLimit, cancellationToken)
+                .TryReserveAsync(userId, UserTimeZoneResolver.LocalDayStartUtc(settings.TimeZoneId, DateTime.UtcNow), DailyScanLimit, cancellationToken)
                 .ConfigureAwait(false);
             if (!reservation.Allowed || reservation.FoodScanId is not { } foodScanId)
             {
@@ -247,21 +247,6 @@ public sealed class FoodScanService(
     }
 
     private static decimal Clamp(decimal value, decimal max) => Math.Clamp(value, 0, max);
-
-    /// <summary>Midnight of the user's current local day, in UTC - the allowance resets then.</summary>
-    private static DateTime LocalDayStartUtc(string? timeZoneId, DateTime utcNow)
-    {
-        var timeZone = UserTimeZoneResolver.Resolve(timeZoneId);
-        var localMidnight = DateTime.SpecifyKind(UserTimeZoneResolver.ToLocal(utcNow, timeZone).Date, DateTimeKind.Unspecified);
-
-        // A zone whose DST jump skips midnight has no 00:00 that day; the day starts at the jump.
-        while (timeZone.IsInvalidTime(localMidnight))
-        {
-            localMidnight = localMidnight.AddMinutes(30);
-        }
-
-        return TimeZoneInfo.ConvertTimeToUtc(localMidnight, timeZone);
-    }
 
     /// <summary>Sniffs the file signature rather than trusting the upload's content type.</summary>
     private static string? DetectImageMediaType(byte[] bytes)

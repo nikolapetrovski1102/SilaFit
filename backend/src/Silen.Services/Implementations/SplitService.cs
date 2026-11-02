@@ -100,11 +100,21 @@ public sealed class SplitService(ISplitsProvider splitsProvider, IUserProfilePro
     public Task<ServiceResult<List<WorkoutSplitModel>>> GetMySplitsAsync(Guid userId, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
-            var splits = await splitsProvider.GetOwnedSplitsAsync(userId, cancellationToken);
-            foreach (var split in splits)
+            // The user's own builds (editable) first, then whatever a trainer assigned
+            // them (viewable only - the write functions reject anything not owned).
+            // Assigned splits don't count toward the plan's split limit, which
+            // ThrowIfAtSplitLimitAsync reads from the owned list alone.
+            var owned = await splitsProvider.GetOwnedSplitsAsync(userId, cancellationToken);
+            var assigned = await splitsProvider.GetAssignedSplitsAsync(userId, cancellationToken);
+            foreach (var split in owned)
             {
                 split.IsEditableByMe = true;
             }
+            foreach (var split in assigned)
+            {
+                split.IsEditableByMe = false;
+            }
+            List<WorkoutSplitModel> splits = [.. owned, .. assigned.Where(a => owned.All(o => o.SplitId != a.SplitId))];
             return splits;
         });
 

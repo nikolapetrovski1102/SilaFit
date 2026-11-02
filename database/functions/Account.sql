@@ -70,6 +70,8 @@ BEGIN
     DELETE FROM dbo.foodnutrition WHERE createdbyuserid = p_userid;
     -- AI food-scan allowance ledger - timestamps only.
     DELETE FROM dbo.foodscans WHERE userid = p_userid;
+    -- Shared-link scan allowance ledger - timestamps and kind only.
+    DELETE FROM dbo.linkscans WHERE userid = p_userid;
     DELETE FROM dbo.usernutritiontargets WHERE userid = p_userid;
     DELETE FROM dbo.usersubscriptions WHERE userid = p_userid;
     -- After UserSubscriptions (its LatestReceiptId points here). Also frees the

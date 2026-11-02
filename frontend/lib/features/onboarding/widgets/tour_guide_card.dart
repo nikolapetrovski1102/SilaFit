@@ -17,7 +17,7 @@ const kFeatureTourSteps =
     title: 'Home & Today\'s Workout',
     description:
         'See today\'s session and tap Start Workout to open the live tracker. Tap any '
-            'day in the strip to preview it, and the flame up top counts your '
+            'day in the strip to preview it, and Sila up top counts your '
             'streak.',
     access: 'Free: workouts, logging and streaks.',
   ),

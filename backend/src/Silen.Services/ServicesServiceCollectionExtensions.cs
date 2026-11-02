@@ -27,6 +27,7 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IMealPlanningService, MealPlanningService>();
         services.AddScoped<IFoodService, FoodService>();
         services.AddScoped<IFoodScanService, FoodScanService>();
+        services.AddScoped<ILinkImportService, LinkImportService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IMonthlyReviewService, MonthlyReviewService>();
         services.AddScoped<IWeeklyPlanGenerationService, WeeklyPlanGenerationService>();
@@ -56,6 +57,10 @@ public static class ServicesServiceCollectionExtensions
         // A document import asks for a long answer (up to 26 weeks of program), which
         // can take well past HttpClient's 100-second default to stream back.
         services.AddHttpClient<IOpenRouterClient, OpenRouterClient>(client => client.Timeout = TimeSpan.FromMinutes(5));
+        // Redirects off: TikTokPreviewClient follows a short link hop by hop and checks each
+        // one is still on tiktok.com, so a shared link can't point the server anywhere else.
+        services.AddHttpClient<ILinkPreviewClient, TikTokPreviewClient>(client => client.Timeout = TimeSpan.FromSeconds(10))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddHttpClient<IAppStoreServerClient, AppStoreServerClient>();
         services.AddHttpClient<IGooglePlayDeveloperClient, GooglePlayDeveloperClient>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();

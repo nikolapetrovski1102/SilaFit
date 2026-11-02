@@ -891,11 +891,13 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
 
 /* Streak panel */
 .streak-label { display: inline-flex; align-items: center; gap: 8px; }
-.flame { color: var(--macro-fats); transform-origin: 50% 90%; animation: flame 1.6s ease-in-out infinite; }
-@keyframes flame {
-  0%, 100% { transform: scale(1) rotate(-3deg); }
-  35% { transform: scale(1.12, 1.18) rotate(4deg); }
-  70% { transform: scale(0.96, 1.05) rotate(-1deg); }
+.streak-ram { width: 22px; height: 22px; transform-origin: 50% 80%; animation: streak-ram 2.4s ease-in-out infinite; }
+/* A quick head-butt nod, then a rest. */
+@keyframes streak-ram {
+  0%, 55%, 100% { transform: rotate(0) translateY(0); }
+  68% { transform: rotate(-8deg) translateY(-1px); }
+  78% { transform: rotate(7deg) translateY(1px); }
+  88% { transform: rotate(-2deg); }
 }
 .streak-week { list-style: none; display: flex; gap: 6px; margin-top: 22px; }
 .streak-week li {
@@ -1222,7 +1224,7 @@ body { overflow-x: hidden; font-size: 18px; line-height: 1.55; }
 /* ---------------- Play layer: reduced motion ---------------- */
 @media (prefers-reduced-motion: reduce) {
   .float-chip { animation: none; scale: 1; opacity: 1; translate: none; }
-  .flame, .streak-week .is-today, .mascot, .closing__mascot, .marquee__track .dot,
+  .streak-ram, .streak-week .is-today, .mascot, .closing__mascot, .marquee__track .dot,
   .store-badge::after, .plan--featured::before, .rest-ring .rest-ring__bar { animation: none; }
   .store-badge::after { display: none; }
   .media--side .streak-week li { scale: 1; transition: none; }

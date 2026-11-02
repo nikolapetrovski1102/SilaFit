@@ -66,7 +66,11 @@ public sealed class AdminConsoleService(
     public Task<ServiceResult<AdminImageUploadResultDto>> UploadImageAsync(string? sessionToken, ImageUploadRequest upload, string? clientIp, CancellationToken cancellationToken = default) =>
         ServiceExecutor.RunAsync(async () =>
         {
-            await RequireAsync(sessionToken, AdminPermissions.SplitsWrite, clientIp, cancellationToken);
+            // Hero images for both splits and diet plans come through here.
+            await AdminPermissionGuard.RequireAnyAsync(
+                adminProvider, adminRbacProvider, sessionToken,
+                [AdminPermissions.SplitsWrite, AdminPermissions.DietPlansWrite],
+                clientIp, cancellationToken);
 
             var url = await imageUploadService.SaveAsync(upload, cancellationToken);
             return new AdminImageUploadResultDto { Url = url };

@@ -15,7 +15,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/mascot/mascot_dialog.dart';
-import '../../core/widgets/mascot/mascot_pose.dart';
+import '../../core/widgets/mascot/ram_mascot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
@@ -915,7 +915,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
       final isMilestone = streakDays > 0 && streakDays % 7 == 0;
       await MascotDialog.show(
         context,
-        pose: isMilestone ? MascotPose.proud : MascotPose.celebrating,
+        pose: isMilestone ? RamArt.standing : RamArt.charging,
         title: isMilestone ? '$streakDays-day streak!' : 'Workout complete',
         message: outcome == WorkoutCompletion.savedOffline
             ? 'Nice work. Saved on your phone - it\'ll upload by itself when you\'re back online.'

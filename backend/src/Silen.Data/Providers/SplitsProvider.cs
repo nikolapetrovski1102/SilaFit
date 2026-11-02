@@ -57,6 +57,13 @@ public sealed class SplitsProvider(ISqlExecutor sqlExecutor) : ISplitsProvider
             reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapSplit, cancellationToken),
             cancellationToken);
 
+    public Task<List<WorkoutSplitModel>> GetAssignedSplitsAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        sqlExecutor.QueryAsync(
+            "dbo.usp_UserSplits_GetAssigned",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadListAsync(reader, WorkoutRowMapper.MapSplit, cancellationToken),
+            cancellationToken);
+
     public Task<AdminMutationResultModel> UpsertUserSplitAsync(UserSplitUpsertRequest request, Guid userId, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_UserSplit_Upsert",

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
-import 'mascot_pose.dart';
+import 'ram_mascot.dart';
 
 /// A lighter, non-blocking mascot moment - an inline banner that slides in
 /// from the top and auto-dismisses, for a milestone that doesn't need to
@@ -13,7 +13,7 @@ class MascotToast {
 
   static void show(
     BuildContext context, {
-    required MascotPose pose,
+    required RamArt pose,
     required String message,
     Duration duration = const Duration(seconds: 3),
   }) {
@@ -32,7 +32,7 @@ class MascotToast {
 }
 
 class _MascotToastView extends StatefulWidget {
-  final MascotPose pose;
+  final RamArt pose;
   final String message;
   final Duration duration;
   final VoidCallback onDismissed;

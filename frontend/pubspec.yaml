@@ -117,9 +117,7 @@ flutter:
     - assets/branding/onboarding/
     - assets/avatars/male/
     - assets/avatars/female/
-    - assets/mascot/
-    - assets/mascot/flame/dark/
-    - assets/mascot/flame/light/
+    - assets/mascot/ram/
     - assets/splits/
     - assets/lottie_animations/
 
@@ -148,8 +146,8 @@ flutter:
 # tool/generate_alternate_app_icons.sh instead - rerun both when the artwork
 # changes. `adaptive_icon_*` gives Android's adaptive-icon system a
 # transparent foreground so it isn't clipped by the circular/squircle/
-# rounded masks; the light alternate reuses that foreground over its own
-# ic_launcher_light_background color (android/app/src/main/res/values/colors.xml).
+# rounded masks; the light alternate gets a burgundy foreground over its own
+# ic_launcher_light_background color (android/app/src/main/res/values/app_icon_colors.xml).
 # Run: dart run flutter_launcher_icons && tool/generate_alternate_app_icons.sh
 flutter_launcher_icons:
   android: true
@@ -157,13 +155,13 @@ flutter_launcher_icons:
   image_path: "assets/branding/app_icon_dark.png"
   remove_alpha_ios: true
   min_sdk_android: 21
-  adaptive_icon_background: "#183233"
+  adaptive_icon_background: "#172d30"
   adaptive_icon_foreground: "assets/branding/app_icon_adaptive_fg.png"
   web:
     generate: true
     image_path: "assets/branding/app_icon_dark.png"
-    background_color: "#183233"
-    theme_color: "#183233"
+    background_color: "#172d30"
+    theme_color: "#172d30"
   macos:
     generate: true
     image_path: "assets/branding/app_icon_dark.png"
@@ -174,23 +172,23 @@ flutter_launcher_icons:
 # --- flutter_native_splash: the native (pre-Flutter-engine) splash screen,
 # shown instantly on cold start before AppColors/ThemeMode can even run -
 # so it needs its own explicit light/dark background pair. Colors mirror
-# AppColors.background in each mode; the transparent-background mark reads
-# correctly on both. Run: dart run flutter_native_splash:create
+# AppColors.background in each mode, and each mode gets the horn-S mark in
+# its own palette (burgundy on cream, lime on teal). Run: dart run flutter_native_splash:create
 # The tool always writes iOS images to ios/Runner/Assets.xcassets (the old
 # target name), so afterwards copy LaunchImage.imageset and
 # LaunchBackground.imageset from there into ios/SilaFit/Assets.xcassets.
 flutter_native_splash:
-  color: "#f5fbf5"
+  color: "#f5eedd"
   color_dark: "#172d30"
-  image: "assets/branding/app_icon_transparent.png"
+  image: "assets/branding/app_icon_transparent_light.png"
   # The iOS target was renamed from Runner to SilaFit, so its Info.plist
   # moved out of the tool's default `ios/Runner/Info.plist` path.
   info_plist_files:
     - "ios/SilaFit/Info.plist"
   image_dark: "assets/branding/app_icon_transparent.png"
   android_12:
-    color: "#f5fbf5"
+    color: "#f5eedd"
     color_dark: "#172d30"
-    image: "assets/branding/app_icon_adaptive_fg.png"
+    image: "assets/branding/app_icon_adaptive_fg_light.png"
     image_dark: "assets/branding/app_icon_adaptive_fg.png"
   web: false

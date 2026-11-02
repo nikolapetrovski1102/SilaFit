@@ -50,7 +50,7 @@
   }
 
   function showAlert(message, kind) {
-    mood(kind === 'info' ? (codeForm.hidden ? 'flame' : 'smug') : 'shocked');
+    mood(kind === 'info' ? (codeForm.hidden ? 'standing' : 'smug') : 'shocked');
     alertBox.textContent = message;
     alertBox.hidden = false;
     alertBox.classList.toggle('login-alert--info', kind === 'info');
@@ -71,7 +71,7 @@
       item.classList.toggle('is-done', index < step);
     });
 
-    mood(step === 1 ? 'flame' : 'smug');
+    mood(step === 1 ? 'standing' : 'smug');
     (step === 1 ? usernameEl : codeEl).focus();
   }
 

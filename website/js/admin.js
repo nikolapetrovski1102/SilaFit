@@ -26,10 +26,193 @@
   /* A split's hero value is either a URL or an auto-assigned theme-neutral key
      ('asset:splits/push_pull_legs', see SplitHeroImages.cs) that the API serves
      as /api/static/splits/{dark|light}/{key}.jpg - same as split_hero_image.dart. */
-  function heroSrc(value) {
-    var prefix = 'asset:splits/';
-    if (!value || value.indexOf(prefix) !== 0) return value;
-    return auth.apiBase + '/api/static/splits/dark/' + value.slice(prefix.length) + '.jpg';
+  var HERO_PREFIX = 'asset:splits/';
+
+  /* The built-in split artwork ("media") a trainer can attach instead of
+     uploading. Keys mirror SplitHeroImages.cs and StaticAssets/splits/. */
+  var SPLIT_HERO_MEDIA = [
+    { key: 'push_pull_legs', label: 'Push / Pull / Legs' },
+    { key: 'upper_lower', label: 'Upper / Lower' },
+    { key: 'bro_split', label: 'Body-part split' },
+    { key: 'strength', label: 'Strength' },
+    { key: 'hypertrophy', label: 'Hypertrophy' },
+    { key: 'conditioning', label: 'Conditioning' },
+    { key: 'general', label: 'Full body' },
+    { key: 'custom', label: 'Custom' }
+  ];
+
+  /* Category -> artwork, same table as SplitHeroImages.ForSplit. */
+  var SPLIT_HERO_BY_CATEGORY = {
+    PushPullLegs: 'push_pull_legs', ArnoldSplit: 'push_pull_legs',
+    UpperLower: 'upper_lower', PHUL: 'upper_lower',
+    BroSplit: 'bro_split', Powerlifting: 'strength',
+    PHAT: 'hypertrophy', GluteFocus: 'hypertrophy',
+    Circuit: 'conditioning', Calisthenics: 'conditioning',
+    FullBody: 'general'
+  };
+
+  function heroKey(value) {
+    return value && value.indexOf(HERO_PREFIX) === 0 ? value.slice(HERO_PREFIX.length) : null;
+  }
+
+  function heroAssetUrl(key, variant) {
+    return auth.apiBase + '/api/static/splits/' + variant + '/' + key + '.jpg';
+  }
+
+  /* A split's hero value is either a URL or a variant-neutral key
+     ('asset:splits/push_pull_legs', see SplitHeroImages.cs) that the API serves
+     as /api/static/splits/{dark|light}/{key}.jpg - same as split_hero_image.dart.
+     The app picks the variant per client; the console shows the one that
+     matches its own theme unless a variant is asked for. */
+  function heroSrc(value, variant) {
+    var key = heroKey(value);
+    if (!key) return value;
+    var v = variant || (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+    return heroAssetUrl(key, v);
+  }
+
+  /* Library art ships a light and a dark version: render both and let CSS
+     show the one matching the console theme, so toggling it never refetches. */
+  function heroThumbHtml(value) {
+    var key = heroKey(value);
+    if (!key) return '<img src="' + esc(value) + '" alt="" loading="lazy" />';
+    return '<img class="hero-variant hero-variant--light" src="' + esc(heroAssetUrl(key, 'light')) + '" alt="" loading="lazy" />' +
+      '<img class="hero-variant hero-variant--dark" src="' + esc(heroAssetUrl(key, 'dark')) + '" alt="" loading="lazy" />';
+  }
+
+  /* Diet plan media: the hosted meal-prep art the AI weekly planner already
+     uses (DietPlanHeroImages.cs). One image each, no light/dark pair, and the
+     stored value is the URL itself. */
+  var DIET_HERO_BASE = 'https://images.sila.fitness/diet-plans/';
+  var DIET_HERO_MEDIA = [
+    { file: 'ai-weekly-general.png', label: 'Balanced week' },
+    { file: 'ai-clean-bulk.png', label: 'Clean bulk' },
+    { file: 'ai-fat-loss.png', label: 'Fat loss' },
+    { file: 'ai-healthy-week.png', label: 'Healthy & active' }
+  ];
+
+  function suggestedDietHeroUrl(text) {
+    var t = text || '';
+    if (/\b(bulk(ing)?|mass|muscle|gain(s|ing)?|high[\s-]*calorie)\b/i.test(t)) return DIET_HERO_BASE + 'ai-clean-bulk.png';
+    if (/\b(cut(ting)?|fat[\s-]*loss|lean|shred|deficit|weight[\s-]*loss|keto|low[\s-]*carb)\b/i.test(t)) return DIET_HERO_BASE + 'ai-fat-loss.png';
+    if (/\b(maintain|maintenance|healthy|active|balance[d]?|mediterranean)\b/i.test(t)) return DIET_HERO_BASE + 'ai-healthy-week.png';
+    return DIET_HERO_BASE + 'ai-weekly-general.png';
+  }
+
+  /* Hero image picker shared by the split and diet plan editors: a media
+     library grid, a URL field, Upload and No image.
+       heroPickerHtml(id, items, hint)  - markup for the form field
+       wireHeroPicker(id, opts)         - behaviour; returns { value() }
+     Each item is { value, label, light, dark? }: with both light and dark the
+     tile and preview show the pair. opts.suggest() names the suggested value;
+     opts.isNew starts an empty new item on that suggestion and keeps following
+     it (see opts.watch, the inputs that change it) until the trainer picks. */
+  function heroPickerHtml(id, items, hint) {
+    return '<div class="field field--full"><label>Hero image</label>' +
+      '<span class="label-sm" style="color:var(--on-surface-variant)">' + esc(hint) + '</span>' +
+      '<div class="hero-media" id="' + id + 'Media" role="radiogroup" aria-label="Media library">' +
+        items.map(function (m, i) {
+          return '<button type="button" class="hero-media__item" role="radio" aria-checked="false" data-hero-index="' + i + '">' +
+            '<span class="hero-media__art' + (m.dark ? '' : ' hero-media__art--single') + '">' +
+              '<img src="' + esc(m.light) + '" alt="" loading="lazy" />' +
+              (m.dark ? '<img src="' + esc(m.dark) + '" alt="" loading="lazy" />' : '') +
+            '</span>' +
+            '<span class="hero-media__label">' + esc(m.label) +
+              '<span class="chip chip--accent hero-media__hint">Suggested</span>' +
+            '</span>' +
+          '</button>';
+        }).join('') +
+      '</div>' +
+      '<div class="hero-media__custom">' +
+        '<input class="input" id="' + id + 'Url" placeholder="Or paste an image URL: https://…" />' +
+        '<input type="file" id="' + id + 'File" accept="image/png,image/jpeg,image/webp" style="display:none" />' +
+        '<button type="button" class="btn btn--ghost btn--sm" id="' + id + 'UploadBtn">Upload image…</button>' +
+        '<button type="button" class="btn btn--ghost btn--sm" id="' + id + 'Clear">No image</button>' +
+      '</div>' +
+      '<span class="label-sm" id="' + id + 'Status" style="color:var(--on-surface-variant)"></span>' +
+      '<div class="hero-preview" id="' + id + 'Preview" hidden></div>' +
+    '</div>';
+  }
+
+  function wireHeroPicker(id, opts) {
+    var items = opts.items;
+    var value = opts.initial || '';
+    var picked = !opts.isNew || !!value;
+    var input = $('#' + id + 'Url');
+    var status = $('#' + id + 'Status');
+
+    function indexOf(v) {
+      for (var i = 0; i < items.length; i++) if (items[i].value === v) return i;
+      return -1;
+    }
+
+    function render() {
+      var selected = indexOf(value);
+      var suggested = indexOf(opts.suggest());
+      $$('#' + id + 'Media [data-hero-index]').forEach(function (b) {
+        var i = num(b.getAttribute('data-hero-index'));
+        b.classList.toggle('is-selected', i === selected);
+        b.classList.toggle('is-suggested', i === suggested);
+        b.setAttribute('aria-checked', String(i === selected));
+      });
+      if (document.activeElement !== input) input.value = selected >= 0 ? '' : value;
+
+      var preview = $('#' + id + 'Preview');
+      if (!value) { preview.hidden = true; preview.innerHTML = ''; return; }
+      preview.hidden = false;
+      var item = items[selected];
+      preview.innerHTML = item && item.dark
+        ? '<figure><img src="' + esc(item.light) + '" alt="" /><figcaption>Light</figcaption></figure>' +
+          '<figure><img src="' + esc(item.dark) + '" alt="" /><figcaption>Dark</figcaption></figure>'
+        : '<figure><img src="' + esc(item ? item.light : value) + '" alt="" /><figcaption>' +
+            (item ? esc(item.label) : 'Your image') + '</figcaption></figure>';
+    }
+
+    function follow() {
+      if (!picked) value = opts.suggest();
+      render();
+    }
+
+    function choose(v) {
+      value = v;
+      picked = true;
+      status.textContent = '';
+      render();
+    }
+
+    (opts.watch || []).forEach(function (el) {
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', follow);
+    });
+
+    $$('#' + id + 'Media [data-hero-index]').forEach(function (b) {
+      b.addEventListener('click', function () { choose(items[num(b.getAttribute('data-hero-index'))].value); });
+    });
+
+    input.addEventListener('input', function () {
+      value = this.value.trim();
+      picked = true;
+      render();
+    });
+
+    $('#' + id + 'Clear').addEventListener('click', function () { choose(''); });
+
+    $('#' + id + 'UploadBtn').addEventListener('click', function () { $('#' + id + 'File').click(); });
+
+    $('#' + id + 'File').addEventListener('change', function () {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      status.textContent = 'Uploading…';
+      auth.uploadImage(file).then(function (result) {
+        if (!toastOnFailure(result, 'Could not upload image.')) { status.textContent = ''; return; }
+        var url = result.data && result.data.url;
+        if (url) choose(url);
+        status.textContent = 'Uploaded.';
+        toast('Image uploaded.');
+      });
+    });
+
+    follow();
+    return { value: function () { return value; } };
   }
 
   function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
@@ -497,7 +680,7 @@
         '<article class="card mp-card">' +
           '<div class="mp-card__thumb">' +
             (s.heroImageUrl
-              ? '<img src="' + esc(heroSrc(s.heroImageUrl)) + '" alt="" loading="lazy" />'
+              ? heroThumbHtml(s.heroImageUrl)
               : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>') +
           '</div>' +
           '<div class="mp-card__head">' +
@@ -563,6 +746,10 @@
       : splitsCache.find(function (x) { return x.splitId === splitId; });
     if (!isNew && !s) return;
 
+    var splitHeroItems = SPLIT_HERO_MEDIA.map(function (m) {
+      return { value: HERO_PREFIX + m.key, label: m.label, light: heroAssetUrl(m.key, 'light'), dark: heroAssetUrl(m.key, 'dark') };
+    });
+
     var backdrop = openModal(
       modalHead(isNew ? 'New split' : 'Edit split') +
       '<div class="form-grid">' +
@@ -592,17 +779,9 @@
           '</select></div>' +
         '<div class="field field--full"><label>Description</label>' +
           '<textarea class="textarea" id="spDesc" placeholder="Who is this split for?">' + esc(s.description || '') + '</textarea></div>' +
-        '<div class="field field--full"><label>Hero image</label>' +
-          '<input class="input" id="spHero" value="' + esc(s.heroImageUrl || '') + '" placeholder="https://…" />' +
-          '<div style="display:flex;align-items:center;gap:10px;margin-top:8px">' +
-            '<input type="file" id="spHeroFile" accept="image/png,image/jpeg,image/webp" style="display:none" />' +
-            '<button type="button" class="btn btn--ghost btn--sm" id="spHeroUploadBtn">Upload image…</button>' +
-            '<span class="label-sm" id="spHeroUploadStatus" style="color:var(--on-surface-variant)"></span>' +
-          '</div>' +
-          (s.heroImageUrl
-            ? '<img id="spHeroPreview" src="' + esc(heroSrc(s.heroImageUrl)) + '" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:block" />'
-            : '<img id="spHeroPreview" style="max-width:200px;max-height:120px;border-radius:8px;margin-top:8px;display:none" />') +
-        '</div>' +
+        heroPickerHtml('spHero', splitHeroItems,
+          'Pick from the SilaFit media library or upload your own. Library art comes in a light and a dark ' +
+          'version and the app shows each client the one that fits them.') +
       '</div>' +
       '<div class="modal__actions">' +
         '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
@@ -611,24 +790,14 @@
     );
     wireClose(backdrop);
 
-    $('#spHeroUploadBtn').addEventListener('click', function () {
-      $('#spHeroFile').click();
-    });
-
-    $('#spHeroFile').addEventListener('change', function () {
-      var file = this.files && this.files[0];
-      if (!file) return;
-      var status = $('#spHeroUploadStatus');
-      status.textContent = 'Uploading…';
-      auth.uploadImage(file).then(function (result) {
-        if (!toastOnFailure(result, 'Could not upload image.')) { status.textContent = ''; return; }
-        var url = result.data && result.data.url;
-        $('#spHero').value = url || '';
-        var preview = $('#spHeroPreview');
-        if (url) { preview.src = url; preview.style.display = 'block'; }
-        status.textContent = 'Uploaded.';
-        toast('Image uploaded.');
-      });
+    /* Stores 'asset:splits/{key}' for library art, or an uploaded / pasted URL.
+       A new split follows its category's suggested art until the trainer picks. */
+    var hero = wireHeroPicker('spHero', {
+      items: splitHeroItems,
+      initial: s.heroImageUrl,
+      isNew: isNew,
+      watch: [$('#spCategory')],
+      suggest: function () { return HERO_PREFIX + (SPLIT_HERO_BY_CATEGORY[$('#spCategory').value] || 'custom'); }
     });
 
     $('#spSave').addEventListener('click', function () {
@@ -639,7 +808,7 @@
         level: $('#spLevel').value,
         durationDays: num($('#spDuration').value),
         description: $('#spDesc').value.trim(),
-        heroImageUrl: $('#spHero').value.trim(),
+        heroImageUrl: hero.value(),
         recommendedGoal: $('#spGoal').value || null,
         visibility: $('#spVisibility').value,
         sortOrder: s.sortOrder || 0
@@ -1213,6 +1382,7 @@
 
       return (
         '<article class="card mp-card">' +
+          (p.heroImageUrl ? '<div class="mp-card__thumb">' + heroThumbHtml(p.heroImageUrl) + '</div>' : '') +
           '<div class="mp-card__head">' +
             '<span class="chip chip--accent">' + esc(p.periodType) + '</span>' +
             (p.isSystemDefault ? '<span class="chip">System</span>' : '') +
@@ -1274,6 +1444,10 @@
       : dietPlansCache.find(function (x) { return x.dietPlanId === dietPlanId; });
     if (!isNew && !p) return;
 
+    var dietHeroItems = DIET_HERO_MEDIA.map(function (m) {
+      return { value: DIET_HERO_BASE + m.file, label: m.label, light: DIET_HERO_BASE + m.file };
+    });
+
     var backdrop = openModal(
       modalHead(isNew ? 'New diet plan' : 'Edit diet plan') +
       '<div class="form-grid">' +
@@ -1294,7 +1468,8 @@
           '<span class="label-sm" style="color:var(--on-surface-variant)">Up to 182 (26 weeks). Day 8 is week 2, Monday.</span></div>' +
         '<div class="field field--full"><label>Description</label>' +
           '<textarea class="textarea" id="dpDesc" placeholder="Who is this plan for?">' + esc(p.description || '') + '</textarea></div>' +
-        '<div class="field field--full"><label>Hero image URL</label><input class="input" id="dpHero" value="' + esc(p.heroImageUrl || '') + '" placeholder="https://…" /></div>' +
+        heroPickerHtml('dpHero', dietHeroItems,
+          'Pick from the SilaFit media library or upload your own. The same image shows in light and dark mode.') +
       '</div>' +
       '<div class="modal__actions">' +
         '<button class="btn btn--ghost btn--sm" data-close>Cancel</button>' +
@@ -1303,6 +1478,16 @@
     );
     wireClose(backdrop);
 
+    /* A new plan follows its name and description to the closest meal-prep
+       art until the trainer picks one. */
+    var hero = wireHeroPicker('dpHero', {
+      items: dietHeroItems,
+      initial: p.heroImageUrl,
+      isNew: isNew,
+      watch: [$('#dpName'), $('#dpDesc')],
+      suggest: function () { return suggestedDietHeroUrl($('#dpName').value + ' ' + $('#dpDesc').value); }
+    });
+
     $('#dpSave').addEventListener('click', function () {
       var payload = {
         dietPlanId: isNew ? null : p.dietPlanId,
@@ -1310,7 +1495,7 @@
         periodType: $('#dpPeriod').value,
         durationDays: num($('#dpDuration').value),
         description: $('#dpDesc').value.trim(),
-        heroImageUrl: $('#dpHero').value.trim(),
+        heroImageUrl: hero.value(),
         visibility: $('#dpVisibility').value,
         sortOrder: p.sortOrder || 0
       };

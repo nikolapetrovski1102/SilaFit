@@ -95,6 +95,25 @@ public class SplitServiceTests
     }
 
     [Fact]
+    public async Task GetMySplitsAsync_IncludesTrainerAssignedSplitsAsReadOnly()
+    {
+        var userId = Guid.NewGuid();
+        var ownedId = Guid.NewGuid();
+        var assignedId = Guid.NewGuid();
+        splitsProvider.Setup(p => p.GetOwnedSplitsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkoutSplitModel { SplitId = ownedId }]);
+        splitsProvider.Setup(p => p.GetAssignedSplitsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkoutSplitModel { SplitId = assignedId }]);
+
+        var result = await sut.GetMySplitsAsync(userId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Collection(result.Data!,
+            owned => { Assert.Equal(ownedId, owned.SplitId); Assert.True(owned.IsEditableByMe); },
+            assigned => { Assert.Equal(assignedId, assigned.SplitId); Assert.False(assigned.IsEditableByMe); });
+    }
+
+    [Fact]
     public async Task DuplicateMySplitAsync_ProUserAtSplitLimit_ReturnsPlanLimitWithoutCopying()
     {
         var userId = Guid.NewGuid();

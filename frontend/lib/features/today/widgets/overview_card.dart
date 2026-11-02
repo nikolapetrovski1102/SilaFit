@@ -8,11 +8,12 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/duration_format.dart';
-import '../../../core/widgets/mascot/mascot_pose.dart';
+import '../../../core/widgets/mascot/ram_mascot.dart';
 import '../../../core/widgets/progress_ring.dart';
 import '../../../core/widgets/silen_button.dart';
 import '../../splits/split_builder_screen.dart';
 import '../../splits/split_creation_wizard_screen.dart';
+import '../../splits/split_detail_screen.dart';
 import '../../splits/splits_controller.dart';
 import '../../splits/splits_models.dart';
 import '../../splits/splits_repository.dart';
@@ -227,14 +228,33 @@ class _SessionSection extends StatelessWidget {
     today.load(force: true);
   }
 
+  /// A trainer-assigned split is locked, so it opens read-only instead of in
+  /// the builder (whose saves the server would refuse anyway).
   Future<void> _openSplitBuilder(BuildContext context, String splitId) async {
     final today = context.read<TodayController>();
     final repository = context.read<SplitsRepository>();
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => SplitBuilderScreen(
-        controller: SplitBuilderController(repository, splitId: splitId),
-      ),
-    ));
+    final navigator = Navigator.of(context);
+    SplitDetail? detail;
+    try {
+      detail = await repository.getDetail(splitId);
+    } catch (_) {
+      // Fall through to the builder, which shows its own load error.
+    }
+    if (detail != null && !detail.split.isEditableByMe) {
+      await navigator.push(MaterialPageRoute(
+        builder: (_) => SplitDetailScreen(
+          controller: SplitDetailController(repository, splitId,
+              initialDetail: detail),
+          splitName: detail!.split.name,
+        ),
+      ));
+    } else {
+      await navigator.push(MaterialPageRoute(
+        builder: (_) => SplitBuilderScreen(
+          controller: SplitBuilderController(repository, splitId: splitId),
+        ),
+      ));
+    }
     today.load(force: true);
   }
 
@@ -416,7 +436,7 @@ class _SessionSection extends StatelessWidget {
           ),
         ),
         SizedBox(width: AppSpacing.md * scale),
-        Image.asset(MascotPose.resting.assetPath,
+        Image.asset(RamArt.sleepy.assetPath,
             width: 68 * scale, height: 68 * scale),
       ],
     );

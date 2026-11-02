@@ -5,22 +5,21 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
-import 'flame_mascot.dart';
-import 'mascot_pose.dart';
+import 'ram_mascot.dart';
 
 /// One thing Sila says: the expression to show and the words in the bubble.
 class MascotLine {
-  final FlameArt art;
+  final RamArt art;
   final String text;
 
   const MascotLine(this.art, this.text);
 }
 
-/// Sila next to a speech bubble. The text types itself out while the flame
+/// Sila next to a speech bubble. The text types itself out while Sila
 /// bobs as if talking, then both settle. When the [line] changes, it talks
 /// again. With reduced motion turned on, the full line appears at once.
 ///
-/// Screen readers get the whole line in one go ("Silen says: ..."), never
+/// Screen readers get the whole line in one go ("Sila says: ..."), never
 /// the partially typed text.
 class TalkingMascot extends StatefulWidget {
   final MascotLine line;
@@ -107,7 +106,7 @@ class _TalkingMascotState extends State<TalkingMascot>
                   transform: Matrix4.identity()
                     ..translateByDouble(0.0, -2.5 * wave.abs(), 0.0, 1.0)
                     ..scaleByDouble(1 + 0.03 * wave, 1 - 0.03 * wave, 1.0, 1.0),
-                  child: FlameMascot(widget.line.art,
+                  child: RamMascot(widget.line.art,
                       size: widget.mascotSize, excludeFromSemantics: true),
                 ),
                 const SizedBox(width: AppSpacing.xs),

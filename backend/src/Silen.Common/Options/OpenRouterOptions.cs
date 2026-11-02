@@ -18,5 +18,10 @@ public sealed class OpenRouterOptions
     /// the text reports don't need vision, and the scan is tuned for this model's reasoning.</summary>
     public string FoodScanModel { get; set; } = "openai/gpt-6-sol";
 
+    /// <summary>Text model that reads a shared TikTok post's caption into a workout or a meal. A
+    /// caption is short and the task is extraction, so a small, cheap model is enough; set via
+    /// OPENROUTER_LINK_IMPORT_MODEL. Needs json_schema support.</summary>
+    public string LinkImportModel { get; set; } = "openai/gpt-4.1-mini";
+
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1/chat/completions";
 }

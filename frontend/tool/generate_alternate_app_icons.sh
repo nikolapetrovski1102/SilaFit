@@ -4,7 +4,7 @@
 #     can pick in Settings). flutter_launcher_icons still writes to the old
 #     ios/Runner path, so pubspec.yaml has it skip iOS entirely.
 #   - Android ic_launcher_light: legacy PNGs for API < 26 plus the adaptive
-#     icon XML, which reuses the shared ic_launcher_foreground drawable.
+#     icon XML with its own burgundy foreground (ic_launcher_light_foreground).
 # macOS only (uses sips). Run from anywhere:
 #   dart run flutter_launcher_icons && tool/generate_alternate_app_icons.sh
 set -eu
@@ -12,6 +12,7 @@ cd "$(dirname "$0")/.."
 
 DARK=assets/branding/app_icon_dark.png
 LIGHT=assets/branding/app_icon_light.png
+LIGHT_FG=assets/branding/app_icon_adaptive_fg_light.png
 CATALOG=ios/SilaFit/Assets.xcassets
 
 # "<point size> <scale>" pairs - the iPhone/iPad/marketing sizes Xcode's
@@ -65,13 +66,22 @@ for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
     --out "$RES/mipmap-$density/ic_launcher_light.png" >/dev/null
 done
 
+# Adaptive foreground at 108dp per density, like ic_launcher_foreground.
+for pair in mdpi:108 hdpi:162 xhdpi:216 xxhdpi:324 xxxhdpi:432; do
+  density=${pair%:*}
+  px=${pair#*:}
+  mkdir -p "$RES/drawable-$density"
+  sips -s format png -z "$px" "$px" "$LIGHT_FG" \
+    --out "$RES/drawable-$density/ic_launcher_light_foreground.png" >/dev/null
+done
+
 cat > "$RES/mipmap-anydpi-v26/ic_launcher_light.xml" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
   <background android:drawable="@color/ic_launcher_light_background"/>
   <foreground>
       <inset
-          android:drawable="@drawable/ic_launcher_foreground"
+          android:drawable="@drawable/ic_launcher_light_foreground"
           android:inset="16%" />
   </foreground>
 </adaptive-icon>

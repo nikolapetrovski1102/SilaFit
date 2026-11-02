@@ -398,7 +398,7 @@ class _ScanResults extends StatelessWidget {
         for (var i = 0; i < items.length; i++)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: _ScanItemRow(
+            child: FoodScanItemRow(
               item: items[i],
               selected: selected.contains(i),
               onTap: () => onToggle(i),
@@ -413,12 +413,14 @@ class _ScanResults extends StatelessWidget {
   }
 }
 
-class _ScanItemRow extends StatelessWidget {
+/// One AI-read ingredient with a tick, its macros and portion.
+class FoodScanItemRow extends StatelessWidget {
   final FoodScanItem item;
   final bool selected;
   final VoidCallback onTap;
 
-  const _ScanItemRow({
+  const FoodScanItemRow({
+    super.key,
     required this.item,
     required this.selected,
     required this.onTap,

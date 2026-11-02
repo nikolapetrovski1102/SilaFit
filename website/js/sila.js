@@ -1,10 +1,8 @@
 /* ============================================================
-   SilaFit: "Sila" flame-spirit mascot helpers
-   The art mirrors frontend/assets/mascot/flame/{light,dark}/: burgundy
-   and mustard on cream for light mode, soft lime on teal for dark mode.
-   Every mascot ships both variants. css/base.css (.sila) shows the one
-   that matches <html data-theme>, so toggling the theme never refetches
-   or flashes. Both images are lazy, so the hidden one is never downloaded.
+   SilaFit: "Sila" the ram mascot helpers
+   The art mirrors frontend/assets/mascot/ram/. Its dark ink outline is
+   the edge (no sticker border), so one image reads on both the light
+   and the dark site theme.
 
      window.Sila.html('sleepy', { size: 96, glow: true, alive: true })
      window.Sila.set(element, 'shocked')     // swap the pose in place
@@ -12,15 +10,18 @@
 (function () {
   'use strict';
 
-  var ARTS = ['spark', 'flame', 'blaze', 'determined', 'laughing', 'smug', 'sleepy', 'shocked'];
-  var BASE = 'assets/img/mascot/flame/';
+  var ARTS = ['standing', 'charging', 'emblem', 'determined', 'laughing', 'smug', 'sleepy', 'shocked'];
+  /* Names from the old flame set, so stale callers still get sensible art. */
+  var LEGACY = { flame: 'standing', blaze: 'charging', spark: 'smug' };
+  var BASE = 'assets/img/mascot/ram/';
 
   function normalise(art) {
-    return ARTS.indexOf(art) >= 0 ? art : 'flame';
+    art = LEGACY[art] || art;
+    return ARTS.indexOf(art) >= 0 ? art : 'standing';
   }
 
-  function src(theme, art) {
-    return BASE + theme + '/' + normalise(art) + '.webp';
+  function src(art) {
+    return BASE + normalise(art) + '.webp?v=20261102-ink';
   }
 
   function escAttr(value) {
@@ -40,8 +41,7 @@
       ? ' role="img" aria-label="' + escAttr(opts.alt) + '"'
       : ' aria-hidden="true"';
     return '<span class="' + classes.join(' ') + '" data-sila="' + art + '"' + style + label + '>' +
-      '<img class="sila__art sila__art--dark" src="' + src('dark', art) + '" width="384" height="384" alt="" loading="lazy" decoding="async" />' +
-      '<img class="sila__art sila__art--light" src="' + src('light', art) + '" width="384" height="384" alt="" loading="lazy" decoding="async" />' +
+      '<img class="sila__art" src="' + src(art) + '" width="512" height="512" alt="" loading="lazy" decoding="async" />' +
       '</span>';
   }
 
@@ -50,10 +50,8 @@
     art = normalise(art);
     if (el.getAttribute('data-sila') === art) return;
     el.setAttribute('data-sila', art);
-    var dark = el.querySelector('.sila__art--dark');
-    var light = el.querySelector('.sila__art--light');
-    if (dark) dark.src = src('dark', art);
-    if (light) light.src = src('light', art);
+    var img = el.querySelector('.sila__art');
+    if (img) img.src = src(art);
     /* A little pop so the change of mood reads as a reaction. */
     el.classList.remove('sila--react');
     void el.offsetWidth;

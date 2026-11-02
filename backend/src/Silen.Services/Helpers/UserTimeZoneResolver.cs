@@ -24,6 +24,21 @@ public static partial class UserTimeZoneResolver
         return TimeZoneInfo.ConvertTimeFromUtc(kinded, timeZone);
     }
 
+    /// <summary>Midnight of the user's current local day, in UTC - when a daily allowance resets.</summary>
+    public static DateTime LocalDayStartUtc(string? timeZoneId, DateTime utcNow)
+    {
+        var timeZone = Resolve(timeZoneId);
+        var localMidnight = DateTime.SpecifyKind(ToLocal(utcNow, timeZone).Date, DateTimeKind.Unspecified);
+
+        // A zone whose DST jump skips midnight has no 00:00 that day; the day starts at the jump.
+        while (timeZone.IsInvalidTime(localMidnight))
+        {
+            localMidnight = localMidnight.AddMinutes(30);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(localMidnight, timeZone);
+    }
+
     /// <summary>
     /// Validates and canonicalizes a client-supplied timezone. Fixed offsets are
     /// rewritten to "+HH:MM"; named zones are kept as-is once .NET recognizes them.

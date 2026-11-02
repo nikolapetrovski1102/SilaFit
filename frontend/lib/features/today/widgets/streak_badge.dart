@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/mascot/streak_flame.dart';
+import '../../../core/widgets/mascot/streak_ram.dart';
 
 /// The streak counter shown top-right next to Home's greeting. Both tap and
 /// a horizontal swipe open the streak history sheet - tap for the quick
@@ -101,7 +101,7 @@ class _StreakBadgeState extends State<StreakBadge> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                StreakFlame(streakDays: widget.streakDays, size: 34 * scale),
+                StreakRam(streakDays: widget.streakDays, size: 34 * scale),
                 SizedBox(width: AppSpacing.xxs * scale),
                 Text('${widget.streakDays}',
                     style: AppTypography.headlineSm.copyWith(fontSize: 22 * scale)),

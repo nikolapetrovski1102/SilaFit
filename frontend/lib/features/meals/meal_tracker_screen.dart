@@ -54,7 +54,18 @@ class MealTrackerScreen extends StatefulWidget {
   /// The logged meal being edited, or null to log a new one.
   final MealLog? existing;
 
-  const MealTrackerScreen({super.key, required this.controller, this.existing});
+  /// A new meal that arrives already named and filled. Ignored when
+  /// [existing] is set.
+  final String? initialName;
+  final List<MealLogItem> initialItems;
+
+  const MealTrackerScreen({
+    super.key,
+    required this.controller,
+    this.existing,
+    this.initialName,
+    this.initialItems = const [],
+  });
 
   @override
   State<MealTrackerScreen> createState() => _MealTrackerScreenState();
@@ -135,7 +146,22 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     _loadScanQuota();
 
     final existing = widget.existing;
-    if (existing == null) {
+    final initialName = widget.initialName?.trim();
+    if (existing == null &&
+        initialName != null &&
+        initialName.isNotEmpty &&
+        widget.initialItems.isNotEmpty) {
+      // Arrives named and filled, so it opens on the ingredients, ready to
+      // adjust and save.
+      _stage = _Stage.foods;
+      _mealType = _mealTypeForNow();
+      _mealName = initialName;
+      _titleFrom = 0;
+      _titleFromSize = AppTypography.headlineLg.fontSize ?? 30;
+      for (final item in widget.initialItems) {
+        _ingredients.add(_Ingredient(_nextKey++, item, landed: true));
+      }
+    } else if (existing == null) {
       _stage = _Stage.name;
       _mealType = _mealTypeForNow();
       _preset(_mealType);
