@@ -115,6 +115,7 @@ flutter:
   assets:
     - assets/branding/
     - assets/branding/onboarding/
+    - assets/branding/splash/
     - assets/avatars/male/
     - assets/avatars/female/
     - assets/mascot/ram/
@@ -137,58 +138,65 @@ flutter:
         - asset: assets/fonts/HankenGrotesk-Variable.ttf
           weight: 600
 
-# --- flutter_launcher_icons: generates the real app-store/launcher icons
-# from the SilaFit mark for every platform. The dark mark is the default
-# icon everywhere; the light mark ships alongside it as an alternate the
-# user can switch to from Settings (see lib/core/app_icon/app_icon_service.dart).
-# This tool only knows about the primary icon, so the light alternate's
-# files (iOS AppIconLight.appiconset, Android ic_launcher_light) come from
-# tool/generate_alternate_app_icons.sh instead - rerun both when the artwork
-# changes. `adaptive_icon_*` gives Android's adaptive-icon system a
-# transparent foreground so it isn't clipped by the circular/squircle/
-# rounded masks; the light alternate gets a burgundy foreground over its own
-# ic_launcher_light_background color (android/app/src/main/res/values/app_icon_colors.xml).
+# --- flutter_launcher_icons: generates the launcher icons from the SilaFit
+# runner mark. The dark icon (lime runner on blurred teal) is the default on
+# the phones; the light one (burgundy runner on blurred cream) ships
+# alongside it as an alternate the user can switch to from Settings (see
+# lib/core/platform/app_icon_service.dart).
+# - This tool only knows about the primary icon and still writes iOS to the
+#   old ios/Runner path, so iOS is skipped here: both iOS sets (AppIcon,
+#   AppIconLight in ios/SilaFit) and Android's light alternate
+#   (ic_launcher_light) come from tool/generate_alternate_app_icons.sh.
+# - Android: the blurred teal `adaptive_icon_background` image plus the lime
+#   `adaptive_icon_foreground`, sized to the adaptive-icon safe zone so
+#   circle/squircle/rounded masks never clip it; Android 13+ themed icons use
+#   the white `adaptive_icon_monochrome` runner, and pre-adaptive Android
+#   uses the flattened dark icon (`image_path_android`).
+# - web, macOS and Windows use the light `image_path`.
 # Run: dart run flutter_launcher_icons && tool/generate_alternate_app_icons.sh
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/branding/app_icon_dark.png"
+  image_path: "assets/branding/app_icon_light.png"
+  image_path_android: "assets/branding/app_icon_dark.png"
   remove_alpha_ios: true
   min_sdk_android: 21
-  adaptive_icon_background: "#172d30"
+  adaptive_icon_background: "assets/branding/app_icon_adaptive_bg.png"
   adaptive_icon_foreground: "assets/branding/app_icon_adaptive_fg.png"
+  adaptive_icon_monochrome: "assets/branding/app_icon_monochrome.png"
   web:
     generate: true
-    image_path: "assets/branding/app_icon_dark.png"
-    background_color: "#172d30"
-    theme_color: "#172d30"
+    image_path: "assets/branding/app_icon_light.png"
+    background_color: "#f5eedd"
+    theme_color: "#f5eedd"
   macos:
     generate: true
-    image_path: "assets/branding/app_icon_dark.png"
+    image_path: "assets/branding/app_icon_light.png"
   windows:
     generate: true
-    image_path: "assets/branding/app_icon_dark.png"
+    image_path: "assets/branding/app_icon_light.png"
 
 # --- flutter_native_splash: the native (pre-Flutter-engine) splash screen,
-# shown instantly on cold start before AppColors/ThemeMode can even run -
-# so it needs its own explicit light/dark background pair. Colors mirror
-# AppColors.background in each mode, and each mode gets the horn-S mark in
-# its own palette (burgundy on cream, lime on teal). Run: dart run flutter_native_splash:create
+# shown instantly on cold start before AppColors/ThemeMode can even run.
+# It is deliberately a blank blurred backdrop - no mark - matching what
+# RunnerDrawSplash (lib/core/widgets/runner_draw_splash.dart) opens on, so the
+# runner then draws itself in on top with no visible hand-off. The light/dark
+# backdrops mirror AppColors.background in each mode. Android 12+'s splash
+# API only allows a solid colour (no background image), so there it is the
+# plain background of each mode, with no icon.
+# Run: dart run flutter_native_splash:create
 # The tool always writes iOS images to ios/Runner/Assets.xcassets (the old
 # target name), so afterwards copy LaunchImage.imageset and
 # LaunchBackground.imageset from there into ios/SilaFit/Assets.xcassets.
 flutter_native_splash:
-  color: "#f5eedd"
-  color_dark: "#172d30"
-  image: "assets/branding/app_icon_transparent_light.png"
+  # (background_image replaces `color` here; the tool rejects both together.)
+  background_image: "assets/branding/splash/splash_bg_light.png"
+  background_image_dark: "assets/branding/splash/splash_bg_dark.png"
   # The iOS target was renamed from Runner to SilaFit, so its Info.plist
   # moved out of the tool's default `ios/Runner/Info.plist` path.
   info_plist_files:
     - "ios/SilaFit/Info.plist"
-  image_dark: "assets/branding/app_icon_transparent.png"
   android_12:
     color: "#f5eedd"
     color_dark: "#172d30"
-    image: "assets/branding/app_icon_adaptive_fg_light.png"
-    image_dark: "assets/branding/app_icon_adaptive_fg.png"
   web: false

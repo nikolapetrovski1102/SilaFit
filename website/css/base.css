@@ -376,6 +376,59 @@ input, select, textarea { font-family: var(--font); }
 [data-theme="dark"] .theme-toggle__moon { display: none; }
 [data-theme="light"] .theme-toggle__sun { display: none; }
 
+/* ---------- Full-screen loader (js/loader.js) ----------
+   Mirrors the app's RunnerDrawSplash: a blurred backdrop in the active
+   palette, with the runner drawing itself in on top. Public pages only,
+   once per browser session (the inline <head> bootstrap adds `no-loader`
+   to <html> after the first one). Fades out by itself after 6s even if
+   scripts never run, so it can never trap the page. */
+.site-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 62% 42%, #172d30 0%, #0c1c1e 100%);
+  transition: opacity 450ms ease, visibility 450ms ease;
+  animation: site-loader-failsafe 450ms ease 6s forwards;
+}
+.site-loader.is-done { opacity: 0; visibility: hidden; }
+.no-loader .site-loader { display: none; }
+@keyframes site-loader-failsafe { to { opacity: 0; visibility: hidden; } }
+
+/* Absolutely positioned so the blobs don't take a grid cell and push the
+   runner off centre. */
+.site-loader__blur { position: absolute; inset: 0; }
+.site-loader__blur span {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(min(14vw, 120px));
+}
+.site-loader__blur span:nth-child(1) { width: 70vmax; height: 70vmax; left: 45%; top: -20%; background: #4c7a66; opacity: .75; }
+.site-loader__blur span:nth-child(2) { width: 34vmax; height: 34vmax; left: 58%; top: 8%;   background: #defb92; opacity: .28; }
+.site-loader__blur span:nth-child(3) { width: 50vmax; height: 50vmax; left: -18%; top: -14%; background: #2f7a68; opacity: .5; }
+.site-loader__blur span:nth-child(4) { width: 56vmax; height: 56vmax; left: -14%; top: 62%; background: #eeaf51; opacity: .16; }
+
+[data-theme="light"] .site-loader { background: radial-gradient(120% 90% at 62% 42%, #fbf6ea 0%, #f1e7d0 100%); }
+[data-theme="light"] .site-loader__blur span:nth-child(1) { background: #f5c463; opacity: .45; }
+[data-theme="light"] .site-loader__blur span:nth-child(2) { background: #ffe7a8; opacity: .6; }
+[data-theme="light"] .site-loader__blur span:nth-child(3) { background: #fff9ec; opacity: .8; }
+[data-theme="light"] .site-loader__blur span:nth-child(4) { background: #800020; opacity: .1; }
+
+.site-loader__mark {
+  position: relative;
+  width: min(46vw, 240px);
+  height: auto;
+}
+.site-loader__mark--light { display: none; }
+[data-theme="light"] .site-loader__mark--dark { display: none; }
+[data-theme="light"] .site-loader__mark--light { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  .site-loader { display: none; }
+}
+
 /* ---------- Cards (SectionCard) ---------- */
 .card {
   background: var(--surface);

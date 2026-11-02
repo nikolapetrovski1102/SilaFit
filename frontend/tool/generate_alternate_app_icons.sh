@@ -84,6 +84,11 @@ cat > "$RES/mipmap-anydpi-v26/ic_launcher_light.xml" <<'XML'
           android:drawable="@drawable/ic_launcher_light_foreground"
           android:inset="16%" />
   </foreground>
+  <monochrome>
+      <inset
+          android:drawable="@drawable/ic_launcher_monochrome"
+          android:inset="16%" />
+  </monochrome>
 </adaptive-icon>
 XML
 

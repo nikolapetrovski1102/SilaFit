@@ -10,11 +10,10 @@ import 'core/session/session_store.dart';
 import 'core/sync/sync_queue.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
-import 'core/widgets/mascot/ram_loader.dart';
+import 'core/widgets/runner_draw_splash.dart';
 import 'features/account/account_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/auth_repository.dart';
-import 'features/auth/widgets/auth_blob_background.dart';
 import 'features/diet_guides/diet_guide_controller.dart';
 import 'features/diet_guides/diet_guide_repository.dart';
 import 'features/diet_plans/diet_plan_controller.dart';
@@ -22,7 +21,6 @@ import 'features/diet_plans/diet_plan_repository.dart';
 import 'features/documents/trainer_documents_repository.dart';
 import 'features/exercises/exercises_repository.dart';
 import 'features/meals/meal_controller.dart';
-import 'features/motivation/splash_quote.dart';
 import 'features/meals/meal_repository.dart';
 import 'features/notifications/notifications_repository.dart';
 import 'features/notifications/push_messaging_service.dart';
@@ -308,45 +306,25 @@ class _AppRoot extends StatefulWidget {
   State<_AppRoot> createState() => _AppRootState();
 }
 
-/// How long the cold-start splash stays up at minimum. A returning device's
-/// bootstrap is only a local session restore, which in a release (AOT) build
-/// finishes within a frame or two - without a floor the ram animation never
-/// becomes visible. Long enough to catch the first blink of the loop.
-const _minSplashDuration = Duration(milliseconds: 2200);
-
-/// Only the first launch of the process waits for [_minSplashDuration];
-/// sign-out/account-deletion reloads rebuild `_AppRoot` but should not.
-bool _coldStartSplashShown = false;
-
 class _AppRootState extends State<_AppRoot> {
   bool _settingsLoadTriggered = false;
   bool _pushSyncTriggered = false;
-  bool _minSplashElapsed = _coldStartSplashShown;
-  Timer? _minSplashTimer;
 
-  @override
-  void initState() {
-    super.initState();
-    if (!_minSplashElapsed) {
-      _coldStartSplashShown = true;
-      _minSplashTimer = Timer(_minSplashDuration, () {
-        if (mounted) setState(() => _minSplashElapsed = true);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _minSplashTimer?.cancel();
-    super.dispose();
-  }
+  /// Whether the runner mark has finished drawing. The splash stays up until
+  /// it has, even when bootstrap resolves sooner, so it never cuts off
+  /// mid-stroke. Static because a brightness flip remounts this whole subtree
+  /// (see the `KeyedSubtree` in `SilenApp`), and sign-out/account-deletion
+  /// rebuild `_AppRoot` too - neither should replay the cold-start splash.
+  static bool _splashFinished = false;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, auth, _) {
-        if (auth.isBootstrapping || !_minSplashElapsed) {
-          return const _SplashScreen();
+        if (auth.isBootstrapping || !_splashFinished) {
+          return RunnerDrawSplash(
+            onFinished: () => setState(() => _splashFinished = true),
+          );
         }
         // Settings needs a live device/user token, which only exists once
         // `AuthController.bootstrap()` resolves - kick it here, once, rather
@@ -374,70 +352,6 @@ class _AppRootState extends State<_AppRoot> {
           showFeatureTour: !sessionStore.hasCompletedFeatureTour,
         );
       },
-    );
-  }
-}
-
-/// Takes over from the static native splash (see `flutter_native_splash` in
-/// `pubspec.yaml`) and shows Sila charging up for however long the bootstrap
-/// login actually takes, instead of a conventional loader. Behind Sila the
-/// same blurred accent blobs as onboarding/login keep gliding from layout to
-/// layout, so the wait feels alive rather than frozen, and a motivational
-/// line fades in and out at the bottom ([SplashQuote]).
-class _SplashScreen extends StatefulWidget {
-  const _SplashScreen();
-
-  @override
-  State<_SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<_SplashScreen> {
-  /// Only the four step layouts; the fifth is the tall-form variant with an
-  /// oversized bottom blob, which would look off on a centered splash.
-  static const _layoutCount = 4;
-
-  /// Slightly longer than [AuthBlobBackground]'s 700ms glide, so each move
-  /// eases out and settles for a beat before the next one starts.
-  static const _step = Duration(milliseconds: 900);
-
-  int _layout = 0;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(_step, (_) {
-      if (!mounted || MediaQuery.disableAnimationsOf(context)) return;
-      setState(() => _layout = (_layout + 1) % _layoutCount);
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          Positioned.fill(child: AuthBlobBackground(layout: _layout)),
-          const Center(child: RamLoader(size: 180)),
-          const Positioned(
-            left: 32,
-            right: 32,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              minimum: EdgeInsets.only(bottom: 40),
-              child: SplashQuote(),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

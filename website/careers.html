@@ -8,9 +8,9 @@
   <title>Careers at SilaFit</title>
   <meta name="description" content="Open roles and how to reach the SilaFit team about working with us." />
   <link rel="canonical" href="https://sila.fitness/careers.html" />
-  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png" media="(prefers-color-scheme: dark)" />
-  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png" media="(prefers-color-scheme: light)" />
-  <link rel="stylesheet" href="css/base.css?v=20261102-ink" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
+  <link rel="stylesheet" href="css/base.css?v=20261103-runner" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
   <link rel="stylesheet" href="css/site.css?v=20261102-ram" />
   <link rel="stylesheet" href="css/legal.css?v=20261102-ram" />
@@ -22,14 +22,21 @@
         ? stored
         : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       document.documentElement.setAttribute('data-theme', theme);
+      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('no-loader'); } catch (e) { /* private mode */ }
     })();
   </script>
 </head>
 <body>
+  <!-- Full-screen loader: the runner draws itself in, then fades (js/loader.js) -->
+  <div class="site-loader" id="siteLoader" aria-hidden="true">
+    <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
+    <img class="site-loader__mark site-loader__mark--dark" src="assets/img/branding/loader_dark.svg" alt="" />
+    <img class="site-loader__mark site-loader__mark--light" src="assets/img/branding/loader_light.svg" alt="" />
+  </div>
   <header class="nav">
     <div class="nav__inner">
       <a class="nav__logo" href="index.html">
-        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp" width="36" height="36" alt="" aria-hidden="true" />
+        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
         SilaFit
       </a>
       <nav class="nav__links">
@@ -75,7 +82,7 @@
       <div class="footer__grid">
         <div class="footer__brand">
           <a class="nav__logo" href="index.html">
-            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp" width="36" height="36" alt="" aria-hidden="true" />
+            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
             SilaFit
           </a>
           <p>Workout tracking, training splits, and meal plans in one app, with streaks that respect recovery.</p>
@@ -114,6 +121,7 @@
       </div>
     </div>
   </footer>
+  <script src="js/loader.js?v=20261103"></script>
   <script src="js/theme.js"></script>
   <script src="js/motion.js?v=20261102-ram"></script>
 </body>
