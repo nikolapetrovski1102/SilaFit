@@ -24,6 +24,16 @@
   font-display: swap;
 }
 
+/* Street-style marker face for the drawn-in page titles (mirrors the
+   app's MarkerDrawnTitle). Apache 2.0, see assets/fonts/LICENSE-PermanentMarker.txt. */
+@font-face {
+  font-family: 'Permanent Marker';
+  src: url('../assets/fonts/PermanentMarker-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   color-scheme: dark;
 
@@ -378,11 +388,13 @@ input, select, textarea { font-family: var(--font); }
 
 /* ---------- Full-screen loader (js/loader.js) ----------
    Mirrors the app's RunnerDrawSplash: a blurred backdrop in the active
-   palette, with the runner drawing itself in on top. Public pages only,
-   once per browser session (the inline <head> bootstrap adds `no-loader`
-   to <html> after the first one). Fades out by itself after 6s even if
-   scripts never run, so it can never trap the page. */
+   palette, with the runner drawing itself in on top. Shown on every public
+   page load; after the first one in a session <html> gets `loader-fast` and
+   a quicker drawing. Leaving for another site page fades the backdrop back
+   in (`is-covering`) so pages hand over without a flash. Fades out by itself
+   if scripts never run (6s, or 3s when fast), so it can never trap the page. */
 .site-loader {
+  --loader-ease: cubic-bezier(.22, .61, .36, 1);
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -390,16 +402,23 @@ input, select, textarea { font-family: var(--font); }
   place-items: center;
   overflow: hidden;
   background: radial-gradient(120% 90% at 62% 42%, #172d30 0%, #0c1c1e 100%);
-  transition: opacity 450ms ease, visibility 450ms ease;
-  animation: site-loader-failsafe 450ms ease 6s forwards;
+  transition: opacity 620ms var(--loader-ease), visibility 0s linear 620ms;
+  animation: site-loader-failsafe 500ms ease 6s forwards;
 }
-.site-loader.is-done { opacity: 0; visibility: hidden; }
-.no-loader .site-loader { display: none; }
+.loader-fast .site-loader { animation-delay: 3s; }
+.site-loader.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
+/* Covering for a page change: quick fade in, no runner. */
+.site-loader.is-covering { opacity: 1; visibility: visible; transition: opacity 240ms ease-out, visibility 0s; }
 @keyframes site-loader-failsafe { to { opacity: 0; visibility: hidden; } }
 
 /* Absolutely positioned so the blobs don't take a grid cell and push the
    runner off centre. */
-.site-loader__blur { position: absolute; inset: 0; }
+.site-loader__blur {
+  position: absolute;
+  inset: 0;
+  transition: transform 900ms var(--loader-ease);
+}
+.site-loader.is-done .site-loader__blur { transform: scale(1.08); }
 .site-loader__blur span {
   position: absolute;
   border-radius: 50%;
@@ -416,17 +435,24 @@ input, select, textarea { font-family: var(--font); }
 [data-theme="light"] .site-loader__blur span:nth-child(3) { background: #fff9ec; opacity: .8; }
 [data-theme="light"] .site-loader__blur span:nth-child(4) { background: #800020; opacity: .1; }
 
+/* The runner lifts and dissolves as the backdrop clears. */
 .site-loader__mark {
   position: relative;
   width: min(46vw, 240px);
   height: auto;
+  transition: transform 620ms var(--loader-ease), opacity 380ms ease, filter 620ms ease;
 }
-.site-loader__mark--light { display: none; }
-[data-theme="light"] .site-loader__mark--dark { display: none; }
-[data-theme="light"] .site-loader__mark--light { display: block; }
+.site-loader.is-done .site-loader__mark { transform: scale(1.12) translateY(-6px); opacity: 0; filter: blur(6px); }
+.site-loader.is-covering .site-loader__mark { opacity: 0; transition: none; }
+
+/* The page settles in underneath as the loader clears. */
+@keyframes site-page-in { from { opacity: 0; transform: translateY(10px); } }
+.site-loader ~ main { animation: site-page-in 700ms cubic-bezier(.22, .61, .36, 1) 1.3s backwards; }
+.loader-fast .site-loader ~ main { animation-delay: .65s; }
 
 @media (prefers-reduced-motion: reduce) {
   .site-loader { display: none; }
+  .site-loader ~ main { animation: none; }
 }
 
 /* ---------- Cards (SectionCard) ---------- */
@@ -586,7 +612,7 @@ input, select, textarea { font-family: var(--font); }
 /* ---------- Sila, the ram mascot ----------
    Markup (static pages write it by hand, the console uses js/sila.js):
      <span class="sila sila--glow sila--alive" data-sila="standing">
-       <img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261102-ink">
+       <img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261103-real">
      </span>
    The art has a clean dark ink edge (no sticker border) that reads on both
    site themes, so there is one image.
@@ -614,6 +640,8 @@ input, select, textarea { font-family: var(--font); }
   vertical-align: bottom;
   user-select: none;
   -webkit-user-select: none;
+  /* Depth for the mid-air turn in Sila.celebrate(). */
+  perspective: 900px;
 }
 .sila__art {
   grid-area: 1 / 1;
@@ -676,6 +704,43 @@ input, select, textarea { font-family: var(--font); }
   70% { transform: scale(0.96, 1.06); }
   100% { transform: scale(1, 1); }
 }
+/* Celebration layer (js/sila.js injects it): light rays fanning out from
+   the chest and a shock ring on the floor. Both rest invisible, and the
+   routine animates them with the Web Animations API. */
+.sila__fx {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.sila__rays {
+  position: absolute;
+  left: -40%;
+  right: -40%;
+  top: -22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0;
+  background:
+    radial-gradient(closest-side, var(--sila-glow-core), transparent 46%),
+    repeating-conic-gradient(from 0deg, var(--sila-glow) 0deg 9deg, transparent 9deg 25.7deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.55) 52%, transparent 100%);
+          mask: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.55) 52%, transparent 100%);
+}
+.sila__ring {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: -5%;
+  height: 12%;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #defb92);
+  box-shadow: 0 0 18px var(--sila-glow);
+  opacity: 0;
+}
+.sila--celebrating { cursor: default; }
+.sila--celebrating.sila--glow::before { animation-duration: 1.2s; }
+
 @media (prefers-reduced-motion: reduce) {
   .sila--glow::before, .sila--glow::after, .sila--alive .sila__art, .sila--react .sila__art { animation: none; }
 }

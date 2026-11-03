@@ -8,9 +8,9 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/mascot/talking_mascot.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
+import '../../../core/widgets/marker_drawn_title.dart';
 
 /// The closing screen of the flow: animated bell, "Stay on track" pitch,
 /// and a real OS notification-permission prompt behind "Continue". There is
@@ -26,15 +26,11 @@ class NotificationPermissionScreen extends StatelessWidget {
   /// timezone + opt-in either way, just with a different enabled flag.
   final ValueChanged<bool> onFinish;
 
-  /// What Sila says at the top of the screen, if anything.
-  final MascotLine? mascot;
-
   const NotificationPermissionScreen({
     super.key,
     required this.onBack,
     required this.isSubmitting,
     required this.onFinish,
-    this.mascot,
   });
 
   /// permission_handler only ships an implementation for Android, iOS, web,
@@ -78,12 +74,6 @@ class NotificationPermissionScreen extends StatelessWidget {
                 ),
               ],
             ),
-            if (mascot != null) ...[
-              const SizedBox(height: AppSpacing.lg),
-              OnboardingStepContentTransition(
-                child: TalkingMascot(line: mascot!),
-              ),
-            ],
             Expanded(
               flex: 6,
               child: OnboardingStepContentTransition(
@@ -115,9 +105,9 @@ class NotificationPermissionScreen extends StatelessWidget {
               incomingOffset: 14,
               child: Column(
                 children: [
-                  Text('Stay on track',
-                      textAlign: TextAlign.center,
-                      style: AppTypography.headlineLg),
+                  const MarkerDrawnTitle('Stay on track',
+                      playKey: 'notification-permission',
+                      textAlign: TextAlign.center),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Get a nudge on workout days and reminders when it’s time to log your progress.',

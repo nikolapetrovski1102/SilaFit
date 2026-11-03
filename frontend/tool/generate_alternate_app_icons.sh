@@ -5,6 +5,9 @@
 #     ios/Runner path, so pubspec.yaml has it skip iOS entirely.
 #   - Android ic_launcher_light: legacy PNGs for API < 26 plus the adaptive
 #     icon XML with its own burgundy foreground (ic_launcher_light_foreground).
+#   - Android ic_stat_silafit: the white runner as the push notification small
+#     icon (AndroidManifest default_notification_icon). Without it FCM falls
+#     back to the launcher icon, which the status bar flattens to a blob.
 # macOS only (uses sips). Run from anywhere:
 #   dart run flutter_launcher_icons && tool/generate_alternate_app_icons.sh
 set -eu
@@ -92,4 +95,24 @@ cat > "$RES/mipmap-anydpi-v26/ic_launcher_light.xml" <<'XML'
 </adaptive-icon>
 XML
 
-echo "Generated iOS AppIcon + AppIconLight and Android ic_launcher_light."
+# Notification small icon: the runner cropped out of the monochrome layer
+# (its artwork spans x 262-733, y 295-751 of 1024) to a centred 520px
+# square, then 24dp per density. White on transparent; Android tints it.
+MONO=assets/branding/app_icon_monochrome.png
+for pair in mdpi:24 hdpi:36 xhdpi:48 xxhdpi:72 xxxhdpi:96; do
+  density=${pair%:*}
+  px=${pair#*:}
+  sips -s format png -c 520 520 --cropOffset 263 238 "$MONO" \
+    --out "$RES/drawable-$density/ic_stat_silafit.png" >/dev/null
+  sips -z "$px" "$px" "$RES/drawable-$density/ic_stat_silafit.png" >/dev/null
+done
+
+cat > "$RES/values/notification_colors.xml" <<'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent behind the ic_stat_silafit push icon (brand teal). -->
+    <color name="silafit_notification">#172d30</color>
+</resources>
+XML
+
+echo "Generated iOS AppIcon + AppIconLight, Android ic_launcher_light and ic_stat_silafit."

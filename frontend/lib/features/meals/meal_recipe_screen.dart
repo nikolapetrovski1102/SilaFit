@@ -11,6 +11,7 @@ import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/skeleton.dart';
 import 'meal_models.dart';
 import 'meal_repository.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Opens [MealRecipeScreen] for one meal suggestion.
 Future<void> openMealRecipe(BuildContext context,
@@ -94,7 +95,7 @@ class _MealRecipeScreenState extends State<MealRecipeScreen> {
         if (recipe.mealType.isNotEmpty)
           SectionEyebrow(recipe.mealType, color: AppColors.accent),
         const SizedBox(height: AppSpacing.sm),
-        Text(recipe.title, style: AppTypography.headlineLg),
+        MarkerDrawnTitle(recipe.title, playKey: 'recipe:${recipe.title}'),
         const SizedBox(height: AppSpacing.xs),
         Text(
           '${recipe.caloriesKcal} kcal · P${recipe.proteinG} '

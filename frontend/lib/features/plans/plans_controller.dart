@@ -182,6 +182,12 @@ class PlansController extends ChangeNotifier {
   /// Claims a Silen promo code and re-prices the paywall with the Play offer
   /// it unlocks. Returns the reason it can't be used, or null once applied.
   Future<String?> applyPromoCode(String code) async {
+    // Codes start a subscription (a free first period), and Play can't put
+    // one on top of a subscription that's already running - check before the
+    // server spends one of the code's redemptions on this account.
+    if (current?.isPaid == true) {
+      return 'You already have a subscription - codes are for starting a new one.';
+    }
     final PromoCode promo;
     try {
       promo = await _repository.redeemPromoCode(code.trim());
@@ -237,6 +243,16 @@ class PlansController extends ChangeNotifier {
   StoreQuote? quoteFor(SubscriptionPlan plan, {bool? yearly}) {
     final id = _productIdFor(plan, yearly: yearly);
     return id == null ? null : _quotes[id];
+  }
+
+  /// The plan an applied promo code's offer is on (on the current billing
+  /// cycle) - what the paywall selects once a code goes through.
+  String? get promoPlanId {
+    if (promoCode == null) return null;
+    for (final entry in state.data ?? const <PlanCatalogEntry>[]) {
+      if (quoteFor(entry.plan)?.isPromoCode == true) return entry.plan.planId;
+    }
+    return null;
   }
 
   /// Whether the store offers this user an intro price on any product.

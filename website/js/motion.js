@@ -118,7 +118,48 @@
     heading.classList.add('is-splitting');
   }
 
-  var heroTitle = document.querySelector('[data-split]');
+  /* ----------------------------------------------------------------
+     Marker titles — the page <h1> writes itself in, word by word, like
+     the app's MarkerDrawnTitle: each word wipes open left to right,
+     paced by its length (~70ms a letter, 0.65–1.6s overall). It plays
+     once per page per browser session, after the loader has lifted;
+     later visits (and reduced motion) show the plain title.
+     ---------------------------------------------------------------- */
+  function afterLoader(fn) {
+    if (!document.getElementById('siteLoader') || root.classList.contains('loader-done')) { fn(); return; }
+    var started = false;
+    var go = function () { if (started) return; started = true; fn(); };
+    window.addEventListener('silafit:loader-done', go);
+    setTimeout(go, 4500); // the loader's own CSS failsafe has gone by then
+  }
+
+  $$('h1.marker-title').forEach(function (title) {
+    title.classList.remove('reveal');
+    var key = 'silafit-title:' + location.pathname.replace(/\.html$|\/$/, '');
+    var played = false;
+    try { played = sessionStorage.getItem(key) === '1'; sessionStorage.setItem(key, '1'); } catch (e) { /* private mode */ }
+    if (reduceMotion || played) return;
+
+    splitWords(title);
+    var words = $$('.split-word > span', title);
+    var chars = 0;
+    var lengths = words.map(function (w) { var n = w.textContent.length; chars += n + 1; return n; });
+    var total = Math.min(1600, Math.max(650, chars * 70));
+    var at = 120; // a short beat before the pen touches down
+    words.forEach(function (w, i) {
+      var d = total * lengths[i] / chars;
+      w.style.setProperty('--t', Math.round(at) + 'ms');
+      w.style.setProperty('--d', Math.round(d) + 'ms');
+      at += d + total / chars; // the gap between words
+    });
+    afterLoader(function () {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { title.classList.add('is-split'); });
+      });
+    });
+  });
+
+  var heroTitle = document.querySelector('[data-split]:not(.marker-title)');
   if (heroTitle && !reduceMotion) {
     splitWords(heroTitle);
     requestAnimationFrame(function () {
@@ -135,7 +176,7 @@
       });
     }, { threshold: 0.2, rootMargin: '0px 0px -8% 0px' });
     $$('.section h2.t-xl, .closing h2').forEach(function (h) {
-      if (h.hasAttribute('data-split')) return;
+      if (h.hasAttribute('data-split') || h.classList.contains('marker-title')) return;
       splitWords(h);
       headingObserver.observe(h);
     });
@@ -268,6 +309,9 @@
       return cs.getPropertyValue(v).trim() || '#defb92';
     });
   }
+  /* Three kinds of piece: paper that flips in 3D as it tumbles (its back
+     face a shade darker), curly ribbons, and twinkling four-point stars.
+     Air drag slows the launch, then gravity and a little sway take over. */
   function burst(x, y, count) {
     if (!confettiCanvas) {
       confettiCanvas = document.createElement('canvas');
@@ -282,18 +326,28 @@
     confettiCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var colors = confettiColors();
     for (var i = 0; i < (count || 70); i++) {
-      var a = Math.random() * Math.PI * 2;
-      var speed = 4 + Math.random() * 9;
+      /* Mostly upward, fanning out to both sides. */
+      var a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.3;
+      var speed = 6 + Math.random() * 10;
+      var roll = Math.random();
       confettiBits.push({
+        kind: roll < 0.62 ? 'paper' : roll < 0.84 ? 'ribbon' : 'star',
         x: x, y: y,
-        vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 6,
-        w: 6 + Math.random() * 6, h: 4 + Math.random() * 4,
-        r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.4,
-        c: colors[i % colors.length], life: 0, max: 70 + Math.random() * 40,
-        round: Math.random() < 0.3
+        vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+        s: 6 + Math.random() * 6,
+        r: Math.random() * Math.PI * 2, vr: (Math.random() - 0.5) * 0.3,
+        flip: 0.12 + Math.random() * 0.2, phase: Math.random() * Math.PI * 2,
+        c: colors[i % colors.length], life: 0, max: 95 + Math.random() * 45
       });
     }
     if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(stepConfetti); }
+  }
+  function shade(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    if (!m) return hex;
+    var n = parseInt(m[1], 16);
+    var f = 0.72;
+    return 'rgb(' + Math.round((n >> 16) * f) + ',' + Math.round(((n >> 8) & 255) * f) + ',' + Math.round((n & 255) * f) + ')';
   }
   function stepConfetti() {
     var ctx = confettiCtx;
@@ -301,15 +355,34 @@
     confettiBits = confettiBits.filter(function (b) { return b.life < b.max; });
     confettiBits.forEach(function (b) {
       b.life++;
-      b.vy += 0.32; b.vx *= 0.985; b.vy *= 0.985;
-      b.x += b.vx; b.y += b.vy; b.r += b.vr;
+      b.vx *= 0.955; b.vy = b.vy * 0.955 + 0.34;
+      b.x += b.vx + Math.sin(b.life * 0.09 + b.phase) * 0.6;
+      b.y += b.vy; b.r += b.vr;
+      var t = b.life / b.max;
       ctx.save();
-      ctx.globalAlpha = Math.max(0, 1 - b.life / b.max);
+      ctx.globalAlpha = t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3);
       ctx.translate(b.x, b.y);
-      ctx.rotate(b.r);
-      ctx.fillStyle = b.c;
-      if (b.round) { ctx.beginPath(); ctx.arc(0, 0, b.h / 1.6, 0, Math.PI * 2); ctx.fill(); }
-      else ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.abs(Math.cos(b.r * 2)) + 1);
+      if (b.kind === 'paper') {
+        var flip = Math.cos(b.life * b.flip + b.phase);
+        ctx.rotate(b.r);
+        ctx.fillStyle = flip >= 0 ? b.c : shade(b.c);
+        ctx.fillRect(-b.s / 2, -b.s * 0.31 * Math.max(Math.abs(flip), 0.08), b.s, b.s * 0.62 * Math.max(Math.abs(flip), 0.08));
+      } else if (b.kind === 'ribbon') {
+        ctx.rotate(b.r * 0.5);
+        ctx.strokeStyle = b.c; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(0, -b.s);
+        for (var k = 1; k <= 6; k++) ctx.lineTo(Math.sin(k * 1.6 + b.life * 0.25 + b.phase) * b.s * 0.38, -b.s + k * b.s * 0.42);
+        ctx.stroke();
+      } else {
+        var tw = 0.55 + 0.45 * Math.abs(Math.sin(b.life * 0.2 + b.phase));
+        var r = b.s * 0.75 * tw, w = r * 0.22;
+        ctx.globalAlpha *= tw;
+        ctx.fillStyle = '#fff6d6';
+        ctx.beginPath(); ctx.moveTo(0, -r);
+        ctx.quadraticCurveTo(w, -w, r, 0); ctx.quadraticCurveTo(w, w, 0, r);
+        ctx.quadraticCurveTo(-w, w, -r, 0); ctx.quadraticCurveTo(-w, -w, 0, -r);
+        ctx.fill();
+      }
       ctx.restore();
     });
     if (confettiBits.length) requestAnimationFrame(stepConfetti);
@@ -320,28 +393,31 @@
     burst(r.left + r.width / 2, r.top + r.height / 2, count);
   }
 
-  /* Sila lights up for a moment when something good happens, then settles
-     back into its resting pose. Needs js/sila.js; without it, Sila just hops. */
-  function cheer(container, ms) {
-    var sila = container && (container.matches('.sila') ? container : container.querySelector('.sila'));
-    if (!sila || !window.Sila) return;
-    var rest = sila.getAttribute('data-sila-rest') || sila.getAttribute('data-sila');
-    sila.setAttribute('data-sila-rest', rest);
-    window.Sila.set(sila, 'laughing');
-    clearTimeout(sila._cheerTimer);
-    sila._cheerTimer = setTimeout(function () { window.Sila.set(sila, rest); }, ms || 1600);
+  /* Fired from just over Sila's horns, so it rains down around Sila. */
+  function burstOver(el, count) {
+    var r = el.getBoundingClientRect();
+    burst(r.left + r.width / 2, r.top + r.height * 0.12, count);
   }
 
-  /* Mascots hop when poked; the closing one celebrates on arrival. */
+  /* Sila celebrates when something good happens: a leap, a turn in the air
+     and a fist pump, with confetti on the landing (js/sila.js). Without
+     sila.js, the mascot just hops. */
+  function cheer(container, count) {
+    var sila = container && (container.matches('.sila') ? container : container.querySelector('.sila'));
+    if (sila && window.Sila && window.Sila.celebrate) {
+      window.Sila.celebrate(sila, { onLand: function () { burstOver(sila, count); } });
+      return;
+    }
+    container.classList.remove('is-hopping');
+    void container.offsetWidth;
+    container.classList.add('is-hopping');
+    burstFrom(container, count);
+  }
+
+  /* Mascots celebrate when poked; the closing one celebrates on arrival. */
   $$('.mascot, .closing__mascot').forEach(function (m) {
     m.style.cursor = 'pointer';
-    m.addEventListener('click', function () {
-      m.classList.remove('is-hopping');
-      void m.offsetWidth;
-      m.classList.add('is-hopping');
-      burstFrom(m, 50);
-      cheer(m);
-    });
+    m.addEventListener('click', function () { cheer(m, 60); });
     m.addEventListener('animationend', function (e) {
       if (e.animationName === 'mascot-hop') m.classList.remove('is-hopping');
     });
@@ -354,7 +430,7 @@
       closingObserver.disconnect();
       var mascot = closing.querySelector('.closing__mascot');
       setTimeout(function () {
-        if (mascot) { mascot.classList.add('is-hopping'); burstFrom(mascot, 90); cheer(mascot, 2200); }
+        if (mascot) cheer(mascot, 90);
         var bubble = closing.querySelector('[data-closing-bubble]');
         if (bubble) bubble.classList.add('is-shown');
       }, 700);

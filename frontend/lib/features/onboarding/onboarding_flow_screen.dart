@@ -10,7 +10,6 @@ import '../notifications/notifications_repository.dart';
 import '../notifications/push_messaging_service.dart';
 import '../../root_shell.dart';
 import 'onboarding_controller.dart';
-import 'onboarding_mascot_lines.dart';
 import 'onboarding_repository.dart';
 import 'widgets/age_wheel_picker.dart';
 import 'widgets/intro_slide.dart';
@@ -165,7 +164,6 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.gender:
         return QuestionScaffold(
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
@@ -187,7 +185,6 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.age:
         return QuestionScaffold(
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
@@ -207,7 +204,6 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.height:
         return QuestionScaffold(
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
@@ -233,7 +229,6 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.weight:
         return QuestionScaffold(
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
@@ -259,7 +254,6 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.goal:
         return QuestionScaffold(
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
@@ -289,7 +283,6 @@ class _OnboardingFlowView extends StatelessWidget {
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           onNext: controller.goNext,
           onSkip: () => _skip(context),
         );
@@ -297,7 +290,6 @@ class _OnboardingFlowView extends StatelessWidget {
       case OnboardingStep.notifications:
         return NotificationPermissionScreen(
           onBack: controller.goBack,
-          mascot: mascotLineFor(controller.step),
           isSubmitting: controller.isSubmitting,
           onFinish: (allowed) => _finish(context, allowed),
         );
@@ -306,8 +298,8 @@ class _OnboardingFlowView extends StatelessWidget {
 }
 
 const _introSlides = [
+  // Slide 1 is title-only: the graffiti headline carries it on its own.
   IntroSlideData(
-    iconMark: SilaIconMark(),
     headline: 'Track every rep.\nSee real progress.',
     subhead: 'Workouts, meals, and progress in one place.',
   ),

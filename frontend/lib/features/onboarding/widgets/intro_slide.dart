@@ -5,18 +5,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/dumbbell_icon.dart';
-import '../../../core/widgets/mascot/ram_mascot.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
+import '../../../core/widgets/marker_drawn_title.dart';
 
-/// One page of the intro carousel: an icon mark plus headline/subhead.
+/// One page of the intro carousel: an optional icon mark plus
+/// headline/subhead. Without a mark the headline sits centred on its own.
 class IntroSlideData {
-  final Widget iconMark;
+  final Widget? iconMark;
   final String headline;
   final String subhead;
 
   const IntroSlideData({
-    required this.iconMark,
+    this.iconMark,
     required this.headline,
     required this.subhead,
   });
@@ -172,16 +173,18 @@ class _IntroSlidePage extends StatelessWidget {
       child: Column(
         children: [
           const Spacer(flex: 2),
-          OnboardingStepContentTransition(child: data.iconMark),
-          const Spacer(flex: 2),
+          if (data.iconMark case final mark?) ...[
+            OnboardingStepContentTransition(child: mark),
+            const Spacer(flex: 2),
+          ],
           OnboardingStepContentTransition(
             incomingOffset: 14,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(data.headline,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.headlineLg),
+                MarkerDrawnTitle(data.headline,
+                    playKey: 'intro:${data.headline}',
+                    textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   data.subhead,
@@ -339,18 +342,6 @@ class DumbbellIconMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return OnboardingIconMark(
       child: SoftDumbbellIcon(size: 130, color: AppColors.accent),
-    );
-  }
-}
-
-/// Slide 1's mark: Sila the ram greeting the user.
-class SilaIconMark extends StatelessWidget {
-  const SilaIconMark({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const OnboardingIconMark(
-      child: RamMascot(RamArt.laughing, size: 150),
     );
   }
 }

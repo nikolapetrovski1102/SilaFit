@@ -15,6 +15,7 @@ import '../meals/meal_models.dart';
 import '../meals/meal_repository.dart';
 import '../splits/widgets/ink_field.dart';
 import 'diet_plan_repository.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 // Same shape for every diet the wizard creates: a week, one day at a time.
 // The diet-plan builder is where the header gets tuned afterwards.
@@ -1145,8 +1146,8 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                 Icon(Icons.check_circle_rounded,
                     size: 56, color: AppColors.accent),
                 const SizedBox(height: AppSpacing.lg),
-                Text('${_dietName ?? 'Your diet'} is ready',
-                    style: AppTypography.headlineLg,
+                MarkerDrawnTitle('${_dietName ?? 'Your diet'} is ready',
+                    playKey: 'diet-ready:$_dietName',
                     textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.xs),
                 Text(

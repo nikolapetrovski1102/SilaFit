@@ -15,6 +15,7 @@ import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
 import 'diet_plan_repository.dart';
 import 'diet_plans_screen.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// The user's own diet plans - built via the in-app builder, always fully
 /// editable. The Nutrition "Active Diet Plan" section's destination, laid out
@@ -113,11 +114,11 @@ class _MyDietPlansScreenState extends State<MyDietPlansScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SectionEyebrow('Your Nutrition', color: AppColors.accent),
-                      const SizedBox(height: 4),
-                      Text('My Diet Plans', style: AppTypography.headlineLg),
-                      const SizedBox(height: AppSpacing.lg),
-                      _CreateDietPlanCta(onTap: _openWizard),
+                      MarkerTitleOverlap(
+                        title: const MarkerDrawnTitle('My Diet Plans',
+                            playKey: 'my-diet-plans'),
+                        child: _CreateDietPlanCta(onTap: _openWizard),
+                      ),
                       if (activePlanId == null) ...[
                         const SizedBox(height: AppSpacing.lg),
                         Text('No active diet plan yet',

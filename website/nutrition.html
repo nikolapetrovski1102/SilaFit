@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#172d30" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5eedd" media="(prefers-color-scheme: light)" />
+  <title>Nutrition &amp; meal plans — SilaFit</title>
+  <meta name="description" content="Calorie and macro targets that follow your training, whole-food meal plans built from USDA data, and AI food scan." />
+  <link rel="canonical" href="https://sila.fitness/nutrition.html" />
+  <meta name="apple-itunes-app" content="app-id=6811345732" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://sila.fitness/nutrition.html" />
+  <meta property="og:title" content="Nutrition &amp; meal plans — SilaFit" />
+  <meta property="og:description" content="Calorie and macro targets that follow your training, whole-food meal plans built from USDA data, and AI food scan." />
+  <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png?v=20261103-runner" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
+  <link rel="stylesheet" href="css/base.css?v=20261103-marker" />
+  <link rel="stylesheet" href="css/ambient.css?v=20260925" />
+  <link rel="stylesheet" href="css/site.css?v=20261103-marker" />
+  <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) { /* private mode */ }
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('loader-fast'); } catch (e) { /* private mode */ }
+    })();
+  </script>
+</head>
+<body>
+  <!-- Full-screen loader: the runner draws itself in, then fades (js/loader.js) -->
+  <div class="site-loader" id="siteLoader" aria-hidden="true">
+    <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
+    <img class="site-loader__mark" id="siteLoaderMark" alt="" />
+  </div>
+  <script>
+    /* One drawing for the active theme: full on the first page of a visit, quick after that. */
+    (function () {
+      var d = document.documentElement;
+      document.getElementById('siteLoaderMark').src = 'assets/img/branding/loader_'
+        + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
+        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261103-2';
+    })();
+  </script>
+
+  <!-- ================= Nav ================= -->
+  <header class="nav" id="mainNav">
+    <div class="nav__inner">
+      <a class="nav__logo" href="index.html">
+        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
+        SilaFit
+      </a>
+      <nav class="nav__links" id="navLinks">
+        <a href="features.html">Features</a>
+        <a href="training.html">Training</a>
+        <a href="nutrition.html" class="is-active" aria-current="page">Nutrition</a>
+        <a href="pricing.html">Pricing</a>
+      </nav>
+      <div class="nav__cta">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
+          <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+          <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+        </button>
+        <a class="btn btn--primary btn--sm" href="/download">Get the app</a>
+      </div>
+      <button class="nav__burger" id="navBurger" aria-label="Menu" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h16M4 16h16"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= Nutrition ================= -->
+    <section class="section" id="nutrition" data-scene="mix">
+      <div class="wrap">
+        <div class="section__head">
+          <span class="eyebrow eyebrow--accent reveal">Nutrition</span>
+          <h1 class="t-xl marker-title">Meal plans that flex with your training.</h1>
+          <p class="t-lead reveal">Whole foods at realistic portions, with macros summed from per-100g USDA data, not guessed. Pick a goal, get a week, log it in one tap.</p>
+        </div>
+
+        <div class="macros" data-macros>
+          <div class="macro macro--kcal reveal" style="--p:82">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="2000">2,000</span></div>
+            <span class="eyebrow">Daily kcal target</span>
+            <span class="macro__logged">1,640 logged today</span>
+          </div>
+          <div class="macro macro--protein reveal reveal-delay-1" style="--p:83">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="160">160</span><small>g</small></div>
+            <span class="eyebrow">Protein</span>
+            <span class="macro__logged">132 g logged</span>
+          </div>
+          <div class="macro macro--carbs reveal reveal-delay-2" style="--p:78">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="180">180</span><small>g</small></div>
+            <span class="eyebrow">Carbs</span>
+            <span class="macro__logged">141 g logged</span>
+          </div>
+          <div class="macro macro--fats reveal reveal-delay-3" style="--p:75">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="65">65</span><small>g</small></div>
+            <span class="eyebrow">Fats</span>
+            <span class="macro__logged">49 g logged</span>
+          </div>
+        </div>
+
+        <div class="meals">
+          <div class="meals__head reveal">
+            <span class="eyebrow">Suggested this month</span>
+            <span class="eyebrow" style="color:var(--outline)">Refreshed monthly</span>
+          </div>
+          <ul class="meal-list" id="mealStrip"><!-- rendered from SilaStore --></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= Next page ================= -->
+    <section class="section section--rule page-next" data-scene="mix">
+      <div class="wrap page-next__inner">
+        <span class="eyebrow">Keep exploring</span>
+        <a class="page-next__link reveal" href="pricing.html">Pricing<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= Footer ================= -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer__grid">
+        <div class="footer__brand">
+          <a class="nav__logo" href="index.html">
+            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
+            SilaFit
+          </a>
+          <p>Workout tracking, training splits, and meal plans in one app, with streaks that respect recovery.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="/download">Download the app</a></li>
+            <li><a href="features.html">Features</a></li>
+            <li><a href="nutrition.html">Meal planning</a></li>
+            <li><a href="training.html">Training splits</a></li>
+            <li><a href="pricing.html">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Company</h4>
+          <ul>
+            <li><a href="about.html">About</a></li>
+            <li><a href="pricing.html#community">Community</a></li>
+            <li><a href="support.html">Support</a></li>
+            <li><a href="careers.html">Careers</a></li>
+            <li><a href="press.html">Press kit</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="privacy.html">Privacy policy</a></li>
+            <li><a href="terms.html">Terms of service</a></li>
+            <li><a href="delete-account.html">Delete my account</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 SilaFit. All rights reserved.</span>
+        <span>Made for lifters, by lifters.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/loader.js?v=20261103-marker"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/vendor-qrcode.js"></script>
+  <script src="js/site.js?v=20261103-2"></script>
+  <script src="js/sila.js?v=20261103-real"></script>
+  <script src="js/motion.js?v=20261103-marker"></script>
+</body>
+</html>

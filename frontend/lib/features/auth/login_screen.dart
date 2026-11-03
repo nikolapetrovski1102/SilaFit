@@ -15,6 +15,7 @@ import 'complete_profile_flow.dart';
 import 'register_screen.dart';
 import 'widgets/auth_blob_background.dart';
 import 'widgets/oauth_sign_in_buttons.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -208,8 +209,8 @@ class _LoginScreenState extends State<LoginScreen>
                               children: [
                                 _FadeUp(
                                   animation: headerIn,
-                                  child: Text('Welcome back',
-                                      style: AppTypography.headlineLg),
+                                  child: const MarkerDrawnTitle('Welcome back',
+                                      playKey: 'login'),
                                 ),
                                 const SizedBox(height: AppSpacing.xs),
                                 _FadeUp(

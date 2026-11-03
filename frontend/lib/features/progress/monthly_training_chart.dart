@@ -11,6 +11,7 @@ import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_dropdown.dart';
 import 'analytics_models.dart';
 import 'weight_display.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Plots logged load, not an inferred quality/effort score. The drawing starts
 /// at the baseline, then traces each real point with a moving tip.
@@ -93,9 +94,8 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.marginMobile, vertical: AppSpacing.xl),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const SectionEyebrow('Your training, in motion'),
-        const SizedBox(height: AppSpacing.sm),
-        Text('See your effort over time', style: AppTypography.headlineLg),
+        const MarkerDrawnTitle('See your effort over time',
+            playKey: 'monthly-effort'),
         const SizedBox(height: AppSpacing.sm),
         Text(
             'Working weight, reps and logged effort tell different parts of the story.',

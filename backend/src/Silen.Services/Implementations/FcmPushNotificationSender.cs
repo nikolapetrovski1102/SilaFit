@@ -153,7 +153,8 @@ public sealed class FcmPushNotificationSender : IPushNotificationSender
                 {
                     priority = "high",
                     ttl = $"{message.TtlSeconds ?? _options.DefaultTtlSeconds}s",
-                    notification = new { channel_id = "silen_reminders", sound = "default" }
+                    // icon = res/drawable/ic_stat_silafit (the white runner).
+                    notification = new { channel_id = "silen_reminders", sound = "default", icon = "ic_stat_silafit" }
                 },
                 ["apns"] = new
                 {

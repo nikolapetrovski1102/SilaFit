@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -99,8 +101,29 @@ class _MascotToastViewState extends State<_MascotToastView>
             ),
             child: Row(
               children: [
-                Image.asset(widget.pose.assetPath,
-                    width: 44, height: 44, semanticLabel: mascotName),
+                // Sila pops up from below with a springy wiggle, a beat
+                // after the banner, so it reads as Sila arriving with news.
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 900),
+                  curve: const Interval(0.15, 1),
+                  builder: (context, v, child) {
+                    final pop = Curves.elasticOut.transform(v);
+                    final wiggle =
+                        math.sin(v * math.pi * 4) * 0.12 * (1 - v);
+                    return Transform(
+                      alignment: Alignment.bottomCenter,
+                      transform: Matrix4.identity()
+                        ..translateByDouble(0.0, 10 * (1 - pop), 0.0, 1.0)
+                        ..rotateZ(wiggle)
+                        ..scaleByDouble(pop, pop, 1.0, 1.0),
+                      child: child,
+                    );
+                  },
+                  child: RamMascot(widget.pose, size: 44),
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(widget.message, style: AppTypography.bodyMd),

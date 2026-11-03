@@ -13,21 +13,24 @@ import 'plans_screen.dart';
 /// redemption sheet - whatever it grants comes back through the normal
 /// purchase verification and unlocks with a celebration.
 ///
-/// Android: Play promo codes can only grant free time, so discounts are
-/// Silen's own codes. The server checks the code and names the Play offer it
-/// unlocks, then the paywall sells that offer at the store's discounted price
+/// Android: Play promo codes can only grant free time to an existing
+/// subscription, so codes that start one (e.g. a free first month instead of
+/// the intro price) are Silen's own. The server checks the code and names the
+/// Play offer it unlocks, then the paywall sells that offer
 /// ([openPaywall] is false when the caller already is the paywall). Play's
 /// own codes are still one tap away in the dialog.
 ///
+/// Returns true once a Silen code is on the paywall (Android only) - iOS
+/// redemptions finish in Apple's sheet and arrive as a purchase instead.
+///
 /// A subscription belongs to a Silen account, so guests sign in first.
-Future<void> runRedeemCode(BuildContext context,
+Future<bool> runRedeemCode(BuildContext context,
     {bool openPaywall = true}) async {
   final hasAccount = await AccountGate.ensure(context);
-  if (!hasAccount || !context.mounted) return;
+  if (!hasAccount || !context.mounted) return false;
 
   if (Platform.isAndroid) {
-    await _redeemOnAndroid(context, openPaywall: openPaywall);
-    return;
+    return _redeemOnAndroid(context, openPaywall: openPaywall);
   }
 
   final messenger = ScaffoldMessenger.of(context);
@@ -37,9 +40,10 @@ Future<void> runRedeemCode(BuildContext context,
     messenger.showSnackBar(const SnackBar(
         content: Text('Code redemption isn\'t available right now.')));
   }
+  return false;
 }
 
-Future<void> _redeemOnAndroid(BuildContext context,
+Future<bool> _redeemOnAndroid(BuildContext context,
     {required bool openPaywall}) async {
   final controller = context.read<PlansController>();
   final messenger = ScaffoldMessenger.of(context);
@@ -53,10 +57,11 @@ Future<void> _redeemOnAndroid(BuildContext context,
   switch (result) {
     case _RedeemResult.applied:
       messenger.showSnackBar(const SnackBar(
-          content: Text('Code applied - your discount is on the plans.')));
+          content: Text('Code applied - your offer is on the plans.')));
       if (openPaywall) {
         navigator.push(MaterialPageRoute(builder: (_) => const PlansScreen()));
       }
+      return true;
     case _RedeemResult.playCode:
       try {
         await controller.redeemCode();
@@ -70,6 +75,7 @@ Future<void> _redeemOnAndroid(BuildContext context,
     case null:
       break;
   }
+  return false;
 }
 
 enum _RedeemResult { applied, playCode }

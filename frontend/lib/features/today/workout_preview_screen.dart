@@ -9,6 +9,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../splits/splits_models.dart';
 import 'widgets/day_preview.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Read-only details for one scheduled day in the active split.
 class WorkoutPreviewScreen extends StatelessWidget {
@@ -42,8 +43,8 @@ class WorkoutPreviewScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.gutterMobile, vertical: AppSpacing.lg),
           children: [
-            Text(preview.title ?? 'Training Session',
-                style: AppTypography.headlineLg),
+            MarkerDrawnTitle(preview.title ?? 'Training Session',
+                playKey: 'workout-preview:${preview.date}'),
             const SizedBox(height: AppSpacing.xxs),
             Text(DateFormat('EEEE, MMM d').format(preview.date),
                 style: AppTypography.bodyMd

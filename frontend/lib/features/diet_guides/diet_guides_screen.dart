@@ -12,6 +12,7 @@ import 'diet_guide_controller.dart';
 import 'diet_guide_detail_screen.dart';
 import 'diet_guide_models.dart';
 import 'diet_guide_repository.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Browse view for the imported long-form diet guides (Clean Eating, Keto,
 /// IIFYM, ...). Separate from `DietPlansScreen`, which lists the assignable
@@ -52,9 +53,7 @@ class _DietGuidesScreenState extends State<DietGuidesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SectionEyebrow('Nutrition Library', color: AppColors.accent),
-                const SizedBox(height: 4),
-                Text('Diet Guides', style: AppTypography.headlineLg),
+                MarkerDrawnTitle('Diet Guides', playKey: 'diet-guides'),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
                   'Reference guides on how each approach works, what it allows '

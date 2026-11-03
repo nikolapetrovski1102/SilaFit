@@ -17,9 +17,9 @@
   <meta name="twitter:card" content="summary" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
-  <link rel="stylesheet" href="css/base.css?v=20261103-runner" />
+  <link rel="stylesheet" href="css/base.css?v=20261103-marker" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261102-ram" />
+  <link rel="stylesheet" href="css/site.css?v=20261103-marker" />
   <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
   <script>
     (function () {
@@ -29,7 +29,7 @@
         ? stored
         : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       document.documentElement.setAttribute('data-theme', theme);
-      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('no-loader'); } catch (e) { /* private mode */ }
+      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('loader-fast'); } catch (e) { /* private mode */ }
     })();
   </script>
 </head>
@@ -37,9 +37,17 @@
   <!-- Full-screen loader: the runner draws itself in, then fades (js/loader.js) -->
   <div class="site-loader" id="siteLoader" aria-hidden="true">
     <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
-    <img class="site-loader__mark site-loader__mark--dark" src="assets/img/branding/loader_dark.svg" alt="" />
-    <img class="site-loader__mark site-loader__mark--light" src="assets/img/branding/loader_light.svg" alt="" />
+    <img class="site-loader__mark" id="siteLoaderMark" alt="" />
   </div>
+  <script>
+    /* One drawing for the active theme: full on the first page of a visit, quick after that. */
+    (function () {
+      var d = document.documentElement;
+      document.getElementById('siteLoaderMark').src = 'assets/img/branding/loader_'
+        + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
+        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261103-2';
+    })();
+  </script>
 
   <!-- ================= Nav ================= -->
   <header class="nav" id="mainNav">
@@ -49,10 +57,10 @@
         SilaFit
       </a>
       <nav class="nav__links" id="navLinks">
-        <a href="#features">Features</a>
-        <a href="#splits">Training</a>
-        <a href="#nutrition">Nutrition</a>
-        <a href="#pricing">Pricing</a>
+        <a href="features.html">Features</a>
+        <a href="training.html">Training</a>
+        <a href="nutrition.html">Nutrition</a>
+        <a href="pricing.html">Pricing</a>
       </nav>
       <div class="nav__cta">
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
@@ -72,9 +80,9 @@
     <section class="hero" id="top" data-scene="lime">
       <div class="wrap">
         <div class="eyebrow eyebrow--accent reveal">Workout + nutrition tracking</div>
-        <h1 class="t-hero" data-split>Strength, measured <em>to the rep.</em><span class="hero-sticker" data-nosplit aria-hidden="true">
+        <h1 class="t-hero marker-title" data-split>Strength, measured <em>to the rep.</em><span class="hero-sticker" data-nosplit aria-hidden="true">
           <svg class="hero-sticker__ring" viewBox="0 0 200 200"><defs><path id="stickerPath" d="M100 100m-78 0a78 78 0 1 1 156 0a78 78 0 1 1-156 0"/></defs><text><textPath href="#stickerPath" textLength="485">TRAIN · EAT · RECOVER · REPEAT ·</textPath></text></svg>
-          <span class="sila sila--glow sila--alive" data-sila="standing" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261102-ink" width="512" height="512" alt="" decoding="async" /></span>
+          <span class="sila sila--glow sila--alive" data-sila="standing" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261103-real" width="512" height="512" alt="" decoding="async" /></span>
         </span></h1>
         <div class="hero__row">
           <p class="t-lead reveal reveal-delay-1">
@@ -116,7 +124,7 @@
           <div class="media media--side reveal reveal-delay-2">
             <div>
               <span class="eyebrow streak-label">
-                <img class="streak-ram" src="assets/img/mascot/ram/emblem.webp?v=20261102-ink" width="22" height="22" alt="" aria-hidden="true" />
+                <img class="streak-ram" src="assets/img/mascot/ram/emblem.webp?v=20261103-real" width="22" height="22" alt="" aria-hidden="true" />
                 Current streak
               </span>
               <div class="t-stat"><span data-count="112">112</span><span class="t-muted-inline"> d</span></div>
@@ -125,7 +133,7 @@
               </ol>
               <p class="t-body">Rest days count. Recovery is training too.</p>
             </div>
-            <span class="sila sila--glow sila--alive mascot" data-sila="charging" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/charging.webp?v=20261102-ink" width="512" height="512" alt="" loading="lazy" decoding="async" /></span>
+            <span class="sila sila--glow sila--alive mascot" data-sila="charging" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/charging.webp?v=20261103-real" width="512" height="512" alt="" loading="lazy" decoding="async" /></span>
           </div>
         </div>
       </div>
@@ -164,251 +172,13 @@
         </div>
       </div>
       <ul class="screens" aria-label="App screenshots" tabindex="0">
-        <li class="screen reveal"><img src="assets/img/screens/today.webp" width="560" height="1212" loading="lazy" alt="Today screen with workout streak, weekly schedule and the next session" /><span>Today</span></li>
-        <li class="screen reveal reveal-delay-1"><img src="assets/img/screens/logging.webp" width="560" height="1212" loading="lazy" alt="Logging a set of incline dumbbell bench press with weight, reps and rest timer" /><span>Set logging</span></li>
-        <li class="screen reveal reveal-delay-2"><img src="assets/img/screens/progress.webp" width="560" height="1212" loading="lazy" alt="Progress screen showing strength trend and personal records" /><span>Progress &amp; PRs</span></li>
-        <li class="screen reveal reveal-delay-3"><img src="assets/img/screens/nutrition.webp" width="560" height="1212" loading="lazy" alt="Nutrition screen with daily calories, macros and suggested meals" /><span>Nutrition</span></li>
-        <li class="screen reveal"><img src="assets/img/screens/splits.webp" width="560" height="1212" loading="lazy" alt="Workout splits matched to your goal, level and schedule" /><span>Splits</span></li>
-        <li class="screen reveal"><img src="assets/img/screens/welcome.webp" width="560" height="1212" loading="lazy" alt="SilaFit welcome screen: track every rep, see real progress" /><span>Get started</span></li>
+        <li class="screen reveal"><img src="assets/img/screens/today.webp" width="560" height="1217" loading="lazy" alt="Today screen with the week strip, today's Push session and your active split" /><span>Today</span></li>
+        <li class="screen reveal reveal-delay-1"><img src="assets/img/screens/logging.webp" width="560" height="1217" loading="lazy" alt="Logging a set of dumbbell incline bench press: weight, reps and rest timer" /><span>Set logging</span></li>
+        <li class="screen reveal reveal-delay-2"><img src="assets/img/screens/progress.webp" width="560" height="1217" loading="lazy" alt="Progress screen with the estimated 1RM trend for wide-grip lat pulldown" /><span>Progress &amp; PRs</span></li>
+        <li class="screen reveal reveal-delay-3"><img src="assets/img/screens/nutrition.webp" width="560" height="1217" loading="lazy" alt="Nutrition screen with calories left, macros and today's meals from your diet plan" /><span>Nutrition</span></li>
+        <li class="screen reveal"><img src="assets/img/screens/splits.webp" width="560" height="1217" loading="lazy" alt="My Splits: create a split or pick one matched to your goal, level and schedule" /><span>Splits</span></li>
+        <li class="screen reveal"><img src="assets/img/screens/welcome.webp" width="560" height="1217" loading="lazy" alt="Home screen: training, nutrition and progress in one app" /><span>All in one</span></li>
       </ul>
-    </section>
-
-    <!-- ================= Features ================= -->
-    <div class="marquee" aria-hidden="true">
-      <div class="marquee__track">
-        <span>Train</span><i class="dot"></i><span class="is-outline">Eat</span><i class="dot"></i><span>Recover</span><i class="dot"></i><span class="is-outline">Repeat</span><i class="dot"></i><span>Train</span><i class="dot"></i><span class="is-outline">Eat</span><i class="dot"></i><span>Recover</span>
-      </div>
-    </div>
-
-    <section class="section" id="features" data-scene="sky">
-      <div class="wrap">
-        <div class="section__head">
-          <span class="eyebrow eyebrow--accent reveal">The system</span>
-          <h2 class="t-xl reveal">Everything a lifter tracks. Nothing they don't.</h2>
-        </div>
-        <ol class="index-list">
-          <li class="index-row reveal" data-preview="assets/img/screens/splits.webp">
-            <span class="index-row__num">01</span>
-            <h3 class="t-lg">Smart workout splits</h3>
-            <p class="t-body">A curated split library (PPL, Upper/Lower, PHUL, Arnold) matched to your goal, with session tracking down to the set.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/progress.webp">
-            <span class="index-row__num">02</span>
-            <h3 class="t-lg">1RM progression &amp; PR tracking</h3>
-            <p class="t-body">Per-exercise charts of estimated 1RM, top set and volume, with every personal record flagged the moment you hit it.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/nutrition.webp">
-            <span class="index-row__num">03</span>
-            <h3 class="t-lg">Adaptive meal planning</h3>
-            <p class="t-body">Calorie and macro targets calibrated to your training load, with whole-food meal suggestions built from USDA data.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/today.webp">
-            <span class="index-row__num">04</span>
-            <h3 class="t-lg">Streaks that stick</h3>
-            <p class="t-body">A streak engine that celebrates consistency, and counts rest days, because recovery is training too.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/today.webp">
-            <span class="index-row__num">05</span>
-            <h3 class="t-lg">Hydration &amp; bodyweight</h3>
-            <p class="t-body">Water intake and morning weigh-ins logged in two taps, trended against your training volume.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/progress.webp">
-            <span class="index-row__num">06</span>
-            <h3 class="t-lg">AI monthly analytics</h3>
-            <p class="t-body">A coach-grade report every month: volume landmarks, deload signals, and exactly what to change next block.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/nutrition.webp">
-            <span class="index-row__num">07</span>
-            <h3 class="t-lg">AI food scan</h3>
-            <p class="t-body">Snap a photo of your plate and get an estimated calorie and macro breakdown, ready to log. Or search the food database by name.</p>
-          </li>
-          <li class="index-row reveal" data-preview="assets/img/screens/logging.webp">
-            <span class="index-row__num">08</span>
-            <h3 class="t-lg">Your exercises, your meals</h3>
-            <p class="t-body">Add custom exercises and recipes when the library doesn't have yours, and build a diet plan around them with a step-by-step wizard.</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-
-    <!-- ================= Training splits ================= -->
-    <section class="section section--rule" id="splits" data-scene="amber">
-      <div class="wrap">
-        <div class="showcase">
-          <div class="showcase__media">
-            <figure class="media reveal" data-parallax>
-              <img src="assets/img/branding/split_hero.webp" width="896" height="1200" loading="lazy" alt="Lifter chalking up before a deadlift" />
-            </figure>
-          </div>
-          <div class="showcase__body">
-            <span class="eyebrow eyebrow--accent reveal">Training library</span>
-            <h2 class="t-xl reveal" style="margin-top:32px;">A split for every goal.</h2>
-            <p class="t-lead reveal">Pick a proven program or build your own. SilaFit sets your weekly schedule and session targets instantly.</p>
-            <ul class="plain-list">
-              <li class="reveal">
-                <div><div class="plain-list__name">PPL Hypertrophy</div><div class="plain-list__meta">Intermediate · 6 days · Build muscle</div></div>
-                <span class="plain-list__tag">Popular</span>
-              </li>
-              <li class="reveal">
-                <div><div class="plain-list__name">Upper / Lower</div><div class="plain-list__meta">Beginner · 4 days · Stay active</div></div>
-              </li>
-              <li class="reveal">
-                <div><div class="plain-list__name">5-Day Metabolic Circuit</div><div class="plain-list__meta">Beginner · 5 days · Lose fat</div></div>
-              </li>
-              <li class="reveal">
-                <div><div class="plain-list__name">Arnold Split</div><div class="plain-list__meta">Advanced · 6 days · Build muscle</div></div>
-              </li>
-              <li class="reveal">
-                <div><div class="plain-list__name">PHUL Power-Hypertrophy</div><div class="plain-list__meta">Intermediate · 4 days · Strength &amp; size</div></div>
-                <span class="plain-list__tag">New</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= Nutrition ================= -->
-    <section class="section section--rule" id="nutrition" data-scene="mix">
-      <div class="wrap">
-        <div class="section__head">
-          <span class="eyebrow eyebrow--accent reveal">Nutrition</span>
-          <h2 class="t-xl reveal">Meal plans that flex with your training.</h2>
-          <p class="t-lead reveal">Whole foods at realistic portions, with macros summed from per-100g USDA data, not guessed. Pick a goal, get a week, log it in one tap.</p>
-        </div>
-
-        <div class="macros" data-macros>
-          <div class="macro macro--kcal reveal" style="--p:82">
-            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
-            <div class="t-stat"><span data-count="2000">2,000</span></div>
-            <span class="eyebrow">Daily kcal target</span>
-            <span class="macro__logged">1,640 logged today</span>
-          </div>
-          <div class="macro macro--protein reveal reveal-delay-1" style="--p:83">
-            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
-            <div class="t-stat"><span data-count="160">160</span><small>g</small></div>
-            <span class="eyebrow">Protein</span>
-            <span class="macro__logged">132 g logged</span>
-          </div>
-          <div class="macro macro--carbs reveal reveal-delay-2" style="--p:78">
-            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
-            <div class="t-stat"><span data-count="180">180</span><small>g</small></div>
-            <span class="eyebrow">Carbs</span>
-            <span class="macro__logged">141 g logged</span>
-          </div>
-          <div class="macro macro--fats reveal reveal-delay-3" style="--p:75">
-            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
-            <div class="t-stat"><span data-count="65">65</span><small>g</small></div>
-            <span class="eyebrow">Fats</span>
-            <span class="macro__logged">49 g logged</span>
-          </div>
-        </div>
-
-        <div class="meals">
-          <div class="meals__head reveal">
-            <span class="eyebrow">Suggested this month</span>
-            <span class="eyebrow" style="color:var(--outline)">Refreshed monthly</span>
-          </div>
-          <ul class="meal-list" id="mealStrip"><!-- rendered from SilaStore --></ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= How it works ================= -->
-    <section class="section section--rule" id="how" data-scene="sky">
-      <div class="wrap">
-        <div class="section__head">
-          <span class="eyebrow eyebrow--accent reveal">How it works</span>
-          <h2 class="t-xl reveal">From first rep to next PR.</h2>
-        </div>
-        <ol class="steps">
-          <li class="step reveal">
-            <div class="step__num">01</div>
-            <h3>Pick your split</h3>
-            <p>Choose a proven program or build your own. Your weekly schedule is set instantly.</p>
-          </li>
-          <li class="step reveal reveal-delay-1">
-            <div class="step__num">02</div>
-            <h3>Log every set</h3>
-            <p>Track weight and reps as you lift. Your 1RM and PR curve update in real time.</p>
-          </li>
-          <li class="step reveal reveal-delay-2">
-            <div class="step__num">03</div>
-            <h3>Fuel with precision</h3>
-            <p>A weekly meal plan calibrated to your training volume. Whole foods, no guessing.</p>
-          </li>
-          <li class="step reveal reveal-delay-3">
-            <div class="step__num">04</div>
-            <h3>Read the AI report</h3>
-            <p>Every month: peak volume, deload signals, and your next training block.</p>
-          </li>
-        </ol>
-
-        <figure class="pr-chart reveal" data-pr-chart>
-          <div class="pr-chart__head">
-            <div>
-              <span class="eyebrow">Deadlift · estimated 1RM</span>
-              <div class="pr-chart__value"><span data-count="173">173</span><small> kg</small></div>
-            </div>
-            <div class="pr-chart__legend">
-              <span><i class="is-logged"></i>Logged</span>
-              <span><i class="is-pr"></i>New PR</span>
-            </div>
-          </div>
-          <div class="pr-chart__plot"><!-- drawn by site.js --></div>
-          <figcaption class="pr-chart__caption">A sample 12-week block. SilaFit charts your estimated 1RM from every logged set and flags each new PR.</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <!-- ================= Pricing ================= -->
-    <section class="section section--rule" id="pricing" data-scene="lime">
-      <div class="wrap">
-        <div class="section__head">
-          <span class="eyebrow eyebrow--accent reveal">Pricing</span>
-          <h2 class="t-xl reveal">Start free. Upgrade when the numbers demand it.</h2>
-        </div>
-        <div class="billing-toggle reveal" role="group" aria-label="Billing period">
-          <span class="billing-toggle__pill" aria-hidden="true"></span>
-          <button class="is-active" data-billing="monthly" id="billingMonthly">Monthly</button>
-          <button data-billing="yearly" id="billingYearly">Yearly <span class="save-badge">−30%</span></button>
-        </div>
-        <div class="pricing-grid" id="pricingGrid"><!-- rendered from /api/plans, SilaStore as fallback --></div>
-        <p class="pricing-note">Start on Free, then upgrade inside the app. Subscriptions are billed through the App Store and you can cancel anytime from your Apple ID settings.</p>
-      </div>
-    </section>
-
-    <!-- ================= Community ================= -->
-    <section class="section section--rule" id="community" data-scene="amber">
-      <div class="wrap">
-        <span class="eyebrow eyebrow--accent reveal">Community</span>
-        <figure class="quote-feature reveal">
-          <span class="quote-result">Deadlift · 180 kg PR</span>
-          <blockquote class="quote-lead">“Watching my estimated 1RM climb every week kept me honest. Finished the block with a 180 kg deadlift.”</blockquote>
-          <figcaption class="quote-who quote-who--lg">
-            <img src="assets/img/avatars/male_9.webp" width="72" height="72" alt="" />
-            <div><b>Marko P.</b><span>Advanced tier · Powerlifting block</span></div>
-          </figcaption>
-        </figure>
-        <div class="quotes">
-          <figure class="quote reveal">
-            <span class="quote-result">Lean Cut · 2,000 kcal</span>
-            <blockquote>“The meal plans are actual food I already cook. I stopped tracking in three apps and just follow the week.”</blockquote>
-            <figcaption class="quote-who">
-              <img src="assets/img/avatars/female_6.webp" width="52" height="52" loading="lazy" alt="" />
-              <div><b>Elena R.</b><span>Pro tier · Lean Cut plan</span></div>
-            </figcaption>
-          </figure>
-          <figure class="quote reveal reveal-delay-1">
-            <span class="quote-result">First strict pull-up · 6 weeks</span>
-            <blockquote>“Started on the free tier. Six weeks later I did my first strict pull-up. The mascot celebrates harder than my gym buddies.”</blockquote>
-            <figcaption class="quote-who">
-              <img src="assets/img/avatars/female_7.webp" width="52" height="52" loading="lazy" alt="" />
-              <div><b>Ivana K.</b><span>Free tier · Calisthenics</span></div>
-            </figcaption>
-          </figure>
-        </div>
-      </div>
     </section>
 
     <!-- ================= Closing CTA ================= -->
@@ -416,7 +186,7 @@
       <div class="wrap">
         <div class="closing" data-closing>
           <h2 class="t-hero reveal">Your next PR is already on the curve.</h2>
-          <div class="closing__mascot reveal"><p class="sila-bubble" data-closing-bubble>one more rep. then the next PR.</p><span class="sila sila--glow sila--alive" data-sila="determined" role="img" aria-label="Sila, the SilaFit ram mascot" data-closing-sila><img class="sila__art" src="assets/img/mascot/ram/determined.webp?v=20261102-ink" width="512" height="512" alt="" loading="lazy" decoding="async" /></span></div>
+          <div class="closing__mascot reveal"><p class="sila-bubble" data-closing-bubble>one more rep. then the next PR.</p><span class="sila sila--glow sila--alive" data-sila="determined" role="img" aria-label="Sila, the SilaFit ram mascot" data-closing-sila><img class="sila__art" src="assets/img/mascot/ram/determined.webp?v=20261103-real" width="512" height="512" alt="" loading="lazy" decoding="async" /></span></div>
           <div class="closing__actions reveal">
             <div class="store-cta">
               <a class="store-badge" href="https://apps.apple.com/app/id6811345732" data-app-link aria-label="Download SilaFit on the App Store">
@@ -450,17 +220,17 @@
           <h4>Product</h4>
           <ul>
             <li><a href="/download">Download the app</a></li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="#nutrition">Meal planning</a></li>
-            <li><a href="#splits">Training splits</a></li>
-            <li><a href="#pricing">Pricing</a></li>
+            <li><a href="features.html">Features</a></li>
+            <li><a href="nutrition.html">Meal planning</a></li>
+            <li><a href="training.html">Training splits</a></li>
+            <li><a href="pricing.html">Pricing</a></li>
           </ul>
         </div>
         <div>
           <h4>Company</h4>
           <ul>
             <li><a href="about.html">About</a></li>
-            <li><a href="#community">Community</a></li>
+            <li><a href="pricing.html#community">Community</a></li>
             <li><a href="support.html">Support</a></li>
             <li><a href="careers.html">Careers</a></li>
             <li><a href="press.html">Press kit</a></li>
@@ -482,12 +252,12 @@
     </div>
   </footer>
 
-  <script src="js/loader.js?v=20261103"></script>
+  <script src="js/loader.js?v=20261103-marker"></script>
   <script src="js/theme.js"></script>
   <script src="js/data.js"></script>
   <script src="js/vendor-qrcode.js"></script>
-  <script src="js/site.js?v=20261102-dl"></script>
-  <script src="js/sila.js?v=20261102-ink"></script>
-  <script src="js/motion.js?v=20261102-ram"></script>
+  <script src="js/site.js?v=20261103-2"></script>
+  <script src="js/sila.js?v=20261103-real"></script>
+  <script src="js/motion.js?v=20261103-marker"></script>
 </body>
 </html>

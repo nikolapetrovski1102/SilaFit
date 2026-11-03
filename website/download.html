@@ -13,11 +13,11 @@
   <meta property="og:url" content="https://sila.fitness/download" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
-  <!-- Runs before anything paints, so phones are sent on without a flash of this page. -->
-  <script src="js/download.js?v=20261102"></script>
-  <link rel="stylesheet" href="css/base.css?v=20261103-runner" />
+  <!-- Runs before anything paints, so phones see the handoff, not a flash of this page. -->
+  <script src="js/download.js?v=20261103-handoff"></script>
+  <link rel="stylesheet" href="css/base.css?v=20261103-marker" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261102-ram" />
+  <link rel="stylesheet" href="css/site.css?v=20261103-marker" />
   <script>
     (function () {
       var stored = null;
@@ -75,9 +75,106 @@
     }
     /* On Android (until Play is live) lead with the "coming soon" note. */
     [data-platform="android"] .download__note { color: var(--high-emphasis); font-weight: 500; }
+    /* ---------- Phone handoff (js/download.js sets data-handoff) ----------
+       The runner draws in over the loader backdrop, a bar fills for
+       --handoff-ms, then the page goes to the store. Hidden unless the
+       script asks for it, so desktop and no-JS visitors never see it. */
+    .handoff { display: none; }
+    [data-handoff] .handoff {
+      display: grid;
+      place-items: center;
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      overflow: hidden;
+      padding: 32px var(--gutter);
+      background: radial-gradient(120% 90% at 62% 42%, #172d30 0%, #0c1c1e 100%);
+      color: #fff;
+    }
+    [data-theme="light"][data-handoff] .handoff { background: radial-gradient(120% 90% at 62% 42%, #fbf6ea 0%, #f1e7d0 100%); color: #172d30; }
+    [data-handoff] body { overflow: hidden; }
+    .handoff .site-loader__blur { animation: handoff-drift 6s ease-in-out infinite alternate; }
+    .handoff__inner {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+      text-align: center;
+    }
+    .handoff__mark { width: min(44vw, 200px); height: auto; aspect-ratio: 682 / 662; }
+    .handoff__text {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      animation: handoff-rise 520ms cubic-bezier(.22, .61, .36, 1) 500ms backwards;
+    }
+    .handoff__title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+    .handoff__sub { font-size: 15px; opacity: .7; }
+    .handoff__bar {
+      width: 160px;
+      height: 4px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: currentColor;
+      background: color-mix(in srgb, currentColor 16%, transparent);
+      animation: handoff-rise 520ms cubic-bezier(.22, .61, .36, 1) 600ms backwards;
+    }
+    .handoff__bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: #defb92;
+      transform-origin: left;
+      animation: handoff-fill var(--handoff-ms, 1600ms) cubic-bezier(.45, 0, .25, 1) forwards;
+    }
+    [data-theme="light"] .handoff__bar span { background: #800020; }
+    .handoff__link {
+      position: absolute;
+      bottom: calc(28px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-size: 14px;
+      color: inherit;
+      opacity: .6;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      animation: handoff-fade 400ms ease 1.2s backwards;
+    }
+    @keyframes handoff-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes handoff-rise { from { opacity: 0; transform: translateY(8px); } }
+    @keyframes handoff-fade { from { opacity: 0; } }
+    @keyframes handoff-drift { to { transform: scale(1.06) translate(-1.5%, 1%); } }
+    @media (prefers-reduced-motion: reduce) {
+      .handoff *, .handoff .site-loader__blur { animation: none !important; }
+      .handoff__bar span { transform: scaleX(1); }
+    }
   </style>
 </head>
 <body>
+  <!-- Phones: a short branded handoff before the store opens (js/download.js) -->
+  <div class="handoff" id="handoff" role="status" aria-live="polite">
+    <div class="site-loader__blur" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <div class="handoff__inner">
+      <img class="handoff__mark" id="handoffMark" alt="" />
+      <div class="handoff__text">
+        <span class="handoff__title">Opening <span data-handoff-store>the App Store</span></span>
+        <span class="handoff__sub">Get SilaFit, free to start</span>
+      </div>
+      <div class="handoff__bar" aria-hidden="true"><span></span></div>
+    </div>
+    <a class="handoff__link" data-handoff-link href="https://apps.apple.com/app/id6811345732">Not opening? Tap here</a>
+  </div>
+  <script>
+    /* Load the drawing now so it starts in step with the bar. */
+    (function () {
+      var d = document.documentElement;
+      if (!d.hasAttribute('data-handoff')) return;
+      document.getElementById('handoffMark').src = 'assets/img/branding/loader_'
+        + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark') + '.svg?v=20261103-2';
+    })();
+  </script>
   <header class="nav">
     <div class="nav__inner">
       <a class="nav__logo" href="index.html">
@@ -85,9 +182,9 @@
         SilaFit
       </a>
       <nav class="nav__links">
-        <a href="index.html#features">Features</a>
-        <a href="index.html#nutrition">Nutrition</a>
-        <a href="index.html#pricing">Pricing</a>
+        <a href="features.html">Features</a>
+        <a href="nutrition.html">Nutrition</a>
+        <a href="pricing.html">Pricing</a>
       </nav>
       <div class="nav__cta">
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" title="Switch color theme">
@@ -101,9 +198,9 @@
   <main>
     <section class="download">
       <div class="download__card">
-        <span class="sila sila--glow sila--alive" data-sila="standing" role="img" aria-label="Sila, the SilaFit ram mascot"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261102-ink" width="512" height="512" alt="" decoding="async" /></span>
+        <span class="sila sila--glow sila--alive" data-sila="standing" role="img" aria-label="Sila, the SilaFit ram mascot"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261103-real" width="512" height="512" alt="" decoding="async" /></span>
         <div class="eyebrow eyebrow--accent">Download</div>
-        <h1>Get SilaFit.</h1>
+        <h1 class="marker-title">Get SilaFit.</h1>
         <p class="download__lead">Log every set, follow a proven split, and eat to your goal. Free to start, no card required.</p>
 
         <div class="download__badges">
@@ -129,7 +226,7 @@
 
   <script src="js/theme.js"></script>
   <script src="js/vendor-qrcode.js"></script>
-  <script src="js/sila.js?v=20261102-ink"></script>
-  <script src="js/motion.js?v=20261102-ram"></script>
+  <script src="js/sila.js?v=20261103-real"></script>
+  <script src="js/motion.js?v=20261103-marker"></script>
 </body>
 </html>

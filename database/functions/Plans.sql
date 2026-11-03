@@ -152,10 +152,15 @@ BEGIN
     RETURN NEXT c1;
 END $$;
 
--- Claims a Silen discount code for the caller. Always returns one row whose
--- Status is Ok, Invalid (unknown or switched off), NotStarted, Expired or
--- Exhausted; PlayOfferId is only filled in for Ok. A caller who already
--- claimed the code gets Ok again without using up another redemption.
+-- Claims a Silen promo code for the caller. Always returns one row whose
+-- Status is Ok, Invalid (unknown or switched off), NotStarted, Expired,
+-- NotEligible or Exhausted; PlayOfferId is only filled in for Ok. A caller who
+-- already claimed the code gets Ok again without using up another redemption.
+--
+-- Codes are for new members only, matching the App Store offer codes' "New
+-- subscribers" eligibility: a Play developer-determined offer is open to
+-- anyone, so an account that has ever had a store subscription (any store,
+-- any status) is NotEligible here.
 CREATE OR REPLACE FUNCTION dbo.usp_promocode_redeem(
     p_userid uuid,
     p_code varchar(40)
@@ -177,6 +182,8 @@ BEGIN
         v_status := 'NotStarted';
     ELSIF v_promo.expiresatutc IS NOT NULL AND v_promo.expiresatutc <= dbo.sysutcdatetime() THEN
         v_status := 'Expired';
+    ELSIF EXISTS (SELECT 1 FROM dbo.subscriptionreceipts WHERE userid = p_userid) THEN
+        v_status := 'NotEligible';
     ELSIF EXISTS (SELECT 1 FROM dbo.promocoderedemptions WHERE code = v_promo.code AND userid = p_userid) THEN
         v_status := 'Ok';
     ELSIF v_promo.maxredemptions IS NOT NULL

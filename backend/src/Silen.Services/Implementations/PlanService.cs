@@ -81,6 +81,9 @@ public sealed class PlanService(IPlansProvider plansProvider, ISubscriptionRecei
                 },
                 "Expired" => throw new ValidationException($"Promo code '{code}' has expired.", "This code has expired."),
                 "NotStarted" => throw new ValidationException($"Promo code '{code}' is not live yet.", "This code isn't active yet."),
+                "NotEligible" => throw new ValidationException(
+                    $"Promo code '{code}' refused: user '{userId}' has subscribed before.",
+                    "Codes are for new members - this account has already had a subscription."),
                 "Exhausted" => throw new ValidationException($"Promo code '{code}' has no redemptions left.", "This code has already been fully claimed."),
                 _ => throw new ValidationException($"Promo code '{code}' is unknown or inactive.", "That code isn't valid.")
             };

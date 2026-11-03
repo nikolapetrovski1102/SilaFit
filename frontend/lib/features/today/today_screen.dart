@@ -1,15 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/state/resource_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_responsive.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 import '../../core/widgets/fit_height.dart';
 import '../../core/widgets/skeleton.dart';
 import '../splits/splits_models.dart';
@@ -380,7 +379,6 @@ class _TodayContent extends StatelessWidget {
         : now.hour < 18
             ? 'Good afternoon'
             : 'Good evening';
-    final dateLabel = DateFormat('EEEE, MMM d').format(now);
 
     final overviewCard = TodayOverviewCard(
       dashboard: dashboard,
@@ -402,48 +400,31 @@ class _TodayContent extends StatelessWidget {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Plain-text greeting, no boxed date pill - this page's own large
-        // title, standing in for the removed shared header bar. The streak
-        // badge sits up here next to it (rather than floating over the day
-        // row below) so it reads as part of Home's header at a glance.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(greeting,
-                      style: AppTypography.headlineLg
-                          .copyWith(fontSize: 28 * scale)),
-                  SizedBox(height: 2 * scale),
-                  Text(dateLabel,
-                      style: AppTypography.bodyMd
-                          .copyWith(color: AppColors.onSurfaceVariant)),
-                ],
-              ),
+        // Home's own large title - the street-style greeting - sitting
+        // right on top of the day strip / overview below it (touches pass
+        // straight through to it). The streak badge stays at the end of the
+        // greeting's first line so it reads as part of Home's header.
+        // The overview combines streak/calendar and today's session into
+        // one flowing block - "am I on track" and "what do I do today" read
+        // as a single glance instead of two stacked boxes.
+        MarkerTitleOverlap(
+          title: MarkerDrawnTitle(greeting, playKey: 'today', scale: scale),
+          // Home's overview is dense right at its top edge, so the greeting
+          // sits just clear of it instead of overlapping like other pages.
+          overlapFactor: MarkerTitleOverlap.clearOverlapFactor,
+          trailing: StreakBadge(
+            streakDays: dashboard.currentStreakDays,
+            scale: scale,
+            onTap: () => showStreakHistorySheet(
+              context,
+              currentStreakDays: dashboard.currentStreakDays,
+              weeklyCompliancePercent: dashboard.weeklyCompliancePercent,
             ),
-            StreakBadge(
-              streakDays: dashboard.currentStreakDays,
-              scale: scale,
-              onTap: () => showStreakHistorySheet(
-                context,
-                currentStreakDays: dashboard.currentStreakDays,
-                weeklyCompliancePercent: dashboard.weeklyCompliancePercent,
-              ),
-            ),
-          ],
+          ),
+          child: overviewSpotlightKey != null
+              ? KeyedSubtree(key: overviewSpotlightKey!, child: overviewCard)
+              : overviewCard,
         ),
-        // Extra room above the day strip - keeps it from crowding the
-        // greeting now that it's a scrollable row rather than a fixed one.
-        SizedBox(height: AppSpacing.xxxl * scale),
-        // Streak/calendar and today's session combined into one flowing
-        // block - "am I on track" and "what do I do today" read as a single
-        // glance instead of two stacked boxes.
-        if (overviewSpotlightKey != null)
-          KeyedSubtree(key: overviewSpotlightKey!, child: overviewCard)
-        else
-          overviewCard,
         SizedBox(height: AppSpacing.xl * scale),
         const Spacer(),
         ActiveSplitCard(

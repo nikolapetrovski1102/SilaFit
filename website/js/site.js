@@ -23,20 +23,14 @@
   /* The QR points at the smart link, which sends each phone to its own store. */
   var DOWNLOAD_URL = 'https://sila.fitness/download';
 
-  /* Active nav link on scroll */
-  var sections = $$('section[id], div[id="top"]');
-  var navAnchors = $$('.nav__links a');
-  var scrollActiveObserver = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        var id = entry.target.id;
-        navAnchors.forEach(function (a) {
-          a.classList.toggle('is-active', a.getAttribute('href') === '#' + id);
-        });
-      }
-    });
-  }, { threshold: 0.4 });
-  sections.forEach(function (s) { scrollActiveObserver.observe(s); });
+  /* Active nav link: the page you're on (each section has its own page). */
+  var here = location.pathname.split('/').pop() || 'index.html';
+  $$('.nav__links a').forEach(function (a) {
+    var target = (a.getAttribute('href') || '').split('#')[0];
+    var on = target === here;
+    a.classList.toggle('is-active', on);
+    if (on) a.setAttribute('aria-current', 'page');
+  });
 
   /* ----------------------------------------------------------------
      Animated stat counters

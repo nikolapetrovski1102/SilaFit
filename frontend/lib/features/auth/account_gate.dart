@@ -10,6 +10,7 @@ import '../../root_shell.dart';
 import '../onboarding/widgets/intro_slide.dart' show OnboardingIconMark;
 import 'auth_controller.dart';
 import 'register_screen.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// The single place that implements "when the user wants to track
 /// progress, buy, or use another gated feature, require an account".
@@ -110,8 +111,8 @@ class _AccountRequiredSheetState extends State<_AccountRequiredSheet>
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              Text('Create a free account',
-                  style: AppTypography.headlineLg, textAlign: TextAlign.center),
+              const MarkerDrawnTitle('Create a free account',
+                  playKey: 'account-gate', textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Your guest progress carries over - this just locks it to an account so you can track it long-term, purchase a plan, or use AI features.',

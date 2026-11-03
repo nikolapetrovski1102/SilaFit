@@ -10,9 +10,9 @@
   <link rel="canonical" href="https://sila.fitness/press.html" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
   <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
-  <link rel="stylesheet" href="css/base.css?v=20261103-runner" />
+  <link rel="stylesheet" href="css/base.css?v=20261103-marker" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261102-ram" />
+  <link rel="stylesheet" href="css/site.css?v=20261103-marker" />
   <link rel="stylesheet" href="css/legal.css?v=20261102-ram" />
   <script>
     (function () {
@@ -22,7 +22,7 @@
         ? stored
         : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       document.documentElement.setAttribute('data-theme', theme);
-      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('no-loader'); } catch (e) { /* private mode */ }
+      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('loader-fast'); } catch (e) { /* private mode */ }
     })();
   </script>
   <style>
@@ -42,9 +42,17 @@
   <!-- Full-screen loader: the runner draws itself in, then fades (js/loader.js) -->
   <div class="site-loader" id="siteLoader" aria-hidden="true">
     <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
-    <img class="site-loader__mark site-loader__mark--dark" src="assets/img/branding/loader_dark.svg" alt="" />
-    <img class="site-loader__mark site-loader__mark--light" src="assets/img/branding/loader_light.svg" alt="" />
+    <img class="site-loader__mark" id="siteLoaderMark" alt="" />
   </div>
+  <script>
+    /* One drawing for the active theme: full on the first page of a visit, quick after that. */
+    (function () {
+      var d = document.documentElement;
+      document.getElementById('siteLoaderMark').src = 'assets/img/branding/loader_'
+        + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
+        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261103-2';
+    })();
+  </script>
   <header class="nav">
     <div class="nav__inner">
       <a class="nav__logo" href="index.html">
@@ -69,7 +77,7 @@
     <section class="legal-hero">
       <div class="legal-hero__content">
         <div class="eyebrow eyebrow--accent">Press kit</div>
-        <h1 data-split>Brand assets & boilerplate.</h1>
+        <h1 class="marker-title" data-split>Brand assets & boilerplate.</h1>
         <p>Logos, icons, and a short description for anyone writing about SilaFit.</p>
       </div>
     </section>
@@ -98,11 +106,11 @@
               <span>Mark for light backgrounds</span>
             </div>
             <div class="press-asset">
-              <a class="press-asset__art press-asset__art--light" href="assets/img/mascot/ram/sila-press.png" download><img src="assets/img/mascot/ram/standing.webp?v=20261102-ink" alt="Sila, the SilaFit ram mascot, standing" loading="lazy" /></a>
+              <a class="press-asset__art press-asset__art--light" href="assets/img/mascot/ram/sila-press.png" download><img src="assets/img/mascot/ram/standing.webp?v=20261103-real" alt="Sila, the SilaFit ram mascot, standing" loading="lazy" /></a>
               <span>Sila, standing</span>
             </div>
             <div class="press-asset">
-              <a class="press-asset__art press-asset__art--dark" href="assets/img/mascot/ram/sila-press-charging.png" download><img src="assets/img/mascot/ram/charging.webp?v=20261102-ink" alt="Sila, the SilaFit ram mascot, charging" loading="lazy" /></a>
+              <a class="press-asset__art press-asset__art--dark" href="assets/img/mascot/ram/sila-press-charging.png" download><img src="assets/img/mascot/ram/charging.webp?v=20261103-real" alt="Sila, the SilaFit ram mascot, charging" loading="lazy" /></a>
               <span>Sila, charging</span>
             </div>
           </div>
@@ -129,17 +137,17 @@
         <div>
           <h4>Product</h4>
           <ul>
-            <li><a href="index.html#features">Features</a></li>
-            <li><a href="index.html#nutrition">Meal planning</a></li>
-            <li><a href="index.html#splits">Training splits</a></li>
-            <li><a href="index.html#pricing">Pricing</a></li>
+            <li><a href="features.html">Features</a></li>
+            <li><a href="nutrition.html">Meal planning</a></li>
+            <li><a href="training.html">Training splits</a></li>
+            <li><a href="pricing.html">Pricing</a></li>
           </ul>
         </div>
         <div>
           <h4>Company</h4>
           <ul>
             <li><a href="about.html">About</a></li>
-            <li><a href="index.html#community">Community</a></li>
+            <li><a href="pricing.html#community">Community</a></li>
             <li><a href="support.html">Support</a></li>
             <li><a href="careers.html">Careers</a></li>
             <li><a href="press.html">Press kit</a></li>
@@ -160,8 +168,8 @@
       </div>
     </div>
   </footer>
-  <script src="js/loader.js?v=20261103"></script>
+  <script src="js/loader.js?v=20261103-marker"></script>
   <script src="js/theme.js"></script>
-  <script src="js/motion.js?v=20261102-ram"></script>
+  <script src="js/motion.js?v=20261103-marker"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ import '../../core/widgets/silen_button.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
 import 'meal_recipe_screen.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// One curated meal's detail + activate action - mirrors SplitDetailScreen:
 /// a hero summary, then a single primary button that flips from
@@ -94,7 +95,8 @@ class _DetailBody extends StatelessWidget {
       children: [
         SectionEyebrow(suggestion.mealType, color: AppColors.accent),
         const SizedBox(height: AppSpacing.sm),
-        Text(suggestion.title, style: AppTypography.headlineLg),
+        MarkerDrawnTitle(suggestion.title,
+            playKey: 'meal-suggestion:${suggestion.title}'),
         const SizedBox(height: AppSpacing.md),
         Row(
           children: [

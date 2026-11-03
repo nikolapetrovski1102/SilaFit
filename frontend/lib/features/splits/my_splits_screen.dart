@@ -21,6 +21,7 @@ import 'splits_models.dart';
 import 'splits_repository.dart';
 import 'splits_screen.dart';
 import 'widgets/split_hero_image.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// The user's own splits - built via the in-app builder, always fully
 /// editable - plus any split a trainer assigned them, which is listed
@@ -208,11 +209,11 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SectionEyebrow('Your Training', color: AppColors.accent),
-                    const SizedBox(height: 4),
-                    Text('My Splits', style: AppTypography.headlineLg),
-                    const SizedBox(height: AppSpacing.lg),
-                    _CreateSplitCta(onTap: _openWizard),
+                    MarkerTitleOverlap(
+                      title: const MarkerDrawnTitle('My Splits',
+                          playKey: 'my-splits'),
+                      child: _CreateSplitCta(onTap: _openWizard),
+                    ),
                     if (activeSplit == null) ...[
                       const SizedBox(height: AppSpacing.lg),
                       Text('No active split yet',

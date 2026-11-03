@@ -212,6 +212,7 @@ public class PlanServiceTests
     [InlineData("Expired")]
     [InlineData("NotStarted")]
     [InlineData("Exhausted")]
+    [InlineData("NotEligible")]
     public async Task RedeemPromoCodeAsync_RejectedCode_ReturnsValidationFailure(string status)
     {
         var userId = Guid.NewGuid();

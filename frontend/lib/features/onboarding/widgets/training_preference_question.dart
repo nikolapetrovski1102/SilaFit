@@ -3,7 +3,6 @@ import '../onboarding_controller.dart';
 import 'arc_rating_slider.dart';
 import 'option_row_selector.dart';
 import 'question_scaffold.dart';
-import '../../../core/widgets/mascot/talking_mascot.dart';
 
 /// Uses the same answer rows, typography, progress and CTA as the original questions.
 class TrainingPreferenceQuestion extends StatelessWidget {
@@ -15,9 +14,6 @@ class TrainingPreferenceQuestion extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback? onSkip;
   final bool isLast;
-
-  /// What Sila says above the question, if anything.
-  final MascotLine? mascot;
   const TrainingPreferenceQuestion(
       {super.key,
       required this.controller,
@@ -27,12 +23,16 @@ class TrainingPreferenceQuestion extends StatelessWidget {
       required this.onBack,
       required this.onNext,
       this.onSkip,
-      this.isLast = false,
-      this.mascot});
+      this.isLast = false});
 
+  // Five stops, numbered 1-5 on the arc. Novice and Experienced sit between
+  // the three classic levels; the backend maps them onto those levels
+  // (see PersonFit.PreferredLevelFor).
   static const _experienceLabels = {
     'Beginner': 'Getting started',
+    'Novice': 'A little active',
     'Intermediate': 'Somewhat athletic',
+    'Experienced': 'Athletic',
     'Advanced': 'Very athletic',
   };
 
@@ -42,14 +42,12 @@ class TrainingPreferenceQuestion extends StatelessWidget {
       return QuestionScaffold(
         onBack: onBack,
         onSkip: onSkip,
-        mascot: mascot,
         progressStep: progressStep,
         progressStepCount: progressStepCount,
         headline: 'How would you rate your fitness level?',
         body: ArcRatingSlider(
           values: _experienceLabels.keys.toList(),
           labels: _experienceLabels,
-          displayNumbers: const [1, 3, 5],
           selected: controller.trainingExperience,
           onSelected: (value) =>
               controller.setTrainingExperience(value, autoAdvance: false),
@@ -132,7 +130,6 @@ class TrainingPreferenceQuestion extends StatelessWidget {
     return QuestionScaffold(
       onBack: onBack,
       onSkip: onSkip,
-      mascot: mascot,
       progressStep: progressStep,
       progressStepCount: progressStepCount,
       headline: headline,

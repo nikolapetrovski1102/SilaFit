@@ -27,6 +27,7 @@ import 'analytics_models.dart';
 import 'weight_display.dart';
 import 'monthly_training_chart.dart';
 import 'recap_animation.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// The Stories-style recap slideshow. Renders the Pro monthly report and, for
 /// ADVANCED subscribers, the weekly report - the six shared slides plus two
@@ -619,9 +620,9 @@ class _AiVerdictSlide extends StatelessWidget {
               children: [
                 const _RecapIcon(icon: Icons.auto_awesome_rounded),
                 const SizedBox(height: AppSpacing.sm),
-                Text('Your next chapter',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.headlineLg),
+                const MarkerDrawnTitle('Your next chapter',
+                    playKey: 'monthly-next-chapter',
+                    textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.sm),
               ],
             ),

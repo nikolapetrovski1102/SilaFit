@@ -40,6 +40,13 @@ class StoreIntroOffer {
     return total == 1 ? periodUnit : '$total ${periodUnit}s';
   }
 
+  /// True when the whole offer is a single unit - "a month", "a week".
+  bool get isSingleUnit => periodValue * periodCount == 1;
+
+  /// "1 month", "3 months" - [duration] with the count spelled out, for
+  /// badges.
+  String get countedDuration => isSingleUnit ? '1 $periodUnit' : duration;
+
   /// "€1.49/month for the first 3 months" / "Free for the first week".
   String get summary {
     if (isFreeTrial) return 'Free for the first $duration';

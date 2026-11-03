@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +12,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/legal_links.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 import '../../core/widgets/silen_ambient_backdrop.dart';
 import '../../core/widgets/silen_button.dart';
 import '../../core/widgets/skeleton.dart';
@@ -86,10 +89,17 @@ class _PlansScreenState extends State<PlansScreen> {
     return subscription?.isPaid == true ? subscription : null;
   }
 
+  // Set while Apple's code sheet is (or was just) open: the redemption comes
+  // back as a purchase on the store stream rather than through
+  // [_purchase], so this screen watches for the plan turning paid and closes
+  // itself - RootShell plays the celebration.
+  bool _awaitingStoreCode = false;
+
   @override
   void initState() {
     super.initState();
     _controller = context.read<PlansController>();
+    _controller.addListener(_onControllerChanged);
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
@@ -103,6 +113,30 @@ class _PlansScreenState extends State<PlansScreen> {
       Future.microtask(
           () => _controller.setBillingCycle(yearly: cycle == 'Yearly'));
     }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (!_awaitingStoreCode || _controller.current?.isPaid != true) return;
+    _awaitingStoreCode = false;
+    // The welcome offer's tour is done once they're subscribed, however it
+    // happened - same as the buy button and "Continue with Free Plan".
+    Future.microtask(_dismiss);
+  }
+
+  /// "Have a code?" - Android lands the code's offer on these rows and
+  /// selects its plan; iOS hands over to Apple's sheet (see [runRedeemCode]).
+  Future<void> _redeemCode() async {
+    if (Platform.isIOS) _awaitingStoreCode = true;
+    final applied = await runRedeemCode(context, openPaywall: false);
+    if (!mounted || !applied) return;
+    final planId = _controller.promoPlanId;
+    if (planId != null) _selectPlan(planId);
   }
 
   bool _isCurrentPlan(SubscriptionPlan plan) =>
@@ -183,6 +217,9 @@ class _PlansScreenState extends State<PlansScreen> {
   }
 
   Future<void> _purchase(SubscriptionPlan plan) async {
+    // The buy button closes this screen itself - a sheet dismissed without
+    // redeeming mustn't close it a second time.
+    _awaitingStoreCode = false;
     final hasAccount = await AccountGate.ensure(context);
     if (!hasAccount || !mounted) return;
     final ok = await _controller.purchase(plan);
@@ -286,6 +323,7 @@ class _PlansScreenState extends State<PlansScreen> {
                         isWelcomeOfferFlow: widget.isWelcomeOffer,
                         isCurrent: _isCurrentSelection(selected.plan),
                         onPurchase: () => _purchase(selected.plan),
+                        onRedeemCode: _redeemCode,
                         onSkip: _dismiss,
                         onCancelSubscription:
                             _current != null ? _openCancelFlow : null,
@@ -387,13 +425,24 @@ class _PlansHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(isManaging ? 'Manage Your Plan' : 'Choose Your Protocol',
-            style: AppTypography.headlineMd, textAlign: TextAlign.center),
-        const SizedBox(height: 2),
+        // Managing gets the graffiti page title like the rest of the app
+        // (a touch smaller so the plans stay in view); the upgrade paywall
+        // keeps its compact heading.
+        if (isManaging) ...[
+          const MarkerDrawnTitle('Manage Your Plan',
+              playKey: 'manage-plan', scale: 0.8, textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.sm),
+        ] else ...[
+          Text('Choose Your Protocol',
+              style: AppTypography.headlineMd, textAlign: TextAlign.center),
+          const SizedBox(height: 2),
+        ],
         Text(
-          isWelcomeOffer && controller.hasIntroOffer
-              ? 'New members get an introductory price on their first billing period.'
-              : 'Transparent pricing. Upgrade or cancel anytime.',
+          controller.promoCode != null
+              ? 'Code ${controller.promoCode!.code} applied.'
+              : isWelcomeOffer && controller.hasIntroOffer
+                  ? 'New members get an introductory price on their first billing period.'
+                  : 'Transparent pricing. Upgrade or cancel anytime.',
           style: AppTypography.bodySm,
           textAlign: TextAlign.center,
         ),
@@ -589,7 +638,9 @@ class _PlanRowState extends State<_PlanRow> {
         : intro == null
             ? null
             : intro.isFreeTrial
-                ? 'FREE TRIAL'
+                ? (quote!.isPromoCode
+                    ? '${intro.countedDuration.toUpperCase()} FREE'
+                    : 'FREE TRIAL')
                 : introPct != null
                     ? '$introPct% OFF'
                     : 'INTRO OFFER';
@@ -931,6 +982,7 @@ class _PlansFooter extends StatelessWidget {
   final bool isWelcomeOfferFlow;
   final bool isCurrent;
   final VoidCallback onPurchase;
+  final VoidCallback onRedeemCode;
   final VoidCallback onSkip;
 
   /// Set only when a paying user is managing their plan - opens the cancel
@@ -943,6 +995,7 @@ class _PlansFooter extends StatelessWidget {
     required this.isWelcomeOffer,
     required this.isWelcomeOfferFlow,
     required this.onPurchase,
+    required this.onRedeemCode,
     required this.onSkip,
     this.isCurrent = false,
     this.onCancelSubscription,
@@ -951,9 +1004,21 @@ class _PlansFooter extends StatelessWidget {
   bool get _isFree =>
       entry.plan.monthlyPrice == 0 && entry.plan.yearlyPrice == 0;
 
+  /// "Start your free month of Pro" / "Try Pro free for 3 months".
+  static String _freeTrialLabel(StoreIntroOffer intro, String planName) =>
+      intro.isSingleUnit
+          ? 'Start your free ${intro.duration} of $planName'
+          : 'Try $planName free for ${intro.duration}';
+
   @override
   Widget build(BuildContext context) {
     final quote = controller.quoteFor(entry.plan);
+    // Right under the buy button for anyone starting a subscription - a new
+    // user arriving with a code shouldn't have to hunt the footer for it.
+    // Someone managing a paid plan has nothing to start, so it stays a
+    // footer link there.
+    final showCodeEntry = !_isFree && !isCurrent && onCancelSubscription == null;
+    final appliedCode = controller.promoCode?.code;
     final intro = quote?.intro;
     final catalogPrice =
         controller.isYearly ? entry.plan.yearlyPrice : entry.plan.monthlyPrice;
@@ -989,7 +1054,7 @@ class _PlansFooter extends StatelessWidget {
                     ? 'Your current plan'
                     : intro != null
                         ? (intro.isFreeTrial
-                            ? 'Start free trial of ${entry.plan.name}'
+                            ? _freeTrialLabel(intro, entry.plan.name)
                             : 'Claim ${entry.plan.name} · ${intro.displayPrice}')
                         : onCancelSubscription != null
                             ? 'Switch to ${entry.plan.name} · $priceText/$cadence'
@@ -1003,6 +1068,36 @@ class _PlansFooter extends StatelessWidget {
                     : onPurchase,
             height: 50,
           ),
+          if (showCodeEntry)
+            appliedCode != null
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle_rounded,
+                            size: 16, color: AppColors.accent),
+                        const SizedBox(width: 6),
+                        Text('Code $appliedCode applied',
+                            style: AppTypography.bodySm.copyWith(
+                                fontSize: 13,
+                                color: AppColors.onSurface,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  )
+                : TextButton(
+                    onPressed: controller.isPurchasing ? null : onRedeemCode,
+                    style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 40),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        visualDensity: VisualDensity.compact),
+                    child: Text('Have a code?',
+                        style: AppTypography.bodySm.copyWith(
+                            fontSize: 14,
+                            color: AppColors.onSurface,
+                            fontWeight: FontWeight.w600)),
+                  ),
           if (onCancelSubscription != null && !_isFree)
             TextButton(
               onPressed: onCancelSubscription,
@@ -1056,11 +1151,12 @@ class _PlansFooter extends StatelessWidget {
                     ? null
                     : () => runRestorePurchases(context),
               ),
-              _FooterLink(
-                label: 'Redeem code',
-                style: linkStyle,
-                onPressed: () => runRedeemCode(context, openPaywall: false),
-              ),
+              if (!showCodeEntry)
+                _FooterLink(
+                  label: 'Redeem code',
+                  style: linkStyle,
+                  onPressed: onRedeemCode,
+                ),
             ],
           ),
         ],

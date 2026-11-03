@@ -7,7 +7,9 @@ public static class UserProfileRules
 {
     public static readonly string[] Genders = ["Male", "Female", "Other"];
     public static readonly string[] Goals = ["BuildMuscle", "LoseFat", "MaintainActive"];
-    public static readonly string[] TrainingExperiences = ["Beginner", "Intermediate", "Advanced"];
+    /// <summary>The app's 1-5 fitness-level arc, low to high. Novice and Experienced
+    /// are the in-between stops; PersonFit folds them onto the three split levels.</summary>
+    public static readonly string[] TrainingExperiences = ["Beginner", "Novice", "Intermediate", "Experienced", "Advanced"];
     public static readonly string[] EquipmentAccesses = ["FullGym", "Dumbbells", "Bodyweight"];
     public static readonly string[] DailyActivityLevels = ["Sedentary", "LightlyActive", "Active", "VeryActive"];
 

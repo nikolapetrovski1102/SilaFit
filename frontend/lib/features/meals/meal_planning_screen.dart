@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../diet_plans/diet_plan_controller.dart';
 import '../diet_plans/widgets/locked_diet_plans.dart';
@@ -85,14 +86,15 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _inset(
-                    SectionEyebrow('Fuel & Macros', color: AppColors.accent)),
-                const SizedBox(height: 4),
-                _inset(Text('Nutrition', style: AppTypography.headlineLg)),
-                const SizedBox(height: AppSpacing.lg),
-                // Loaded content insets itself (around the full-bleed day
-                // strip); the skeleton and error card take the margin here.
-                Padding(
+                // The title sits partly over the day strip; touches pass
+                // through. Loaded content insets itself (around the
+                // full-bleed day strip); the skeleton and error card take
+                // the margin here.
+                MarkerTitleOverlap(
+                  titleInset: AppSpacing.marginMobile,
+                  title: const MarkerDrawnTitle('Nutrition',
+                      playKey: 'nutrition'),
+                  child: Padding(
                   padding: _controller.state.hasData
                       ? EdgeInsets.zero
                       : const EdgeInsets.symmetric(
@@ -110,7 +112,7 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
                       return content;
                     },
                   ),
-                ),
+                )),
                 const SizedBox(height: AppSpacing.xl),
                 // Free accounts keep following a plan they already had, but
                 // browsing/creating plans is Pro - show the locked preview.

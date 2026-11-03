@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
@@ -274,17 +275,16 @@ class _ProgressContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionEyebrow('Performance', color: AppColors.accent),
-        const SizedBox(height: 4),
-        Text('Your progress', style: AppTypography.headlineLg),
-        const SizedBox(height: AppSpacing.xl),
-        if (spotlightKey != null)
-          KeyedSubtree(
-            key: spotlightKey!,
-            child: ExerciseProgressCard(controller: exerciseController),
-          )
-        else
-          ExerciseProgressCard(controller: exerciseController),
+        // The title sits partly over the card below; touches pass through.
+        MarkerTitleOverlap(
+          title: const MarkerDrawnTitle('Your progress', playKey: 'progress'),
+          child: spotlightKey != null
+              ? KeyedSubtree(
+                  key: spotlightKey!,
+                  child: ExerciseProgressCard(controller: exerciseController),
+                )
+              : ExerciseProgressCard(controller: exerciseController),
+        ),
         const SizedBox(height: AppSpacing.xxl),
         // Only the insight card depends on `controller.state` (the overview
         // call) - scoping the ResourceBuilder to just it means a slow or

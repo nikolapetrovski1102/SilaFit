@@ -13,6 +13,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/legal_links.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/silen_button.dart';
@@ -32,6 +33,7 @@ import '../plans/redeem_code_action.dart';
 import '../providers/providers_screen.dart';
 import '../plans/restore_purchases_action.dart';
 import 'ai_consent_gate.dart';
+import 'mascot_preview_screen.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
 
@@ -164,23 +166,23 @@ class _SettingsContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionEyebrow('Preferences & Profile'),
-        const SizedBox(height: 4),
-        Text('Settings', style: AppTypography.headlineLg),
-        const SizedBox(height: AppSpacing.lg),
-        // The profile row only needs auth/session state, not `settings` -
-        // it (and everything below it that's equally independent of
-        // `settings`) stays visible even while that fetch is slow or
-        // failed. Only the preference sections below, which read straight
-        // off `settings`, sit behind the ResourceBuilder.
-        _ProfileRow(
-          name: session?.displayName ?? session?.email ?? 'Guest Athlete',
-          subtitle: auth.isRegistered
-              ? (session?.email ?? 'Registered account')
-              : 'Guest device - progress not linked',
-          profile: profile,
-          onEditProfile: onEditProfile,
-          controller: controller,
+        // The title sits partly over the profile row; touches pass
+        // through. The profile row only needs auth/session state, not
+        // `settings` - it (and everything below it that's equally
+        // independent of `settings`) stays visible even while that fetch is
+        // slow or failed. Only the preference sections below, which read
+        // straight off `settings`, sit behind the ResourceBuilder.
+        MarkerTitleOverlap(
+          title: const MarkerDrawnTitle('Settings', playKey: 'settings'),
+          child: _ProfileRow(
+            name: session?.displayName ?? session?.email ?? 'Guest Athlete',
+            subtitle: auth.isRegistered
+                ? (session?.email ?? 'Registered account')
+                : 'Guest device - progress not linked',
+            profile: profile,
+            onEditProfile: onEditProfile,
+            controller: controller,
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
         ResourceBuilder<UserSettings>(
@@ -226,6 +228,20 @@ class _SettingsContent extends StatelessWidget {
               label: 'Help & legal',
               onTap: () => _openSubpage(context, const _HelpLegalPage())),
         ]),
+        // Mascot preview is a debug-only tool; hidden from release builds.
+        if (_showMascotPreview) ...[
+          const SizedBox(height: AppSpacing.lg),
+          const SectionEyebrow('Preview'),
+          const SizedBox(height: AppSpacing.sm),
+          SectionCard(
+            child: _DevActionRow(
+              icon: Icons.celebration_outlined,
+              label: 'Mascot Preview',
+              subtitle: 'Fire every Sila celebration, dialog, toast and pose',
+              onTap: () => _openSubpage(context, const MascotPreviewScreen()),
+            ),
+          ),
+        ],
         // Keep development-only controls isolated from profile/release builds.
         // Analytics previews deliberately live on the Progress screen so even
         // debug builds exercise the authenticated production-data path.
@@ -769,7 +785,9 @@ const _goalLabels = {
 
 const _experienceLabels = {
   'Beginner': 'Beginner',
+  'Novice': 'Novice',
   'Intermediate': 'Intermediate',
+  'Experienced': 'Experienced',
   'Advanced': 'Advanced',
 };
 
@@ -1356,6 +1374,9 @@ class _ReminderTimeRow extends StatelessWidget {
     onSelected('$hh:$mm:00');
   }
 }
+
+/// Shows the Mascot Preview entry in debug builds only.
+const bool _showMascotPreview = kDebugMode;
 
 /// Debug-build-only switch that flips [SessionStore.hasCompletedOnboarding]
 /// so the first-launch onboarding flow can be replayed without reinstalling

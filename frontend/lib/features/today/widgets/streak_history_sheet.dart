@@ -6,7 +6,7 @@ import '../../../core/state/resource_state.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/mascot/streak_ram.dart';
+import '../../../core/widgets/streak_fire.dart';
 import '../../../core/widgets/section_eyebrow.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../plans/plans_repository.dart';
@@ -124,7 +124,7 @@ class _StreakHistorySheetState extends State<StreakHistorySheet> {
           children: [
             Row(
               children: [
-                StreakRam(streakDays: widget.currentStreakDays, size: 56),
+                StreakFire(streakDays: widget.currentStreakDays, size: 56),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
@@ -405,13 +405,13 @@ class _HistoryDot extends StatelessWidget {
   }
 }
 
-/// The line under the streak count that says how far Sila is from the
-/// next stage (see [StreakRam]).
+/// The line under the streak count that says how far the fire is from
+/// its next stage (see [StreakFire]).
 String _streakCaption(int streakDays) {
-  final next = StreakRam.nextStageAt(streakDays);
-  if (streakDays <= 0) return 'Finish a workout to wake Sila up.';
-  if (next == null) return "Sila's a champion. Keep the streak charging!";
+  final next = StreakFire.nextStageAt(streakDays);
+  if (streakDays <= 0) return 'Finish a workout to light your streak.';
+  if (next == null) return "You're on fire. Keep it blazing!";
   final left = next - streakDays;
-  final stage = next == StreakRam.lockedInAt ? 'locked in' : 'champion';
-  return '$left more ${left == 1 ? 'day' : 'days'} until Sila is $stage.';
+  final stage = next == StreakFire.hotAt ? 'burns hotter' : 'is blazing';
+  return '$left more ${left == 1 ? 'day' : 'days'} until your fire $stage.';
 }

@@ -5,7 +5,6 @@ import 'package:silafit/core/api/api_client.dart';
 import 'package:silafit/core/session/session_store.dart';
 import 'package:silafit/features/notifications/notifications_repository.dart';
 import 'package:silafit/features/onboarding/onboarding_controller.dart';
-import 'package:silafit/features/onboarding/onboarding_mascot_lines.dart';
 import 'package:silafit/features/onboarding/onboarding_models.dart';
 import 'package:silafit/features/onboarding/onboarding_repository.dart';
 import 'package:silafit/features/onboarding/widgets/age_wheel_picker.dart';
@@ -90,7 +89,6 @@ void main() {
                 step: OnboardingStep.trainingDays,
                 progressStep: 6,
                 progressStepCount: 11,
-                mascot: mascotLineFor(OnboardingStep.trainingDays),
                 onBack: () {},
                 onNext: () {}))));
     await tester.drag(
@@ -116,7 +114,6 @@ void main() {
           onBack: () {},
           progressStep: 2,
           progressStepCount: 11,
-          mascot: mascotLineFor(OnboardingStep.age),
           headline: 'What is your age?',
           body: StatefulBuilder(builder: (context, setState) {
             return Center(
@@ -156,17 +153,23 @@ void main() {
           onBack: () {},
           progressStep: 8,
           progressStepCount: 11,
-          mascot: mascotLineFor(OnboardingStep.trainingExperience),
           headline: 'How would you rate your fitness level?',
           body: StatefulBuilder(builder: (context, setState) {
             return ArcRatingSlider(
-              values: const ['Beginner', 'Intermediate', 'Advanced'],
+              values: const [
+                'Beginner',
+                'Novice',
+                'Intermediate',
+                'Experienced',
+                'Advanced'
+              ],
               labels: const {
                 'Beginner': 'Getting started',
+                'Novice': 'A little active',
                 'Intermediate': 'Somewhat athletic',
+                'Experienced': 'Athletic',
                 'Advanced': 'Very athletic',
               },
-              displayNumbers: const [1, 3, 5],
               selected: selected,
               onSelected: (value) => setState(() => selected = value),
             );
@@ -208,13 +211,20 @@ void main() {
             width: 335,
             child: StatefulBuilder(builder: (context, setState) {
               return ArcRatingSlider(
-                values: const ['Beginner', 'Intermediate', 'Advanced'],
+                values: const [
+                  'Beginner',
+                  'Novice',
+                  'Intermediate',
+                  'Experienced',
+                  'Advanced'
+                ],
                 labels: const {
                   'Beginner': 'Getting started',
+                  'Novice': 'A little active',
                   'Intermediate': 'Somewhat athletic',
+                  'Experienced': 'Athletic',
                   'Advanced': 'Very athletic',
                 },
-                displayNumbers: const [1, 3, 5],
                 selected: selected,
                 onSelected: (value) => setState(() => selected = value),
               );

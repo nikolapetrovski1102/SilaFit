@@ -16,6 +16,7 @@ import 'meal_controller.dart';
 import 'meal_models.dart';
 import 'meal_recommendation.dart';
 import 'meal_suggestion_detail_screen.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// The full "Suggested Meals" library - a dedicated listing screen for
 /// browsing/activating curated meal ideas, structurally mirroring
@@ -105,9 +106,7 @@ class _SuggestionsContentState extends State<_SuggestionsContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionEyebrow('Curated Ideas', color: AppColors.accent),
-        const SizedBox(height: 4),
-        Text('Suggested Meals', style: AppTypography.headlineLg),
+        MarkerDrawnTitle('Suggested Meals', playKey: 'meal-suggestions'),
         const SizedBox(height: AppSpacing.md),
         if (widget.suggestions.isEmpty)
           const MascotEmptyState(

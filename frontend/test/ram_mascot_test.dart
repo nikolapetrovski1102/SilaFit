@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:silafit/core/widgets/mascot/ram_mascot.dart';
-import 'package:silafit/core/widgets/mascot/streak_ram.dart';
 import 'package:silafit/core/widgets/mascot/talking_mascot.dart';
 import 'package:silafit/features/onboarding/onboarding_controller.dart';
 import 'package:silafit/features/onboarding/onboarding_mascot_lines.dart';
@@ -13,19 +12,6 @@ Widget _host(Widget child, {Brightness brightness = Brightness.dark}) =>
     );
 
 void main() {
-  test('streak ram levels up at 1, 7 and 30 days', () {
-    expect(StreakRam.artFor(0), RamArt.sleepy);
-    expect(StreakRam.artFor(1), RamArt.smug);
-    expect(StreakRam.artFor(6), RamArt.smug);
-    expect(StreakRam.artFor(7), RamArt.determined);
-    expect(StreakRam.artFor(29), RamArt.determined);
-    expect(StreakRam.artFor(30), RamArt.emblem);
-    expect(StreakRam.artFor(365), RamArt.emblem);
-    expect(StreakRam.nextStageAt(3), 7);
-    expect(StreakRam.nextStageAt(12), 30);
-    expect(StreakRam.nextStageAt(30), isNull);
-  });
-
   test('ram art resolves to one shared asset', () {
     expect(RamArt.smug.assetPath, 'assets/mascot/ram/smug.png');
   });

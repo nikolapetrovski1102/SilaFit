@@ -1,10 +1,11 @@
 /* ============================================================
    SilaFit — smart download link (download.html, served at /download)
-   nginx already redirects iPhone/iPad by user agent. This covers
-   what nginx can't see: iPadOS Safari (it claims to be a Mac) and
-   visits straight to /download.html. Android goes to Google Play
-   once PLAY_STORE_URL is set; until then it gets the "coming soon"
-   state. Desktop gets both badges and a QR back to /download.
+   Phones land on a short branded handoff: the runner draws itself in,
+   "Opening the App Store" fills a bar, and ~1.6s later the page
+   replaces itself with the store listing. iPadOS Safari (it claims to
+   be a Mac) is caught too. Android does the same once PLAY_STORE_URL
+   is set; until then it gets the "coming soon" state. Desktop gets
+   both badges and a QR back to /download.
    ============================================================ */
 (function () {
   'use strict';
@@ -24,10 +25,27 @@
   // ?stay keeps a phone on this page (handy for checking it).
   var stay = /[?&]stay\b/.test(location.search);
 
-  if (!stay && isIOS) { location.replace(APP_STORE_URL); return; }
-  if (!stay && isAndroid && PLAY_STORE_URL) { location.replace(PLAY_STORE_URL); return; }
-
   var root = document.documentElement;
+
+  // How long the handoff stays up. The full runner drawing ends at ~1.22s.
+  var HANDOFF_MS = 1600;
+  var storeUrl = stay ? null : isIOS ? APP_STORE_URL : (isAndroid && PLAY_STORE_URL) || null;
+
+  if (storeUrl) {
+    // Set before first paint so CSS shows the handoff, never the page under it.
+    root.setAttribute('data-handoff', isIOS ? 'ios' : 'android');
+    root.style.setProperty('--handoff-ms', HANDOFF_MS + 'ms');
+    var go = function () { location.replace(storeUrl); };
+    var timer = setTimeout(go, HANDOFF_MS);
+
+    // Back from the store (bfcache): show the normal page, don't bounce again.
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) { clearTimeout(timer); root.removeAttribute('data-handoff'); }
+    });
+    // Stuck in an in-app browser that blocked the redirect: after a few
+    // seconds, fall back to the page with the badges.
+    setTimeout(function () { root.removeAttribute('data-handoff'); }, HANDOFF_MS + 3500);
+  }
   root.setAttribute('data-platform', isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
 
   function ready(fn) {
@@ -36,6 +54,13 @@
   }
 
   ready(function () {
+    var handoff = document.getElementById('handoff');
+    if (handoff && storeUrl) {
+      handoff.querySelector('[data-handoff-store]').textContent =
+        isIOS ? 'the App Store' : 'Google Play';
+      handoff.querySelector('[data-handoff-link]').href = storeUrl;
+    }
+
     var play = document.querySelector('[data-play-badge]');
     if (play && PLAY_STORE_URL) {
       play.setAttribute('href', PLAY_STORE_URL);

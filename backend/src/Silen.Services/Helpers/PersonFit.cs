@@ -111,14 +111,17 @@ public sealed record PersonFit(
     /// claims "Advanced". A healthy adult who answers "Advanced" now gets an
     /// advanced protocol instead of the old age-only "Intermediate" default, and
     /// a missing answer keeps the previous default (Intermediate, or Beginner
-    /// under the safety ceiling).
+    /// under the safety ceiling). The in-between answers round down to the
+    /// gentler level: Novice (2/5) trains as Beginner, Experienced (4/5) as
+    /// Intermediate.
     /// </summary>
     private static string PreferredLevelFor(string ageBand, string bmiCategory, string? experience)
     {
         var ceiling = ageBand is "Teen" or "Masters" || bmiCategory == "Obese" ? BeginnerRank : AdvancedRank;
         var requested = experience switch
         {
-            "Beginner" => BeginnerRank,
+            "Beginner" or "Novice" => BeginnerRank,
+            "Experienced" => IntermediateRank,
             "Advanced" => AdvancedRank,
             _ => IntermediateRank
         };

@@ -11,6 +11,7 @@ import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
 import 'widgets/diet_plan_card.dart';
 import 'widgets/locked_diet_plans.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Browse view for diet plans - the meal-planning equivalent of
 /// `SplitsScreen`. Unlike splits, plans carry no server-computed
@@ -59,9 +60,7 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SectionEyebrow('Meal Planning', color: AppColors.accent),
-                const SizedBox(height: 4),
-                Text('Diet Plans', style: AppTypography.headlineLg),
+                MarkerDrawnTitle('Diet Plans', playKey: 'diet-plans'),
                 const SizedBox(height: AppSpacing.md),
                 if (_controller.requiresUpgrade)
                   LockedDietPlans(

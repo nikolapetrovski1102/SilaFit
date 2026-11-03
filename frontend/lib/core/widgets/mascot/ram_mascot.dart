@@ -10,11 +10,13 @@ const mascotName = 'Sila';
 /// set reads on both the light and the dark theme.
 ///
 /// - [standing], [charging]: full-body poses for dialogs, toasts and heroes.
-/// - [emblem]: the head from the app icon, for the loader and streak peak.
+/// - [back]: the full body from behind. `CelebratingRam` shows it mid-spin.
+/// - [emblem]: a front-facing head for small spots like the streak chip.
 /// - [determined], [laughing], [smug], [sleepy], [shocked]: expressions.
 enum RamArt {
   standing,
   charging,
+  back,
   emblem,
   determined,
   laughing,

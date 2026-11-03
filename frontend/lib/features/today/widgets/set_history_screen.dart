@@ -14,6 +14,7 @@ import '../../../core/widgets/upgrade_lock_card.dart';
 import '../../plans/plans_screen.dart';
 import '../today_models.dart';
 import '../today_repository.dart';
+import '../../../core/widgets/marker_drawn_title.dart';
 
 /// Full breakdown of every set logged for a completed past day, grouped by
 /// exercise in the order they were worked. Reached from Home's "View set
@@ -154,8 +155,8 @@ class _SetHistoryList extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.gutterMobile, vertical: AppSpacing.lg),
       children: [
-        Text(sessionTitle ?? 'Training Session',
-            style: AppTypography.headlineLg),
+        MarkerDrawnTitle(sessionTitle ?? 'Training Session',
+            playKey: 'set-history:$date'),
         const SizedBox(height: AppSpacing.xxs),
         Text(DateFormat('EEEE, MMM d').format(date),
             style: AppTypography.bodyMd

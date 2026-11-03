@@ -12,6 +12,7 @@ import '../../core/widgets/silen_button.dart';
 import '../progress/progress_repository.dart';
 import 'plans_controller.dart';
 import 'plans_models.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Three-step retention flow ahead of the store's cancel screen, opened from
 /// the plan list when a paying user picks Free or "Cancel subscription": a "stay"
@@ -231,7 +232,7 @@ class _StayStep extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("We'd hate to see you go", style: AppTypography.headlineLg),
+        MarkerDrawnTitle("We'd hate to see you go", playKey: 'cancel-1'),
         const SizedBox(height: AppSpacing.xs),
         Text(
           'If you cancel, SilaFit ${sub.planName} stays active until '
@@ -330,7 +331,7 @@ class _LossStep extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
         ] else ...[
-          Text("You're about to lose", style: AppTypography.headlineLg),
+          MarkerDrawnTitle("You're about to lose", playKey: 'cancel-2'),
           const SizedBox(height: AppSpacing.lg),
         ],
         if (features.isNotEmpty)
@@ -375,7 +376,7 @@ class _StoreStep extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Cancel in $storeName', style: AppTypography.headlineLg),
+        MarkerDrawnTitle('Cancel in $storeName', playKey: 'cancel-3'),
         const SizedBox(height: AppSpacing.xs),
         Text(
           '$storeName manages your subscription, so the last step happens '

@@ -23,6 +23,7 @@ import 'splits_controller.dart';
 import 'splits_models.dart';
 import 'splits_repository.dart';
 import 'widgets/split_hero_image.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 class SplitsScreen extends StatefulWidget {
   final bool isTour;
@@ -171,9 +172,7 @@ class _SplitsHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SectionEyebrow('Training Protocols', color: AppColors.accent),
-        const SizedBox(height: 4),
-        Text('Workout Splits', style: AppTypography.headlineLg),
+        MarkerDrawnTitle('Workout Splits', playKey: 'workout-splits'),
       ],
     );
   }

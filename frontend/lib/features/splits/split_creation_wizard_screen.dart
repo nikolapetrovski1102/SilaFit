@@ -16,6 +16,7 @@ import '../exercises/exercises_models.dart';
 import '../exercises/exercises_repository.dart';
 import 'splits_repository.dart';
 import 'widgets/ink_field.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 // The wizard no longer asks for these - every split it creates is the same
 // shape, and the day-by-day flow below is where all the real customization
@@ -895,8 +896,8 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                 Icon(Icons.check_circle_rounded,
                     size: 56, color: AppColors.accent),
                 const SizedBox(height: AppSpacing.lg),
-                Text('${_splitName ?? 'Your split'} is ready',
-                    style: AppTypography.headlineLg,
+                MarkerDrawnTitle('${_splitName ?? 'Your split'} is ready',
+                    playKey: 'split-ready:$_splitName',
                     textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.xs),
                 Text(

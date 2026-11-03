@@ -5,10 +5,10 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/section_card.dart';
-import '../../core/widgets/section_eyebrow.dart';
 import '../../core/widgets/skeleton.dart';
 import 'diet_guide_controller.dart';
 import 'diet_guide_models.dart';
+import '../../core/widgets/marker_drawn_title.dart';
 
 /// Read-only view of one imported diet guide: its header plus every ordered
 /// section, with source lists and tables preserved.
@@ -87,9 +87,7 @@ class _DietGuideDetailScreenState extends State<DietGuideDetailScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
           ],
-          SectionEyebrow('Diet Guide', color: AppColors.accent),
-          const SizedBox(height: 4),
-          Text(guide.title, style: AppTypography.headlineLg),
+          MarkerDrawnTitle(guide.title, playKey: 'diet-guide:${guide.title}'),
           if (guide.summary != null && guide.summary!.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(guide.summary!,

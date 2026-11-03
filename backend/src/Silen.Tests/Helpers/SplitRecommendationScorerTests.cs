@@ -161,6 +161,20 @@ public class SplitRecommendationScorerTests
         Assert.True(ranked[0].MatchScore > ranked[1].MatchScore);
     }
 
+    [Theory]
+    [InlineData("Beginner", "Beginner")]
+    [InlineData("Novice", "Beginner")]
+    [InlineData("Intermediate", "Intermediate")]
+    [InlineData("Experienced", "Intermediate")]
+    [InlineData("Advanced", "Advanced")]
+    public void From_FiveStepExperience_RoundsDownToSplitLevel(string experience, string expectedLevel)
+    {
+        // The app's 1-5 fitness arc: the in-between stops train at the gentler level.
+        var fit = PersonFit.From(170, 70, 30, 4, 60, experience, "FullGym", "Active");
+
+        Assert.Equal(expectedLevel, fit.PreferredLevel);
+    }
+
     [Fact]
     public void Rank_MissingExperience_DoesNotGateByLevel()
     {
