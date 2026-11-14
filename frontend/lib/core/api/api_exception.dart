@@ -1,3 +1,4 @@
+import '../../l10n/l10n.dart';
 /// The one error type every repository throws. [userMessage] is always safe
 /// to show directly in the UI - it's either the backend's own `Message`
 /// field or the global fallback, matching the backend's "one global message
@@ -32,7 +33,7 @@ class ApiException implements Exception {
   bool get isRetryable =>
       isNetworkError || (statusCode != null && statusCode! >= 500);
 
-  static const String genericMessage = 'Something went wrong';
+  static String get genericMessage => tr('Something went wrong');
 
   @override
   String toString() => 'ApiException($statusCode, $userMessage)';

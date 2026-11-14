@@ -12,6 +12,7 @@ using Silen.Api.HostedServices;
 using Silen.Common.Contracts;
 using Silen.Common.Enums;
 using Silen.Common.Helpers;
+using Silen.Common.Localization;
 using Silen.Common.Options;
 using Silen.Data;
 using Silen.Services;
@@ -152,6 +153,30 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             }));
 
+    // Adding a few new products from a shopping bag is a handful of label photos;
+    // the cap is what bounds the vision-model bill for a free account.
+    options.AddPolicy(RateLimitPolicies.FoodLabelScan, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            AuthenticatedPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy(RateLimitPolicies.BarcodeLookup, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            AuthenticatedPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
     // A real user types a code once or twice; anything more looks like guessing.
     options.AddPolicy(RateLimitPolicies.PromoCodes, httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -187,6 +212,20 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(30),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    // Every open of the download page sends one beacon. A gym's QR code can be
+    // scanned by a room full of phones behind one Wi-Fi address, so this is loose -
+    // it only stops one client from filling the report with junk.
+    options.AddPolicy(RateLimitPolicies.DownloadVisit, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientPartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
@@ -317,6 +356,22 @@ app.Use(async (context, next) =>
     headers["X-Frame-Options"] = "DENY";
     headers["Referrer-Policy"] = "no-referrer";
     headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+    await next();
+});
+
+// User-facing messages (the envelope's Message) follow the app's language,
+// which the Flutter client sends as Accept-Language. Only this message
+// language is set here. CurrentCulture is left alone, so number and date
+// formatting in the API never changes with the caller's language.
+app.Use(async (context, next) =>
+{
+    var preferred = context.Request.GetTypedHeaders().AcceptLanguage
+        .OrderByDescending(value => value.Quality ?? 1)
+        .Select(value => value.Value.Value)
+        .FirstOrDefault(tag => tag is not null
+            && (tag.StartsWith(AppText.Macedonian, StringComparison.OrdinalIgnoreCase)
+                || tag.StartsWith(AppText.English, StringComparison.OrdinalIgnoreCase)));
+    AppText.SetRequestLanguage(preferred);
     await next();
 });
 

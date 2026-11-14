@@ -16,6 +16,7 @@ import 'diet_plan_models.dart';
 import 'diet_plan_repository.dart';
 import 'diet_plans_screen.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// The user's own diet plans - built via the in-app builder, always fully
 /// editable. The Nutrition "Active Diet Plan" section's destination, laid out
@@ -70,9 +71,9 @@ class _MyDietPlansScreenState extends State<MyDietPlansScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(ok
-            ? '${plan.name} is now your active diet plan.'
+            ? tr('{name} is now your active diet plan.', {'name': plan.name})
             : activeController.actionError ??
-                'Could not activate this plan.')));
+                tr('Could not activate this plan.'))));
   }
 
   @override
@@ -102,64 +103,60 @@ class _MyDietPlansScreenState extends State<MyDietPlansScreen> {
             animation: _controller,
             builder: (context, _) => SafeArea(
               bottom: false,
-              child: RefreshIndicator(
-                onRefresh: () => _controller.load(force: true),
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                      AppSpacing.marginMobile,
-                      AppSpacing.xs,
-                      AppSpacing.marginMobile,
-                      AppSpacing.xxl + MediaQuery.paddingOf(context).bottom),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      MarkerTitleOverlap(
-                        title: const MarkerDrawnTitle('My Diet Plans',
-                            playKey: 'my-diet-plans'),
-                        child: _CreateDietPlanCta(onTap: _openWizard),
-                      ),
-                      if (activePlanId == null) ...[
-                        const SizedBox(height: AppSpacing.lg),
-                        Text('No active diet plan yet',
-                            style: AppTypography.headlineSm),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text('Create one to get your nutrition on track.',
-                            style: AppTypography.bodyMd
-                                .copyWith(color: AppColors.onSurfaceVariant)),
-                      ],
-                      ResourceBuilder<List<DietPlan>>(
-                        state: _controller.state,
-                        onRetry: _controller.load,
-                        builder: (context, plans) {
-                          if (plans.isEmpty) return const SizedBox.shrink();
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SizedBox(height: AppSpacing.lg),
-                              const SectionEyebrow('Your diet plans'),
-                              const SizedBox(height: AppSpacing.sm),
-                              for (final plan in plans) ...[
-                                _MyDietPlanCard(
-                                  plan: plan,
-                                  isActive: activePlanId == plan.dietPlanId,
-                                  onTap: () => _openBuilder(plan.dietPlanId),
-                                  onActivate: () => _activatePlan(plan),
-                                ),
-                                const SizedBox(height: AppSpacing.sm),
-                              ],
-                            ],
-                          );
-                        },
-                      ),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                    AppSpacing.marginMobile,
+                    AppSpacing.xs,
+                    AppSpacing.marginMobile,
+                    AppSpacing.xxl + MediaQuery.paddingOf(context).bottom),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    MarkerTitleOverlap(
+                      title: MarkerDrawnTitle(tr('My Diet Plans'),
+                          playKey: 'my-diet-plans'),
+                      child: _CreateDietPlanCta(onTap: _openWizard),
+                    ),
+                    if (activePlanId == null) ...[
                       const SizedBox(height: AppSpacing.lg),
-                      _SuggestedDietPlansRow(
-                        onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const DietPlansScreen())),
-                      ),
+                      Text(tr('No active diet plan yet'),
+                          style: AppTypography.headlineSm),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(tr('Create one to get your nutrition on track.'),
+                          style: AppTypography.bodyMd
+                              .copyWith(color: AppColors.onSurfaceVariant)),
                     ],
-                  ),
+                    ResourceBuilder<List<DietPlan>>(
+                      state: _controller.state,
+                      onRetry: _controller.load,
+                      builder: (context, plans) {
+                        if (plans.isEmpty) return const SizedBox.shrink();
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: AppSpacing.lg),
+                            SectionEyebrow(tr('Your diet plans')),
+                            const SizedBox(height: AppSpacing.sm),
+                            for (final plan in plans) ...[
+                              _MyDietPlanCard(
+                                plan: plan,
+                                isActive: activePlanId == plan.dietPlanId,
+                                onTap: () => _openBuilder(plan.dietPlanId),
+                                onActivate: () => _activatePlan(plan),
+                              ),
+                              const SizedBox(height: AppSpacing.sm),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    _SuggestedDietPlansRow(
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => const DietPlansScreen())),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -207,11 +204,11 @@ class _CreateDietPlanCta extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Create Diet Plan',
+                  Text(tr('Create Diet Plan'),
                       style: AppTypography.headlineSm
                           .copyWith(color: AppColors.onAccent)),
                   const SizedBox(height: 2),
-                  Text('One simple step at a time',
+                  Text(tr('One simple step at a time'),
                       style: AppTypography.bodySm.copyWith(
                           color: AppColors.onAccent.withOpacity(0.85))),
                 ],
@@ -291,7 +288,7 @@ class _MyDietPlanCardState extends State<_MyDietPlanCard> {
                           Icon(Icons.check_rounded,
                               size: 12, color: AppColors.onAccent),
                           const SizedBox(width: 6),
-                          Text('ACTIVE',
+                          Text(tr('ACTIVE'),
                               style: AppTypography.labelCaps
                                   .copyWith(color: AppColors.onAccent)),
                         ],
@@ -319,15 +316,15 @@ class _MyDietPlanCardState extends State<_MyDietPlanCard> {
                           children: [
                             _MetaPill(
                                 icon: Icons.calendar_view_week_rounded,
-                                label: '${plan.durationDays} days'),
+                                label: trPlural(plan.durationDays, '{n} day', '{n} days')),
                             _MetaPill(
                                 icon: Icons.event_repeat_rounded,
-                                label: plan.periodType),
+                                label: tr(plan.periodType)),
                           ],
                         ),
                       ),
                       if (widget.isActive)
-                        Text('Active',
+                        Text(tr('Active'),
                             style: AppTypography.labelSm
                                 .copyWith(color: AppColors.accent))
                       else
@@ -339,7 +336,7 @@ class _MyDietPlanCardState extends State<_MyDietPlanCard> {
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
                             : IconButton(
-                                tooltip: 'Set as active diet plan',
+                                tooltip: tr('Set as active diet plan'),
                                 visualDensity: VisualDensity.compact,
                                 icon: Icon(Icons.play_circle_outline_rounded,
                                     color: AppColors.accent),
@@ -401,7 +398,7 @@ class _SuggestedDietPlansRow extends StatelessWidget {
             Icon(Icons.auto_awesome_rounded, color: AppColors.accent),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Text('Suggested diet plans',
+              child: Text(tr('Suggested diet plans'),
                   style: AppTypography.bodyMd
                       .copyWith(fontWeight: FontWeight.w600)),
             ),

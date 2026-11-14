@@ -67,7 +67,7 @@ class AnalyticsController extends ChangeNotifier {
         state = ResourceState.error(e.userMessage);
       }
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     }
     notifyListeners();
   }

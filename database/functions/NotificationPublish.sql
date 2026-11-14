@@ -78,12 +78,24 @@ END $$;
 -- Records that the user actually used the app (foreground/open, or tapped a
 -- notification). This is the heartbeat the backoff logic measures: too long a
 -- gap and normal reminders quiet down, then a single comeback message fires.
+--
+-- p_language is the app's UI language ('en'/'mk') at the time, kept so that
+-- scheduled pushes go out in it. Only written when it actually changed.
 CREATE OR REPLACE FUNCTION dbo.usp_notification_recordinteraction(
     p_userid uuid,
     p_atutc timestamp(3),
-    p_notificationid uuid DEFAULT NULL
+    p_notificationid uuid DEFAULT NULL,
+    p_language varchar(5) DEFAULT NULL
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 BEGIN
+    IF p_language IS NOT NULL THEN
+        UPDATE dbo.usersettings
+        SET language     = p_language,
+            updatedatutc = p_atutc
+        WHERE userid = p_userid
+          AND language IS DISTINCT FROM p_language;
+    END IF;
+
     INSERT INTO dbo.usernotificationstates (userid, lastinteractionatutc, updatedatutc)
     VALUES (p_userid, p_atutc, p_atutc)
     ON CONFLICT (userid) DO UPDATE SET
@@ -164,6 +176,7 @@ BEGIN
         s.notificationlocaltime,
         s.notificationtimeisuserset,
         s.timezoneid,
+        s.language,
         COALESCE(st.lastinteractionatutc, u.lastloginatutc, u.createdatutc) AS lastinteractionatutc,
         st.lastpushedatutc,
         st.lastmotivationatutc,
@@ -327,5 +340,20 @@ BEGIN
       AND createdatutc < p_olderthanutc
     ORDER BY createdatutc
     LIMIT p_maxrows;
+    RETURN NEXT c1;
+END $$;
+
+-- The user's app language, for one-off pushes sent outside the candidate feed
+-- (weekly AI plan ready, trainer assignments).
+CREATE OR REPLACE FUNCTION dbo.usp_notification_getuserlanguage(
+    p_userid uuid
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT language
+    FROM dbo.usersettings
+    WHERE userid = p_userid;
     RETURN NEXT c1;
 END $$;

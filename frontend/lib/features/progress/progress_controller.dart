@@ -54,7 +54,7 @@ class ProgressController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _overviewLoading = false;
     }
@@ -82,7 +82,7 @@ class ProgressController extends ChangeNotifier {
     } on ApiException catch (e) {
       prsState = ResourceState.error(e.userMessage);
     } catch (_) {
-      prsState = const ResourceState.error(ApiException.genericMessage);
+      prsState = ResourceState.error(ApiException.genericMessage);
     } finally {
       _prsLoading = false;
     }

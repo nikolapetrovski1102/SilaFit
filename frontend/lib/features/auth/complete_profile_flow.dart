@@ -13,6 +13,7 @@ import '../onboarding/widgets/onboarding_step_transition.dart';
 import '../onboarding/widgets/option_row_selector.dart';
 import '../onboarding/widgets/question_scaffold.dart';
 import '../onboarding/widgets/training_preference_question.dart';
+import '../../l10n/l10n.dart';
 
 /// Walks a just-registered user through the same onboarding questions
 /// (gender/age/height/weight/goal) when `GET api/profile` comes back
@@ -66,7 +67,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
     if (!saved) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content:
-              Text(controller.lastError ?? 'Please complete your profile.')));
+              Text(controller.lastError ?? tr('Please complete your profile.'))));
       return;
     }
     Navigator.of(context).pop(true);
@@ -167,13 +168,13 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           onBack: _back,
           progressStep: 1,
           progressStepCount: _stepCount,
-          headline: "What's your gender?",
+          headline: tr("What's your gender?"),
           body: OptionRowSelector(
             options: const ['Male', 'Female', 'Other'],
             selected: controller.gender,
             onSelected: controller.selectGender,
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: controller.gender != null ? _next : null,
         );
       case 1:
@@ -181,7 +182,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           onBack: _back,
           progressStep: 2,
           progressStepCount: _stepCount,
-          headline: 'What is your age?',
+          headline: tr('What is your age?'),
           body: Center(
             child: AgeWheelPicker(
               value: controller.ageYears,
@@ -190,7 +191,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
               onChanged: controller.setAge,
             ),
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: _next,
         );
       case 2:
@@ -198,7 +199,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           onBack: _back,
           progressStep: 3,
           progressStepCount: _stepCount,
-          headline: "What's your height?",
+          headline: tr("What's your height?"),
           body: Center(
             child: NumericWheelPicker(
               value: controller.heightCm,
@@ -211,7 +212,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
               onUnitChanged: controller.setHeightUnit,
             ),
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: _next,
         );
       case 3:
@@ -219,7 +220,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           onBack: _back,
           progressStep: 4,
           progressStepCount: _stepCount,
-          headline: "What's your current weight?",
+          headline: tr("What's your current weight?"),
           body: Center(
             child: NumericWheelPicker(
               value: controller.weightKg,
@@ -232,7 +233,7 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
               onUnitChanged: controller.setWeightUnit,
             ),
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: _next,
         );
       case 4:
@@ -241,20 +242,19 @@ class _CompleteProfileViewState extends State<_CompleteProfileView> {
           onBack: _back,
           progressStep: 5,
           progressStepCount: _stepCount,
-          headline: "What's your main goal?",
+          headline: tr("What's your main goal?"),
           body: OptionRowSelector(
             options: const ['BuildMuscle', 'LoseFat', 'MaintainActive'],
-            labelFor: (value) =>
-                const {
+            labelFor: (value) => tr(const {
                   'BuildMuscle': 'Build muscle',
                   'LoseFat': 'Lose fat',
                   'MaintainActive': 'Maintain and stay active',
                 }[value] ??
-                value,
+                value),
             selected: controller.goal,
             onSelected: controller.selectGoal,
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           ctaLoading: controller.isSubmitting,
           onCta: controller.goal != null ? _next : null,
         );

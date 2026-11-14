@@ -200,6 +200,7 @@ BEGIN
         food.fiberg,
         food.sugarg,
         food.sodiummg,
+        food.imageurl,
         food.createdbyuserid IS NOT NULL AS iscustom
     FROM unnest(v_matches) WITH ORDINALITY AS matches(foodnutritionid, resultorder)
     INNER JOIN dbo.foodnutrition food ON food.foodnutritionid = matches.foodnutritionid
@@ -225,20 +226,227 @@ CREATE OR REPLACE FUNCTION dbo.foodnutrition_createcustom(
     p_sugarg numeric(12,3) DEFAULT NULL,
     p_sodiummg numeric(12,3) DEFAULT NULL,
     p_sourcefoodid varchar(120) DEFAULT NULL,
-    p_contenthash bytea DEFAULT NULL
+    p_contenthash bytea DEFAULT NULL,
+    p_barcode varchar(80) DEFAULT NULL
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
 DECLARE
     c1 refcursor;
     v_foodnutritionid bigint;
 BEGIN
     INSERT INTO dbo.foodnutrition
-        (name, normalizedname, brandname, sourcename, sourcefoodid, servingsizeg,
+        (name, normalizedname, brandname, barcode, sourcename, sourcefoodid, servingsizeg,
          calorieskcal, proteing, carbohydrateg, fatg, fiberg, sugarg, sodiummg,
          isbranded, contenthash, createdbyuserid)
     VALUES
-        (p_name, p_normalizedname, p_brandname, 'User', p_sourcefoodid, p_servingsizeg,
+        (p_name, p_normalizedname, p_brandname, p_barcode, 'User', p_sourcefoodid, p_servingsizeg,
          p_calorieskcal, p_proteing, p_carbohydrateg, p_fatg, p_fiberg, p_sugarg, p_sodiummg,
-         p_brandname IS NOT NULL, p_contenthash, p_userid)
+         p_brandname IS NOT NULL OR p_barcode IS NOT NULL, p_contenthash, p_userid)
+    RETURNING foodnutritionid INTO v_foodnutritionid;
+
+    -- A packaged product: if another user already entered the same label, it
+    -- joins the shared catalog. Same transaction, so it can't half-happen.
+    IF p_barcode IS NOT NULL THEN
+        PERFORM dbo.foodnutrition_promotebarcode(v_foodnutritionid);
+    END IF;
+
+    OPEN c1 FOR
+    SELECT
+        foodnutritionid,
+        name,
+        brandname,
+        barcode,
+        sourcename,
+        servingsizeg,
+        calorieskcal,
+        proteing,
+        carbohydrateg,
+        fatg,
+        fiberg,
+        sugarg,
+        sodiummg,
+        imageurl,
+        true AS iscustom
+    FROM dbo.foodnutrition
+    WHERE foodnutritionid = v_foodnutritionid;
+    RETURN NEXT c1;
+END $$;
+
+-- Community barcode foods. Products Open Food Facts doesn't know (most local
+-- Macedonian ones) only exist as users' private foods, so every user had to
+-- type the same label again. When two different users have saved a barcode
+-- with matching nutrition, the label is taken as read right and a shared
+-- 'SilaFit Community' row is added - by then neither copy is one person's
+-- word. Matching allows for rounding: kcal within max(10, 5%), each macro
+-- within max(1 g, 10%). Values are the average of the agreeing entries;
+-- name and brand come from the first of them. Never replaces a shared row
+-- that already has the four headline values (OFF, a partner, or an earlier
+-- promotion). p_foodnutritionid is the user food just saved.
+CREATE OR REPLACE FUNCTION dbo.foodnutrition_promotebarcode(
+    p_foodnutritionid bigint
+) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+    v_anchor dbo.foodnutrition%ROWTYPE;
+BEGIN
+    SELECT * INTO v_anchor FROM dbo.foodnutrition WHERE foodnutritionid = p_foodnutritionid;
+    IF v_anchor.barcode IS NULL OR v_anchor.createdbyuserid IS NULL
+       OR v_anchor.calorieskcal IS NULL OR v_anchor.proteing IS NULL
+       OR v_anchor.carbohydrateg IS NULL OR v_anchor.fatg IS NULL THEN
+        RETURN;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM dbo.foodnutrition
+        WHERE barcode = v_anchor.barcode AND createdbyuserid IS NULL
+          AND calorieskcal IS NOT NULL AND proteing IS NOT NULL
+          AND carbohydrateg IS NOT NULL AND fatg IS NOT NULL
+    ) THEN
+        RETURN;
+    END IF;
+
+    WITH latest AS (
+        -- Each user counts once: their newest entry for this barcode.
+        SELECT DISTINCT ON (createdbyuserid) *
+        FROM dbo.foodnutrition
+        WHERE barcode = v_anchor.barcode AND createdbyuserid IS NOT NULL
+          AND calorieskcal IS NOT NULL AND proteing IS NOT NULL
+          AND carbohydrateg IS NOT NULL AND fatg IS NOT NULL
+        ORDER BY createdbyuserid, importedatutc DESC, foodnutritionid DESC
+    ), agreeing AS (
+        SELECT * FROM latest
+        WHERE abs(calorieskcal - v_anchor.calorieskcal) <= greatest(10, 0.05 * greatest(calorieskcal, v_anchor.calorieskcal))
+          AND abs(proteing - v_anchor.proteing) <= greatest(1, 0.10 * greatest(proteing, v_anchor.proteing))
+          AND abs(carbohydrateg - v_anchor.carbohydrateg) <= greatest(1, 0.10 * greatest(carbohydrateg, v_anchor.carbohydrateg))
+          AND abs(fatg - v_anchor.fatg) <= greatest(1, 0.10 * greatest(fatg, v_anchor.fatg))
+    ), first_entry AS (
+        SELECT * FROM agreeing ORDER BY importedatutc, foodnutritionid LIMIT 1
+    )
+    INSERT INTO dbo.foodnutrition
+        (name, normalizedname, brandname, barcode, datatype, sourcename, sourcefoodid,
+         servingsizeg, calorieskcal, proteing, carbohydrateg, fatg, fiberg, sugarg, sodiummg,
+         isbranded, contenthash)
+    SELECT f.name, f.normalizedname, f.brandname, v_anchor.barcode, 'Branded', 'SilaFit Community', v_anchor.barcode,
+           (SELECT s.servingsizeg FROM dbo.foodnutrition s
+            WHERE s.barcode = v_anchor.barcode AND s.servingsizeg IS NOT NULL
+              AND s.createdbyuserid IN (SELECT createdbyuserid FROM agreeing)
+            ORDER BY s.importedatutc LIMIT 1),
+           round(avg(a.calorieskcal), 1), round(avg(a.proteing), 1), round(avg(a.carbohydrateg), 1), round(avg(a.fatg), 1),
+           round(avg(a.fiberg), 1), round(avg(a.sugarg), 1), round(avg(a.sodiummg), 0),
+           true, sha256(convert_to('community:' || v_anchor.barcode, 'UTF8'))
+    FROM agreeing a CROSS JOIN first_entry f
+    GROUP BY f.name, f.normalizedname, f.brandname
+    HAVING count(*) >= 2
+    ON CONFLICT DO NOTHING;
+END $$;
+
+-- What other users called a barcode product the catalog doesn't have, to
+-- prefill the "add it" form: name, brand and serving only. The nutrition is
+-- left for the user to type from the label, so a match in
+-- foodnutrition_promotebarcode is two people reading it, not one copied.
+-- The most common name wins, then the earliest. Zero or one row.
+CREATE OR REPLACE FUNCTION dbo.foodnutrition_getbarcodesuggestion(
+    p_barcode varchar(80),
+    p_userid uuid DEFAULT NULL
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT
+        min(name) AS name,
+        min(brandname) AS brandname,
+        min(servingsizeg) AS servingsizeg
+    FROM dbo.foodnutrition
+    WHERE barcode = btrim(p_barcode)
+      AND createdbyuserid IS NOT NULL
+      AND createdbyuserid IS DISTINCT FROM p_userid
+    GROUP BY normalizedname
+    ORDER BY count(DISTINCT createdbyuserid) DESC, min(importedatutc)
+    LIMIT 1;
+    RETURN NEXT c1;
+END $$;
+
+-- The meal tracker's barcode scan. The caller's own food wins (they named and
+-- checked it), then the catalog by source priority. At most one row, and only
+-- one with the four headline values - a product the tracker can't count is
+-- treated as missing so the app offers to complete it.
+CREATE OR REPLACE FUNCTION dbo.foodnutrition_getbybarcode(
+    p_barcode varchar(80),
+    p_userid uuid DEFAULT NULL
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT
+        foodnutritionid,
+        name,
+        brandname,
+        barcode,
+        sourcename,
+        servingsizeg,
+        calorieskcal,
+        proteing,
+        carbohydrateg,
+        fatg,
+        fiberg,
+        sugarg,
+        sodiummg,
+        imageurl,
+        createdbyuserid IS NOT NULL AS iscustom
+    FROM dbo.foodnutrition
+    WHERE barcode = btrim(p_barcode)
+      AND (createdbyuserid IS NULL OR createdbyuserid = p_userid)
+      AND calorieskcal IS NOT NULL AND proteing IS NOT NULL
+      AND carbohydrateg IS NOT NULL AND fatg IS NOT NULL
+    ORDER BY (createdbyuserid IS NULL), sourcepriority, foodnutritionid
+    LIMIT 1;
+    RETURN NEXT c1;
+END $$;
+
+-- A product the barcode scan fetched live from the Open Food Facts API because
+-- the last import didn't have it. Keyed like the importer's rows
+-- (sourcename, sourcefoodid = barcode), so the next import refreshes it in
+-- place rather than adding a second copy. p_contenthash is computed by
+-- FoodService from the barcode and can't collide with an imported row's.
+-- p_sourcename: a grocery partner's catalog (paket.mk) saves through here too,
+-- under its own name, so its row and OFF's for one barcode are kept apart.
+CREATE OR REPLACE FUNCTION dbo.foodnutrition_saveopenfoodfacts(
+    p_barcode varchar(80),
+    p_name varchar(500),
+    p_normalizedname varchar(500),
+    p_brandname varchar(300) DEFAULT NULL,
+    p_sourceurl varchar(1000) DEFAULT NULL,
+    p_imageurl varchar(1000) DEFAULT NULL,
+    p_servingsizeg numeric(12,3) DEFAULT NULL,
+    p_calorieskcal numeric(12,3) DEFAULT NULL,
+    p_proteing numeric(12,3) DEFAULT NULL,
+    p_carbohydrateg numeric(12,3) DEFAULT NULL,
+    p_fatg numeric(12,3) DEFAULT NULL,
+    p_fiberg numeric(12,3) DEFAULT NULL,
+    p_sugarg numeric(12,3) DEFAULT NULL,
+    p_sodiummg numeric(12,3) DEFAULT NULL,
+    p_contenthash bytea DEFAULT NULL,
+    p_sourcename text DEFAULT 'Open Food Facts'
+) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+    v_foodnutritionid bigint;
+BEGIN
+    INSERT INTO dbo.foodnutrition
+        (name, normalizedname, brandname, barcode, datatype, sourcename, sourcefoodid, sourceurl,
+         imageurl, servingsizeg, calorieskcal, proteing, carbohydrateg, fatg, fiberg, sugarg,
+         sodiummg, isbranded, contenthash)
+    VALUES
+        (p_name, p_normalizedname, p_brandname, p_barcode, 'Branded', COALESCE(NULLIF(left(btrim(p_sourcename), 40), ''), 'Open Food Facts'), p_barcode, p_sourceurl,
+         p_imageurl, p_servingsizeg, p_calorieskcal, p_proteing, p_carbohydrateg, p_fatg, p_fiberg, p_sugarg,
+         p_sodiummg, true, p_contenthash)
+    ON CONFLICT (sourcename, sourcefoodid) DO UPDATE SET
+        name = excluded.name, normalizedname = excluded.normalizedname, brandname = excluded.brandname,
+        barcode = excluded.barcode, sourceurl = excluded.sourceurl, imageurl = excluded.imageurl,
+        servingsizeg = excluded.servingsizeg, calorieskcal = excluded.calorieskcal,
+        proteing = excluded.proteing, carbohydrateg = excluded.carbohydrateg, fatg = excluded.fatg,
+        fiberg = excluded.fiberg, sugarg = excluded.sugarg, sodiummg = excluded.sodiummg,
+        importedatutc = dbo.sysutcdatetime()
     RETURNING foodnutritionid INTO v_foodnutritionid;
 
     OPEN c1 FOR
@@ -256,7 +464,8 @@ BEGIN
         fiberg,
         sugarg,
         sodiummg,
-        true AS iscustom
+        imageurl,
+        false AS iscustom
     FROM dbo.foodnutrition
     WHERE foodnutritionid = v_foodnutritionid;
     RETURN NEXT c1;

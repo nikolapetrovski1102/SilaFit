@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/silen_button.dart';
+import '../../../l10n/l10n.dart';
 
 /// The "OR" divider + Google/Apple pill buttons, shared by [RegisterScreen]
 /// and [LoginScreen] - both hand the same idToken/identityToken to the same
@@ -35,21 +36,21 @@ class OAuthSignInButtons extends StatelessWidget {
             Expanded(child: Divider(color: AppColors.outlineVariant)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-              child: Text('OR', style: AppTypography.labelCaps),
+              child: Text(tr('OR'), style: AppTypography.labelCaps),
             ),
             Expanded(child: Divider(color: AppColors.outlineVariant)),
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
         SecondaryPillButton(
-          label: 'Continue with Google',
+          label: tr('Continue with Google'),
           icon: Icons.g_mobiledata_rounded,
           onPressed: isBusy ? null : onGoogle,
         ),
         if (!kIsWeb && Platform.isIOS) ...[
           const SizedBox(height: AppSpacing.sm),
           SecondaryPillButton(
-            label: 'Continue with Apple',
+            label: tr('Continue with Apple'),
             icon: Icons.apple_rounded,
             onPressed: isBusy ? null : onApple,
           ),

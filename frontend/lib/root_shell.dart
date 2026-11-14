@@ -36,6 +36,7 @@ import 'features/splits/splits_controller.dart';
 import 'features/splits/splits_screen.dart';
 import 'features/today/today_controller.dart';
 import 'features/today/today_screen.dart';
+import 'l10n/l10n.dart';
 
 /// The four-tab shell every top-level screen lives inside. Owns the bottom
 /// nav (there's no shared header bar - each screen carries its own large
@@ -167,7 +168,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     if (!mounted || message == null) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
         content:
-            Text('A change saved offline couldn\'t be uploaded: $message')));
+            Text(tr('A change saved offline couldn\'t be uploaded: {message}', {'message': tr(message)}))));
   }
 
   /// Back from the background while the last request had no signal - try
@@ -364,12 +365,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                 targetKey: _currentSpotlightKey,
                 stepIndex: _tourStep,
                 stepCount: kFeatureTourSteps.length,
-                title: kFeatureTourSteps[_tourStep].title,
-                description: kFeatureTourSteps[_tourStep].description,
-                access: kFeatureTourSteps[_tourStep].access,
+                title: tr(kFeatureTourSteps[_tourStep].title),
+                description: tr(kFeatureTourSteps[_tourStep].description),
+                access: tr(kFeatureTourSteps[_tourStep].access),
                 nextLabel: _tourStep == kFeatureTourSteps.length - 1
-                    ? 'Choose Protocol'
-                    : 'Next',
+                    ? tr('Choose Protocol')
+                    : tr('Next'),
                 cardBottom:
                     SilenBottomNavBar.reservedHeight(context) + AppSpacing.sm,
                 onNext: _nextTourStep,
@@ -398,9 +399,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
 /// Wraps one tab's screen so it (a) never gets disposed as the [PageView]
 /// scrolls it out of the cache range - matching the old [IndexedStack]'s
-/// "state survives forever" guarantee - and (b) plays a quick fade + rise
+/// "state survives forever" guarantee - (b) plays a quick fade + rise
 /// entrance every time it becomes the active tab, whether that's a tap or a
-/// swipe landing on it.
+/// swipe landing on it, and (c) pauses the screen's animations while it
+/// isn't the active tab.
 class _AnimatedTab extends StatefulWidget {
   final bool active;
   final Widget child;
@@ -456,7 +458,14 @@ class _AnimatedTabState extends State<_AnimatedTab>
     super.build(context); // required by AutomaticKeepAliveClientMixin
     return FadeTransition(
       opacity: _fade,
-      child: SlideTransition(position: _rise, child: widget.child),
+      child: SlideTransition(
+        position: _rise,
+        // A kept-alive tab off screen isn't painted, but PageView doesn't
+        // stop its animations - a looping one (a loading shimmer, say) kept
+        // the phone rendering frames for a tab nobody can see. Pausing them
+        // here; they pick up where they left off when the tab is active.
+        child: TickerMode(enabled: widget.active, child: widget.child),
+      ),
     );
   }
 }

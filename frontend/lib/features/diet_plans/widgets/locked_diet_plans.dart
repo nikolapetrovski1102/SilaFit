@@ -1,12 +1,12 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/frozen_blur.dart';
 import '../../../core/widgets/upgrade_lock_card.dart';
 import '../../plans/plans_screen.dart';
 import '../diet_plan_models.dart';
 import 'diet_plan_card.dart';
+import '../../../l10n/l10n.dart';
 
 /// Free-tier stand-in for the diet-plan catalog: a blurred sample of plan
 /// cards behind the upgrade prompt, the same treatment `SplitsScreen` gives
@@ -55,8 +55,7 @@ class LockedDietPlans extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+        FrozenBlur(
           child: IgnorePointer(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -73,11 +72,11 @@ class LockedDietPlans extends StatelessWidget {
           child: Align(
             alignment: const Alignment(0, -0.4),
             child: UpgradeLockCard(
-              title: 'Diet plans made for you',
-              message: 'Follow weekly and monthly meal plans matched to your '
+              title: tr('Diet plans made for you'),
+              message: tr('Follow weekly and monthly meal plans matched to your '
                   'targets, or build your own. Logging meals food by food '
-                  'stays free.',
-              actionLabel: 'Unlock diet plans',
+                  'stays free.'),
+              actionLabel: tr('Unlock diet plans'),
               onUnlock: () => _openPlans(context),
             ),
           ),

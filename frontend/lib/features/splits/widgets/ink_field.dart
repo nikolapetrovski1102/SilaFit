@@ -7,6 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../exercises/exercise_form_button.dart';
 import '../../exercises/exercises_models.dart';
+import '../../../l10n/l10n.dart';
 
 // The "ink" look shared by split creation and editing: borderless big type
 // over a bottom rule that fills on focus, and exercises that hop from a
@@ -609,7 +610,7 @@ class InkTopBar extends StatelessWidget {
         children: [
           IconButton(
             icon: Icon(backIcon, size: 20),
-            tooltip: 'Back',
+            tooltip: tr('Back'),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           Expanded(child: title ?? const SizedBox.shrink()),

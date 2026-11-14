@@ -16,6 +16,7 @@ import '../../progress/analytics_repository.dart';
 import '../../progress/monthly_overview_screen.dart';
 import '../../settings/ai_consent_gate.dart';
 import '../today_controller.dart';
+import '../../../l10n/l10n.dart';
 
 /// Home's paid recap entry point. Uses the actual subscription, independently
 /// of the development analytics bypass, and never substitutes monthly for weekly.
@@ -85,10 +86,10 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
       plan = await plans.getActivePlanCode();
     } on ApiException catch (e) {
       message = e.isForbidden
-          ? 'Access changed. Tap to check your subscription'
-          : 'Could not check your subscription. Tap to retry';
+          ? tr('Access changed. Tap to check your subscription')
+          : tr('Could not check your subscription. Tap to retry');
     } catch (_) {
-      message = 'Could not check your subscription. Tap to retry';
+      message = tr('Could not check your subscription. Tap to retry');
     }
     if (!mounted || request != _request) return;
     setState(() {
@@ -132,18 +133,18 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
       setState(() {
         _loading = false;
         _message = e.isInsufficientData
-            ? 'Log more workouts and meals to prepare your review'
+            ? tr('Log more workouts and meals to prepare your review')
             : e.isAiConsentRequired
-                ? 'Allow AI data sharing to see your review'
+                ? tr('Allow AI data sharing to see your review')
                 : e.isForbidden
-                ? 'Access changed. Tap to check your subscription'
-                : 'Could not load your review. Tap to retry';
+                ? tr('Access changed. Tap to check your subscription')
+                : tr('Could not load your review. Tap to retry');
       });
     } catch (_) {
       if (!mounted || request != _request) return;
       setState(() {
         _loading = false;
-        _message = 'Could not load your review. Tap to retry';
+        _message = tr('Could not load your review. Tap to retry');
       });
     }
   }
@@ -157,20 +158,20 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
       iconColor: AppColors.secondary,
       iconBackground: AppColors.secondary.withValues(alpha: 0.16),
       label: _loading
-          ? 'AI REVIEW'
+          ? tr('AI REVIEW')
           : weekly
-              ? 'WEEKLY AI REVIEW'
+              ? tr('WEEKLY AI REVIEW')
               : paid
-                  ? 'MONTHLY AI REVIEW'
-                  : 'AI TRAINING REVIEWS',
+                  ? tr('MONTHLY AI REVIEW')
+                  : tr('AI TRAINING REVIEWS'),
       value: _loading
-          ? 'Checking your subscription…'
+          ? tr('Checking your subscription…')
           : _message ??
               (weekly
-                  ? 'Open your weekly overview'
+                  ? tr('Open your weekly overview')
                   : paid
-                      ? 'Open your monthly overview'
-                      : 'Pro: monthly · Advanced: weekly'),
+                      ? tr('Open your monthly overview')
+                      : tr('Pro: monthly · Advanced: weekly')),
       scale: widget.scale,
       borderColor: AppColors.secondary.withValues(alpha: 0.3),
       trailing: _loading
@@ -180,8 +181,8 @@ class _AiInsightsTeaserCardState extends State<AiInsightsTeaserCard>
               paid
                   ? _plan!
                   : _message != null
-                      ? 'RETRY'
-                      : 'UNLOCK',
+                      ? tr('RETRY')
+                      : tr('UNLOCK'),
               style: AppTypography.labelCaps.copyWith(
                   color: AppColors.secondary, fontSize: 9 * widget.scale)),
       onTap: _loading

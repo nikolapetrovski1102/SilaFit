@@ -15,12 +15,24 @@ namespace Silen.Api.Controllers;
 [ApiController]
 [Route("api/auth")]
 [EnableRateLimiting(RateLimitPolicies.Auth)]
-public sealed class AuthController(IAuthService authService, ILogger<AuthController> logger) : ControllerBase
+public sealed class AuthController(
+    IAuthService authService,
+    IDownloadLinkService downloadLinkService,
+    ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("device")]
     public async Task<IActionResult> Device([FromBody] DeviceLoginRequest request, CancellationToken cancellationToken)
     {
         var result = await authService.LoginWithDeviceAsync(request.DeviceId, cancellationToken);
+
+        // A brand-new install's first call: credit it to the download-link scan that
+        // led here, if any (the service ignores accounts older than a few minutes).
+        if (result.IsSuccess && result.Data is { } session)
+        {
+            await downloadLinkService.ClaimInstallAsync(
+                session.UserId, HttpContext.Connection.RemoteIpAddress, request.Platform, cancellationToken);
+        }
+
         return result.ToActionResult(logger);
     }
 

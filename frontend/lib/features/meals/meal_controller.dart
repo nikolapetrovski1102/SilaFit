@@ -92,7 +92,7 @@ class MealController extends ChangeNotifier {
     } on ApiException catch (e) {
       suggestionsState = ResourceState.error(e.userMessage);
     } catch (_) {
-      suggestionsState = const ResourceState.error(ApiException.genericMessage);
+      suggestionsState = ResourceState.error(ApiException.genericMessage);
     } finally {
       _suggestionsLoading = false;
     }
@@ -141,7 +141,7 @@ class MealController extends ChangeNotifier {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
       if (requestId != _dayRequestId) return;
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       if (requestId == _dayRequestId) {
         isDayLoading = false;
@@ -372,6 +372,7 @@ class MealController extends ChangeNotifier {
     double? fiberG,
     double? sugarG,
     double? sodiumMg,
+    String? barcode,
   }) =>
       _repository.createCustomFood(
         name: name,
@@ -384,7 +385,14 @@ class MealController extends ChangeNotifier {
         fiberG: fiberG,
         sugarG: sugarG,
         sodiumMg: sodiumMg,
+        barcode: barcode,
       );
+
+  Future<BarcodeLookupResult> lookupBarcode(String barcode) =>
+      _repository.lookupBarcode(barcode);
+
+  Future<NutritionLabelResult> readNutritionLabel(List<int> jpegBytes) =>
+      _repository.readNutritionLabel(jpegBytes);
 
   Future<void> deleteMeal(String mealLogId) async {
     if (state.data == null) return;

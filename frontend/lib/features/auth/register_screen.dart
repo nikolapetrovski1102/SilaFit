@@ -17,6 +17,7 @@ import 'login_screen.dart';
 import 'widgets/auth_blob_background.dart';
 import 'widgets/oauth_sign_in_buttons.dart';
 import 'widgets/otp_code_field.dart';
+import '../../l10n/l10n.dart';
 
 /// Registration entry point. Google/Apple sign-up stays a single tap, right
 /// on the first step; registering with an email/password instead becomes a
@@ -101,7 +102,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _continueFromEmail() {
     if (!_emailController.text.contains('@')) {
-      setState(() => _fieldError = 'Enter a valid email');
+      setState(() => _fieldError = tr('Enter a valid email'));
       return;
     }
     _goTo(_stepIndex + 1);
@@ -109,7 +110,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submitPassword(AuthController auth) async {
     if (_passwordController.text.length < 8) {
-      setState(() => _fieldError = 'At least 8 characters');
+      setState(() => _fieldError = tr('At least 8 characters'));
       return;
     }
     final ok = await auth.startEmailRegistration(
@@ -305,12 +306,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
           onBack: () => _goBack(auth),
           progressStep: 1,
           progressStepCount: _stepCount,
-          headline: 'Lock in your progress',
+          headline: tr('Lock in your progress'),
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Your guest history carries over automatically.',
+                tr('Your guest history carries over automatically.'),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant),
               ),
@@ -320,13 +321,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 focusNode: _nameFocusNode,
                 style: AppTypography.bodyMd,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                    hintText: 'Display name (optional)'),
+                decoration: InputDecoration(
+                    hintText: tr('Display name (optional)')),
                 onSubmitted: (_) => _continueFromName(),
               ),
             ],
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: _continueFromName,
           hideBelowCta: _nameFieldFocused,
           belowCta: OAuthSignInButtons(
@@ -342,7 +343,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           onBack: () => _goBack(auth),
           progressStep: 2,
           progressStepCount: _stepCount,
-          headline: "What's your email?",
+          headline: tr("What's your email?"),
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -352,7 +353,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
                 autofocus: true,
-                decoration: const InputDecoration(hintText: 'Email'),
+                decoration: InputDecoration(hintText: tr('Email')),
                 onSubmitted: (_) => _continueFromEmail(),
               ),
               if (_fieldError != null) ...[
@@ -363,7 +364,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ],
             ],
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: _continueFromEmail,
         );
 
@@ -372,7 +373,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           onBack: () => _goBack(auth),
           progressStep: 3,
           progressStepCount: _stepCount,
-          headline: 'Choose a password',
+          headline: tr('Choose a password'),
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -382,12 +383,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 obscureText: true,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(hintText: 'Password'),
+                decoration: InputDecoration(hintText: tr('Password')),
                 onSubmitted: (_) => _submitPassword(auth),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                _fieldError ?? 'At least 8 characters.',
+                _fieldError ?? tr('At least 8 characters.'),
                 style: AppTypography.bodySm.copyWith(
                     color: _fieldError != null
                         ? AppColors.error
@@ -395,7 +396,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ],
           ),
-          ctaLabel: 'Create Account',
+          ctaLabel: tr('Create Account'),
           ctaLoading: auth.isBusy,
           onCta: () => _submitPassword(auth),
         );
@@ -405,13 +406,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           onBack: () => _goBack(auth),
           progressStep: 4,
           progressStepCount: _stepCount,
-          headline: 'Check your email',
+          headline: tr('Check your email'),
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Enter the 6-digit code we sent to '
-                '${_emailController.text.trim()}.',
+                tr('Enter the 6-digit code we sent to {email}.',
+                    {'email': _emailController.text.trim()}),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant),
               ),
@@ -423,7 +424,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ],
           ),
-          ctaLabel: 'Verify',
+          ctaLabel: tr('Verify'),
           ctaLoading: auth.isBusy,
           onCta: _code.length == 6 ? () => _submitCode(auth) : null,
           belowCta: Center(
@@ -433,8 +434,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   : () => _resendCode(auth),
               child: Text(
                 _resendSecondsLeft > 0
-                    ? 'Resend code in ${_resendSecondsLeft}s'
-                    : "Didn't get a code? Resend",
+                    ? tr('Resend code in {s}s', {'s': _resendSecondsLeft})
+                    : tr("Didn't get a code? Resend"),
                 style: AppTypography.bodyMd.copyWith(
                   color: _resendSecondsLeft > 0
                       ? AppColors.onSurfaceVariant
@@ -466,9 +467,9 @@ class _LoginLink extends StatelessWidget {
           style:
               AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
           children: [
-            const TextSpan(text: 'Already have an account? '),
+            TextSpan(text: tr('Already have an account? ')),
             TextSpan(
-              text: 'Log in',
+              text: tr('Log in'),
               style: TextStyle(
                   color: AppColors.accent, fontWeight: FontWeight.w600),
             ),

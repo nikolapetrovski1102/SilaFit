@@ -11,6 +11,7 @@ import '../../core/session/session_store.dart';
 import 'auth_repository.dart';
 import 'auth_result.dart';
 import 'email_verification_start.dart';
+import '../../l10n/l10n.dart';
 
 /// App-wide auth state. Holds the current [SilenSession] (via [SessionStore])
 /// and is the one place every login/register/link flow goes through, so the
@@ -112,7 +113,7 @@ class AuthController extends ChangeNotifier {
   Future<bool> verifyEmailRegistration(String code) => _run(() async {
         final pending = _pendingVerification;
         if (pending == null) {
-          throw const ApiException('No pending email verification to confirm.');
+          throw ApiException(tr('No pending email verification to confirm.'));
         }
         final result = await _repository.verifyEmailRegistration(
             pendingId: pending.pendingId, code: code);
@@ -124,7 +125,7 @@ class AuthController extends ChangeNotifier {
   Future<bool> resendEmailVerification() => _run(() async {
         final pending = _pendingVerification;
         if (pending == null) {
-          throw const ApiException('No pending email verification to resend.');
+          throw ApiException(tr('No pending email verification to resend.'));
         }
         final result =
             await _repository.resendEmailVerification(pending.pendingId);
@@ -153,11 +154,11 @@ class AuthController extends ChangeNotifier {
           throw ApiException(_googleSignInFailure(e));
         }
         if (account == null)
-          throw const ApiException('Google sign-in was cancelled.');
+          throw ApiException(tr('Google sign-in was cancelled.'));
         final auth = await account.authentication;
         final idToken = auth.idToken;
         if (idToken == null)
-          throw const ApiException('Google did not return an identity token.');
+          throw ApiException(tr('Google did not return an identity token.'));
         final result = await _repository.loginGoogle(idToken);
         await _applySession(result);
       });
@@ -218,16 +219,16 @@ class AuthController extends ChangeNotifier {
   /// "com.google.android.gms.common.api.ApiException: 10: ".
   static String _googleSignInFailure(PlatformException e) {
     if (e.code == GoogleSignIn.kSignInCanceledError) {
-      return 'Google sign-in was cancelled.';
+      return tr('Google sign-in was cancelled.');
     }
     if (e.code == GoogleSignIn.kNetworkError) {
-      return 'Google sign-in needs an internet connection. Please try again.';
+      return tr('Google sign-in needs an internet connection. Please try again.');
     }
     final status = RegExp(r'ApiException: (\d+)').firstMatch(e.message ?? '');
     final code = status?.group(1) ?? e.code;
     // 10 = DEVELOPER_ERROR: this build's signing certificate SHA-1 has no
     // Android OAuth client (see frontend/env/README.md).
-    return 'Google sign-in failed (code $code). Please try again or use another sign-in option.';
+    return tr('Google sign-in failed (code {code}). Please try again or use another sign-in option.', {'code': code});
   }
 
   Future<void> _applySession(AuthResult result) =>

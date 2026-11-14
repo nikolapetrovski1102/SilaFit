@@ -9,6 +9,7 @@ import 'provider_actions.dart';
 import 'provider_logo.dart';
 import 'supplement_provider_models.dart';
 import 'supplement_providers_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// A one-line partner nudge shown above "Save meal" while a meal being logged
 /// is protein-heavy: the partner's logo, the discount, and a tap that copies
@@ -93,7 +94,7 @@ class _ProteinPartnerHintState extends State<ProteinPartnerHint> {
   Widget _chip(SupplementProvider partner) {
     final offer = [
       if (partner.discountLabel != null) partner.discountLabel!,
-      if (partner.promoCode != null) 'code ${partner.promoCode}',
+      if (partner.promoCode != null) tr('code {code}', {'code': partner.promoCode}),
     ].join(' · ');
     return Material(
       color: AppColors.surfaceContainerHigh.withValues(alpha: 0.85),
@@ -114,7 +115,7 @@ class _ProteinPartnerHintState extends State<ProteinPartnerHint> {
                 child: Text.rich(
                   TextSpan(children: [
                     TextSpan(
-                        text: 'Protein from ${partner.name}',
+                        text: tr('Protein from {name}', {'name': partner.name}),
                         style: AppTypography.labelSm.copyWith(
                             color: AppColors.onSurface,
                             fontWeight: FontWeight.w600)),
@@ -130,7 +131,7 @@ class _ProteinPartnerHintState extends State<ProteinPartnerHint> {
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                tooltip: 'Hide for a week',
+                tooltip: tr('Hide for a week'),
                 icon: Icon(Icons.close_rounded,
                     size: 16, color: AppColors.onSurfaceVariant),
                 onPressed: _dismiss,

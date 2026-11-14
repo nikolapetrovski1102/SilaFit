@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/skeleton.dart';
+import '../../l10n/l10n.dart';
 
 /// A tiny loading/error/data union used by every feature controller that
 /// fetches something from the API, so screens don't each reinvent
@@ -124,13 +125,13 @@ class _ErrorCard extends StatelessWidget {
             Icon(Icons.error_outline_rounded,
                 color: AppColors.error, size: 28),
             const SizedBox(height: AppSpacing.sm),
-            Text(message,
+            Text(tr(message),
                 textAlign: TextAlign.center, style: AppTypography.bodySm),
             if (onRetry != null) ...[
               const SizedBox(height: AppSpacing.md),
               TextButton(
                 onPressed: onRetry,
-                child: Text('RETRY',
+                child: Text(tr('RETRY'),
                     style: AppTypography.labelCaps
                         .copyWith(color: AppColors.accent)),
               ),

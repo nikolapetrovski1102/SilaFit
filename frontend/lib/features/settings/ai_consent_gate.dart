@@ -7,6 +7,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/utils/legal_links.dart';
 import '../../core/widgets/silen_button.dart';
 import 'settings_controller.dart';
+import '../../l10n/l10n.dart';
 
 /// Asks for consent before any AI feature sends the user's data to the
 /// third-party AI provider (App Review 5.1.1(i) / 5.1.2(i): name who gets the
@@ -61,13 +62,13 @@ class _AiConsentSheet extends StatelessWidget {
             Icon(Icons.auto_awesome_rounded,
                 color: AppColors.secondary, size: 32),
             const SizedBox(height: AppSpacing.sm),
-            Text('Share your data with our AI provider?',
+            Text(tr('Share your data with our AI provider?'),
                 style: AppTypography.headlineSm),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'AI reviews, AI weekly plans and meal photo scans are handled by a third-party AI '
+              tr('AI reviews, AI weekly plans and meal photo scans are handled by a third-party AI '
               'service. To create them, SilaFit sends OpenRouter, and the '
-              'AI model provider it routes the request to, the following:',
+              'AI model provider it routes the request to, the following:'),
               style: body,
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -84,30 +85,30 @@ class _AiConsentSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('•  ', style: body),
-                    Expanded(child: Text(item, style: body)),
+                    Expanded(child: Text(tr(item), style: body)),
                   ],
                 ),
               ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Your email and account details are never sent. The data is used only to '
+              tr('Your email and account details are never sent. The data is used only to '
               'generate your review or plan. You can turn this off anytime '
-              'in Settings.',
+              'in Settings.'),
               style: body,
             ),
             TextButton(
               onPressed: () =>
-                  openHostedPage(context, privacyUrl, 'Privacy Policy'),
-              child: const Text('Read our Privacy Policy'),
+                  openHostedPage(context, privacyUrl, tr('Privacy Policy')),
+              child: Text(tr('Read our Privacy Policy')),
             ),
             const SizedBox(height: AppSpacing.sm),
             PrimaryPillButton(
-              label: 'Allow',
+              label: tr('Allow'),
               onPressed: () => Navigator.of(context).pop(true),
             ),
             const SizedBox(height: AppSpacing.sm),
             SecondaryPillButton(
-              label: "Don't allow",
+              label: tr("Don't allow"),
               onPressed: () => Navigator.of(context).pop(false),
             ),
           ],

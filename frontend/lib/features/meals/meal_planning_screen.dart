@@ -21,6 +21,7 @@ import 'widgets/calorie_ring.dart';
 import 'widgets/macro_bar.dart';
 import 'widgets/meal_log_card.dart';
 import '../today/widgets/day_preview.dart';
+import '../../l10n/l10n.dart';
 
 /// The Nutrition/Meal Planning screen - boxless: a calorie ring on the left
 /// with its macro bars beside it on the right, a 7-day pill strip below that
@@ -86,13 +87,14 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // The title sits partly over the day strip; touches pass
+                // The title sits just above the day strip; touches pass
                 // through. Loaded content insets itself (around the
                 // full-bleed day strip); the skeleton and error card take
                 // the margin here.
                 MarkerTitleOverlap(
                   titleInset: AppSpacing.marginMobile,
-                  title: const MarkerDrawnTitle('Nutrition',
+                  overlapFactor: MarkerTitleOverlap.gapOverlapFactor,
+                  title: MarkerDrawnTitle(tr('Nutrition'),
                       playKey: 'nutrition'),
                   child: Padding(
                   padding: _controller.state.hasData
@@ -117,7 +119,7 @@ class _MealPlanningScreenState extends State<MealPlanningScreen> {
                 // Free accounts keep following a plan they already had, but
                 // browsing/creating plans is Pro - show the locked preview.
                 if (dietPlans.requiresUpgrade && !hasActivePlan) ...[
-                  _inset(const SectionEyebrow('Diet Plans · Pro')),
+                  _inset(SectionEyebrow(tr('Diet Plans · Pro'))),
                   const SizedBox(height: AppSpacing.sm),
                   _inset(LockedDietPlans(onReturn: () {
                     if (!mounted) return;
@@ -378,7 +380,7 @@ class _MealDayContent extends StatelessWidget {
                   ring: CalorieRing(
                     progress: ratio,
                     value: day.remainingCalories.abs(),
-                    label: over ? 'KCAL OVER' : 'KCAL LEFT',
+                    label: over ? tr('KCAL OVER') : tr('KCAL LEFT'),
                   ),
                 ),
               ),
@@ -394,21 +396,21 @@ class _MealDayContent extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     MacroBar(
-                      label: 'Protein',
+                      label: tr('Protein'),
                       consumedG: day.consumedProteinG,
                       targetG: day.targets.targetProteinG,
                       color: AppColors.accent,
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     MacroBar(
-                      label: 'Carbs',
+                      label: tr('Carbs'),
                       consumedG: day.consumedCarbsG,
                       targetG: day.targets.targetCarbsG,
                       color: AppColors.tertiaryContainer,
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     MacroBar(
-                      label: 'Fats',
+                      label: tr('Fats'),
                       consumedG: day.consumedFatsG,
                       targetG: day.targets.targetFatsG,
                       color: AppColors.secondary,
@@ -502,7 +504,7 @@ class _LogMealFabState extends State<_LogMealFab> {
   Widget build(BuildContext context) {
     return FloatingActionButton(
       onPressed: _openTracker,
-      tooltip: 'Log a meal',
+      tooltip: tr('Log a meal'),
       backgroundColor: AppColors.accent,
       foregroundColor: AppColors.onAccent,
       elevation: 0,
@@ -550,9 +552,9 @@ class _DayMeals extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(child: SectionEyebrow('Meals')),
+            Expanded(child: SectionEyebrow(tr('Meals'))),
             if (meals.isNotEmpty)
-              Text('${meals.where((m) => m.isLogged).length} logged',
+              Text(tr('{n} logged', {'n': meals.where((m) => m.isLogged).length}),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
           ],
@@ -562,8 +564,8 @@ class _DayMeals extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             child: Text(
-                'Nothing logged yet. Tap + to build a meal food by food - its '
-                'macros count toward this day.',
+                tr('Nothing logged yet. Tap + to build a meal food by food - its '
+                'macros count toward this day.'),
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant)),
           )

@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +7,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/best_match_card.dart';
 import '../../core/widgets/browse_all_toggle.dart';
+import '../../core/widgets/frozen_blur.dart';
 import '../../core/widgets/hero_container_transform.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/section_card.dart';
@@ -24,6 +23,7 @@ import 'splits_models.dart';
 import 'splits_repository.dart';
 import 'widgets/split_hero_image.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 class SplitsScreen extends StatefulWidget {
   final bool isTour;
@@ -84,7 +84,7 @@ class _SplitsScreenState extends State<SplitsScreen> {
               onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const MySplitsScreen())),
               icon: Icon(Icons.edit_note_rounded, color: AppColors.onSurface),
-              label: Text('My splits',
+              label: Text(tr('My splits'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurface)),
             ),
@@ -147,9 +147,9 @@ class _SplitsScreenState extends State<SplitsScreen> {
                 targetKey: _splitsSpotlightKey,
                 stepIndex: 1,
                 stepCount: kFeatureTourSteps.length,
-                title: kFeatureTourSteps[1].title,
-                description: kFeatureTourSteps[1].description,
-                access: kFeatureTourSteps[1].access,
+                title: tr(kFeatureTourSteps[1].title),
+                description: tr(kFeatureTourSteps[1].description),
+                access: tr(kFeatureTourSteps[1].access),
                 cardBottom:
                     MediaQuery.of(context).padding.bottom + AppSpacing.lg,
                 onNext: widget.onTourNext ?? () => Navigator.of(context).pop(),
@@ -172,7 +172,7 @@ class _SplitsHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        MarkerDrawnTitle('Workout Splits', playKey: 'workout-splits'),
+        MarkerDrawnTitle(tr('Workout Splits'), playKey: 'workout-splits'),
       ],
     );
   }
@@ -229,9 +229,8 @@ class _LockedSplitsContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
-          child: const IgnorePointer(
+        const FrozenBlur(
+          child: IgnorePointer(
             child: _SplitsContent(splits: _placeholder),
           ),
         ),
@@ -240,10 +239,10 @@ class _LockedSplitsContent extends StatelessWidget {
             child: Align(
               alignment: const Alignment(0, -0.4),
               child: UpgradeLockCard(
-                title: 'Splits picked for you',
-                message: 'Get training splits ranked for your goal, level and '
-                    'body, and browse the full protocol library.',
-                actionLabel: 'Unlock suggested splits',
+                title: tr('Splits picked for you'),
+                message: tr('Get training splits ranked for your goal, level and '
+                    'body, and browse the full protocol library.'),
+                actionLabel: tr('Unlock suggested splits'),
                 onUnlock: onUnlock,
               ),
             ),
@@ -272,10 +271,10 @@ class _SplitsContentState extends State<_SplitsContent> {
   @override
   Widget build(BuildContext context) {
     if (widget.splits.isEmpty) {
-      return const MascotEmptyState(
-        title: 'No splits yet',
+      return MascotEmptyState(
+        title: tr('No splits yet'),
         message:
-            'Your training protocols will show up here once they\'re ready.',
+            tr('Your training protocols will show up here once they\'re ready.'),
       );
     }
 
@@ -288,7 +287,7 @@ class _SplitsContentState extends State<_SplitsContent> {
         _BestMatchHero(match: best),
         if (ranked.length > 1) ...[
           const SizedBox(height: AppSpacing.lg),
-          const SectionEyebrow('More for you'),
+          SectionEyebrow(tr('More for you')),
           const SizedBox(height: AppSpacing.sm),
           for (final match in ranked.skip(1).take(3)) ...[
             _SplitPickRow(match: match),
@@ -298,10 +297,10 @@ class _SplitsContentState extends State<_SplitsContent> {
         const SizedBox(height: AppSpacing.lg),
         BrowseAllToggle(
           open: _browsingAll,
-          title: 'Browse all ${widget.splits.length} protocols',
+          title: tr('Browse all {n} protocols', {'n': widget.splits.length}),
           subtitle: _browsingAll
-              ? 'Showing the full library'
-              : 'Filter every split in the library',
+              ? tr('Showing the full library')
+              : tr('Filter every split in the library'),
           onTap: () => setState(() => _browsingAll = !_browsingAll),
         ),
         if (_browsingAll) ...[
@@ -323,18 +322,18 @@ class _BestMatchHero extends StatelessWidget {
     final repository = context.read<SplitsRepository>();
     final split = match.split;
     return BestMatchCard(
-      eyebrow: split.matchesGoal ? 'Best for you' : 'Start here',
+      eyebrow: split.matchesGoal ? tr('Best for you') : tr('Start here'),
       title: split.name,
       reason: match.reason,
       icon: Icons.auto_awesome_rounded,
       meta: [
         BestMatchMeta(
-            Icons.calendar_view_week_rounded, '${split.durationDays} days'),
+            Icons.calendar_view_week_rounded, trPlural(split.durationDays, '{n} day', '{n} days')),
         BestMatchMeta(Icons.trending_up_rounded, split.level),
         BestMatchMeta(
             Icons.category_rounded, splitCategoryLabel(split.category)),
       ],
-      actionLabel: 'View this protocol',
+      actionLabel: tr('View this protocol'),
       onTap: () => Navigator.of(context).push(heroExpandRoute(
         builder: (_) => SplitDetailScreen(
           controller: SplitDetailController(repository, split.splitId),
@@ -465,7 +464,7 @@ class _SplitLibraryState extends State<_SplitLibrary> {
             itemBuilder: (context, i) {
               if (i == 0) {
                 return PillChip(
-                  label: 'All Splits',
+                  label: tr('All Splits'),
                   selected: _filter == null && !_recommendedOnly,
                   onTap: () => setState(() {
                     _filter = null;
@@ -475,7 +474,7 @@ class _SplitLibraryState extends State<_SplitLibrary> {
               }
               if (hasRecommendations && i == 1) {
                 return PillChip(
-                  label: 'Recommended for you',
+                  label: tr('Recommended for you'),
                   selected: _recommendedOnly,
                   onTap: () =>
                       setState(() => _recommendedOnly = !_recommendedOnly),
@@ -497,8 +496,8 @@ class _SplitLibraryState extends State<_SplitLibrary> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const SectionEyebrow('Split Library'),
-            Text('${visible.length} Protocols',
+            SectionEyebrow(tr('Split Library')),
+            Text(trPlural(visible.length, '{n} Protocol', '{n} Protocols'),
                 style: AppTypography.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],
@@ -508,7 +507,7 @@ class _SplitLibraryState extends State<_SplitLibrary> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 48),
             child: Center(
-                child: Text('No splits match this filter.',
+                child: Text(tr('No splits match this filter.'),
                     style: AppTypography.bodySm)),
           ),
         for (final split in visible) ...[
@@ -583,7 +582,7 @@ class _SplitCard extends StatelessWidget {
                                   color: Colors.black, shape: BoxShape.circle),
                             ),
                             const SizedBox(width: 6),
-                            Text('FEATURED',
+                            Text(tr('FEATURED'),
                                 style: AppTypography.labelCaps
                                     .copyWith(color: AppColors.onAccent)),
                           ],
@@ -607,7 +606,7 @@ class _SplitCard extends StatelessWidget {
                             Icon(Icons.auto_awesome_rounded,
                                 size: 12, color: AppColors.accent),
                             const SizedBox(width: 6),
-                            Text('FOR YOU',
+                            Text(tr('FOR YOU'),
                                 style: AppTypography.labelCaps
                                     .copyWith(color: AppColors.accent)),
                           ],
@@ -639,20 +638,20 @@ class _SplitCard extends StatelessWidget {
                       children: [
                         _MetaPill(
                             icon: Icons.calendar_view_week_rounded,
-                            label: '${split.durationDays} days'),
+                            label: trPlural(split.durationDays, '{n} day', '{n} days')),
                         _MetaPill(
                             icon: Icons.trending_up_rounded,
                             label: split.level),
                         if (split.isEditableByMe)
-                          const _MetaPill(
-                              icon: Icons.edit_rounded, label: 'Your split')
+                          _MetaPill(
+                              icon: Icons.edit_rounded, label: tr('Your split'))
                         // Anything not shipped by SilaFit and not owned by
                         // this user is a trainer's own protocol, shown
                         // because it was made public or assigned to them.
                         else if (!split.isSystemDefault)
-                          const _MetaPill(
+                          _MetaPill(
                               icon: Icons.fitness_center_rounded,
-                              label: 'From your coach'),
+                              label: tr('From your coach')),
                       ],
                     ),
                   ],

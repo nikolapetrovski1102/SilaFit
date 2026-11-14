@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../auth/account_gate.dart';
 import 'plans_controller.dart';
+import '../../l10n/l10n.dart';
 
 /// The one Restore Purchases flow, shared by Settings and the paywall so both
 /// entry points gate, wait and report identically. Subscriptions are tied to a
@@ -16,15 +17,15 @@ Future<void> runRestorePurchases(BuildContext context) async {
   final plans = context.read<PlansController>();
   messenger.hideCurrentSnackBar();
   messenger
-      .showSnackBar(const SnackBar(content: Text('Restoring purchases...')));
+      .showSnackBar(SnackBar(content: Text(tr('Restoring purchases...'))));
 
   final outcome = await plans.restorePurchases();
   if (outcome == null || !context.mounted) return;
 
   final message = switch (outcome) {
-    RestoreOutcome.restored => 'Your subscription has been restored.',
+    RestoreOutcome.restored => tr('Your subscription has been restored.'),
     RestoreOutcome.nothingFound =>
-      'No active subscription found for this Apple ID or Google account.',
+      tr('No active subscription found for this Apple ID or Google account.'),
     RestoreOutcome.failed => plans.actionError!,
   };
   messenger.hideCurrentSnackBar();

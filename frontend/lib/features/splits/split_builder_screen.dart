@@ -14,6 +14,7 @@ import '../today/today_controller.dart';
 import 'split_day_editor_screen.dart';
 import 'splits_controller.dart';
 import 'splits_models.dart';
+import '../../l10n/l10n.dart';
 
 const _kLevels = ['Beginner', 'Intermediate', 'Advanced'];
 const _kGoals = ['BuildMuscle', 'LoseFat', 'MaintainActive'];
@@ -127,7 +128,7 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
   Future<void> _saveHeader() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      _toast('Give your split a name.');
+      _toast(tr('Give your split a name.'));
       return;
     }
     final ok = await _controller.saveHeader(
@@ -146,16 +147,16 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete split?'),
-        content: const Text(
-            'This removes the split and every day/exercise in it. This can\'t be undone.'),
+        title: Text(tr('Delete split?')),
+        content: Text(
+            tr('This removes the split and every day/exercise in it. This can\'t be undone.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -178,7 +179,7 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
       // activated split's session (and its exercises) would not appear until a
       // manual pull-to-refresh.
       context.read<TodayController>().load(force: true);
-      _toast('This is now your active split.');
+      _toast(tr('This is now your active split.'));
     } else {
       _toastError();
     }
@@ -221,23 +222,23 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
     if (duration != null && duration > _durationDays) {
       setState(() => _durationDays = duration);
     }
-    _toast('${day.day.title} duplicated.');
+    _toast(tr('{name} duplicated.', {'name': day.day.title}));
   }
 
   Future<void> _deleteDay(SplitDayWithExercises day) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete ${day.day.title}?'),
-        content: const Text(
-            'This removes the day and its exercises. This can\'t be undone.'),
+        title: Text(tr('Delete {name}?', {'name': day.day.title})),
+        content: Text(
+            tr('This removes the day and its exercises. This can\'t be undone.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -254,13 +255,13 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
   Future<void> _reorderDays() async {
     final order = await showReorderSheet<SplitDayWithExercises>(
       context,
-      title: 'Reorder days',
-      subtitle: 'Press and drag the handle to change what comes next.',
+      title: tr('Reorder days'),
+      subtitle: tr('Press and drag the handle to change what comes next.'),
       items: _sortedDays,
       idOf: (d) => d.day.splitDayId,
       titleOf: (d) => d.day.title,
       subtitleOf: (d) =>
-          d.day.isRestDay ? 'Rest day' : '${d.exercises.length} exercises',
+          d.day.isRestDay ? tr('Rest day') : trPlural(d.exercises.length, '{n} exercise', '{n} exercises'),
     );
     if (order == null || !mounted) return;
     final ok = await _controller
@@ -306,8 +307,8 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
   }
 
   String get _metaLine => [
-        '$_durationDays ${_durationDays == 1 ? 'DAY' : 'DAYS'}',
-        _level.toUpperCase(),
+        trPlural(_durationDays, '{n} DAY', '{n} DAYS'),
+        tr(_level).toUpperCase(),
         if (_goal != null) _goalLabel(_goal!).toUpperCase(),
       ].join('  ·  ');
 
@@ -343,7 +344,7 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
                           InkField(
                             controller: _name,
                             focusNode: _nameFocus,
-                            hint: 'Name your split',
+                            hint: tr('Name your split'),
                             hero: true,
                             autofocus: _controller.splitId == null,
                             // Submitting blurs the field, and the blur saves.
@@ -387,13 +388,13 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
               icon: Icon(
                   activated ? Icons.check_rounded : Icons.play_arrow_rounded,
                   size: 18),
-              label: Text(activated ? 'Active' : 'Activate'),
+              label: Text(activated ? tr('Active') : tr('Activate')),
             ),
           ),
         if (exists)
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz_rounded),
-            tooltip: 'More',
+            tooltip: tr('More'),
             onSelected: (value) => switch (value) {
               'details' => _showDetails(),
               'reorder' => _reorderDays(),
@@ -401,11 +402,11 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
               _ => null,
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'details', child: Text('Details')),
+              PopupMenuItem(value: 'details', child: Text(tr('Details'))),
               if ((_controller.detail?.days.length ?? 0) > 1)
-                const PopupMenuItem(
-                    value: 'reorder', child: Text('Reorder days')),
-              const PopupMenuItem(value: 'delete', child: Text('Delete split')),
+                PopupMenuItem(
+                    value: 'reorder', child: Text(tr('Reorder days'))),
+              PopupMenuItem(value: 'delete', child: Text(tr('Delete split'))),
             ],
           ),
       ],
@@ -446,7 +447,7 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
             ? const SkeletonList(count: 4, padding: EdgeInsets.zero)
             : GestureDetector(
                 onTap: _controller.load,
-                child: Text('$error  Tap to retry.',
+                child: Text(tr('{error}  Tap to retry.', {'error': error}),
                     style: AppTypography.bodySm
                         .copyWith(color: AppColors.onSurfaceVariant)),
               ),
@@ -465,15 +466,15 @@ class _SplitBuilderScreenState extends State<SplitBuilderScreen> {
               showHint: i == 0,
               actions: [
                 SwipeAction(
-                  label: 'Duplicate',
+                  label: tr('Duplicate'),
                   icon: Icons.copy_rounded,
                   onTap: () => _duplicateDay(days[i]),
                   disabledReason: days.length >= _kMaxDays
-                      ? 'A split can have at most $_kMaxDays days.'
+                      ? tr('A split can have at most {n} days.', {'n': _kMaxDays})
                       : null,
                 ),
                 SwipeAction(
-                  label: 'Delete',
+                  label: tr('Delete'),
                   icon: Icons.delete_outline_rounded,
                   isDestructive: true,
                   onTap: () => _deleteDay(days[i]),
@@ -532,9 +533,9 @@ class _DayTile extends StatelessWidget {
     final exercises = [...day.exercises]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     final subtitle = rest
-        ? 'Rest day'
+        ? tr('Rest day')
         : exercises.isEmpty
-            ? 'No exercises yet'
+            ? tr('No exercises yet')
             : exercises.map((e) => e.name).join('  ·  ');
     final eyebrow = AppTypography.labelCaps
         .copyWith(color: rest ? AppColors.onSurfaceVariant : AppColors.accent);
@@ -553,9 +554,9 @@ class _DayTile extends StatelessWidget {
                 children: [
                   InkTextHero(
                     tag: dayEyebrowHeroTag(day.day.splitDayId),
-                    text: 'DAY ${day.day.dayIndex}',
+                    text: tr('DAY {n}', {'n': day.day.dayIndex}),
                     style: eyebrow,
-                    child: Text('DAY ${day.day.dayIndex}', style: eyebrow),
+                    child: Text(tr('DAY {n}', {'n': day.day.dayIndex}), style: eyebrow),
                   ),
                   const SizedBox(height: AppSpacing.xxs),
                   InkTextHero(
@@ -601,7 +602,7 @@ class _AddDayTile extends StatelessWidget {
           children: [
             Icon(Icons.add_rounded, color: AppColors.accent),
             const SizedBox(width: AppSpacing.xs),
-            Text('Add day',
+            Text(tr('Add day'),
                 style:
                     AppTypography.headlineMd.copyWith(color: AppColors.accent)),
           ],
@@ -663,7 +664,7 @@ class _DetailsSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _label('DESCRIPTION'),
+            _label(tr('DESCRIPTION')),
             TextField(
               controller: description,
               minLines: 1,
@@ -671,10 +672,10 @@ class _DetailsSheet extends StatelessWidget {
               style: bodyStyle,
               cursorColor: AppColors.accent,
               textCapitalization: TextCapitalization.sentences,
-              decoration: inkDecoration('What is this split for?', bodyStyle),
+              decoration: inkDecoration(tr('What is this split for?'), bodyStyle),
             ),
             const SizedBox(height: AppSpacing.xl),
-            _label('LENGTH'),
+            _label(tr('LENGTH')),
             Row(
               children: [
                 IconButton.filledTonal(
@@ -702,24 +703,24 @@ class _DetailsSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.xl),
-            _label('LEVEL'),
+            _label(tr('LEVEL')),
             Wrap(
               spacing: AppSpacing.xs,
               runSpacing: AppSpacing.xs,
               children: [
                 for (final l in _kLevels)
-                  _choice(l, l == level, () => onLevel(l)),
+                  _choice(tr(l), l == level, () => onLevel(l)),
               ],
             ),
             const SizedBox(height: AppSpacing.xl),
-            _label('GOAL'),
+            _label(tr('GOAL')),
             Wrap(
               spacing: AppSpacing.xs,
               runSpacing: AppSpacing.xs,
               children: [
-                _choice('Any', goal == null, () => onGoal(null)),
+                _choice(tr('Any'), goal == null, () => onGoal(null)),
                 for (final g in _kGoals)
-                  _choice(_goalLabel(g), g == goal, () => onGoal(g)),
+                  _choice(tr(_goalLabel(g)), g == goal, () => onGoal(g)),
               ],
             ),
           ],

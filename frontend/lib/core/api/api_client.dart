@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
+import '../../l10n/l10n.dart';
+import '../platform/device_timezone.dart';
 import '../session/session_store.dart';
 import 'api_config.dart';
 import 'api_exception.dart';
@@ -174,7 +176,10 @@ class ApiClient {
   }
 
   Map<String, String> _headers() {
-    final headers = {'Content-Type': 'application/json'};
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept-Language': L10n.languageCode,
+    };
     final token = sessionStore.currentToken;
     if (token != null) headers['Authorization'] = 'Bearer $token';
     return headers;
@@ -244,12 +249,12 @@ class ApiClient {
       if (canRetry) return retry();
       isOffline.value = true;
       if (e is TimeoutException) {
-        throw const ApiException(
-            'The server took too long to respond. Check your connection and try again.',
+        throw ApiException(
+            tr('The server took too long to respond. Check your connection and try again.'),
             isNetworkError: true);
       }
-      throw const ApiException(
-          'Cannot reach the server. Check your connection and try again.',
+      throw ApiException(
+          tr('Cannot reach the server. Check your connection and try again.'),
           isNetworkError: true);
     }
     // A 5xx isn't the server back to normal - leave the pill as it was.
@@ -297,8 +302,8 @@ class ApiClient {
               isOffline.value = true;
               return hit.value;
             }
-            throw const ApiException(
-                'Cannot reach the server. Check your connection and try again.',
+            throw ApiException(
+                tr('Cannot reach the server. Check your connection and try again.'),
                 isNetworkError: true);
         }
       }
@@ -325,7 +330,7 @@ class ApiClient {
     try {
       parsed = parse(envelope?['data']);
     } catch (_) {
-      throw const ApiException(ApiException.genericMessage);
+      throw ApiException(ApiException.genericMessage);
     }
     // Only after it parsed - never save a payload this build can't read back.
     if (cacheKey != null) unawaited(_cache.write(cacheKey, envelope?['data']));
@@ -357,7 +362,7 @@ class ApiClient {
     // owns it (or was linked to it at sign-in).
     final deviceId = await sessionStore.deviceId();
     if (deviceId.isEmpty) return _Renewal.rejected;
-    return _postSessionRenewal('/auth/device', {'deviceId': deviceId}, current);
+    return _postSessionRenewal('/auth/device', {'deviceId': deviceId, 'platform': devicePlatform()}, current);
   }
 
   /// One renewal call. Only a definite "no" - a 401/403, or an answer for a

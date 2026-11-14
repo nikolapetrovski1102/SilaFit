@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../../l10n/l10n.dart';
 
 /// Shimmering placeholder shown while a screen's content loads, in place of
 /// a spinner - the page keeps its shape, so the real content lands where the
@@ -51,7 +52,7 @@ class _SkeletonState extends State<Skeleton>
       child: _SkeletonScope(
         state: this,
         child: Semantics(
-          label: 'Loading',
+          label: tr('Loading'),
           container: true,
           child: ExcludeSemantics(child: widget.child),
         ),

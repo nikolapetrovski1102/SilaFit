@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../settings/settings_controller.dart';
+import '../../l10n/l10n.dart';
 
 /// Same factor as the Active Workout Tracker, so a set logged there reads
 /// the same number here.
@@ -28,4 +29,4 @@ String formatWeight(double kg, String unit) =>
 
 /// Appended to a weight logged per hand on a two-dumbbell exercise, so
 /// "30 kg × 8" isn't read as the total load.
-const perDumbbellSuffix = ' · per dumbbell';
+String get perDumbbellSuffix => tr(' · per dumbbell');

@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import 'onboarding_icon_badge.dart';
+import '../../../l10n/l10n.dart';
 
 /// Simple, accessible answer rows shared by onboarding questions.
 /// Labels can wrap at larger text sizes; the entire row is interactive.
@@ -38,7 +39,7 @@ class OptionRowSelector extends StatelessWidget {
       children: [
         for (final option in options) ...[
           _OptionTile(
-            label: labelFor?.call(option) ?? option,
+            label: labelFor?.call(option) ?? tr(option),
             icon: iconFor?.call(option),
             badgeAsset: badgeAssetFor?.call(option),
             selected: option == selected,

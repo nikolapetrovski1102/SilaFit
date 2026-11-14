@@ -6,7 +6,7 @@ import 'package:flutter/rendering.dart';
 import '../theme/app_colors.dart';
 
 /// A page title that draws itself in with a marker, the same way
-/// `RunnerDrawSplash` draws the runner mark: a round brush travels along a
+/// `LogoDrawSplash` paints the SF mark: a round brush travels along a
 /// centre path and the text is only visible where the brush has been.
 ///
 /// For text the path is a tight zigzag that runs through each line from left
@@ -16,7 +16,7 @@ import '../theme/app_colors.dart';
 ///
 /// Titles are set ultra large in Permanent Marker, a street-style marker
 /// face, in the theme's primary colour (lime in dark mode, burgundy in
-/// light - the same as the splash's runner mark).
+/// light - the same as the splash's SF mark).
 ///
 /// The title leans up a few degrees ([tilt]) and carries a thin outline in
 /// the page background colour, so where it crosses a card - even one in the
@@ -65,6 +65,7 @@ class MarkerDrawnTitle extends StatefulWidget {
 
   static TextStyle streetStyle(double fontSize) => TextStyle(
         fontFamily: 'PermanentMarker',
+        fontFamilyFallback: const ['Pangolin'],
         fontSize: fontSize,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.5,
@@ -373,6 +374,10 @@ class MarkerTitleOverlap extends StatelessWidget {
   /// on top of [child] without covering any of it.
   static const double clearOverlapFactor = 0.24;
 
+  /// A small gap: [child] starts a little below the title's line box, so
+  /// descenders and the low (left) end of the tilted title stay clear of it.
+  static const double gapOverlapFactor = -0.3;
+
   @override
   Widget build(BuildContext context) {
     final fontSize = MarkerDrawnTitle.textScalerFor(context)
@@ -565,4 +570,106 @@ class _RenderOverlap extends RenderBox
   @override
   bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
       defaultHitTestChildren(result, position: position);
+}
+
+/// A name set in the same street-style marker face as [MarkerDrawnTitle] -
+/// Permanent Marker, primary colour, the same few-degree lean - but sized
+/// for a card or app bar and never animated: a list of cards scribbling
+/// themselves in at once would just be noise.
+///
+/// No background-coloured outline either - on a card the surface isn't the
+/// page background, so the ring would show up as a halo instead of
+/// disappearing.
+class StreetName extends StatelessWidget {
+  const StreetName(
+    this.text, {
+    super.key,
+    this.fontSize = 24,
+    this.minFontSize,
+    this.maxLines = 1,
+    this.truncate = true,
+  });
+
+  final String text;
+
+  /// When false the name is never cut off with "...": [maxLines] is only the
+  /// line count the auto-fit aims for, and a name that still doesn't fit at
+  /// [minFontSize] wraps onto as many extra lines as it needs.
+  final bool truncate;
+
+  /// The size used when the name fits. With [minFontSize] set, this is the
+  /// ceiling instead: the name is set as large as it can be while still
+  /// fitting the width in [maxLines] lines, never breaking inside a word -
+  /// so "Legs" goes huge and "Upper Body Hypertrophy" steps down.
+  final double fontSize;
+  final double? minFontSize;
+  final int? maxLines;
+
+  static TextStyle _style(double size) => TextStyle(
+        fontFamily: 'PermanentMarker',
+        fontFamilyFallback: const ['Pangolin'],
+        fontSize: size,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.5,
+        height: MarkerDrawnTitle.lineHeightFactor,
+        color: AppColors.accent,
+      );
+
+  /// Largest size in [min]..[max] (1pt steps) at which [text] fits [width]
+  /// within [maxLines] lines, with every word on a single line.
+  double _fittedSize(double width, TextScaler scaler, double min, double max) {
+    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    bool fits(double size) {
+      final style = _style(size);
+      for (final word in words) {
+        final wp = TextPainter(
+            text: TextSpan(text: word, style: style),
+            textDirection: TextDirection.ltr,
+            textScaler: scaler,
+            maxLines: 1)
+          ..layout();
+        final tooWide = wp.width > width;
+        wp.dispose();
+        if (tooWide) return false;
+      }
+      final tp = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+          maxLines: maxLines)
+        ..layout(maxWidth: width);
+      final ok = !tp.didExceedMaxLines;
+      tp.dispose();
+      return ok;
+    }
+
+    for (var size = max; size > min; size -= 1) {
+      if (fits(size)) return size;
+    }
+    return min;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MarkerDrawnTitle.textScalerFor(context);
+    Widget label(double size) => Transform.rotate(
+          angle: MarkerDrawnTitle.tilt,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            text,
+            maxLines: truncate ? maxLines : null,
+            overflow:
+                truncate && maxLines != null ? TextOverflow.ellipsis : null,
+            textScaler: scaler,
+            style: _style(size),
+          ),
+        );
+
+    final min = minFontSize;
+    if (min == null || min >= fontSize) return label(fontSize);
+    return LayoutBuilder(builder: (context, constraints) {
+      if (!constraints.hasBoundedWidth) return label(fontSize);
+      return label(_fittedSize(constraints.maxWidth, scaler, min, fontSize));
+    });
+  }
 }

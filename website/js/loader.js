@@ -1,11 +1,12 @@
-/* Full-screen loader: the SilaFit runner draws itself over the blurred
-   backdrop, then the overlay eases away once the page has loaded and the
+/* Full-screen loader: the SilaFit "SF" mark paints itself over the
+   blurred backdrop, stroke by stroke, then the overlay eases away once the page has loaded and the
    drawing has finished.
 
    - Every page load shows it. The first one in a browser session plays the
-     full drawing (~1.2s, loader_{dark,light}.svg); after that the inline
+     full drawing (~1.3s, loader_{dark,light}.svg, cut from the designer's
+     silafit_logo_animation(_light).svg like the app's LogoDrawSplash); after that the inline
      <head> bootstrap adds `loader-fast` to <html> and the inline script next
-     to #siteLoader picks loader_*_fast.svg, the same drawing in ~0.65s.
+     to #siteLoader picks loader_*_fast.svg, the same drawing in ~0.75s.
    - Clicking through to another page of the site fades the backdrop back in
      before leaving, so one page hands over to the next without a white flash.
    - CSS fades it out by itself after a few seconds even if this script never
@@ -16,7 +17,7 @@
 
   var root = document.documentElement;
   var fast = root.classList.contains('loader-fast');
-  var MIN_MS = fast ? 700 : 1350; // the drawing finishes at ~0.67s / ~1.22s
+  var MIN_MS = fast ? 780 : 1400; // the drawing finishes at ~0.74s / ~1.32s
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var shown = false;
 

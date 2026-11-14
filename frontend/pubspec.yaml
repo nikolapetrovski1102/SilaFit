@@ -1,13 +1,17 @@
 name: silafit
 description: SilaFit - AI-assisted fitness tracker (Kinetic Pulse design system).
 publish_to: 'none'
-version: 1.0.2+10
+version: 1.0.2+15
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  # Material/Cupertino strings (date pickers, text-selection menu, back
+  # tooltips) in the app's languages - see lib/l10n/l10n.dart.
+  flutter_localizations:
     sdk: flutter
 
   # Material card-to-screen transforms.
@@ -33,7 +37,7 @@ dependencies:
   # Stable per-install device id used for the device-id login flow.
   uuid: ^4.5.1
 
-  intl: ^0.19.0
+  intl: ^0.20.2
 
   # Identity providers required by the spec: Google, Apple, email, device-id.
   google_sign_in: ^6.2.1
@@ -99,6 +103,10 @@ dependencies:
   image_picker: ^1.2.3
   http_parser: ^4.1.2
 
+  # Package barcode scanning in the meal tracker (EAN/UPC). On-device decoding
+  # (Apple Vision / ML Kit), so a scan needs no network until the lookup.
+  mobile_scanner: ^7.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -143,10 +151,19 @@ flutter:
     - family: PermanentMarker
       fonts:
         - asset: assets/fonts/PermanentMarker-Regular.ttf
+    # Cyrillic fallbacks: neither face above has Cyrillic glyphs, so
+    # Macedonian text falls through to these per glyph (Latin text keeps
+    # Hanken Grotesk / Permanent Marker). OFL, see assets/fonts/OFL-*.txt.
+    - family: GolosText
+      fonts:
+        - asset: assets/fonts/GolosText-Variable.ttf
+    - family: Pangolin
+      fonts:
+        - asset: assets/fonts/Pangolin-Regular.ttf
 
 # --- flutter_launcher_icons: generates the launcher icons from the SilaFit
-# runner mark. The dark icon (lime runner on blurred teal) is the default on
-# the phones; the light one (burgundy runner on blurred cream) ships
+# brushed SF mark. The dark icon (lime SF on blurred teal) is the default on
+# the phones; the light one (burgundy SF on blurred cream) ships
 # alongside it as an alternate the user can switch to from Settings (see
 # lib/core/platform/app_icon_service.dart).
 # - This tool only knows about the primary icon and still writes iOS to the
@@ -156,7 +173,7 @@ flutter:
 # - Android: the blurred teal `adaptive_icon_background` image plus the lime
 #   `adaptive_icon_foreground`, sized to the adaptive-icon safe zone so
 #   circle/squircle/rounded masks never clip it; Android 13+ themed icons use
-#   the white `adaptive_icon_monochrome` runner, and pre-adaptive Android
+#   the white `adaptive_icon_monochrome` mark, and pre-adaptive Android
 #   uses the flattened dark icon (`image_path_android`).
 # - web, macOS and Windows use the light `image_path`.
 # Run: dart run flutter_launcher_icons && tool/generate_alternate_app_icons.sh
@@ -185,8 +202,8 @@ flutter_launcher_icons:
 # --- flutter_native_splash: the native (pre-Flutter-engine) splash screen,
 # shown instantly on cold start before AppColors/ThemeMode can even run.
 # It is deliberately a blank blurred backdrop - no mark - matching what
-# RunnerDrawSplash (lib/core/widgets/runner_draw_splash.dart) opens on, so the
-# runner then draws itself in on top with no visible hand-off. The light/dark
+# LogoDrawSplash (lib/core/widgets/logo_draw_splash.dart) opens on, so the
+# SF mark then paints itself in on top with no visible hand-off. The light/dark
 # backdrops mirror AppColors.background in each mode. Android 12+'s splash
 # API only allows a solid colour (no background image), so there it is the
 # plain background of each mode, with no icon.

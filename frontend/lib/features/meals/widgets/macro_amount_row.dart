@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../l10n/l10n.dart';
 
 enum MacroKind {
   calories('Calories', 'kcal', 900),
@@ -153,7 +154,7 @@ class _MacroAmountRowState extends State<MacroAmountRow> {
                             padding:
                                 const EdgeInsets.only(right: AppSpacing.xxs),
                             child: _KindChip(
-                              label: k.label,
+                              label: tr(k.label),
                               selected: k == kind,
                               // Nudge the user to pick one until they have.
                               highlight: kind == null,

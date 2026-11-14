@@ -3,6 +3,7 @@ import '../onboarding_controller.dart';
 import 'arc_rating_slider.dart';
 import 'option_row_selector.dart';
 import 'question_scaffold.dart';
+import '../../../l10n/l10n.dart';
 
 /// Uses the same answer rows, typography, progress and CTA as the original questions.
 class TrainingPreferenceQuestion extends StatelessWidget {
@@ -44,15 +45,17 @@ class TrainingPreferenceQuestion extends StatelessWidget {
         onSkip: onSkip,
         progressStep: progressStep,
         progressStepCount: progressStepCount,
-        headline: 'How would you rate your fitness level?',
+        headline: tr('How would you rate your fitness level?'),
         body: ArcRatingSlider(
           values: _experienceLabels.keys.toList(),
-          labels: _experienceLabels,
+          labels: {
+            for (final e in _experienceLabels.entries) e.key: tr(e.value)
+          },
           selected: controller.trainingExperience,
           onSelected: (value) =>
               controller.setTrainingExperience(value, autoAdvance: false),
         ),
-        ctaLabel: isLast ? 'Finish' : 'Continue',
+        ctaLabel: isLast ? tr('Finish') : tr('Continue'),
         ctaLoading: isLast && controller.isSubmitting,
         onCta: controller.trainingExperience != null && !controller.isSubmitting
             ? onNext
@@ -68,7 +71,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
     final String? Function(String)? badgeAssetFor;
     switch (step) {
       case OnboardingStep.trainingDays:
-        headline = 'Training days per week?';
+        headline = tr('Training days per week?');
         options = const {
           '2': '1–2 days',
           '4': '3–4 days',
@@ -82,7 +85,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
         badgeAssetFor = null;
         break;
       case OnboardingStep.equipmentAccess:
-        headline = 'What equipment can you use?';
+        headline = tr('What equipment can you use?');
         options = const {
           'FullGym': 'Full gym',
           'Dumbbells': 'Dumbbells',
@@ -102,7 +105,7 @@ class TrainingPreferenceQuestion extends StatelessWidget {
             }[value];
         break;
       case OnboardingStep.dailyActivity:
-        headline = 'How active is your day?';
+        headline = tr('How active is your day?');
         options = const {
           'Sedentary': 'Mostly sitting',
           'LightlyActive': 'Some walking',
@@ -135,12 +138,12 @@ class TrainingPreferenceQuestion extends StatelessWidget {
       headline: headline,
       body: OptionRowSelector(
           options: options.keys.toList(),
-          labelFor: (value) => options[value]!,
+          labelFor: (value) => tr(options[value]!),
           selected: selected,
           onSelected: onSelected,
           iconFor: iconFor,
           badgeAssetFor: badgeAssetFor),
-      ctaLabel: isLast ? 'Finish' : 'Continue',
+      ctaLabel: isLast ? tr('Finish') : tr('Continue'),
       ctaLoading: isLast && controller.isSubmitting,
       onCta: selected != null && !controller.isSubmitting ? onNext : null,
     );

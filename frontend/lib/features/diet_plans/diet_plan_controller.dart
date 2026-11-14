@@ -24,8 +24,12 @@ class DietPlansController extends ChangeNotifier {
     if (_isLoading) return;
     if (!force && state.hasData) return;
     _isLoading = true;
-    state = const ResourceState.loading();
-    notifyListeners();
+    // A re-fetch (after creating/editing a plan) keeps the current list on
+    // screen and swaps it in place - only a first load shows the skeleton.
+    if (!state.hasData) {
+      state = const ResourceState.loading();
+      notifyListeners();
+    }
     try {
       final plans = await _repository.getAll();
       requiresUpgrade = false;
@@ -34,7 +38,7 @@ class DietPlansController extends ChangeNotifier {
       requiresUpgrade = e.isForbidden;
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -70,7 +74,7 @@ class DietPlanDetailController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -139,15 +143,19 @@ class MyDietPlansController extends ChangeNotifier {
     if (_isLoading) return;
     if (!force && state.hasData) return;
     _isLoading = true;
-    state = const ResourceState.loading();
-    notifyListeners();
+    // A re-fetch (after creating/editing a plan) keeps the current list on
+    // screen and swaps it in place - only a first load shows the skeleton.
+    if (!state.hasData) {
+      state = const ResourceState.loading();
+      notifyListeners();
+    }
     try {
       final plans = await _repository.getMine();
       state = ResourceState.data(plans);
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -191,7 +199,7 @@ class ActiveDietPlanController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -271,7 +279,7 @@ class DietPlanBuilderController extends ChangeNotifier {
     } on ApiException catch (e) {
       loadState = ResourceState.error(e.userMessage);
     } catch (_) {
-      loadState = const ResourceState.error(ApiException.genericMessage);
+      loadState = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }

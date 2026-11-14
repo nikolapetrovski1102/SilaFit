@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/silen_button.dart';
+import '../../l10n/l10n.dart';
 
 /// Plays the full-screen "you're in" moment after a verified purchase and
 /// completes once the user taps through. [perks] are the plan's catalogue
@@ -302,7 +303,7 @@ class _SubscriptionCelebrationState extends State<SubscriptionCelebration>
         offset: Offset(0, 18 * (1 - reveal)),
         child: Column(
           children: [
-            Text('WELCOME TO',
+            Text(tr('WELCOME TO'),
                 style: AppTypography.labelCaps
                     .copyWith(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: 6),
@@ -331,7 +332,7 @@ class _SubscriptionCelebrationState extends State<SubscriptionCelebration>
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Everything is unlocked. Let\'s make it count.',
+              tr('Everything is unlocked. Let\'s make it count.'),
               textAlign: TextAlign.center,
               style: AppTypography.bodyMd
                   .copyWith(color: AppColors.onSurfaceVariant),
@@ -387,7 +388,7 @@ class _SubscriptionCelebrationState extends State<SubscriptionCelebration>
         child: Transform.translate(
           offset: Offset(0, 16 * (1 - reveal)),
           child: PrimaryPillButton(
-            label: 'Let\'s go',
+            label: tr('Let\'s go'),
             icon: Icons.arrow_forward_rounded,
             height: 52,
             onPressed: () => Navigator.of(context).pop(),

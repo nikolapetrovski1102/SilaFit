@@ -24,16 +24,14 @@ class TodayRepository {
 
   TodayRepository(this._client);
 
-  Future<TodayDashboard> getDashboard() =>
-      _client.get('/today', TodayDashboard.fromJson,
-          cache: true, sameDayOnly: true);
+  Future<TodayDashboard> getDashboard() => _client
+      .get('/today', TodayDashboard.fromJson, cache: true, sameDayOnly: true);
 
   /// Today's dashboard as last saved on this device (same-day only), for an
   /// instant paint before [getDashboard] answers - see [ApiClient.cached].
-  Future<TodayDashboard?> getCachedDashboard() async =>
-      (await _client.cached('/today', TodayDashboard.fromJson,
-              sameDayOnly: true))
-          ?.value;
+  Future<TodayDashboard?> getCachedDashboard() async => (await _client
+          .cached('/today', TodayDashboard.fromJson, sameDayOnly: true))
+      ?.value;
 
   /// The id the phone gives today's session when it has to make it up
   /// offline. Derived from the account and the (UTC) day rather than random,
@@ -42,7 +40,8 @@ class TodayRepository {
   String? offlineSessionId([DateTime? nowUtc]) {
     final userId = _client.sessionStore.current?.userId;
     if (userId == null) return null;
-    final day = DateFormat('yyyy-MM-dd').format((nowUtc ?? DateTime.now()).toUtc());
+    final day =
+        DateFormat('yyyy-MM-dd').format((nowUtc ?? DateTime.now()).toUtc());
     return const Uuid()
         .v5(Namespace.url.value, 'silen:offline-session:$userId:$day');
   }
@@ -54,13 +53,13 @@ class TodayRepository {
   /// resolving today's split day the way `usp_WorkoutSession_GetTodayScheduled`
   /// does. Null when either was never saved or there's no active split.
   Future<OfflineToday?> getOfflineDashboard() async {
-    final last = (await _client.cached('/today', TodayDashboard.fromJson))
-        ?.value;
+    final last =
+        (await _client.cached('/today', TodayDashboard.fromJson))?.value;
     final split = last?.activeSplit;
     if (last == null || split == null) return null;
-    final detail = (await _client.cached(
-            '/splits/${split.splitId}', SplitDetail.fromJson))
-        ?.value;
+    final detail =
+        (await _client.cached('/splits/${split.splitId}', SplitDetail.fromJson))
+            ?.value;
     final sessionId = offlineSessionId();
     if (detail == null || sessionId == null) return null;
 

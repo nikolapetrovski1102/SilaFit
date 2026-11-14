@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 /// Whether [url] points at a real video file. Only a video gets the in-app
 /// sheet below - anything else in `Exercise.DemoVideoUrl` (the catalog used to
@@ -124,7 +125,7 @@ class _ExerciseVideoSheetState extends State<_ExerciseVideoSheet> {
                   color: AppColors.surfaceContainerLowest,
                   child: _failed
                       ? Center(
-                          child: Text('Couldn\'t load the form video.',
+                          child: Text(tr('Couldn\'t load the form video.'),
                               style: AppTypography.bodySm),
                         )
                       : !ready

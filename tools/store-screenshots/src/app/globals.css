@@ -1,0 +1,40 @@
+/* The app's own faces (frontend/assets/fonts). Hanken Grotesk and Permanent
+   Marker have no Cyrillic, so Macedonian falls through per glyph to Golos
+   Text and Shantell Sans (ExtraBold, informal), the closest Cyrillic match
+   to Permanent Marker's marker strokes. */
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("/fonts/HankenGrotesk-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: block;
+}
+@font-face {
+  font-family: "Golos Text";
+  src: url("/fonts/GolosText-Variable.ttf") format("truetype");
+  font-weight: 400 900;
+  font-display: block;
+}
+@font-face {
+  font-family: "Permanent Marker";
+  src: url("/fonts/PermanentMarker-Regular.ttf") format("truetype");
+  font-display: block;
+}
+@font-face {
+  font-family: "Shantell Sans";
+  src: url("/fonts/ShantellSans.ttf") format("truetype");
+  font-weight: 300 800;
+  font-display: block;
+}
+
+:root {
+  --sans: "Hanken Grotesk", "Golos Text", system-ui, sans-serif;
+  --marker: "Permanent Marker", "Shantell Sans", cursive;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: #e9ece9;
+  color: #111;
+}

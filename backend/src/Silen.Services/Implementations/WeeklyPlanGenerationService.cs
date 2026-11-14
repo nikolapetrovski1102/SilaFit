@@ -809,7 +809,8 @@ public sealed class WeeklyPlanGenerationService(
 
         if (pushEnabled)
         {
-            var content = NotificationMessageComposer.WeeklyAiPlanReady(userId, displayName, splitKept);
+            var language = await notificationProvider.GetUserLanguageAsync(userId, cancellationToken).ConfigureAwait(false);
+            var content = NotificationMessageComposer.WeeklyAiPlanReady(userId, displayName, splitKept, language);
             var created = await notificationProvider.TryCreateNotificationAsync(new NewNotificationModel
                 {
                     UserId = userId,

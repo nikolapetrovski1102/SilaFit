@@ -1,55 +1,58 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import '../silen_button.dart';
-import 'celebrating_ram.dart';
+import 'confetti_burst.dart';
 import 'ram_mascot.dart';
+import '../../../l10n/l10n.dart';
 
 /// The mascot's modal moment - custom alerts, congratulations, milestones.
-/// Scale+fade entrance via [Curves.easeOutBack] for a springy, premium feel.
+/// The card fades in, then Sila is scrubbed in with a graffiti marker
+/// zigzag ([ScribbleReveal]) and stays still - no hops or bounces.
 ///
-/// With [showConfetti] on, the dialog becomes a celebration: Sila leaps out
-/// of the top of the card, spins, lands with a fist pump and fires confetti
-/// ([CelebratingRam]). [pose] is then only the reduced-motion fallback
-/// framing, since the routine picks its own poses.
+/// With [showConfetti] on, the dialog becomes a celebration: the card gets
+/// an accent glow and confetti bursts from behind Sila once the scrub is
+/// done.
 class MascotDialog extends StatelessWidget {
   final RamArt pose;
   final String title;
   final String message;
-  final String actionLabel;
+  final String? _actionLabel;
+  String get actionLabel => _actionLabel ?? tr('Nice');
   final VoidCallback? onAction;
   final bool showConfetti;
 
-  static const double _celebrateSize = 150;
+  static const double _mascotSize = 148;
 
   const MascotDialog({
     super.key,
     required this.pose,
     required this.title,
     required this.message,
-    this.actionLabel = 'Nice',
+    String? actionLabel,
     this.onAction,
     this.showConfetti = false,
-  });
+  }) : _actionLabel = actionLabel;
 
-  /// Shows the dialog with the shared scale+fade+easeOutBack entrance.
+  /// Shows the dialog with a plain fade, so nothing jumps before the scrub.
   static Future<void> show(
     BuildContext context, {
     required RamArt pose,
     required String title,
     required String message,
-    String actionLabel = 'Nice',
+    String? actionLabel,
     VoidCallback? onAction,
     bool showConfetti = false,
   }) {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: tr('Dismiss'),
       barrierColor: Colors.black54,
-      transitionDuration: const Duration(milliseconds: 380),
+      transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (context, _, __) => MascotDialog(
         pose: pose,
         title: title,
@@ -58,16 +61,10 @@ class MascotDialog extends StatelessWidget {
         onAction: onAction,
         showConfetti: showConfetti,
       ),
-      transitionBuilder: (context, animation, _, child) {
-        final eased = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
-        return Opacity(
-          opacity: animation.value.clamp(0.0, 1.0),
-          child: Transform.scale(
-            scale: 0.82 + 0.18 * eased.value,
-            child: child,
-          ),
-        );
-      },
+      transitionBuilder: (context, animation, _, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        child: child,
+      ),
     );
   }
 
@@ -80,14 +77,13 @@ class MascotDialog extends StatelessWidget {
           color: Colors.transparent,
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xxl,
-                AppSpacing.xl, AppSpacing.xl),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl, AppSpacing.xl),
             decoration: BoxDecoration(
               color: AppColors.surfaceContainer,
               borderRadius: BorderRadius.circular(AppRadius.card),
               border: showConfetti
-                  ? Border.all(
-                      color: AppColors.accent.withValues(alpha: 0.35))
+                  ? Border.all(color: AppColors.accent.withValues(alpha: 0.35))
                   : null,
               // A soft accent glow lifts a celebration off the backdrop.
               boxShadow: showConfetti
@@ -103,20 +99,7 @@ class MascotDialog extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (showConfetti)
-                  // The stage is taller than the space it takes, so Sila
-                  // leaps up and out of the top of the card.
-                  SizedBox(
-                    height: _celebrateSize * 1.1,
-                    child: OverflowBox(
-                      alignment: Alignment.bottomCenter,
-                      maxWidth: CelebratingRam.stageFor(_celebrateSize).width,
-                      maxHeight: CelebratingRam.stageFor(_celebrateSize).height,
-                      child: const CelebratingRam(size: _celebrateSize),
-                    ),
-                  )
-                else
-                  RamMascot(pose, size: 148),
+                _DialogMascot(pose: pose, confetti: showConfetti),
                 const SizedBox(height: AppSpacing.lg),
                 Text(title,
                     style: AppTypography.headlineMd,
@@ -140,6 +123,57 @@ class MascotDialog extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Sila scrubbed in, a beat after the dialog's fade, with an optional
+/// confetti burst from behind once the scrub has finished.
+class _DialogMascot extends StatefulWidget {
+  final RamArt pose;
+  final bool confetti;
+
+  const _DialogMascot({required this.pose, required this.confetti});
+
+  @override
+  State<_DialogMascot> createState() => _DialogMascotState();
+}
+
+class _DialogMascotState extends State<_DialogMascot> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final mascot = RamMascot(
+      widget.pose,
+      size: MascotDialog._mascotSize,
+      scribbleIn: true,
+      scribbleDelay: const Duration(milliseconds: 160),
+      onRevealed: widget.confetti && !_revealed
+          ? () {
+              if (!mounted) return;
+              setState(() => _revealed = true);
+              HapticFeedback.mediumImpact();
+            }
+          : null,
+    );
+    if (!widget.confetti) return mascot;
+    return SizedBox.square(
+      dimension: MascotDialog._mascotSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          if (_revealed && !MediaQuery.disableAnimationsOf(context))
+            const Positioned(
+              left: -120,
+              right: -120,
+              top: -140,
+              bottom: -60,
+              child: IgnorePointer(child: ConfettiBurst()),
+            ),
+          mascot,
+        ],
       ),
     );
   }

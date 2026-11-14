@@ -17,8 +17,12 @@ class AppTypography {
 
   static const _family = 'HankenGrotesk';
 
+  /// Hanken Grotesk has no Cyrillic, so Macedonian glyphs come from Golos.
+  static const _fallback = ['GolosText'];
+
   static TextStyle get labelCaps => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 11,
         height: 14 / 11,
         letterSpacing: 0.05 * 11,
@@ -28,6 +32,7 @@ class AppTypography {
 
   static TextStyle get bodyMd => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 14,
         height: 20 / 14,
         fontWeight: FontWeight.w400,
@@ -36,6 +41,7 @@ class AppTypography {
 
   static TextStyle get labelSm => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 12,
         height: 16 / 12,
         fontWeight: FontWeight.w500,
@@ -44,6 +50,7 @@ class AppTypography {
 
   static TextStyle get bodyLg => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 16,
         height: 24 / 16,
         fontWeight: FontWeight.w400,
@@ -54,6 +61,7 @@ class AppTypography {
   /// jitter horizontally as they change.
   static TextStyle get numericUnit => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 14,
         height: 18 / 14,
         letterSpacing: 0.01 * 14,
@@ -64,6 +72,7 @@ class AppTypography {
 
   static TextStyle get headlineSm => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 18,
         height: 24 / 18,
         letterSpacing: -0.01 * 18,
@@ -73,6 +82,7 @@ class AppTypography {
 
   static TextStyle get headlineMd => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 22,
         height: 28 / 22,
         letterSpacing: -0.015 * 22,
@@ -82,6 +92,7 @@ class AppTypography {
 
   static TextStyle get headlineLg => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 28,
         height: 34 / 28,
         letterSpacing: -0.02 * 28,
@@ -91,6 +102,7 @@ class AppTypography {
 
   static TextStyle get displayStatMobile => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 38,
         height: 42 / 38,
         letterSpacing: -0.03 * 38,
@@ -105,6 +117,7 @@ class AppTypography {
   /// screen rather than sitting in a stat grid.
   static TextStyle get displayStatXl => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 76,
         height: 80 / 76,
         letterSpacing: -0.03 * 76,
@@ -115,6 +128,7 @@ class AppTypography {
 
   static TextStyle get displayStat => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 48,
         height: 52 / 48,
         letterSpacing: -0.03 * 48,
@@ -130,6 +144,7 @@ class AppTypography {
   // remove once every call site above has migrated to the named styles.
   static TextStyle get bodySm => TextStyle(
         fontFamily: _family,
+        fontFamilyFallback: _fallback,
         fontSize: 13,
         height: 18 / 13,
         fontWeight: FontWeight.w400,

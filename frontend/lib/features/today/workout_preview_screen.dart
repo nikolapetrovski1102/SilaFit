@@ -10,6 +10,7 @@ import '../../core/widgets/section_eyebrow.dart';
 import '../splits/splits_models.dart';
 import 'widgets/day_preview.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// Read-only details for one scheduled day in the active split.
 class WorkoutPreviewScreen extends StatelessWidget {
@@ -36,14 +37,14 @@ class WorkoutPreviewScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Workout Preview', style: AppTypography.headlineSm),
+        title: Text(tr('Workout Preview'), style: AppTypography.headlineSm),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.gutterMobile, vertical: AppSpacing.lg),
           children: [
-            MarkerDrawnTitle(preview.title ?? 'Training Session',
+            MarkerDrawnTitle(preview.title ?? tr('Training Session'),
                 playKey: 'workout-preview:${preview.date}'),
             const SizedBox(height: AppSpacing.xxs),
             Text(DateFormat('EEEE, MMM d').format(preview.date),
@@ -55,7 +56,7 @@ class WorkoutPreviewScreen extends StatelessWidget {
             ],
             if (splitName?.trim().isNotEmpty == true) ...[
               const SizedBox(height: AppSpacing.xxs),
-              Text('From $splitName',
+              Text(tr('From {name}', {'name': splitName}),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant)),
             ],
@@ -67,22 +68,22 @@ class WorkoutPreviewScreen extends StatelessWidget {
                 _SummaryPill(
                   icon: Icons.schedule_rounded,
                   label: preview.estimatedMinutes == null
-                      ? 'Duration not set'
+                      ? tr('Duration not set')
                       : formatMinutesLabel(preview.estimatedMinutes!),
                 ),
                 _SummaryPill(
                   icon: Icons.fitness_center_rounded,
                   label:
-                      '${exercises.length} ${exercises.length == 1 ? 'exercise' : 'exercises'}',
+                      trPlural(exercises.length, '{n} exercise', '{n} exercises'),
                 ),
                 if (totalSets > 0)
                   _SummaryPill(
                       icon: Icons.repeat_rounded,
-                      label: '$totalSets total sets'),
+                      label: trPlural(totalSets, '{n} total set', '{n} total sets')),
               ],
             ),
             const SizedBox(height: AppSpacing.xl),
-            const SectionEyebrow('Exercise details'),
+            SectionEyebrow(tr('Exercise details')),
             const SizedBox(height: AppSpacing.sm),
             if (exercises.isEmpty)
               const _EmptyWorkout()
@@ -177,12 +178,12 @@ class _ExerciseDetail extends StatelessWidget {
                 Row(
                   children: [
                     _TargetValue(
-                      label: 'SETS',
+                      label: tr('SETS'),
                       value: '${exercise.targetSets}',
                     ),
                     const SizedBox(width: AppSpacing.xxl),
                     _TargetValue(
-                      label: 'REPS',
+                      label: tr('REPS'),
                       value: _repsLabel(exercise),
                     ),
                   ],
@@ -229,7 +230,7 @@ class _EmptyWorkout extends StatelessWidget {
   Widget build(BuildContext context) {
     return SectionCard(
       child: Text(
-        'No exercises are assigned to this day yet.',
+        tr('No exercises are assigned to this day yet.'),
         style: AppTypography.bodyLg.copyWith(
           color: AppColors.onSurfaceVariant,
         ),

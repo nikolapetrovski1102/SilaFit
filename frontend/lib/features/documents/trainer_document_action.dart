@@ -8,6 +8,7 @@ import '../../core/theme/app_typography.dart';
 import 'secure_document_screen.dart';
 import 'trainer_document_models.dart';
 import 'trainer_documents_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// App-bar action on a split / diet plan: a document icon when the trainer has
 /// handed this user a PDF for it, nothing otherwise. One document opens
@@ -65,7 +66,7 @@ class _TrainerDocumentActionState extends State<TrainerDocumentAction> {
             Padding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile, 0,
                   AppSpacing.marginMobile, AppSpacing.xs),
-              child: Text('From your trainer', style: AppTypography.headlineSm),
+              child: Text(tr('From your trainer'), style: AppTypography.headlineSm),
             ),
             for (final document in _documents)
               ListTile(
@@ -119,7 +120,7 @@ class _TrainerDocumentActionState extends State<TrainerDocumentAction> {
     return IconButton(
       tooltip: _documents.length == 1
           ? _documents.first.title
-          : 'Documents from your trainer',
+          : tr('Documents from your trainer'),
       onPressed: _opening ? null : _onPressed,
       icon: _opening
           ? const SizedBox(

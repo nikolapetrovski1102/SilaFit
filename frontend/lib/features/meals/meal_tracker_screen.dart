@@ -5,19 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/silen_button.dart';
 import '../auth/widgets/auth_blob_background.dart';
 import '../plans/plans_screen.dart';
+import '../providers/grocery_order.dart';
 import '../providers/protein_partner_hint.dart';
 import '../settings/ai_consent_gate.dart';
 import '../splits/widgets/ink_field.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
+import 'widgets/barcode_scanner_screen.dart';
 import 'widgets/food_picker_sheet.dart';
 import 'widgets/food_scan_sheet.dart';
+import '../../l10n/l10n.dart';
 
 // Line heights of the committed meal name (headlineLg) and the totals strip
 // that settles beneath it. The name may wrap to two lines, so everything
@@ -78,7 +82,11 @@ class _Ingredient {
   MealLogItem item;
   bool landed;
 
-  _Ingredient(this.key, this.item, {required this.landed});
+  /// Came from a barcode scan: the grocery partner hint offers it.
+  final bool fromBarcode;
+
+  _Ingredient(this.key, this.item,
+      {required this.landed, this.fromBarcode = false});
 }
 
 class _MealTrackerScreenState extends State<MealTrackerScreen>
@@ -126,6 +134,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   /// the server still enforces it, so the row just shows without a count).
   FoodScanQuota? _scanQuota;
   bool _pickingPhoto = false;
+  bool _lookingUpBarcode = false;
 
   bool get _isEditing => widget.existing != null;
 
@@ -321,10 +330,10 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
   Future<void> _delete() async {
     final confirmed = await _ask(
-      title: 'Delete this meal?',
-      message: 'It will be removed from this day\'s totals.',
-      stay: 'Keep it',
-      leave: 'Delete',
+      title: tr('Delete this meal?'),
+      message: tr('It will be removed from this day\'s totals.'),
+      stay: tr('Keep it'),
+      leave: tr('Delete'),
     );
     if (confirmed != true || !mounted) return;
     await _controller.deleteMeal(widget.existing!.mealLogId);
@@ -337,12 +346,12 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       return;
     }
     final leave = await _ask(
-      title: 'Discard this meal?',
+      title: tr('Discard this meal?'),
       message: _isEditing
-          ? 'Your changes to this meal won\'t be saved.'
-          : 'The foods you\'ve added won\'t be logged.',
-      stay: 'Keep editing',
-      leave: 'Discard',
+          ? tr('Your changes to this meal won\'t be saved.')
+          : tr('The foods you\'ve added won\'t be logged.'),
+      stay: tr('Keep editing'),
+      leave: tr('Discard'),
     );
     if (leave == true && mounted) Navigator.of(context).pop();
   }
@@ -435,7 +444,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
   /* ------------------------------ ingredients ------------------------------ */
 
-  Future<void> _add(FoodItem food) async {
+  Future<void> _add(FoodItem food, {bool fromBarcode = false}) async {
     final from = overlayRectOf(context, _rowKeys[food.foodNutritionId]);
     HapticFeedback.selectionClick();
     // Drop the keyboard so the layout eases back and the food flies home.
@@ -445,6 +454,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       _nextKey++,
       MealLogItem.fromFood(food, food.defaultGrams),
       landed: from == null,
+      fromBarcode: fromBarcode,
     );
     setState(() => _ingredients.add(entry));
     _clearSearch();
@@ -489,6 +499,79 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     _clearSearch();
   }
 
+  /// Packaged food: scan it, and it's either in the meal at once (our
+  /// catalog or Open Food Facts) or the user adds it from its label, saved
+  /// under the barcode so the next scan - theirs - finds it.
+  /// Barcode scanning is Pro: a Free account gets a few tries (never shown),
+  /// then the scan button opens the plans.
+  Future<void> _scanBarcode() async {
+    if (_lookingUpBarcode) return;
+    _focus.unfocus();
+    if (_scanQuota?.barcodeAvailable == false) {
+      await _openPlans();
+      return;
+    }
+    final code = await showBarcodeScanner(context);
+    if (code == null || !mounted) return;
+
+    setState(() => _lookingUpBarcode = true);
+    BarcodeLookupResult? result;
+    var upgrade = false;
+    try {
+      result = await _controller.lookupBarcode(code);
+    } on ApiException catch (e) {
+      // The tries ran out (the quota on screen was stale): straight to plans.
+      if (e.isForbidden) {
+        upgrade = true;
+      } else if (mounted) {
+        _toast(e.userMessage);
+      }
+    } catch (_) {
+      if (mounted) _toast(ApiException.genericMessage);
+    } finally {
+      if (mounted) setState(() => _lookingUpBarcode = false);
+    }
+    if (!mounted) return;
+    if (upgrade) {
+      await _openPlans();
+      return;
+    }
+    // A Free lookup spends a try; refresh so the next tap knows.
+    unawaited(_loadScanQuota());
+    if (result == null) return;
+
+    final found = result.food;
+    if (found != null) {
+      _add(found, fromBarcode: true);
+      return;
+    }
+    final food = await showCustomFoodSheet(context,
+        controller: _controller, barcode: result.barcode, hint: result.hint);
+    if (food == null || !mounted) return;
+    HapticFeedback.lightImpact();
+    setState(() => _ingredients.add(_Ingredient(
+        _nextKey++, MealLogItem.fromFood(food, food.defaultGrams),
+        landed: true, fromBarcode: true)));
+  }
+
+  Future<void> _openPlans() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
+    if (mounted) await _loadScanQuota();
+  }
+
+  /// The most recent barcode-scanned food still in the meal, for the grocery
+  /// partner hint.
+  String? get _lastScannedName {
+    for (final i in _ingredients.reversed) {
+      if (i.fromBarcode) {
+        final brand = i.item.brandName;
+        return brand == null ? i.item.name : '$brand ${i.item.name}';
+      }
+    }
+    return null;
+  }
+
   Future<void> _loadScanQuota() async {
     try {
       final quota = await _controller.getScanQuota();
@@ -498,21 +581,18 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     }
   }
 
-  /// Photo in, ingredients out: Advanced only, a few times a day. Below
-  /// Advanced the row opens the plans instead.
+  /// Photo in, ingredients out: Advanced, a few times a day. Below Advanced
+  /// the row opens the plans instead.
   Future<void> _scanMeal() async {
     if (_pickingPhoto) return;
     final quota = _scanQuota;
     if (quota != null && !quota.isAvailable) {
       _focus.unfocus();
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const PlansScreen()));
-      if (mounted) await _loadScanQuota();
+      await _openPlans();
       return;
     }
     if (quota != null && quota.remainingToday <= 0) {
-      _toast("You've used all ${quota.dailyLimit} scans for today. "
-          'They reset at midnight.');
+      _toast(tr("You've used all {n} scans for today. They reset at midnight.", {'n': quota.dailyLimit}));
       return;
     }
 
@@ -536,8 +616,8 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     } on PlatformException {
       if (mounted) {
         _toast(source == ImageSource.camera
-            ? 'Allow camera access in Settings to scan a meal.'
-            : 'Allow photo access in Settings to scan a meal.');
+            ? tr('Allow camera access in Settings to scan a meal.')
+            : tr('Allow photo access in Settings to scan a meal.'));
       }
     } finally {
       if (mounted) setState(() => _pickingPhoto = false);
@@ -577,12 +657,12 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
             children: [
               ListTile(
                 leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Take a photo'),
+                title: Text(tr('Take a photo')),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from library'),
+                title: Text(tr('Choose from library')),
                 onTap: () =>
                     Navigator.of(sheetContext).pop(ImageSource.gallery),
               ),
@@ -710,7 +790,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
           _MealTypePill(type: _mealType, onTap: _cycleMealType),
           if (_isEditing)
             IconButton(
-              tooltip: 'Delete meal',
+              tooltip: tr('Delete meal'),
               icon: Icon(Icons.delete_outline_rounded,
                   color: AppColors.onSurfaceVariant),
               onPressed: _delete,
@@ -868,8 +948,8 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   Widget _buildField(double width) {
     final picking = _stage == _Stage.foods;
     final hint = picking
-        ? (_ingredients.isEmpty ? 'Search ingredients' : 'Add another')
-        : _mealType;
+        ? (_ingredients.isEmpty ? tr('Search ingredients') : tr('Add another'))
+        : tr(_mealType);
     if (picking) return _textField(AppTypography.headlineSm, hint, picking);
     // Re-fit on every keystroke. Applied directly rather than tweened - an
     // in-between size is larger than the fit and would wrap for a frame.
@@ -914,12 +994,12 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     final String? message;
     if (query.length < _kMinQueryLength) {
       message = _ingredients.isEmpty
-          ? 'Search by name or barcode - "chicken breast", "oats"'
+          ? tr('Search by name or barcode - "chicken breast", "oats"')
           : null;
     } else if (settled && _searchFailed) {
-      message = 'Couldn\'t search right now. Try again in a moment.';
+      message = tr('Couldn\'t search right now. Try again in a moment.');
     } else if (settled && items.isEmpty) {
-      message = 'No matches for "$query"';
+      message = tr('No matches for "{q}"', {'q': query});
     } else {
       message = null;
     }
@@ -969,10 +1049,19 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                 child: query.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: _ScanMealRow(
-                          quota: _scanQuota,
-                          busy: _pickingPhoto,
-                          onTap: _scanMeal,
+                        child: Column(
+                          children: [
+                            _ScanMealRow(
+                              quota: _scanQuota,
+                              busy: _pickingPhoto,
+                              onTap: _scanMeal,
+                            ),
+                            const SizedBox(height: 6),
+                            _ScanBarcodeRow(
+                              busy: _lookingUpBarcode,
+                              onTap: _scanBarcode,
+                            ),
+                          ],
                         ),
                       )
                     : const SizedBox(width: double.infinity),
@@ -1012,15 +1101,15 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     final Widget bar = switch (_stage) {
       _Stage.name => PrimaryPillButton(
           key: const ValueKey('bar-name'),
-          label: 'Continue',
+          label: tr('Continue'),
           icon: Icons.arrow_forward_rounded,
           onPressed: _commitName,
         ),
       _Stage.foods => PrimaryPillButton(
           key: const ValueKey('bar-foods'),
           label: _ingredients.isEmpty
-              ? 'Add an ingredient'
-              : 'Save meal · ${kcal.round()} kcal',
+              ? tr('Add an ingredient')
+              : tr('Save meal · {kcal} kcal', {'kcal': kcal.round()}),
           icon: Icons.check_rounded,
           isLoading: _saving,
           onPressed: _ingredients.isEmpty ? null : _save,
@@ -1032,9 +1121,11 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_stage == _Stage.foods)
+          if (_stage == _Stage.foods) ...[
+            GroceryProductHint(productName: _lastScannedName),
             ProteinPartnerHint(
                 proteinG: totals.proteinG, caloriesKcal: totals.caloriesKcal),
+          ],
           AnimatedSwitcher(
             duration: kInkQuick,
             switchInCurve: Curves.easeOutCubic,
@@ -1090,7 +1181,7 @@ class _MealTypePill extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  type.toUpperCase(),
+                  tr(type).toUpperCase(),
                   key: ValueKey(type),
                   style:
                       AppTypography.labelCaps.copyWith(color: AppColors.accent),
@@ -1152,14 +1243,14 @@ class _MealTotalsStrip extends StatelessWidget {
             _RollingNumber(totals.caloriesKcal,
                 style: AppTypography.headlineMd
                     .copyWith(color: AppColors.highEmphasis)),
-            Text('KCAL · ${totals.grams.round()} G',
+            Text(tr('KCAL · {g} G', {'g': totals.grams.round()}),
                 style: AppTypography.labelCaps),
           ],
         ),
         const SizedBox(width: AppSpacing.lg),
         Expanded(
           child: _TotalsMacro(
-              label: 'Protein',
+              label: tr('Protein'),
               grams: totals.proteinG,
               share: share(p),
               color: _proteinColor),
@@ -1167,7 +1258,7 @@ class _MealTotalsStrip extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _TotalsMacro(
-              label: 'Carbs',
+              label: tr('Carbs'),
               grams: totals.carbsG,
               share: share(c),
               color: _carbsColor),
@@ -1175,7 +1266,7 @@ class _MealTotalsStrip extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _TotalsMacro(
-              label: 'Fat',
+              label: tr('Fat'),
               grams: totals.fatsG,
               share: share(f),
               color: _fatColor),
@@ -1248,7 +1339,7 @@ class _FoodResultRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitle = [
       if (food.isCustom)
-        'Your food'
+        tr('Your food')
       else if (food.brandName != null && food.brandName!.isNotEmpty)
         food.brandName!,
       '${_fmt(food.caloriesKcal)} kcal / 100 g',
@@ -1299,8 +1390,9 @@ class _FoodResultRow extends StatelessWidget {
   }
 }
 
-/// "Scan a meal photo" - AI reads the plate into ingredients. Advanced
-/// users see today's remaining scans; everyone else sees the tier it needs.
+/// "Scan a meal photo" - AI reads the plate into ingredients. Pro and
+/// Advanced see today's remaining scans, Free its trial scans left, and a
+/// Free account whose trial is spent the tier it needs.
 class _ScanMealRow extends StatelessWidget {
   final FoodScanQuota? quota;
   final bool busy;
@@ -1321,7 +1413,7 @@ class _ScanMealRow extends StatelessWidget {
         ? null
         : locked
             ? 'Advanced'
-            : '${q.remainingToday} left today';
+            : tr('{n} left today', {'n': q.remainingToday});
     final color = spent ? AppColors.onSurfaceVariant : AppColors.accent;
     return Material(
       color:
@@ -1347,7 +1439,7 @@ class _ScanMealRow extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
-                  'Scan a meal photo with AI',
+                  tr('Scan a meal photo with AI'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.bodySm.copyWith(color: color),
@@ -1370,6 +1462,57 @@ class _ScanMealRow extends StatelessWidget {
                     ),
                   ],
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Scan a barcode" - packaged food straight from the shelf. Free on every
+/// tier: decoding runs on the device and the lookup costs no AI.
+class _ScanBarcodeRow extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onTap;
+
+  const _ScanBarcodeRow({required this.busy, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.accent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(_kRowRadius),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(_kRowRadius),
+        canRequestFocus: false,
+        onTap: busy ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              if (busy)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent),
+                )
+              else
+                Icon(Icons.qr_code_scanner_rounded,
+                    size: 20, color: AppColors.accent),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  busy
+                      ? tr('Looking up the product...')
+                      : tr('Scan a product barcode'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      AppTypography.bodySm.copyWith(color: AppColors.accent),
+                ),
+              ),
             ],
           ),
         ),
@@ -1411,8 +1554,8 @@ class _AddOwnFoodRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   query.isEmpty
-                      ? 'Add your own food'
-                      : 'Add "$query" from its label',
+                      ? tr('Add your own food')
+                      : tr('Add "{q}" from its label', {'q': query}),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.bodySm.copyWith(color: AppColors.accent),
@@ -1505,8 +1648,7 @@ class _IngredientCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
-                      'P ${_fmt(item.proteinG)} · C ${_fmt(item.carbsG)} · '
-                      'F ${_fmt(item.fatsG)}',
+                      tr('P {p} · C {c} · F {f}', {'p': _fmt(item.proteinG), 'c': _fmt(item.carbsG), 'f': _fmt(item.fatsG)}),
                       maxLines: 1,
                       overflow: TextOverflow.fade,
                       softWrap: false,

@@ -1,4 +1,5 @@
 using Npgsql;
+using Silen.Common.Localization;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -26,6 +27,7 @@ public static class NotificationRowMapper
         NotificationLocalTime = reader.GetTimeSpanValue("NotificationLocalTime"),
         NotificationTimeIsUserSet = reader.GetBoolValue("NotificationTimeIsUserSet"),
         TimeZoneId = reader.GetStringValue("TimeZoneId"),
+        Language = AppText.Normalize(reader.GetNullableString("Language")),
         LastInteractionAtUtc = reader.GetNullableDateTime("LastInteractionAtUtc"),
         LastPushedAtUtc = reader.GetNullableDateTime("LastPushedAtUtc"),
         LastMotivationAtUtc = reader.GetNullableDateTime("LastMotivationAtUtc"),

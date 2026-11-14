@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import 'exercise_video_sheet.dart';
 import 'exercise_web_search.dart';
+import '../../l10n/l10n.dart';
 
 /// Icon-only button on a search/suggestion row that previews an exercise's
 /// form without picking it - its demo video when there is one, otherwise an
@@ -24,7 +25,7 @@ class ExerciseFormButton extends StatelessWidget {
     final url = demoUrl;
     final videoUrl = url != null && isVideoUrl(url) ? url : null;
     return Tooltip(
-      message: videoUrl == null ? 'Search for form' : 'Watch form',
+      message: videoUrl == null ? tr('Search for form') : tr('Watch form'),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => videoUrl == null

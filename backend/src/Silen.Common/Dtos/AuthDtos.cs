@@ -8,6 +8,11 @@ public sealed class DeviceLoginRequest
     [Required]
     [StringLength(200, MinimumLength = 1)]
     public string DeviceId { get; set; } = string.Empty;
+
+    /// <summary>"ios" or "android" (newer apps only). Helps credit a fresh install to
+    /// the download-link visit made on the same kind of phone.</summary>
+    [StringLength(20)]
+    public string? Platform { get; set; }
 }
 
 public sealed class EmailRegisterRequest

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -22,6 +24,7 @@ import '../../root_shell.dart';
 import '../account/account_repository.dart';
 import '../auth/auth_controller.dart';
 import '../auth/complete_profile_flow.dart';
+import '../notifications/notifications_repository.dart';
 import '../notifications/push_messaging_service.dart';
 import '../onboarding/onboarding_flow_screen.dart';
 import '../onboarding/onboarding_models.dart';
@@ -36,6 +39,7 @@ import 'ai_consent_gate.dart';
 import 'mascot_preview_screen.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
+import '../../l10n/l10n.dart';
 
 /// The Settings screen - preferences, units, and account. Originally matched
 /// `settings_preferences/screen.png` (profile row, appearance toggle, unit
@@ -166,19 +170,20 @@ class _SettingsContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // The title sits partly over the profile row; touches pass
+        // The title sits just above the profile row; touches pass
         // through. The profile row only needs auth/session state, not
         // `settings` - it (and everything below it that's equally
         // independent of `settings`) stays visible even while that fetch is
         // slow or failed. Only the preference sections below, which read
         // straight off `settings`, sit behind the ResourceBuilder.
         MarkerTitleOverlap(
-          title: const MarkerDrawnTitle('Settings', playKey: 'settings'),
+          title: MarkerDrawnTitle(tr('Settings'), playKey: 'settings'),
+          overlapFactor: MarkerTitleOverlap.gapOverlapFactor,
           child: _ProfileRow(
-            name: session?.displayName ?? session?.email ?? 'Guest Athlete',
+            name: session?.displayName ?? session?.email ?? tr('Guest Athlete'),
             subtitle: auth.isRegistered
-                ? (session?.email ?? 'Registered account')
-                : 'Guest device - progress not linked',
+                ? (session?.email ?? tr('Registered account'))
+                : tr('Guest device - progress not linked'),
             profile: profile,
             onEditProfile: onEditProfile,
             controller: controller,
@@ -267,6 +272,22 @@ class _SettingsContent extends StatelessWidget {
                   onTap: () => _startFeatureTourOnly(context),
                 ),
                 Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+                _DevActionRow(
+                  icon: Icons.phone_iphone_rounded,
+                  label: 'Simulate New Device',
+                  subtitle:
+                      'Sign out to a fresh guest + full onboarding - sign up with a new account to test a real code',
+                  onTap: () => _simulateNewDevice(context),
+                ),
+                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
+                _DevActionRow(
+                  icon: Icons.redeem_rounded,
+                  label: 'Preview Code Paywall',
+                  subtitle:
+                      'Welcome offer with a fake "DEVTEST" free-month code - no store or server needed',
+                  onTap: () => _previewCodePaywall(context),
+                ),
+                Divider(height: AppSpacing.lg, color: AppColors.outlineVariant),
                 const _OnboardingDebugToggle(),
               ],
             ),
@@ -295,6 +316,51 @@ class _SettingsContent extends StatelessWidget {
     );
   }
 
+  /// Debug only: what a first install looks like. Onboarding flags reset,
+  /// then a real sign-out - which drops the device id, so the app bootstraps
+  /// a brand-new guest and lands in onboarding. A code only redeems for an
+  /// account that has never subscribed, so sign up fresh at the paywall
+  /// (Apple sandbox tester / Play license tester on the device).
+  Future<void> _simulateNewDevice(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('Simulate new device?')),
+        content: const Text(
+            'Signs you out and replays onboarding as a brand-new guest. '
+            'Use a new account at the paywall to redeem a real code.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(tr('Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Simulate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<SessionStore>().resetAllOnboarding();
+    if (!context.mounted) return;
+    await _logOut(context);
+  }
+
+  /// Debug only: the welcome paywall with a fake free-month code applied
+  /// (see [PlansController.debugApplyPreviewCode]), to check the layout on a
+  /// simulator or before the store offers exist. Buying is blocked.
+  Future<void> _previewCodePaywall(BuildContext context) async {
+    final plans = context.read<PlansController>();
+    final navigator = Navigator.of(context);
+    await plans.load(force: true);
+    plans.debugApplyPreviewCode();
+    await navigator.push(MaterialPageRoute(
+      builder: (_) => const PlansScreen(isWelcomeOffer: true),
+    ));
+    plans.debugClearPreviewCode();
+  }
+
   Future<void> _startFeatureTourOnly(BuildContext context) async {
     final sessionStore = context.read<SessionStore>();
     await sessionStore.setFeatureTourComplete(false);
@@ -311,16 +377,16 @@ class _SettingsContent extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('You will need to sign in again to continue.'),
+        title: Text(tr('Log out?')),
+        content: Text(tr('You will need to sign in again to continue.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('Log Out', style: TextStyle(color: AppColors.error)),
+            child: Text(tr('Log Out'), style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -371,6 +437,7 @@ class _PreferencesSections extends StatelessWidget {
             mode: settings.appearanceMode,
             onSelected: controller.setAppearanceMode,
           ),
+          const _LanguageRow(),
           if (const AppIconService().isSupported) const _AppIconRow(),
           _InlineToggleRow(
             label: 'Weight',
@@ -487,7 +554,14 @@ Widget _avatarImage(String? choice, {required double size}) {
   return ClipOval(
     child: asset.endsWith('.svg')
         ? SvgPicture.asset(asset, width: size, height: size, fit: BoxFit.cover)
-        : Image.asset(asset, width: size, height: size, fit: BoxFit.cover),
+        : Builder(
+            builder: (context) => Image.asset(asset,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                cacheWidth:
+                    (size * MediaQuery.devicePixelRatioOf(context)).ceil()),
+          ),
   );
 }
 
@@ -516,31 +590,31 @@ class _SubscriptionCard extends StatelessWidget {
     VoidCallback onPressed = () => _openPlans(context);
 
     if (!isRegistered) {
-      title = 'Guest access';
+      title = tr('Guest access');
       subtitle =
-          'Create an account to unlock plans, AI insights, and forecasts';
-      action = 'Get Started';
+          tr('Create an account to unlock plans, AI insights, and forecasts');
+      action = tr('Get Started');
     } else if (sub == null) {
       title = 'SilaFit';
       subtitle = failed
-          ? 'Could not check your subscription'
-          : 'Checking your subscription...';
-      action = failed ? 'Retry' : 'View plans';
+          ? tr('Could not check your subscription')
+          : tr('Checking your subscription...');
+      action = failed ? tr('Retry') : tr('View plans');
       if (failed) onPressed = onReload;
     } else if (!sub.isPaid) {
       title = 'SilaFit Free';
-      subtitle = 'Upgrade for AI insights and predictive forecasts';
-      action = 'Upgrade';
+      subtitle = tr('Upgrade for AI insights and predictive forecasts');
+      action = tr('Upgrade');
     } else {
       title = 'SilaFit ${sub.planName}';
       subtitle = _paidSubtitle(sub);
       // ADVANCED is the top tier - nothing left to upsell, so the button
       // goes to the store's own subscription management instead.
       if (sub.planCode == 'ADVANCED') {
-        action = 'Manage';
+        action = tr('Manage');
         onPressed = () => manageSubscription(context, sub);
       } else {
-        action = 'Upgrade';
+        action = tr('Upgrade');
       }
     }
 
@@ -551,9 +625,9 @@ class _SubscriptionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTypography.headlineSm),
+                Text(tr(title), style: AppTypography.headlineSm),
                 const SizedBox(height: 2),
-                Text(subtitle,
+                Text(tr(subtitle),
                     style: AppTypography.bodySm
                         .copyWith(color: AppColors.onSurfaceVariant)),
               ],
@@ -563,7 +637,7 @@ class _SubscriptionCard extends StatelessWidget {
           SizedBox(
             width: 120,
             child: SecondaryPillButton(
-              label: action,
+              label: tr(action),
               foregroundColor: AppColors.accent,
               onPressed: onPressed,
             ),
@@ -575,14 +649,16 @@ class _SubscriptionCard extends StatelessWidget {
 
   static String _paidSubtitle(CurrentSubscription sub) {
     final cycle = switch (sub.billingCycle) {
-      'Yearly' => 'Yearly plan',
-      'Monthly' => 'Monthly plan',
-      _ => 'Active plan',
+      'Yearly' => tr('Yearly plan'),
+      'Monthly' => tr('Monthly plan'),
+      _ => tr('Active plan'),
     };
     final expiry = sub.expiresAtUtc;
     if (expiry == null) return cycle;
     final date = DateFormat.yMMMd().format(expiry.toLocal());
-    return sub.autoRenewing ? '$cycle · Renews $date' : '$cycle · Ends $date';
+    return sub.autoRenewing
+        ? tr('{cycle} · Renews {date}', {'cycle': cycle, 'date': date})
+        : tr('{cycle} · Ends {date}', {'cycle': cycle, 'date': date});
   }
 
   Future<void> _openPlans(BuildContext context) async {
@@ -669,7 +745,7 @@ class _ProfileRow extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
+                  Text(tr(subtitle),
                       style: AppTypography.bodySm
                           .copyWith(color: AppColors.onSurfaceVariant)),
                 ],
@@ -702,7 +778,7 @@ class _ProfileRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Choose avatar', style: AppTypography.headlineSm),
+              Text(tr('Choose avatar'), style: AppTypography.headlineSm),
               const SizedBox(height: AppSpacing.md),
               Wrap(
                 spacing: AppSpacing.sm,
@@ -766,11 +842,11 @@ class _DetailRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label,
+            child: Text(tr(label),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ),
-          Text(value, style: AppTypography.bodyMd),
+          Text(tr(value), style: AppTypography.bodyMd),
         ],
       ),
     );
@@ -798,8 +874,8 @@ const _equipmentLabels = {
 };
 
 String _detailOr(String? value, [Map<String, String>? labels]) {
-  if (value == null) return 'Not set';
-  return labels?[value] ?? value;
+  if (value == null) return tr('Not set');
+  return tr(labels?[value] ?? value);
 }
 
 /// Opens the onboarding-answers sheet from a tap on the profile row's
@@ -834,18 +910,18 @@ void _openUserDetailsSheet(BuildContext context, String name,
             _DetailRow(
                 label: 'Age',
                 value: profile?.ageYears != null
-                    ? '${profile!.ageYears} yrs'
-                    : 'Not set'),
+                    ? tr('{n} yrs', {'n': profile!.ageYears})
+                    : tr('Not set')),
             _DetailRow(
                 label: 'Height',
                 value: profile?.heightCm != null
                     ? '${profile!.heightCm!.round()} cm'
-                    : 'Not set'),
+                    : tr('Not set')),
             _DetailRow(
                 label: 'Weight',
                 value: profile?.weightKg != null
                     ? '${profile!.weightKg!.round()} kg'
-                    : 'Not set'),
+                    : tr('Not set')),
             _DetailRow(
                 label: 'Goal', value: _detailOr(profile?.goal, _goalLabels)),
             _DetailRow(
@@ -857,12 +933,12 @@ void _openUserDetailsSheet(BuildContext context, String name,
                 value: _detailOr(profile?.equipmentAccess, _equipmentLabels)),
             _DetailRow(
                 label: 'Training days/week',
-                value: profile?.trainingDaysPerWeek?.toString() ?? 'Not set'),
+                value: profile?.trainingDaysPerWeek?.toString() ?? tr('Not set')),
             _DetailRow(
                 label: 'Session length',
                 value: profile?.sessionDurationMinutes != null
-                    ? '${profile!.sessionDurationMinutes} min'
-                    : 'Not set'),
+                    ? tr('{n} min', {'n': profile!.sessionDurationMinutes})
+                    : tr('Not set')),
             _DetailRow(
                 label: 'Daily activity level',
                 value: _detailOr(profile?.dailyActivityLevel)),
@@ -936,8 +1012,8 @@ class _AppearanceRow extends StatelessWidget {
         children: [
           Icon(current.icon, color: AppColors.onSurfaceVariant, size: 20),
           const SizedBox(width: AppSpacing.sm),
-          Expanded(child: Text('Appearance', style: AppTypography.bodyMd)),
-          Text(current.label,
+          Expanded(child: Text(tr('Appearance'), style: AppTypography.bodyMd)),
+          Text(tr(current.label),
               style: AppTypography.bodyMd
                   .copyWith(color: AppColors.onSurfaceVariant)),
           const SizedBox(width: 4),
@@ -963,7 +1039,7 @@ class _AppearanceRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Appearance', style: AppTypography.headlineSm),
+              Text(tr('Appearance'), style: AppTypography.headlineSm),
               const SizedBox(height: AppSpacing.sm),
               for (final option in _appearanceModeOptions)
                 _AppearanceOptionTile(
@@ -972,6 +1048,90 @@ class _AppearanceRow extends StatelessWidget {
                   onTap: () {
                     onSelected(option.value);
                     Navigator.of(sheetContext).pop();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The Language row - "Match device", English or Macedonian, in the same
+/// picker sheet as Appearance. Device-local (see [L10n]); the language names
+/// are always shown in their own language so anyone can find theirs.
+class _LanguageRow extends StatelessWidget {
+  const _LanguageRow();
+
+  static const _options = [
+    _AppearanceModeOption(
+        value: L10n.system,
+        label: 'Match device',
+        icon: Icons.smartphone_rounded),
+    _AppearanceModeOption(
+        value: L10n.english, label: 'English', icon: Icons.translate_rounded),
+    _AppearanceModeOption(
+        value: L10n.macedonian,
+        label: 'Македонски',
+        icon: Icons.translate_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _options.firstWhere(
+      (option) => option.value == L10n.preference,
+      orElse: () => _options.first,
+    );
+    return GestureDetector(
+      onTap: () => _openSheet(context),
+      child: Row(
+        children: [
+          Icon(Icons.translate_rounded,
+              color: AppColors.onSurfaceVariant, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(tr('Language'), style: AppTypography.bodyMd)),
+          Text(tr(current.label),
+              style: AppTypography.bodyMd
+                  .copyWith(color: AppColors.onSurfaceVariant)),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded,
+              color: AppColors.onSurfaceVariant, size: 20),
+        ],
+      ),
+    );
+  }
+
+  void _openSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.card))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
+              AppSpacing.marginMobile, AppSpacing.marginMobile, AppSpacing.sm),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(tr('Language'), style: AppTypography.headlineSm),
+              const SizedBox(height: AppSpacing.sm),
+              for (final option in _options)
+                _AppearanceOptionTile(
+                  option: option,
+                  selected: option.value == L10n.preference,
+                  onTap: () {
+                    final notifications =
+                        context.read<NotificationsRepository>();
+                    Navigator.of(sheetContext).pop();
+                    L10n.setPreference(option.value);
+                    // The interaction ping carries the new Accept-Language,
+                    // so the server writes pushes in it from now on.
+                    unawaited(
+                        notifications.recordInteraction().catchError((_) {}));
                   },
                 ),
             ],
@@ -1023,7 +1183,7 @@ class _AppearanceOptionTile extends StatelessWidget {
                       : AppColors.onSurfaceVariant),
             ),
             const SizedBox(width: AppSpacing.sm),
-            Expanded(child: Text(option.label, style: AppTypography.bodyMd)),
+            Expanded(child: Text(tr(option.label), style: AppTypography.bodyMd)),
             if (selected)
               Icon(Icons.check_circle_rounded, color: AppColors.accent),
           ],
@@ -1064,7 +1224,7 @@ class _AppIconRowState extends State<_AppIconRow> {
     if (!await _service.set(choice) && mounted) {
       setState(() => _current = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't change the app icon")));
+          SnackBar(content: Text(tr("Couldn't change the app icon"))));
     }
   }
 
@@ -1076,7 +1236,7 @@ class _AppIconRowState extends State<_AppIconRow> {
         children: [
           Icon(Icons.apps_rounded, color: AppColors.onSurfaceVariant, size: 20),
           const SizedBox(width: AppSpacing.sm),
-          Expanded(child: Text('App icon', style: AppTypography.bodyMd)),
+          Expanded(child: Text(tr('App icon'), style: AppTypography.bodyMd)),
           _AppIconPreview(choice: _current, size: 40),
           const SizedBox(width: AppSpacing.sm),
           Text(_current.label,
@@ -1105,7 +1265,7 @@ class _AppIconRowState extends State<_AppIconRow> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('App icon', style: AppTypography.headlineSm),
+              Text(tr('App icon'), style: AppTypography.headlineSm),
               const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
@@ -1146,7 +1306,10 @@ class _AppIconPreview extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.225),
       child: Image.asset(choice.previewAsset,
-          width: size, height: size, fit: BoxFit.cover),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil()),
     );
   }
 }
@@ -1200,7 +1363,7 @@ class _AppIconOptionTile extends StatelessWidget {
                 ],
               ],
             ),
-            Text(choice == AppIconChoice.dark ? 'Default' : ' ',
+            Text(choice == AppIconChoice.dark ? tr('Default') : ' ',
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],
@@ -1229,7 +1392,7 @@ class _InlineToggleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: AppTypography.bodyMd)),
+        Expanded(child: Text(tr(label), style: AppTypography.bodyMd)),
         Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
@@ -1279,7 +1442,7 @@ class _SwitchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: AppTypography.bodyMd)),
+        Expanded(child: Text(tr(label), style: AppTypography.bodyMd)),
         Switch(
           value: value,
           onChanged: onChanged,
@@ -1332,15 +1495,15 @@ class _ReminderTimeRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reminder time', style: AppTypography.bodyMd),
+                Text(tr('Reminder time'), style: AppTypography.bodyMd),
                 const SizedBox(height: 2),
                 if (isUserSet)
                   Row(
                     children: [
-                      Text('Set by you · ', style: hintStyle),
+                      Text(tr('Set by you · '), style: hintStyle),
                       GestureDetector(
                         onTap: onUseAuto,
-                        child: Text('Use auto',
+                        child: Text(tr('Use auto'),
                             style: hintStyle.copyWith(color: AppColors.accent)),
                       ),
                     ],
@@ -1348,8 +1511,8 @@ class _ReminderTimeRow extends StatelessWidget {
                 else
                   Text(
                     isDetected
-                        ? 'Auto · before you usually train'
-                        : 'Auto · adapts to when you train',
+                        ? tr('Auto · before you usually train')
+                        : tr('Auto · adapts to when you train'),
                     style: hintStyle,
                   ),
               ],
@@ -1479,10 +1642,10 @@ class _DevActionRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: AppTypography.bodyMd),
+                  Text(tr(label), style: AppTypography.bodyMd),
                   const SizedBox(height: 2),
                   Text(
-                    subtitle,
+                    tr(subtitle),
                     style: AppTypography.bodySm.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -1527,11 +1690,11 @@ class _SettingsSubpage extends StatelessWidget {
                       IconButton(
                         icon: Icon(Icons.arrow_back_rounded,
                             color: AppColors.onSurface),
-                        tooltip: 'Back',
+                        tooltip: tr('Back'),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                       Expanded(
-                        child: Text(title,
+                        child: Text(tr(title),
                             style: AppTypography.bodyMd
                                 .copyWith(fontWeight: FontWeight.w600)),
                       ),
@@ -1586,7 +1749,7 @@ class _PrivacyDataPage extends StatelessWidget {
           _LinkRow(
               label: 'Privacy policy',
               onTap: () =>
-                  openHostedPage(context, privacyUrl, 'Privacy Policy')),
+                  openHostedPage(context, privacyUrl, tr('Privacy Policy'))),
         ]),
         const SizedBox(height: AppSpacing.lg),
         _GroupCard(children: [
@@ -1605,16 +1768,16 @@ class _PrivacyDataPage extends StatelessWidget {
   Future<void> _exportData(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-        const SnackBar(content: Text('Preparing your data export...')));
+        SnackBar(content: Text(tr('Preparing your data export...'))));
     try {
       final repository = context.read<AccountRepository>();
       final email = await repository.exportData();
       messenger.showSnackBar(
-          SnackBar(content: Text('Your data export is on its way to $email.')));
+          SnackBar(content: Text(tr('Your data export is on its way to {email}.', {'email': email}))));
     } catch (_) {
-      messenger.showSnackBar(const SnackBar(
+      messenger.showSnackBar(SnackBar(
           content:
-              Text('Could not prepare your data export. Please try again.')));
+              Text(tr('Could not prepare your data export. Please try again.'))));
     }
   }
 
@@ -1622,37 +1785,38 @@ class _PrivacyDataPage extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete account?'),
+        title: Text(tr('Delete account?')),
         // The store owns renewal, so deleting the account can't stop billing -
         // App Review expects users to be told how to cancel (5.1.1(v)).
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(tr(
                 'This permanently deletes your account and all of your data - '
                 'profile, workouts, nutrition logs, and bodyweight history. '
-                'This cannot be undone.'),
+                'This cannot be undone.')),
             const SizedBox(height: AppSpacing.sm),
-            Text(
+            Text(tr(
                 'Deleting your account does not cancel an active subscription. '
-                'Cancel it in your $storeName subscription settings first, or '
-                'you will keep being billed.'),
+                'Cancel it in your {store} subscription settings first, or '
+                'you will keep being billed.',
+                {'store': storeName})),
             TextButton(
               onPressed: openManageSubscriptions,
               style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: const Text('Manage subscription'),
+              child: Text(tr('Manage subscription')),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('Delete', style: TextStyle(color: AppColors.error)),
+            child: Text(tr('Delete'), style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -1669,14 +1833,14 @@ class _PrivacyDataPage extends StatelessWidget {
       // the whole app. The app-level messenger outlives that reload, so the
       // snackbar still lands on the fresh home screen.
       messenger.showSnackBar(
-          const SnackBar(content: Text('Your account has been deleted.')));
+          SnackBar(content: Text(tr('Your account has been deleted.'))));
       // Server-side data is already gone; `logout()` does the local cleanup
       // and reloads the app from a cold start, so the user sees the full
       // loading screen and then lands on Today as a brand-new guest device.
       await authController.logout();
     } catch (_) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Could not delete your account. Please try again.')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr('Could not delete your account. Please try again.'))));
     }
   }
 }
@@ -1692,10 +1856,10 @@ class _HelpLegalPage extends StatelessWidget {
         _GroupCard(children: [
           _LinkRow(
               label: 'Support',
-              onTap: () => openHostedPage(context, supportUrl, 'Support')),
+              onTap: () => openHostedPage(context, supportUrl, tr('Support'))),
           _LinkRow(
               label: 'Terms of use',
-              onTap: () => openHostedPage(context, termsUrl, 'Terms of Use')),
+              onTap: () => openHostedPage(context, termsUrl, tr('Terms of Use'))),
         ]),
       ],
     );
@@ -1739,7 +1903,7 @@ class _LinkRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-              child: Text(label,
+              child: Text(tr(label),
                   style: AppTypography.bodyMd.copyWith(color: labelColor))),
           Icon(Icons.chevron_right_rounded,
               color: AppColors.onSurfaceVariant, size: 20),

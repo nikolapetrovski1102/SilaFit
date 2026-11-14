@@ -1,15 +1,21 @@
+import 'dart:async';
+
 import 'package:http_parser/http_parser.dart';
 
 import '../../core/api/api_client.dart';
 import 'meal_models.dart';
+import 'open_food_facts_client.dart';
+import 'open_food_facts_product.dart';
 
 /// Talks to `api/meals/*` (meal planning/logging and nutrition targets) and
 /// `api/foods/*` (the food catalog the meal tracker searches) - both open to
 /// any authenticated tier including guests.
 class MealRepository {
   final ApiClient _client;
+  final OpenFoodFactsClient _openFoodFacts;
 
-  MealRepository(this._client);
+  MealRepository(this._client, {OpenFoodFactsClient? openFoodFacts})
+      : _openFoodFacts = openFoodFacts ?? OpenFoodFactsClient();
 
   static String isoDate(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-'
@@ -25,9 +31,8 @@ class MealRepository {
 
   /// Saves the user's own daily targets. The server pins them as a manual
   /// override, so a later profile change won't recompute over them.
-  Future<NutritionTargets> updateTargets(NutritionTargets targets) =>
-      _client.put('/meals/targets', NutritionTargets.fromJson,
-          body: targets.toJson());
+  Future<NutritionTargets> updateTargets(NutritionTargets targets) => _client
+      .put('/meals/targets', NutritionTargets.fromJson, body: targets.toJson());
 
   /// Ingredients and steps of one meal suggestion. Cached so a recipe opened
   /// once still reads in the kitchen with no signal.
@@ -143,6 +148,7 @@ class MealRepository {
     double? fiberG,
     double? sugarG,
     double? sodiumMg,
+    String? barcode,
   }) =>
       _client.post(
         '/foods',
@@ -158,11 +164,12 @@ class MealRepository {
           'fiberG': fiberG,
           'sugarG': sugarG,
           'sodiumMg': sodiumMg,
+          if (barcode != null) 'barcode': barcode,
         },
       );
 
-  /// Today's AI photo-scan allowance (Advanced only; `isAvailable` is false
-  /// below it).
+  /// The scan allowance: today's AI meal scans (Advanced) and whether a
+  /// barcode scan will go through (Pro, Advanced, or a Free try left).
   Future<FoodScanQuota> getScanQuota() =>
       _client.get('/foods/scan/quota', FoodScanQuota.fromJson);
 
@@ -181,5 +188,55 @@ class MealRepository {
           if (mealName != null && mealName.trim().isNotEmpty)
             'mealName': mealName.trim(),
         },
+      );
+
+  /// A scanned package barcode: the server's catalog first (which also
+  /// spends a Free try). On a miss the phone asks Open Food Facts itself and
+  /// shows the product as soon as OFF answers; saving it to the catalog for
+  /// the next scan runs in the background, so the user never waits on it.
+  /// An OFF failure keeps the miss: the "add it" form opens.
+  Future<BarcodeLookupResult> lookupBarcode(String barcode) async {
+    final path = '/foods/barcode/${Uri.encodeComponent(barcode)}';
+    final result = await _client.get(path, BarcodeLookupResult.fromJson,
+        query: {'offOnDevice': 'true'});
+    if (result.found || !result.checkOpenFoodFacts) return result;
+
+    final response = await _openFoodFacts.fetchProduct(result.barcode);
+    if (response == null) return result;
+
+    final food = OpenFoodFactsProduct.toFood(result.barcode, response);
+    if (food == null) {
+      // Not loggable as is: prefill the form, keeping the partner's hint
+      // when OFF knew even less. Nothing worth saving.
+      final hint = OpenFoodFactsProduct.toHint(response);
+      return hint == null
+          ? result
+          : BarcodeLookupResult(barcode: result.barcode, hint: hint);
+    }
+
+    unawaited(_saveOpenFoodFactsProduct(path, response));
+    return BarcodeLookupResult(barcode: result.barcode, food: food);
+  }
+
+  /// Fire-and-forget: the server re-checks the product and adds it to the
+  /// shared catalog. A failure (offline, ticket expired) only means the next
+  /// scan of this barcode asks OFF again.
+  Future<void> _saveOpenFoodFactsProduct(
+      String path, Map<String, dynamic> response) async {
+    try {
+      await _client.post('$path/open-food-facts', (_) {}, body: response);
+    } catch (_) {}
+  }
+
+  /// Sends a nutrition-table photo (downsized JPEG, larger than a meal photo
+  /// so small print stays legible) to be read into per-100 g values.
+  Future<NutritionLabelResult> readNutritionLabel(List<int> jpegBytes) =>
+      _client.postMultipart(
+        '/foods/label-scan',
+        NutritionLabelResult.fromJson,
+        fileField: 'image',
+        bytes: jpegBytes,
+        filename: 'label.jpg',
+        contentType: MediaType('image', 'jpeg'),
       );
 }

@@ -10,6 +10,7 @@ import '../../splits/widgets/ink_field.dart';
 import '../meal_controller.dart';
 import '../meal_models.dart';
 import 'food_picker_sheet.dart';
+import '../../../l10n/l10n.dart';
 
 /// Sends [photo] (an already downsized JPEG) for an AI ingredient and macro
 /// estimate, then lets the user choose what to add. The photo stays on screen
@@ -177,33 +178,33 @@ class _FoodScanViewState extends State<_FoodScanView> {
   Widget _buildAction(bool scanning, FoodScanResult? result) {
     if (scanning) {
       return SecondaryPillButton(
-        label: 'Cancel',
+        label: tr('Cancel'),
         onPressed: () => Navigator.of(context).pop(),
       );
     }
     if (_error != null) {
       return _canRetry
           ? PrimaryPillButton(
-              label: 'Try again',
+              label: tr('Try again'),
               icon: Icons.refresh_rounded,
               onPressed: _scan,
             )
           : SecondaryPillButton(
-              label: 'Close',
+              label: tr('Close'),
               onPressed: () => Navigator.of(context).pop(),
             );
     }
     if (result == null || !result.isFood || result.items.isEmpty) {
       return SecondaryPillButton(
-        label: 'Close',
+        label: tr('Close'),
         onPressed: () => Navigator.of(context).pop(),
       );
     }
     final count = _selected.length;
     return PrimaryPillButton(
       label: count == 0
-          ? 'Choose ingredients'
-          : 'Add $count ingredient${count == 1 ? '' : 's'}',
+          ? tr('Choose ingredients')
+          : trPlural(count, 'Add {n} ingredient', 'Add {n} ingredients'),
       icon: Icons.add_rounded,
       onPressed: count == 0 ? null : _addSelected,
     );
@@ -317,11 +318,11 @@ class _ScanningLabel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Reading your meal…', style: AppTypography.headlineSm),
+        Text(tr('Reading your meal…'), style: AppTypography.headlineSm),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Picking out each ingredient and estimating its portion. This '
-          'usually takes 10-30 seconds.',
+          tr('Picking out each ingredient and estimating its portion. This '
+          'usually takes 10-30 seconds.'),
           style:
               AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant),
         ),
@@ -368,12 +369,12 @@ class _ScanResults extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('No food found', style: AppTypography.headlineSm),
+          Text(tr('No food found'), style: AppTypography.headlineSm),
           const SizedBox(height: AppSpacing.xs),
           Text(
             result.notes.isNotEmpty
                 ? result.notes
-                : 'Try a clearer photo of the plate from above.',
+                : tr('Try a clearer photo of the plate from above.'),
             style: muted,
           ),
         ],
@@ -392,7 +393,7 @@ class _ScanResults extends StatelessWidget {
       children: [
         Text(result.dishName, style: AppTypography.headlineSm),
         const SizedBox(height: AppSpacing.xxs),
-        Text('${kcal.round()} kcal selected · AI estimate, adjust grams after',
+        Text(tr('{kcal} kcal selected · AI estimate, adjust grams after', {'kcal': kcal.round()}),
             style: muted),
         const SizedBox(height: AppSpacing.sm),
         for (var i = 0; i < items.length; i++)

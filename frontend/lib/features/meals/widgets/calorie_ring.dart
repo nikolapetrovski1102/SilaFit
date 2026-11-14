@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/progress_ring.dart';
+import '../../../l10n/l10n.dart';
 
 /// Shared by the Nutrition screen's calorie ring and the targets editor's,
 /// so tapping the one flies it into the other.
@@ -57,7 +58,7 @@ class CalorieRing extends StatelessWidget {
     if (onTap == null) return hero;
     return Semantics(
       button: true,
-      label: 'Edit daily calorie and macro targets',
+      label: tr('Edit daily calorie and macro targets'),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,

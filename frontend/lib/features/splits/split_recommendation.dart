@@ -1,4 +1,5 @@
 import 'splits_models.dart';
+import '../../l10n/l10n.dart';
 
 /// One split plus the score/reason behind its placement. [reason] is the
 /// plain-language sentence the UI shows for why this protocol is the pick.
@@ -15,16 +16,16 @@ class SplitMatch {
 }
 
 /// Display label for a `WorkoutSplits.RecommendedGoal` / profile goal value.
-String splitGoalLabel(String goal) => switch (goal) {
+String splitGoalLabel(String goal) => tr(switch (goal) {
       'BuildMuscle' => 'Build Muscle',
       'LoseFat' => 'Lose Fat',
       'MaintainActive' => 'Stay Active',
       _ => goal,
-    };
+    });
 
 /// Display label for a `WorkoutSplits.Category` value - the raw enum-ish
 /// strings ('PushPullLegs', 'GluteFocus', ...) read badly in a sentence.
-String splitCategoryLabel(String category) => switch (category) {
+String splitCategoryLabel(String category) => tr(switch (category) {
       'PushPullLegs' => 'Push · Pull · Legs',
       'UpperLower' => 'Upper · Lower',
       'FullBody' => 'Full Body',
@@ -32,7 +33,7 @@ String splitCategoryLabel(String category) => switch (category) {
       'BroSplit' => 'Bro Split',
       'GluteFocus' => 'Glute & Core',
       _ => category,
-    };
+    });
 
 /// Ranks the split library for one user, best first.
 ///

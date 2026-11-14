@@ -16,7 +16,9 @@ import 'diet_plan_repository.dart';
 import '../documents/trainer_document_action.dart';
 import '../documents/trainer_document_models.dart';
 import '../meals/meal_recipe_screen.dart';
+import '../providers/grocery_order.dart';
 import '../../core/widgets/week_header.dart';
+import '../../l10n/l10n.dart';
 
 /// Read-only detail view for a diet plan - the meal-planning equivalent of
 /// `SplitDetailScreen`. Besides browse + (if owned) edit, it offers the
@@ -55,7 +57,7 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
       // rather than waiting for its next manual load.
       context.read<ActiveDietPlanController>().load(force: true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${widget.planName} is now your active plan.')));
+          content: Text(tr('{name} is now your active plan.', {'name': widget.planName}))));
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.controller.actionError!)));
@@ -66,8 +68,8 @@ class _DietPlanDetailScreenState extends State<DietPlanDetailScreen> {
     final ok = await widget.controller.keep();
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('This diet plan is now permanently yours.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(tr('This diet plan is now permanently yours.'))));
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.controller.actionError!)));
@@ -160,21 +162,24 @@ class _DetailBody extends StatelessWidget {
                         .round(),
                   )
                 : Image.asset('assets/branding/split_hero.png',
-                    fit: BoxFit.cover),
+                    fit: BoxFit.cover,
+                    cacheWidth: (MediaQuery.sizeOf(context).width *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round()),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        SectionEyebrow(detail.plan.periodType, color: AppColors.accent),
+        SectionEyebrow(tr(detail.plan.periodType), color: AppColors.accent),
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
             _MetaPill(
                 icon: Icons.calendar_view_week_rounded,
-                label: '${detail.plan.durationDays} days'),
+                label: trPlural(detail.plan.durationDays, '{n} day', '{n} days')),
             const SizedBox(width: AppSpacing.xs),
             _MetaPill(
                 icon: Icons.event_repeat_rounded,
-                label: '${detail.days.length} plan days'),
+                label: trPlural(detail.days.length, '{n} plan day', '{n} plan days')),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
@@ -183,7 +188,7 @@ class _DetailBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
         ],
         PrimaryPillButton(
-          label: controller.activated ? 'Plan Activated' : 'Activate This Plan',
+          label: controller.activated ? tr('Plan Activated') : tr('Activate This Plan'),
           icon: controller.activated
               ? Icons.check_rounded
               : Icons.play_arrow_rounded,
@@ -193,20 +198,20 @@ class _DetailBody extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         if (detail.plan.isAiGenerated && detail.plan.aiKeptAtUtc == null) ...[
           SecondaryPillButton(
-            label: controller.isKeeping ? 'Keeping...' : 'Keep This Plan',
+            label: controller.isKeeping ? tr('Keeping...') : tr('Keep This Plan'),
             icon: Icons.push_pin_outlined,
             onPressed: controller.isKeeping ? null : onKeep,
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            "AI-generated for this week. Keep it and it's yours for good — "
-            'otherwise it refreshes next Sunday.',
+            tr("AI-generated for this week. Keep it and it's yours for good — "
+                'otherwise it refreshes next Sunday.'),
             style: AppTypography.labelSm
                 .copyWith(color: AppColors.onSurfaceVariant),
           ),
           const SizedBox(height: AppSpacing.md),
         ],
-        Text('DAY BY DAY', style: AppTypography.labelCaps),
+        Text(tr('DAY BY DAY'), style: AppTypography.labelCaps),
         const SizedBox(height: AppSpacing.sm),
         for (final (i, day) in sortedDays.indexed) ...[
           // Multi-week plans: a WEEK k header where each new week starts.
@@ -218,14 +223,14 @@ class _DetailBody extends StatelessWidget {
         ],
         if (detail.shoppingList.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.sm),
-          Text('SHOPPING LIST', style: AppTypography.labelCaps),
+          Text(tr('SHOPPING LIST'), style: AppTypography.labelCaps),
           const SizedBox(height: AppSpacing.sm),
           SectionCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Everything you need for the week.',
+                  tr('Everything you need for the week.'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant),
                 ),
@@ -250,6 +255,7 @@ class _DetailBody extends StatelessWidget {
               ],
             ),
           ),
+          OrderIngredientsButton(ingredients: detail.shoppingList),
         ],
       ],
     );
@@ -309,7 +315,7 @@ class _DayCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
-                child: Text(day.day.title ?? 'Day ${day.day.dayIndex}',
+                child: Text(day.day.title ?? tr('Day {n}', {'n': day.day.dayIndex}),
                     style: AppTypography.headlineSm.copyWith(fontSize: 16)),
               ),
             ],
@@ -331,7 +337,7 @@ class _DayCard extends StatelessWidget {
                     children: [
                       SizedBox(
                         width: 72,
-                        child: Text(meal.mealType,
+                        child: Text(tr(meal.mealType),
                             style: AppTypography.labelSm
                                 .copyWith(color: AppColors.accent)),
                       ),
@@ -339,7 +345,7 @@ class _DayCard extends StatelessWidget {
                           child: Text(meal.title,
                               style: AppTypography.bodySm
                                   .copyWith(color: AppColors.onSurface))),
-                      Text('${meal.caloriesKcal} kcal',
+                      Text(tr('{n} kcal', {'n': meal.caloriesKcal}),
                           style: AppTypography.labelSm
                               .copyWith(color: AppColors.onSurfaceVariant)),
                       const SizedBox(width: AppSpacing.xxs),

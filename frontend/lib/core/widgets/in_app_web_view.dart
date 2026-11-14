@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 /// In-app browser for the app's own hosted pages (Support, Privacy Policy), so
 /// tapping those Settings rows keeps the user inside the app instead of
@@ -91,7 +92,7 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
         title: Text(widget.title, style: AppTypography.headlineSm),
         actions: [
           IconButton(
-            tooltip: 'Open in browser',
+            tooltip: tr('Open in browser'),
             icon: const Icon(Icons.open_in_browser_rounded),
             onPressed: _openInBrowser,
           ),
@@ -150,20 +151,20 @@ class _WebErrorView extends StatelessWidget {
               Icon(Icons.wifi_off_rounded,
                   size: 40, color: AppColors.onSurfaceVariant),
               const SizedBox(height: 12),
-              Text('This page could not be loaded.',
+              Text(tr('This page could not be loaded.'),
                   textAlign: TextAlign.center, style: AppTypography.headlineSm),
               const SizedBox(height: 6),
               Text(
-                'Check your connection and try again.',
+                tr('Check your connection and try again.'),
                 textAlign: TextAlign.center,
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: const Text('Try again')),
+              FilledButton(onPressed: onRetry, child: Text(tr('Try again'))),
               TextButton(
                 onPressed: onOpenInBrowser,
-                child: const Text('Open in browser'),
+                child: Text(tr('Open in browser')),
               ),
             ],
           ),

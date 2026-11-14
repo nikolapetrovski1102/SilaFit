@@ -27,6 +27,9 @@
     }
   }
 
+  /* The Macedonian pages (/mk/) carry lang="mk". */
+  var MK = document.documentElement.lang === 'mk';
+
   function nextTheme(theme) {
     return theme === 'light' ? 'dark' : 'light';
   }
@@ -35,12 +38,16 @@
   function syncButtons(theme) {
     var next = nextTheme(theme);
     buttons.forEach(function (btn) {
-      var title = 'Switch to ' + next + ' mode';
+      var title = MK
+        ? (next === 'light' ? 'Префрли на светла тема' : 'Префрли на темна тема')
+        : 'Switch to ' + next + ' mode';
       btn.setAttribute('aria-label', title);
       btn.setAttribute('title', title);
       btn.setAttribute('aria-pressed', String(theme === 'light'));
       var label = btn.querySelector('[data-theme-toggle-label]');
-      if (label) label.textContent = next === 'light' ? 'Light mode' : 'Dark mode';
+      if (label) label.textContent = MK
+        ? (next === 'light' ? 'Светла тема' : 'Темна тема')
+        : (next === 'light' ? 'Light mode' : 'Dark mode');
     });
   }
 

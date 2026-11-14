@@ -12,5 +12,8 @@ public interface ISupplementProvidersProvider
 
     Task<AdminMutationResultModel> UpsertAsync(AdminSupplementProviderUpsertRequest request, AdminActorModel actor, CancellationToken cancellationToken = default);
 
+    /// <summary>The switched-on partner barcode catalog, or null.</summary>
+    Task<PartnerBarcodeCatalogModel?> GetBarcodeCatalogAsync(CancellationToken cancellationToken = default);
+
     Task<AdminMutationResultModel> DeleteAsync(Guid providerId, AdminActorModel actor, CancellationToken cancellationToken = default);
 }

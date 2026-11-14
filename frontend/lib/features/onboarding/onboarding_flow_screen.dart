@@ -19,6 +19,7 @@ import 'widgets/onboarding_step_transition.dart';
 import 'widgets/option_row_selector.dart';
 import 'widgets/question_scaffold.dart';
 import 'widgets/training_preference_question.dart';
+import '../../l10n/l10n.dart';
 
 /// The first-launch flow: a 2-slide intro carousel, 9 profile questions, then a
 /// notification-permission screen. Owns its own [OnboardingController] -
@@ -61,7 +62,7 @@ class _OnboardingFlowView extends StatelessWidget {
     if (!context.mounted) return;
     if (!saved) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(controller.lastError ?? 'Please complete your profile.'),
+        content: Text(controller.lastError ?? tr('Please complete your profile.')),
       ));
       return;
     }
@@ -167,7 +168,7 @@ class _OnboardingFlowView extends StatelessWidget {
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
-          headline: "What's your gender?",
+          headline: tr("What's your gender?"),
           body: OptionRowSelector(
             options: const ['Male', 'Female', 'Other'],
             selected: controller.gender,
@@ -178,7 +179,7 @@ class _OnboardingFlowView extends StatelessWidget {
               'Other': 'gender_other',
             }[value],
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: controller.canContinue ? controller.goNext : null,
         );
 
@@ -188,7 +189,7 @@ class _OnboardingFlowView extends StatelessWidget {
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
-          headline: 'What is your age?',
+          headline: tr('What is your age?'),
           body: Center(
             child: AgeWheelPicker(
               value: controller.ageYears,
@@ -197,7 +198,7 @@ class _OnboardingFlowView extends StatelessWidget {
               onChanged: controller.setAge,
             ),
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: controller.goNext,
         );
 
@@ -207,7 +208,7 @@ class _OnboardingFlowView extends StatelessWidget {
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
-          headline: "What's your height?",
+          headline: tr("What's your height?"),
           body: Center(
             child: NumericWheelPicker(
               value: controller.heightCm,
@@ -222,7 +223,7 @@ class _OnboardingFlowView extends StatelessWidget {
                   _formatHeight(cm, controller.heightUnit),
             ),
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: controller.goNext,
         );
 
@@ -232,7 +233,7 @@ class _OnboardingFlowView extends StatelessWidget {
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
-          headline: "What's your current weight?",
+          headline: tr("What's your current weight?"),
           body: Center(
             child: NumericWheelPicker(
               value: controller.weightKg,
@@ -247,7 +248,7 @@ class _OnboardingFlowView extends StatelessWidget {
                   _formatWeight(kg, controller.weightUnit),
             ),
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: controller.goNext,
         );
 
@@ -257,10 +258,10 @@ class _OnboardingFlowView extends StatelessWidget {
           onSkip: () => _skip(context),
           progressStep: controller.questionProgressStep!,
           progressStepCount: controller.questionStepCount,
-          headline: "What's your main goal?",
+          headline: tr("What's your main goal?"),
           body: OptionRowSelector(
             options: const ['BuildMuscle', 'LoseFat', 'MaintainActive'],
-            labelFor: (value) => _goalLabels[value] ?? value,
+            labelFor: (value) => tr(_goalLabels[value] ?? value),
             selected: controller.goal,
             onSelected: controller.selectGoal,
             badgeAssetFor: (value) => const {
@@ -269,7 +270,7 @@ class _OnboardingFlowView extends StatelessWidget {
               'MaintainActive': 'goal_stay_active',
             }[value],
           ),
-          ctaLabel: 'Continue',
+          ctaLabel: tr('Continue'),
           onCta: controller.canContinue ? controller.goNext : null,
         );
 

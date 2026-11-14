@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import 'ink_field.dart';
+import '../../../l10n/l10n.dart';
 
 /// Muscles a day can target. Finer than the catalogue's six groups on
 /// purpose - `muscleGroupsInText` folds each of these back onto one of
@@ -210,10 +211,10 @@ class _MuscleFocusFieldState extends State<MuscleFocusField>
                           textInputAction: TextInputAction.done,
                           decoration: inkDecoration(
                             widget.targets.isEmpty
-                                ? 'Muscle focus'
+                                ? tr('Muscle focus')
                                 : _full
                                     ? ''
-                                    : 'Add',
+                                    : tr('Add'),
                             style,
                           ),
                           onSubmitted: (_) => _submit(),
@@ -272,8 +273,8 @@ class _MuscleFocusFieldState extends State<MuscleFocusField>
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: Text(
                           _full
-                              ? 'THAT\'S $kMaxMuscleTargets - TAP ONE TO DROP IT'
-                              : 'PICK UP TO $kMaxMuscleTargets  ·  ${widget.targets.length}/$kMaxMuscleTargets',
+                              ? tr('THAT\'S {n} - TAP ONE TO DROP IT', {'n': kMaxMuscleTargets})
+                              : tr('PICK UP TO {n}  ·  {count}/{n}', {'n': kMaxMuscleTargets, 'count': widget.targets.length}),
                           style: AppTypography.labelCaps
                               .copyWith(color: AppColors.onSurfaceVariant),
                         ),
@@ -288,7 +289,7 @@ class _MuscleFocusFieldState extends State<MuscleFocusField>
                           children: [
                             if (custom != null)
                               _OptionRow(
-                                label: 'Add "$custom"',
+                                label: tr('Add "{name}"', {'name': custom}),
                                 selected: false,
                                 enabled: !_full,
                                 onTap: () => _toggle(custom),

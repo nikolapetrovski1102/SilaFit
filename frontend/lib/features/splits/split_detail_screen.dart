@@ -21,6 +21,7 @@ import 'widgets/split_hero_image.dart';
 import '../documents/trainer_document_action.dart';
 import '../documents/trainer_document_models.dart';
 import '../../core/widgets/week_header.dart';
+import '../../l10n/l10n.dart';
 
 class SplitDetailScreen extends StatefulWidget {
   final SplitDetailController controller;
@@ -57,7 +58,7 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
       // manual pull-to-refresh.
       context.read<TodayController>().load(force: true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${widget.splitName} is now your active split.')));
+          content: Text(tr('{name} is now your active split.', {'name': widget.splitName}))));
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.controller.actionError!)));
@@ -68,8 +69,8 @@ class _SplitDetailScreenState extends State<SplitDetailScreen> {
     final ok = await widget.controller.keep();
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('This split is now permanently yours.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(tr('This split is now permanently yours.'))));
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.controller.actionError!)));
@@ -172,7 +173,7 @@ class _DetailBody extends StatelessWidget {
                 children: [
                   _MetaPill(
                       icon: Icons.calendar_view_week_rounded,
-                      label: '${detail.split.durationDays} days'),
+                      label: trPlural(detail.split.durationDays, '{n} day', '{n} days')),
                   const SizedBox(width: AppSpacing.xs),
                   _MetaPill(
                       icon: Icons.trending_up_rounded,
@@ -180,7 +181,7 @@ class _DetailBody extends StatelessWidget {
                   const SizedBox(width: AppSpacing.xs),
                   _MetaPill(
                       icon: Icons.event_repeat_rounded,
-                      label: '${detail.days.length} workout days'),
+                      label: trPlural(detail.days.length, '{n} workout day', '{n} workout days')),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
@@ -190,8 +191,8 @@ class _DetailBody extends StatelessWidget {
               ],
               PrimaryPillButton(
                 label: controller.activated
-                    ? 'Split Activated'
-                    : 'Activate This Split',
+                    ? tr('Split Activated')
+                    : tr('Activate This Split'),
                 icon: controller.activated
                     ? Icons.check_rounded
                     : Icons.play_arrow_rounded,
@@ -202,20 +203,20 @@ class _DetailBody extends StatelessWidget {
                   detail.split.aiKeptAtUtc == null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 SecondaryPillButton(
-                  label: controller.isKeeping ? 'Keeping...' : 'Keep This Plan',
+                  label: controller.isKeeping ? tr('Keeping...') : tr('Keep This Plan'),
                   icon: Icons.push_pin_outlined,
                   onPressed: controller.isKeeping ? null : onKeep,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  "AI-generated for this week. Keep it and it's yours for good — "
-                  'otherwise it refreshes next Sunday.',
+                  tr("AI-generated for this week. Keep it and it's yours for good — "
+                  'otherwise it refreshes next Sunday.'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant),
                 ),
               ],
               const SizedBox(height: AppSpacing.lg),
-              Text('WEEKLY BREAKDOWN', style: AppTypography.labelCaps),
+              Text(tr('WEEKLY BREAKDOWN'), style: AppTypography.labelCaps),
               const SizedBox(height: AppSpacing.sm),
               // The full Monday-anchored week(s): any slot nobody built a
               // day for (a gap like Day 3, or the days past the last one)

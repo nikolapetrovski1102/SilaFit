@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/state/resource_state.dart';
@@ -23,6 +24,7 @@ import 'widgets/day_preview.dart';
 import 'widgets/overview_card.dart';
 import 'widgets/streak_badge.dart';
 import 'widgets/streak_history_sheet.dart';
+import '../../l10n/l10n.dart';
 
 /// The Today dashboard - the one screen fully wired end to end to the
 /// real API, per the project's "solid skeleton + one full slice" scope.
@@ -256,7 +258,9 @@ class _TodayScreenState extends State<TodayScreen> {
                         onWorkoutScreenClosed: _onWorkoutScreenClosed,
                         splitCardSpotlightKey: widget.splitCardSpotlightKey,
                         overviewSpotlightKey: widget.overviewSpotlightKey,
-                        minHeight: (viewportHeight - (AppSpacing.md * scale + AppSpacing.sm)).clamp(0.0, double.infinity),
+                        minHeight: (viewportHeight -
+                                (AppSpacing.md * scale + AppSpacing.sm))
+                            .clamp(0.0, double.infinity),
                       ),
                     ),
                   );
@@ -375,10 +379,10 @@ class _TodayContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final greeting = now.hour < 12
-        ? 'Good morning'
+        ? tr('Good morning')
         : now.hour < 18
-            ? 'Good afternoon'
-            : 'Good evening';
+            ? tr('Good afternoon')
+            : tr('Good evening');
 
     final overviewCard = TodayOverviewCard(
       dashboard: dashboard,
@@ -397,7 +401,7 @@ class _TodayContent extends StatelessWidget {
       onWorkoutClosed: onWorkoutScreenClosed,
     );
 
-    final content = Column(
+    final top = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Home's own large title - the street-style greeting - sitting
@@ -408,10 +412,17 @@ class _TodayContent extends StatelessWidget {
         // one flowing block - "am I on track" and "what do I do today" read
         // as a single glance instead of two stacked boxes.
         MarkerTitleOverlap(
-          title: MarkerDrawnTitle(greeting, playKey: 'today', scale: scale),
-          // Home's overview is dense right at its top edge, so the greeting
-          // sits just clear of it instead of overlapping like other pages.
-          overlapFactor: MarkerTitleOverlap.clearOverlapFactor,
+          // A notch smaller than other pages' titles - Home's header also
+          // carries the streak badge and the session card below it is the
+          // real focus.
+          title:
+              MarkerDrawnTitle(greeting, playKey: 'today', scale: scale * 0.72),
+          // The day pills start right at the overview's top edge, so the
+          // greeting stays fully above them - descenders ("g" in morning /
+          // evening) included - with a clear gap (about 0.9x the greeting's
+          // size, ~28pt), pushing the pills down, instead of overlapping
+          // like other pages' titles do.
+          overlapFactor: -0.9,
           trailing: StreakBadge(
             streakDays: dashboard.currentStreakDays,
             scale: scale,
@@ -426,7 +437,12 @@ class _TodayContent extends StatelessWidget {
               : overviewCard,
         ),
         SizedBox(height: AppSpacing.xl * scale),
-        const Spacer(),
+      ],
+    );
+
+    final bottom = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         ActiveSplitCard(
             activeSplit: dashboard.activeSplit,
             scale: scale,
@@ -436,12 +452,76 @@ class _TodayContent extends StatelessWidget {
       ],
     );
 
-    if (minHeight != null) {
-      return ConstrainedBox(
-        constraints: BoxConstraints(minHeight: minHeight!),
-        child: IntrinsicHeight(child: content),
-      );
-    }
-    return content;
+    // The split / insights cards sit at the bottom of the viewport when the
+    // content is short, and simply follow the overview when it's tall. Not
+    // ConstrainedBox + IntrinsicHeight + Spacer: that asks the whole tree
+    // for intrinsic heights, which a LayoutBuilder anywhere inside (e.g. the
+    // auto-fitting StreetName day title) can't answer - it threw and left
+    // Home blank.
+    return _PinBottom(minHeight: minHeight ?? 0, children: [top, bottom]);
   }
+}
+
+/// Lays out [children] (top, bottom) at full width and natural height, and
+/// places bottom flush with the bottom edge of a box at least [minHeight]
+/// tall - without querying intrinsic dimensions.
+class _PinBottom extends MultiChildRenderObjectWidget {
+  const _PinBottom({required this.minHeight, required super.children});
+
+  final double minHeight;
+
+  @override
+  _RenderPinBottom createRenderObject(BuildContext context) =>
+      _RenderPinBottom(minHeight);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderPinBottom render) =>
+      render.minHeight = minHeight;
+}
+
+class _PinBottomParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderPinBottom extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _PinBottomParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _PinBottomParentData> {
+  _RenderPinBottom(this._minHeight);
+
+  double _minHeight;
+  set minHeight(double v) {
+    if (v == _minHeight) return;
+    _minHeight = v;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _PinBottomParentData) {
+      child.parentData = _PinBottomParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final top = firstChild!;
+    final bottom = childAfter(top)!;
+    final childConstraints =
+        BoxConstraints.tightFor(width: constraints.maxWidth);
+    top.layout(childConstraints, parentUsesSize: true);
+    bottom.layout(childConstraints, parentUsesSize: true);
+    final natural = top.size.height + bottom.size.height;
+    final height = natural > _minHeight ? natural : _minHeight;
+    (top.parentData! as _PinBottomParentData).offset = Offset.zero;
+    (bottom.parentData! as _PinBottomParentData).offset =
+        Offset(0, height - bottom.size.height);
+    size = constraints.constrain(Size(constraints.maxWidth, height));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
 }

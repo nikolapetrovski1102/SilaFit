@@ -23,6 +23,63 @@
   /* The QR points at the smart link, which sends each phone to its own store. */
   var DOWNLOAD_URL = 'https://sila.fitness/download';
 
+  /* ----------------------------------------------------------------
+     Macedonian pages (/mk/, lang="mk"). Plans come from the API and meals
+     from SilaStore, both in English, so known texts get a Macedonian
+     version here; anything new (an edited meal) shows as it is.
+     ---------------------------------------------------------------- */
+  var MK = document.documentElement.lang === 'mk';
+  var MK_TEXT = {
+    'Breakfast': 'Појадок', 'Lunch': 'Ручек', 'Dinner': 'Вечера', 'Snack': 'Ужина',
+    'Hearty Beef & Barley Stew': 'Чорба од говедско со јачмен',
+    'Slow-braised beef chuck with barley, carrots, and onion - a warming January dinner.': 'Бавно динстано говедско со јачмен, морков и кромид, топла јануарска вечера.',
+    'Baked Salmon with Sweet Potato': 'Печен лосос со сладок компир',
+    'Oven-baked salmon over roasted sweet potato with asparagus.': 'Лосос печен во рерна, со печен сладок компир и шпаргли.',
+    'Chicken & Wild Rice Bowl': 'Пилешко со див ориз',
+    'Grilled chicken breast over wild rice and wilted spinach, light olive oil drizzle.': 'Пилешки гради на скара со див ориз и спанаќ, со малку маслиново масло.',
+    'Spring Veggie Frittata': 'Пролетна фритата со зеленчук',
+    'Baked egg frittata with asparagus and feta - a spring-vegetable breakfast.': 'Печена фритата од јајца со шпаргли и фета сирење, пролетен појадок.',
+    'Grilled Chicken Caesar Salad': 'Цезар салата со пилешко на скара',
+    'Grilled chicken over romaine with shaved parmesan and a light Caesar dressing.': 'Пилешко на скара со марула, пармезан и лесен цезар прелив.',
+    'Shrimp & Zucchini Noodles': 'Ракчиња со резанки од тиквички',
+    'Seared shrimp over spiralized zucchini noodles in olive oil and garlic - a light summer dinner.': 'Пропржени ракчиња со резанки од тиквички, маслиново масло и лук, лесна летна вечера.',
+    'Mediterranean Quinoa Salad': 'Медитеранска салата со киноа',
+    'Quinoa, chickpeas, cucumber, and feta tossed in olive oil - a make-ahead summer lunch.': 'Киноа, наут, краставица и фета сирење со маслиново масло, летен ручек што се подготвува однапред.',
+    'Greek Yogurt Berry Bowl': 'Грчки јогурт со бобинки',
+    'Plain Greek yogurt layered with blueberries and granola.': 'Грчки јогурт со боровинки и гранола.',
+    'Turkey Chili': 'Чили со мисирка',
+    'Lean ground turkey simmered with kidney beans and tomatoes - a cozy back-to-school dinner.': 'Посно мелено мисиркино месо варено со грав и домати, топла вечера за почетокот на септември.',
+    'Roasted Chicken with Butternut Squash': 'Печено пилешко со тиква',
+    'Roasted chicken thigh with butternut squash and brussels sprouts - a fall harvest dinner.': 'Печени пилешки копани со тиква и прокељ, есенска вечера.',
+    'Herb-Roasted Turkey Breast with Mashed Potatoes': 'Мисиркини гради со зачини и пире од компири',
+    'Herb-roasted turkey breast with mashed potatoes and green beans.': 'Мисиркини гради печени со зачински билки, со пире од компири и боранија.',
+    'Baked Cod with Root Vegetable Mash': 'Печен бакалар со пире од корен зеленчук',
+    'Baked cod over parsnip mash with sauteed kale - a light dish to close out the year.': 'Печен бакалар со пире од пашканат и пропржен кељ, лесно јадење за крајот на годината.',
+
+    'Free': 'Бесплатен', 'Pro': 'Pro', 'Advanced': 'Advanced',
+    'Workout logging, ready-made splits and streak tracking for self-guided lifters.': 'Запишување тренинзи, готови сплитови и следење низа, за тие што тренираат самостојно.',
+    'Per-exercise 1RM charts, AI monthly overviews, and automated deload signals.': 'Графикони за 1RM по вежба, месечни AI прегледи и автоматски сигнали за deload.',
+    'Weekly AI check-ins, on-demand AI-generated plans, and unlimited splits & diet plans.': 'Неделни AI прегледи, AI планови по барање и неограничени сплитови и планови за исхрана.',
+    'Routine logging & workout telemetry': 'Запишување тренинзи и детална статистика',
+    'Standard split templates (PPL, Upper/Lower)': 'Стандардни сплитови (PPL, Upper/Lower)',
+    'Basic streak & calendar volume view': 'Основна низа и календар со волумен',
+    'Push notifications for daily gym attendance': 'Потсетници за секојдневен тренинг',
+    'Everything included in Free tier': 'Сè од бесплатниот пакет',
+    'AI Monthly Overview & Volume Synthesis': 'Месечен AI преглед и анализа на волуменот',
+    'Per-exercise progress charts: estimated 1RM, top set & volume': 'Графикони по вежба: проценет 1RM, најдобра серија и волумен',
+    'Full Progress screen with personal records & 1M-6M timeframes': 'Целосен екран за напредок со лични рекорди, за 1 до 6 месеци',
+    'Suggested splits ranked for your goal, level & schedule': 'Предложени сплитови според твојата цел, ниво и распоред',
+    '"Last time" weights & reps on every exercise while you train': 'Тежините и повторувањата од „минатиот пат“ на секоја вежба додека тренираш',
+    'Intelligent recovery & deload detection': 'Паметно следење на опоравокот и deload',
+    'Custom split builder with infinite routines': 'Сопствени сплитови со неограничен број рутини',
+    'Everything included in Pro tier': 'Сè од Pro пакетот',
+    'Weekly AI Overview with meal & split suggestions': 'Неделен AI преглед со предлози за оброци и сплитови',
+    'Adaptive meal planner calibrated to load': 'Планер на оброци прилагоден на тренинзите',
+    'AI-generated workout splits & diet plans on request': 'AI сплитови и планови за исхрана по барање',
+    'Unlimited saved splits & diet plans': 'Неограничено зачувани сплитови и планови за исхрана'
+  };
+  function t(text) { return (MK && text && MK_TEXT[text]) || text; }
+
   /* Active nav link: the page you're on (each section has its own page). */
   var here = location.pathname.split('/').pop() || 'index.html';
   $$('.nav__links a').forEach(function (a) {
@@ -47,7 +104,7 @@
       function tick(now) {
         var t = Math.min((now - start) / duration, 1);
         var eased = 1 - Math.pow(1 - t, 3);
-        el.textContent = Math.round(target * eased).toLocaleString('en-US') + suffix;
+        el.textContent = Math.round(target * eased).toLocaleString(MK ? 'mk-MK' : 'en-US') + suffix;
         if (t < 1) requestAnimationFrame(tick);
       }
       requestAnimationFrame(tick);
@@ -78,16 +135,16 @@
     strip.innerHTML = meals.map(function (m) {
       return (
         '<li class="meal-row">' +
-          '<span class="eyebrow meal-row__type">' + escapeHtml(m.mealType) + '</span>' +
+          '<span class="eyebrow meal-row__type">' + escapeHtml(t(m.mealType)) + '</span>' +
           '<div>' +
-            '<div class="meal-row__title">' + escapeHtml(m.title) + '</div>' +
-            '<div class="meal-row__desc">' + escapeHtml(m.description || '') + '</div>' +
+            '<div class="meal-row__title">' + escapeHtml(t(m.title)) + '</div>' +
+            '<div class="meal-row__desc">' + escapeHtml(t(m.description || '')) + '</div>' +
           '</div>' +
           '<div class="meal-row__kcal">' + m.caloriesKcal + '<span>kcal</span></div>' +
           '<div class="meal-row__macros">' +
-            '<span><b>' + m.proteinG + 'g</b> P</span>' +
-            '<span><b>' + m.carbsG + 'g</b> C</span>' +
-            '<span><b>' + m.fatsG + 'g</b> F</span>' +
+            '<span><b>' + m.proteinG + 'g</b> ' + (MK ? 'П' : 'P') + '</span>' +
+            '<span><b>' + m.carbsG + 'g</b> ' + (MK ? 'Ј' : 'C') + '</span>' +
+            '<span><b>' + m.fatsG + 'g</b> ' + (MK ? 'М' : 'F') + '</span>' +
           '</div>' +
         '</li>'
       );
@@ -159,26 +216,29 @@
 
     grid.innerHTML = plans.map(function (p) {
       var price = billing === 'monthly' ? p.monthlyPrice : p.yearlyPrice;
-      var per = billing === 'monthly' ? '/ month' : '/ year';
+      var per = billing === 'monthly' ? (MK ? '/ месец' : '/ month') : (MK ? '/ година' : '/ year');
+      var name = t(p.name.replace(' Tier', ''));
       var featured = p.isFeatured;
       var features = (p.features || []).map(function (f) {
-        return '<li class="' + (f.highlighted ? 'is-highlighted' : '') + '">' + escapeHtml(f.text) + '</li>';
+        return '<li class="' + (f.highlighted ? 'is-highlighted' : '') + '">' + escapeHtml(t(f.text)) + '</li>';
       }).join('');
 
       return (
         '<article class="plan' + (featured ? ' plan--featured' : '') + '">' +
           '<div class="plan__head">' +
-            '<h3 class="plan__name">' + escapeHtml(p.name.replace(' Tier', '')) + '</h3>' +
-            (featured ? '<span class="plan__badge">Most popular</span>' : '') +
+            '<h3 class="plan__name">' + escapeHtml(name) + '</h3>' +
+            (featured ? '<span class="plan__badge">' + (MK ? 'Најпопуларен' : 'Most popular') + '</span>' : '') +
           '</div>' +
           '<div class="plan__price">' +
             '<span class="t-stat">€' + price.toFixed(2) + '</span>' +
             '<span class="per">' + per + '</span>' +
           '</div>' +
-          '<p class="plan__tagline">' + escapeHtml(p.tagline || '') + '</p>' +
+          '<p class="plan__tagline">' + escapeHtml(t(p.tagline || '')) + '</p>' +
           '<ul>' + features + '</ul>' +
           '<a class="btn btn--lg ' + (featured ? 'btn--primary' : 'btn--secondary') + '" href="/download">' +
-            (p.monthlyPrice === 0 ? 'Start free' : 'Get ' + escapeHtml(p.name.replace(' Tier', '')) + ' in the app') +
+            (p.monthlyPrice === 0
+              ? (MK ? 'Започни бесплатно' : 'Start free')
+              : (MK ? 'Земи ' + escapeHtml(name) + ' во апликацијата' : 'Get ' + escapeHtml(name) + ' in the app')) +
           '</a>' +
         '</article>'
       );
@@ -266,7 +326,9 @@
     }).join('');
 
     host.innerHTML =
-      '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Deadlift estimated one-rep max rising from 150 to 173 kilograms over 12 weeks, ending on a new personal record">' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + (MK
+        ? 'Проценетиот 1RM на мртво кревање расте од 150 на 173 килограми за 12 недели и завршува со нов личен рекорд'
+        : 'Deadlift estimated one-rep max rising from 150 to 173 kilograms over 12 weeks, ending on a new personal record') + '">' +
         '<defs><linearGradient id="prFill" x1="0" y1="0" x2="0" y2="1">' +
           '<stop offset="0" stop-color="currentColor" stop-opacity="0.28"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/>' +
         '</linearGradient></defs>' +
@@ -278,7 +340,7 @@
         '<circle class="pr-target" cx="' + target[0].toFixed(1) + '" cy="' + target[1].toFixed(1) + '" r="8"/>' +
       '</svg>' +
       '<div class="pr-badge" style="left:' + (target[0] / W * 100).toFixed(2) + '%;top:' + (target[1] / H * 100).toFixed(2) + '%">' +
-        '<b>173 kg</b><span>New PR · +3 kg</span>' +
+        '<b>173 kg</b><span>' + (MK ? 'Нов рекорд' : 'New PR') + ' · +3 kg</span>' +
       '</div>';
     host.setAttribute('data-w', W);
   }

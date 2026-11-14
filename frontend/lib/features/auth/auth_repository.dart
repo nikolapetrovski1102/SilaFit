@@ -1,4 +1,5 @@
 import '../../core/api/api_client.dart';
+import '../../core/platform/device_timezone.dart';
 import 'auth_result.dart';
 import 'email_verification_start.dart';
 
@@ -12,7 +13,7 @@ class AuthRepository {
   Future<AuthResult> loginWithDevice(String deviceId) => _client.post(
         '/auth/device',
         AuthResult.fromJson,
-        body: {'deviceId': deviceId},
+        body: {'deviceId': deviceId, 'platform': devicePlatform()},
       );
 
   /// Step 1 of email registration - stashes the pending registration and

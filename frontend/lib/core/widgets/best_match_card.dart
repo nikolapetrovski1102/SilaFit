@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import 'section_eyebrow.dart';
+import '../../l10n/l10n.dart';
 
 /// One small icon+label readout on a [BestMatchCard] (e.g. "Intermediate",
 /// "420 kcal", "6 days").
@@ -29,7 +30,8 @@ class BestMatchCard extends StatelessWidget {
   final String reason;
   final IconData icon;
   final List<BestMatchMeta> meta;
-  final String actionLabel;
+  final String? _actionLabel;
+  String get actionLabel => _actionLabel ?? tr('See details');
   final VoidCallback onTap;
 
   const BestMatchCard({
@@ -40,8 +42,8 @@ class BestMatchCard extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.meta = const [],
-    this.actionLabel = 'See details',
-  });
+    String? actionLabel,
+  }) : _actionLabel = actionLabel;
 
   @override
   Widget build(BuildContext context) {

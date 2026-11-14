@@ -1,6 +1,9 @@
 -- Partner shops with a discount code (migration 0017). The app lists the active
 -- ones in Settings > Providers and shows the first Protein one as a small nudge
--- when a user logs a protein-heavy meal; the console manages them.
+-- when a user logs a protein-heavy meal; the console manages them. One flagged
+-- ordersingredients (migration 0028) is the grocery partner the app sends
+-- recipe and shopping-list ingredients to. One with barcodecatalogenabled is
+-- asked about scanned barcodes before Open Food Facts.
 
 CREATE OR REPLACE FUNCTION dbo.usp_supplementproviders_getactive()
 RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
@@ -8,7 +11,8 @@ DECLARE
     c1 refcursor;
 BEGIN
     OPEN c1 FOR
-    SELECT providerid, name, tagline, logourl, promocode, discountlabel, shopurl, category, sortorder
+    SELECT providerid, name, tagline, logourl, promocode, discountlabel, shopurl, category, sortorder,
+           ordersingredients, searchurl
     FROM dbo.supplementproviders
     WHERE isactive
     ORDER BY sortorder, name;
@@ -22,9 +26,27 @@ DECLARE
 BEGIN
     OPEN c1 FOR
     SELECT providerid, name, tagline, logourl, promocode, discountlabel, shopurl, category,
-           isactive, sortorder, createdatutc, updatedatutc
+           isactive, sortorder, ordersingredients, searchurl,
+           barcodecatalogenabled, barcodecatalogurl,
+           (barcodecatalogapikey IS NOT NULL) AS hasbarcodecatalogapikey,
+           createdatutc, updatedatutc
     FROM dbo.supplementproviders
     ORDER BY sortorder, name;
+    RETURN NEXT c1;
+END $$;
+
+-- The partner catalog a barcode lookup asks, if one is switched on.
+CREATE OR REPLACE FUNCTION dbo.usp_supplementproviders_getbarcodecatalog()
+RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
+DECLARE
+    c1 refcursor;
+BEGIN
+    OPEN c1 FOR
+    SELECT name, barcodecatalogurl AS producturl, barcodecatalogapikey AS apikey
+    FROM dbo.supplementproviders
+    WHERE barcodecatalogenabled AND barcodecatalogurl IS NOT NULL
+    ORDER BY sortorder, name
+    LIMIT 1;
     RETURN NEXT c1;
 END $$;
 
@@ -39,6 +61,13 @@ CREATE OR REPLACE FUNCTION dbo.usp_admin_supplementprovider_upsert(
     p_category text DEFAULT 'Protein',
     p_isactive boolean DEFAULT true,
     p_sortorder integer DEFAULT 0,
+    p_ordersingredients boolean DEFAULT false,
+    p_searchurl text DEFAULT NULL,
+    p_barcodecatalogenabled boolean DEFAULT false,
+    p_barcodecatalogurl text DEFAULT NULL,
+    -- Blank keeps the stored key; p_clearbarcodecatalogapikey removes it.
+    p_barcodecatalogapikey text DEFAULT NULL,
+    p_clearbarcodecatalogapikey boolean DEFAULT false,
     p_actoradminuserid uuid DEFAULT NULL,
     p_actorusername text DEFAULT NULL,
     p_actorip text DEFAULT NULL
@@ -69,11 +98,14 @@ BEGIN
         v_action := 'Create';
 
         INSERT INTO dbo.supplementproviders
-            (providerid, name, tagline, logourl, promocode, discountlabel, shopurl, category, isactive, sortorder)
+            (providerid, name, tagline, logourl, promocode, discountlabel, shopurl, category, isactive, sortorder,
+             ordersingredients, searchurl, barcodecatalogenabled, barcodecatalogurl, barcodecatalogapikey)
         VALUES
             (v_providerid, v_name, NULLIF(btrim(p_tagline), ''), NULLIF(btrim(p_logourl), ''),
              NULLIF(btrim(p_promocode), ''), NULLIF(btrim(p_discountlabel), ''), NULLIF(btrim(p_shopurl), ''),
-             v_category, p_isactive, p_sortorder);
+             v_category, p_isactive, p_sortorder, COALESCE(p_ordersingredients, false), NULLIF(btrim(p_searchurl), ''),
+             COALESCE(p_barcodecatalogenabled, false), NULLIF(btrim(p_barcodecatalogurl), ''),
+             NULLIF(btrim(p_barcodecatalogapikey), ''));
     ELSE
         v_action := 'Update';
 
@@ -87,6 +119,13 @@ BEGIN
             category = v_category,
             isactive = p_isactive,
             sortorder = p_sortorder,
+            ordersingredients = COALESCE(p_ordersingredients, false),
+            searchurl = NULLIF(btrim(p_searchurl), ''),
+            barcodecatalogenabled = COALESCE(p_barcodecatalogenabled, false),
+            barcodecatalogurl = NULLIF(btrim(p_barcodecatalogurl), ''),
+            barcodecatalogapikey = CASE
+                WHEN p_clearbarcodecatalogapikey THEN NULL
+                ELSE COALESCE(NULLIF(btrim(p_barcodecatalogapikey), ''), barcodecatalogapikey) END,
             updatedatutc = dbo.sysutcdatetime()
         WHERE providerid = v_providerid;
 

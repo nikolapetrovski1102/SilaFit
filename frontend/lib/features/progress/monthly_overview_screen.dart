@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
@@ -28,6 +29,7 @@ import 'weight_display.dart';
 import 'monthly_training_chart.dart';
 import 'recap_animation.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// The Stories-style recap slideshow. Renders the Pro monthly report and, for
 /// ADVANCED subscribers, the weekly report - the six shared slides plus two
@@ -112,19 +114,19 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
       if (!saved) {
         if (mounted) {
           setState(() =>
-              _weightError = 'Could not save your weight. Please try again.');
+              _weightError = tr('Could not save your weight. Please try again.'));
         }
         return;
       }
       if (!mounted) return;
       setState(() => _latestWeight = value);
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Weight saved.')));
+          .showSnackBar(SnackBar(content: Text(tr('Weight saved.'))));
       await _next();
     } catch (_) {
       if (mounted) {
         setState(() =>
-            _weightError = 'Could not save your weight. Please try again.');
+            _weightError = tr('Could not save your weight. Please try again.'));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -183,7 +185,7 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                     child: _OverviewDots(count: _slideCount, index: _page)),
                 const SizedBox(width: AppSpacing.md),
                 IconButton(
-                    tooltip: 'Close recap',
+                    tooltip: tr('Close recap'),
                     onPressed: _saving ? null : widget.onDone,
                     icon: const Icon(Icons.close_rounded)),
               ]),
@@ -199,15 +201,17 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                 _SlideScaffold(
                   eyebrow: analytics.periodLabel,
                   icon: Icons.celebration_rounded,
-                  headline: 'You showed up.\nThat matters.',
+                  headline: tr('You showed up.\nThat matters.'),
                   subhead:
-                      'Congratulations on the effort you put in this ${_periodWord(analytics)}. Every logged session and every check-in is part of your story.',
+                      analytics.isWeekly
+                          ? tr('Congratulations on the effort you put in this week. Every logged session and every check-in is part of your story.')
+                          : tr('Congratulations on the effort you put in this month. Every logged session and every check-in is part of your story.'),
                   stats: [
                     _StatTile(
-                        label: 'Workouts completed',
+                        label: tr('Workouts completed'),
                         value: '${summary.completedSessions}'),
                     _StatTile(
-                        label: 'Days of meals logged',
+                        label: tr('Days of meals logged'),
                         value: '${summary.loggedMealDays}'),
                   ],
                 ),
@@ -216,11 +220,11 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                     exercises: analytics.exercises, active: _page == 2),
                 _DownsidesSlide(analytics: analytics),
                 _SlideScaffold(
-                  eyebrow: 'A moment for you',
+                  eyebrow: tr('A moment for you'),
                   icon: Icons.favorite_outline_rounded,
-                  headline: 'Take a breath.\nKeep going.',
+                  headline: tr('Take a breath.\nKeep going.'),
                   subhead:
-                      'An imperfect month does not erase your effort. Progress takes time. If you’d like, check in with your weight today.',
+                      tr('An imperfect month does not erase your effort. Progress takes time. If you’d like, check in with your weight today.'),
                   stats: const [],
                   footer: Column(children: [
                     if (_loadingWeight)
@@ -234,11 +238,11 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                     else ...[
                       Text(
                           _latestWeight == null
-                              ? 'Choose your weight below'
-                              : 'Latest entered weight: ${_latestWeight!.toStringAsFixed(1)} kg',
+                              ? tr('Choose your weight below')
+                              : tr('Latest entered weight: {w} kg', {'w': _latestWeight!.toStringAsFixed(1)}),
                           style: AppTypography.bodySm),
                       Semantics(
-                        label: 'Weight in kilograms',
+                        label: tr('Weight in kilograms'),
                         increasedValue:
                             ((_weightTenths + 1).clamp(300, 3000) / 10)
                                 .toStringAsFixed(1),
@@ -304,12 +308,12 @@ class _MonthlyOverviewScreenState extends State<MonthlyOverviewScreen> {
                   AppSpacing.marginMobile, AppSpacing.md),
               child: PrimaryPillButton(
                 label: _page == _slideCount - 1
-                    ? 'Continue to dashboard'
+                    ? tr('Continue to dashboard')
                     : _page == 4
                         ? (_weightEdited
-                            ? (_saving ? 'Saving…' : 'Save weight & continue')
-                            : 'Skip for now')
-                        : 'Next',
+                            ? (_saving ? tr('Saving…') : tr('Save weight & continue'))
+                            : tr('Skip for now'))
+                        : tr('Next'),
                 onPressed: _saving
                     ? null
                     : _page == 4 && _weightEdited
@@ -353,20 +357,22 @@ class _ImprovementsSlide extends StatelessWidget {
     final improved = analytics.exercises.where((e) => e.improved).toList();
     final unit = weightUnitOf(context);
     return _SlideScaffold(
-      eyebrow: 'Your wins',
+      eyebrow: tr('Your wins'),
       icon: Icons.trending_up_rounded,
       headline: improved.isEmpty
-          ? 'Every session builds your story'
-          : 'Look how far you’ve come',
+          ? tr('Every session builds your story')
+          : tr('Look how far you’ve come'),
       subhead: improved.isEmpty
-          ? 'There isn’t a comparable exercise gain to highlight yet. Keep logging weights and reps so your progress can show here.'
-          : 'Your first and latest heaviest sets this ${_periodWord(analytics)}, with reps held steady or increased.',
+          ? tr('There isn’t a comparable exercise gain to highlight yet. Keep logging weights and reps so your progress can show here.')
+          : analytics.isWeekly
+              ? tr('Your first and latest heaviest sets this week, with reps held steady or increased.')
+              : tr('Your first and latest heaviest sets this month, with reps held steady or increased.'),
       stats: const [],
       footer: Column(children: [
         if (analytics.strengths.isNotEmpty) ...[
           Align(
             alignment: Alignment.centerLeft,
-            child: Text('WHAT WENT WELL', style: AppTypography.labelCaps),
+            child: Text(tr('WHAT WENT WELL'), style: AppTypography.labelCaps),
           ),
           const SizedBox(height: AppSpacing.sm),
           for (final strength in analytics.strengths.take(3))
@@ -394,8 +400,8 @@ class _ImprovementsSlide extends StatelessWidget {
                       style: AppTypography.headlineLg
                           .copyWith(color: AppColors.accent)),
                   Text(
-                      '${exercise.points.first.reps} reps → ${exercise.points.last.reps} reps'
-                      '${exercise.isPerDumbbell ? perDumbbellSuffix : ''}',
+                      tr('{a} reps → {b} reps', {'a': exercise.points.first.reps, 'b': exercise.points.last.reps}) +
+                      (exercise.isPerDumbbell ? perDumbbellSuffix : ''),
                       style: AppTypography.bodySm),
                 ],
               ))),
@@ -413,17 +419,19 @@ class _DownsidesSlide extends StatelessWidget {
     final over = analytics.daysOverCalorieTarget;
     final hasGaps = (missed ?? 0) > 0 || (over ?? 0) > 0;
     return _SlideScaffold(
-      eyebrow: 'Room to grow',
+      eyebrow: tr('Room to grow'),
       icon: Icons.explore_outlined,
       headline:
-          hasGaps ? 'A few things to work on' : 'Keep building your rhythm',
+          hasGaps ? tr('A few things to work on') : tr('Keep building your rhythm'),
       subhead: hasGaps
-          ? 'These are useful signals for next ${_periodWord(analytics)}, not a verdict on your effort.'
-          : 'No setbacks flagged in the available logs. Unlogged activity and meals are still unknown.',
+          ? (analytics.isWeekly
+              ? tr('These are useful signals for next week, not a verdict on your effort.')
+              : tr('These are useful signals for next month, not a verdict on your effort.'))
+          : tr('No setbacks flagged in the available logs. Unlogged activity and meals are still unknown.'),
       stats: const [],
       footer: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (analytics.improvements.isNotEmpty) ...[
-          Text('WHAT TO IMPROVE', style: AppTypography.labelCaps),
+          Text(tr('WHAT TO IMPROVE'), style: AppTypography.labelCaps),
           const SizedBox(height: AppSpacing.sm),
           for (final improvement in analytics.improvements.take(3)) ...[
             _RecapDetailCard(
@@ -442,22 +450,22 @@ class _DownsidesSlide extends StatelessWidget {
         if ((missed ?? 0) > 0)
           SectionCard(
               child: Text(
-                  '$missed missed workout days\nPast scheduled training days only. Rest days are excluded.',
+                  tr('{n} missed workout days\nPast scheduled training days only. Rest days are excluded.', {'n': missed}),
                   style: AppTypography.bodyMd)),
         const SizedBox(height: AppSpacing.md),
         if ((over ?? 0) > 0)
           SectionCard(
               child: Text(
-                  '$over days above your calorie target\n${analytics.totalCaloriesOverTarget ?? 0} kcal above target in total across those days.',
+                  tr('{n} days above your calorie target\n{kcal} kcal above target in total across those days.', {'n': over, 'kcal': analytics.totalCaloriesOverTarget ?? 0}),
                   style: AppTypography.bodyMd)),
         const SizedBox(height: AppSpacing.md),
         Text(
             over == null
-                ? 'Not enough nutrition data to compare against a calorie target.'
-                : 'Based on ${analytics.summary.loggedMealDays} logged days and your current ${analytics.calorieTarget ?? '—'} kcal/day target. Historical targets and unlogged meals are not included.',
+                ? tr('Not enough nutrition data to compare against a calorie target.')
+                : tr('Based on {days} logged days and your current {kcal} kcal/day target. Historical targets and unlogged meals are not included.', {'days': analytics.summary.loggedMealDays, 'kcal': analytics.calorieTarget ?? '—'}),
             style: AppTypography.bodySm),
         if (missed == null)
-          Text('Missed workout history is unavailable for this report.',
+          Text(tr('Missed workout history is unavailable for this report.'),
               style: AppTypography.bodySm),
       ]),
     );
@@ -466,8 +474,6 @@ class _DownsidesSlide extends StatelessWidget {
 
 /// 'week' or 'month' - the recap copy swaps between the two depending on which
 /// report is being shown.
-String _periodWord(AnalyticsRecap analytics) =>
-    analytics.isWeekly ? 'week' : 'month';
 
 /// A thin progress rail across the top, one bar per slide - filled bars
 /// behind and including the current page, like a Stories-style recap rather
@@ -620,7 +626,7 @@ class _AiVerdictSlide extends StatelessWidget {
               children: [
                 const _RecapIcon(icon: Icons.auto_awesome_rounded),
                 const SizedBox(height: AppSpacing.sm),
-                const MarkerDrawnTitle('Your next chapter',
+                MarkerDrawnTitle(tr('Your next chapter'),
                     playKey: 'monthly-next-chapter',
                     textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.sm),
@@ -629,7 +635,7 @@ class _AiVerdictSlide extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xl),
           if (analytics.strengths.isNotEmpty) ...[
-            const SectionEyebrow('What went well'),
+            SectionEyebrow(tr('What went well')),
             const SizedBox(height: AppSpacing.sm),
             SectionCard(
               child: Column(
@@ -657,7 +663,7 @@ class _AiVerdictSlide extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
           ],
           if (analytics.improvements.isNotEmpty) ...[
-            const SectionEyebrow('Where to grow'),
+            SectionEyebrow(tr('Where to grow')),
             const SizedBox(height: AppSpacing.sm),
             for (final improvement in analytics.improvements)
               Padding(
@@ -668,7 +674,7 @@ class _AiVerdictSlide extends StatelessWidget {
           ],
           if (analytics.focusText.isNotEmpty) ...[
             SectionEyebrow(
-                analytics.isWeekly ? 'Keep going next week' : 'Keep going with',
+                analytics.isWeekly ? tr('Keep going next week') : tr('Keep going with'),
                 color: AppColors.secondary),
             const SizedBox(height: AppSpacing.sm),
             SectionCard(
@@ -900,11 +906,11 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
         _addedSlots.add(slotId);
       });
       _showMessage(
-          '${suggestion.title} added to Day ${day.dayNumber} (${_shortWeekday(day.date)}).');
+          tr('{meal} added to Day {n} ({day}).', {'meal': suggestion.title, 'n': day.dayNumber, 'day': _shortWeekday(day.date)}));
     } catch (_) {
       if (!mounted) return;
       setState(() => _busySlots.remove(slotId));
-      _showMessage('Could not add that meal. Please try again.');
+      _showMessage(tr('Could not add that meal. Please try again.'));
     }
   }
 
@@ -917,11 +923,11 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
   @override
   Widget build(BuildContext context) {
     return _SlideScaffold(
-      eyebrow: '7-day meal plan',
+      eyebrow: tr('7-day meal plan'),
       icon: Icons.restaurant_rounded,
-      headline: 'AI recommended meals for 7 days',
+      headline: tr('AI recommended meals for 7 days'),
       subhead:
-          'Three meals per day, picked for your goal and current targets. Review the ingredients and macros, then add the meals you want.',
+          tr('Three meals per day, picked for your goal and current targets. Review the ingredients and macros, then add the meals you want.'),
       stats: const [],
       footer: _buildList(),
     );
@@ -930,12 +936,12 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
   Widget _buildList() {
     if (_loading) return const SkeletonList(count: 3, padding: EdgeInsets.zero);
     if (_failed) {
-      return Text('Could not load meal ideas right now.',
+      return Text(tr('Could not load meal ideas right now.'),
           style: AppTypography.bodySm);
     }
     if (_days.isEmpty) {
       return Text(
-          'No meal ideas yet - check back once more meals are recommended.',
+          tr('No meal ideas yet - check back once more meals are recommended.'),
           style: AppTypography.bodySm);
     }
     final day = _days[_selectedDay];
@@ -952,7 +958,7 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
               final item = _days[index];
               return PillChip(
                 selected: index == _selectedDay,
-                label: 'Day ${item.dayNumber}',
+                label: tr('Day {n}', {'n': item.dayNumber}),
                 onTap: () => setState(() => _selectedDay = index),
               );
             },
@@ -960,7 +966,7 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
-            'Day ${day.dayNumber} · ${_shortWeekday(day.date)}, ${_shortMonthDay(day.date)}',
+            tr('Day {n} · {weekday}, {date}', {'n': day.dayNumber, 'weekday': _shortWeekday(day.date), 'date': _shortMonthDay(day.date)}),
             style: AppTypography.headlineSm),
         const SizedBox(height: AppSpacing.sm),
         for (var mealIndex = 0; mealIndex < day.meals.length; mealIndex++)
@@ -993,25 +999,25 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                            '${suggestion.mealType} · ${suggestion.caloriesKcal} kcal',
+                            '${tr(suggestion.mealType)} · ${suggestion.caloriesKcal} kcal',
                             style: AppTypography.bodySm
                                 .copyWith(color: AppColors.onSurfaceVariant)),
                         const SizedBox(height: 4),
                         Text(
-                            'Macros · P ${suggestion.proteinG}g · C ${suggestion.carbsG}g · F ${suggestion.fatsG}g',
+                            tr('Macros · P {p}g · C {c}g · F {f}g', {'p': suggestion.proteinG, 'c': suggestion.carbsG, 'f': suggestion.fatsG}),
                             style: AppTypography.labelSm
                                 .copyWith(color: AppColors.accent)),
                         if (suggestion.compactIngredientSummary
                             case final ingredients?) ...[
                           const SizedBox(height: 6),
-                          Text('Ingredients · $ingredients',
+                          Text(tr('Ingredients · {list}', {'list': ingredients}),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.bodySm
                                   .copyWith(color: AppColors.onSurface)),
                         ] else ...[
                           const SizedBox(height: 6),
-                          Text('Ingredients are not available for this meal.',
+                          Text(tr('Ingredients are not available for this meal.'),
                               style: AppTypography.bodySm.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                   fontStyle: FontStyle.italic)),
@@ -1022,10 +1028,10 @@ class _WeeklyMealPlanSlideState extends State<_WeeklyMealPlanSlide> {
                               ? Icons.check_rounded
                               : Icons.add_rounded,
                           label: _addedSlots.contains(slotId)
-                              ? 'Added'
+                              ? tr('Added')
                               : _busySlots.contains(slotId)
-                                  ? 'Adding…'
-                                  : 'Add to Day ${day.dayNumber}',
+                                  ? tr('Adding…')
+                                  : tr('Add to Day {n}', {'n': day.dayNumber}),
                           onPressed: _busySlots.contains(slotId) ||
                                   _addedSlots.contains(slotId)
                               ? null
@@ -1055,32 +1061,10 @@ class _RecommendedMealDay {
   });
 }
 
-String _shortWeekday(DateTime date) => const [
-      'Mon',
-      'Tue',
-      'Wed',
-      'Thu',
-      'Fri',
-      'Sat',
-      'Sun',
-    ][date.weekday - 1];
+String _shortWeekday(DateTime date) => DateFormat.E().format(date);
 
 String _shortMonthDay(DateTime date) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${months[date.month - 1]} ${date.day}';
+  return DateFormat.MMMd().format(date);
 }
 
 /// Advanced-only recap slide: preserves the user's current split and turns it
@@ -1134,11 +1118,11 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
   @override
   Widget build(BuildContext context) {
     return _SlideScaffold(
-      eyebrow: 'Plan for next week',
+      eyebrow: tr('Plan for next week'),
       icon: Icons.calendar_view_week_rounded,
-      headline: 'Stay with your current split',
+      headline: tr('Stay with your current split'),
       subhead:
-          'Consistency makes your progress measurable. Here is your active rotation for the next seven days, with one focused adjustment from this week.',
+          tr('Consistency makes your progress measurable. Here is your active rotation for the next seven days, with one focused adjustment from this week.'),
       stats: const [],
       footer: _buildPlan(),
     );
@@ -1147,7 +1131,7 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
   Widget _buildPlan() {
     if (_loading) return const SkeletonList(count: 4, padding: EdgeInsets.zero);
     if (_failed) {
-      return Text('Could not load your training plan right now.',
+      return Text(tr('Could not load your training plan right now.'),
           style: AppTypography.bodySm);
     }
     final activeSplit = _activeSplit;
@@ -1157,10 +1141,10 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('No active split yet', style: AppTypography.headlineSm),
+            Text(tr('No active split yet'), style: AppTypography.headlineSm),
             const SizedBox(height: AppSpacing.xs),
             Text(
-                'Choose a split from Plans first. Your next weekly overview will turn it into a seven-day schedule.',
+                tr('Choose a split from Plans first. Your next weekly overview will turn it into a seven-day schedule.'),
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],
@@ -1214,15 +1198,15 @@ class _NextWeekTrainingSlideState extends State<_NextWeekTrainingSlide> {
           const SizedBox(height: AppSpacing.md),
           _RecapDetailCard(
             icon: Icons.tune_rounded,
-            title: improvement?.area ?? 'Progressive consistency',
+            title: improvement?.area ?? tr('Progressive consistency'),
             body: improvement?.recommendation ??
-                'Keep the same exercises and aim for one more quality rep before increasing the load.',
+                tr('Keep the same exercises and aim for one more quality rep before increasing the load.'),
             color: AppColors.secondary,
           ),
           const SizedBox(height: AppSpacing.md),
           SecondaryPillButton(
             icon: Icons.visibility_outlined,
-            label: 'Review my split',
+            label: tr('Review my split'),
             onPressed: openContainer,
           ),
         ],
@@ -1254,7 +1238,7 @@ class _TrainingDayRow extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(
-            isRest ? 'Recovery day' : (day?.title ?? 'Training day'),
+            isRest ? tr('Recovery day') : (day?.title ?? tr('Training day')),
             style: AppTypography.bodySm.copyWith(
                 color:
                     isRest ? AppColors.onSurfaceVariant : AppColors.onSurface),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -10,7 +11,7 @@ import 'core/session/session_store.dart';
 import 'core/sync/sync_queue.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
-import 'core/widgets/runner_draw_splash.dart';
+import 'core/widgets/logo_draw_splash.dart';
 import 'features/account/account_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/auth_repository.dart';
@@ -44,15 +45,16 @@ import 'features/today/active_workout_draft_store.dart';
 import 'features/today/exercise_memory_store.dart';
 import 'features/today/today_controller.dart';
 import 'features/today/today_repository.dart';
+import 'l10n/l10n.dart';
 import 'root_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await L10n.init();
   runApp(const SilenApp());
   // No screenshots or screen recordings anywhere in the app.
-  WidgetsBinding.instance
-      .addPostFrameCallback((_) => ScreenSecurity.lockApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) => ScreenSecurity.lockApp());
 }
 
 /// Wires the whole dependency graph once, at the root, so every feature
@@ -66,7 +68,7 @@ class SilenApp extends StatefulWidget {
   State<SilenApp> createState() => _SilenAppState();
 }
 
-class _SilenAppState extends State<SilenApp> {
+class _SilenAppState extends State<SilenApp> with WidgetsBindingObserver {
   // Owned here, above the reload key, so a reload never tears down the device
   // identity, the HTTP client, or the FCM token-refresh subscription - only
   // the per-run controllers and screens below are rebuilt.
@@ -115,7 +117,32 @@ class _SilenAppState extends State<SilenApp> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    L10n.locale.addListener(_onLanguageChanged);
+  }
+
+  /// A language switch re-runs every `build` below (and so every `tr()`
+  /// call) without remounting anything, so the user stays on the screen
+  /// they changed it from and no state is lost.
+  void _onLanguageChanged() {
+    void rebuild(Element element) {
+      element.markNeedsBuild();
+      element.visitChildren(rebuild);
+    }
+
+    (context as Element).visitChildren(rebuild);
+  }
+
+  /// "Follow the phone" language picks up a system language change live.
+  @override
+  void didChangeLocales(List<Locale>? locales) => L10n.onDeviceLocalesChanged();
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    L10n.locale.removeListener(_onLanguageChanged);
     _syncQueue.stop();
     super.dispose();
   }
@@ -196,7 +223,8 @@ class _AppRun extends StatelessWidget {
         ChangeNotifierProvider(
             create: (ctx) => MySplitsController(ctx.read<SplitsRepository>())),
         ChangeNotifierProvider(
-            create: (ctx) => DietPlansController(ctx.read<DietPlanRepository>())),
+            create: (ctx) =>
+                DietPlansController(ctx.read<DietPlanRepository>())),
         ChangeNotifierProvider(
             create: (ctx) =>
                 MyDietPlansController(ctx.read<DietPlanRepository>())),
@@ -228,67 +256,76 @@ class _AppRun extends StatelessWidget {
             create: (ctx) => MealController(ctx.read<MealRepository>(),
                 syncQueue: syncQueue)),
       ],
-      child: Consumer<SettingsController>(
-        builder: (context, settingsController, _) {
-          // Prefer the live/loaded appearance mode; while it's still
-          // resolving, fall back to the synchronously-cached last-known
-          // value so there's no flash of the wrong theme on cold start.
-          final mode = settingsController.state.data?.appearanceMode ??
-              sessionStore.cachedAppearanceMode;
-          final themeMode = switch (mode) {
-            'Light' => ThemeMode.light,
-            'Dark' => ThemeMode.dark,
-            // 'Device' (and null, on a genuinely first-ever launch) follow
-            // the OS setting.
-            _ => ThemeMode.system,
-          };
-          return MaterialApp(
-            title: 'SilaFit',
-            debugShowCheckedModeBanner: false,
-            scaffoldMessengerKey: messengerKey,
-            theme: buildSilenTheme(Brightness.light),
-            darkTheme: buildSilenTheme(Brightness.dark),
-            themeMode: themeMode,
-            builder: (context, child) {
-              final brightness = Theme.of(context).brightness;
-              AppColors.setBrightness(brightness);
-              ScreenSecurity.setDarkAppearance(
-                  brightness == Brightness.dark);
-              final palette = AppColors.paletteFor(brightness);
-              // Every screen reads `AppColors`'s static getters directly
-              // instead of `Theme.of(context)`, so a plain `notifyListeners`
-              // from flipping the appearance mode only rebuilds whichever
-              // widgets happen to be listening for some other reason -
-              // everything else keeps painting the brightness it was built
-              // with. Keying this wrapper by the resolved brightness forces
-              // Flutter to tear down and rebuild the whole app below here
-              // whenever it changes, so every `AppColors` read - in Settings
-              // and everywhere else - picks up the new palette immediately.
-              //
-              // The OS status bar / Android nav bar are drawn by the
-              // platform, not by anything in this widget tree, so neither
-              // the `KeyedSubtree` remount above nor any `AppColors` read
-              // touches them - without this `AnnotatedRegion` they keep
-              // whatever style they had at cold start forever, which reads
-              // as "that one bit of small text never changes with the rest
-              // of the theme" (a screen with its own `AppBar`, e.g. Splits,
-              // overrides this with its own nested region while it's on
-              // screen, which is the correct/expected layering).
-              final overlayStyle = brightness == Brightness.dark
-                  ? SystemUiOverlayStyle.light
-                  : SystemUiOverlayStyle.dark;
-              return AnnotatedRegion<SystemUiOverlayStyle>(
-                value: overlayStyle.copyWith(
-                  statusBarColor: Colors.transparent,
-                  systemNavigationBarColor: palette.background,
-                  systemNavigationBarDividerColor: palette.background,
-                ),
-                child: KeyedSubtree(key: ValueKey(brightness), child: child!),
-              );
-            },
-            home: const _AppRoot(),
-          );
-        },
+      child: ValueListenableBuilder<Locale>(
+        valueListenable: L10n.locale,
+        // Listens to the appearance mode alone, not every settings change -
+        // a plain Consumer rebuilt the whole MaterialApp on each settings
+        // load or save.
+        builder: (context, locale, _) =>
+            Selector<SettingsController, String?>(
+          selector: (_, settings) => settings.state.data?.appearanceMode,
+          builder: (context, appearanceMode, _) {
+            // Prefer the live/loaded appearance mode; while it's still
+            // resolving, fall back to the synchronously-cached last-known
+            // value so there's no flash of the wrong theme on cold start.
+            final mode = appearanceMode ?? sessionStore.cachedAppearanceMode;
+            final themeMode = switch (mode) {
+              'Light' => ThemeMode.light,
+              'Dark' => ThemeMode.dark,
+              // 'Device' (and null, on a genuinely first-ever launch) follow
+              // the OS setting.
+              _ => ThemeMode.system,
+            };
+            return MaterialApp(
+              title: 'SilaFit',
+              debugShowCheckedModeBanner: false,
+              locale: locale,
+              supportedLocales: L10n.supportedLocales,
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              scaffoldMessengerKey: messengerKey,
+              theme: buildSilenTheme(Brightness.light),
+              darkTheme: buildSilenTheme(Brightness.dark),
+              themeMode: themeMode,
+              builder: (context, child) {
+                final brightness = Theme.of(context).brightness;
+                AppColors.setBrightness(brightness);
+                ScreenSecurity.setDarkAppearance(brightness == Brightness.dark);
+                final palette = AppColors.paletteFor(brightness);
+                // Every screen reads `AppColors`'s static getters directly
+                // instead of `Theme.of(context)`, so a plain `notifyListeners`
+                // from flipping the appearance mode only rebuilds whichever
+                // widgets happen to be listening for some other reason -
+                // everything else keeps painting the brightness it was built
+                // with. Keying this wrapper by the resolved brightness forces
+                // Flutter to tear down and rebuild the whole app below here
+                // whenever it changes, so every `AppColors` read - in Settings
+                // and everywhere else - picks up the new palette immediately.
+                //
+                // The OS status bar / Android nav bar are drawn by the
+                // platform, not by anything in this widget tree, so neither
+                // the `KeyedSubtree` remount above nor any `AppColors` read
+                // touches them - without this `AnnotatedRegion` they keep
+                // whatever style they had at cold start forever, which reads
+                // as "that one bit of small text never changes with the rest
+                // of the theme" (a screen with its own `AppBar`, e.g. Splits,
+                // overrides this with its own nested region while it's on
+                // screen, which is the correct/expected layering).
+                final overlayStyle = brightness == Brightness.dark
+                    ? SystemUiOverlayStyle.light
+                    : SystemUiOverlayStyle.dark;
+                return AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: overlayStyle.copyWith(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: palette.background,
+                    systemNavigationBarDividerColor: palette.background,
+                  ),
+                  child: KeyedSubtree(key: ValueKey(brightness), child: child!),
+                );
+              },
+              home: const _AppRoot(),
+            );
+          },
+        ),
       ),
     );
   }
@@ -310,7 +347,7 @@ class _AppRootState extends State<_AppRoot> {
   bool _settingsLoadTriggered = false;
   bool _pushSyncTriggered = false;
 
-  /// Whether the runner mark has finished drawing. The splash stays up until
+  /// Whether the logo has finished drawing. The splash stays up until
   /// it has, even when bootstrap resolves sooner, so it never cuts off
   /// mid-stroke. Static because a brightness flip remounts this whole subtree
   /// (see the `KeyedSubtree` in `SilenApp`), and sign-out/account-deletion
@@ -322,7 +359,7 @@ class _AppRootState extends State<_AppRoot> {
     return Consumer<AuthController>(
       builder: (context, auth, _) {
         if (auth.isBootstrapping || !_splashFinished) {
-          return RunnerDrawSplash(
+          return LogoDrawSplash(
             onFinished: () => setState(() => _splashFinished = true),
           );
         }

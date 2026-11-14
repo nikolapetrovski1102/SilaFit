@@ -17,6 +17,7 @@ import 'meal_models.dart';
 import 'meal_recommendation.dart';
 import 'meal_suggestion_detail_screen.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// The full "Suggested Meals" library - a dedicated listing screen for
 /// browsing/activating curated meal ideas, structurally mirroring
@@ -106,19 +107,19 @@ class _SuggestionsContentState extends State<_SuggestionsContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        MarkerDrawnTitle('Suggested Meals', playKey: 'meal-suggestions'),
+        MarkerDrawnTitle(tr('Suggested Meals'), playKey: 'meal-suggestions'),
         const SizedBox(height: AppSpacing.md),
         if (widget.suggestions.isEmpty)
-          const MascotEmptyState(
-            title: 'No suggestions yet',
+          MascotEmptyState(
+            title: tr('No suggestions yet'),
             message:
-                'Curated meal ideas will show up here once they\'re ready.',
+                tr('Curated meal ideas will show up here once they\'re ready.'),
           )
         else ...[
           _BestMatchHero(match: ranked.first),
           if (ranked.length > 1) ...[
             const SizedBox(height: AppSpacing.lg),
-            const SectionEyebrow('More for you'),
+            SectionEyebrow(tr('More for you')),
             const SizedBox(height: AppSpacing.sm),
             for (final match in ranked.skip(1).take(3)) ...[
               _SuggestionCard(
@@ -131,10 +132,10 @@ class _SuggestionsContentState extends State<_SuggestionsContent> {
           const SizedBox(height: AppSpacing.lg),
           BrowseAllToggle(
             open: _browsingAll,
-            title: 'Browse all ${widget.suggestions.length} meals',
+            title: tr('Browse all {n} meals', {'n': widget.suggestions.length}),
             subtitle: _browsingAll
-                ? 'Showing the full library'
-                : 'Filter every meal in the library',
+                ? tr('Showing the full library')
+                : tr('Filter every meal in the library'),
             onTap: () => setState(() => _browsingAll = !_browsingAll),
           ),
           if (_browsingAll) ...[
@@ -161,7 +162,7 @@ class _BestMatchHero extends StatelessWidget {
         controller: MealSuggestionActivationController(meals, suggestion),
       ),
       closedBuilder: (context, openContainer) => BestMatchCard(
-        eyebrow: 'Best for you right now',
+        eyebrow: tr('Best for you right now'),
         title: suggestion.title,
         reason: match.reason,
         icon: Icons.restaurant_rounded,
@@ -170,9 +171,9 @@ class _BestMatchHero extends StatelessWidget {
           BestMatchMeta(Icons.local_fire_department_rounded,
               '${suggestion.caloriesKcal} kcal'),
           BestMatchMeta(
-              Icons.egg_alt_rounded, '${suggestion.proteinG}g protein'),
+              Icons.egg_alt_rounded, tr('{n}g protein', {'n': suggestion.proteinG})),
         ],
-        actionLabel: 'View this meal',
+        actionLabel: tr('View this meal'),
         onTap: openContainer,
       ),
     );
@@ -234,7 +235,7 @@ class _MealLibraryState extends State<_MealLibrary> {
             itemBuilder: (context, i) {
               if (i == 0) {
                 return PillChip(
-                  label: 'All Meals',
+                  label: tr('All Meals'),
                   selected: _filter == null,
                   onTap: () => _selectFilter(null),
                 );
@@ -252,8 +253,8 @@ class _MealLibraryState extends State<_MealLibrary> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const SectionEyebrow('Meal Library'),
-            Text('${filtered.length} Meals',
+            SectionEyebrow(tr('Meal Library')),
+            Text(trPlural(filtered.length, '{n} Meal', '{n} Meals'),
                 style: AppTypography.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],
@@ -263,7 +264,7 @@ class _MealLibraryState extends State<_MealLibrary> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 48),
             child: Center(
-                child: Text('No meals match this filter.',
+                child: Text(tr('No meals match this filter.'),
                     style: AppTypography.bodySm)),
           ),
         for (final suggestion in visible) ...[
@@ -273,7 +274,7 @@ class _MealLibraryState extends State<_MealLibrary> {
         if (hasMore) ...[
           const SizedBox(height: AppSpacing.sm),
           SecondaryPillButton(
-            label: 'Show ${filtered.length - visibleCount} more',
+            label: tr('Show {n} more', {'n': filtered.length - visibleCount}),
             icon: Icons.expand_more_rounded,
             onPressed: () => setState(() => _visibleCount += _pageSize),
           ),
@@ -337,7 +338,7 @@ class _SuggestionCard extends StatelessWidget {
                         const SizedBox(width: AppSpacing.xs),
                         _MetaPill(
                             icon: Icons.egg_alt_rounded,
-                            label: '${suggestion.proteinG}g protein'),
+                            label: tr('{n}g protein', {'n': suggestion.proteinG})),
                       ],
                     ),
                   ],

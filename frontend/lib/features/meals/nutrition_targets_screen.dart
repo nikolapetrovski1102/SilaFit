@@ -11,6 +11,7 @@ import '../../core/widgets/silen_button.dart';
 import 'meal_controller.dart';
 import 'meal_models.dart';
 import 'widgets/calorie_ring.dart';
+import '../../l10n/l10n.dart';
 
 const _kCaloriesMin = 1000.0;
 const _kCaloriesMax = 5000.0;
@@ -52,9 +53,9 @@ enum _Macro { protein, carbs, fat }
 
 extension on _Macro {
   String get label => switch (this) {
-        _Macro.protein => 'Protein',
-        _Macro.carbs => 'Carbs',
-        _Macro.fat => 'Fat',
+        _Macro.protein => tr('Protein'),
+        _Macro.carbs => tr('Carbs'),
+        _Macro.fat => tr('Fat'),
       };
 
   double get kcalPerGram => this == _Macro.fat ? 9 : 4;
@@ -183,7 +184,7 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
           backgroundColor: AppColors.surfaceContainerHigh,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.card)),
-          title: Text('Daily calories', style: AppTypography.headlineSm),
+          title: Text(tr('Daily calories'), style: AppTypography.headlineSm),
           content: TextField(
             controller: input,
             autofocus: true,
@@ -204,11 +205,11 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text('Cancel', style: AppTypography.bodyMd),
+              child: Text(tr('Cancel'), style: AppTypography.bodyMd),
             ),
             TextButton(
               onPressed: submit,
-              child: Text('Set',
+              child: Text(tr('Set'),
                   style:
                       AppTypography.bodyMd.copyWith(color: AppColors.accent)),
             ),
@@ -236,7 +237,7 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
           content: Text(widget.controller.actionError ??
-              'Couldn\'t save your targets. Try again.')));
+              tr('Couldn\'t save your targets. Try again.'))));
   }
 
   @override
@@ -279,13 +280,13 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      tooltip: 'Close',
+                      tooltip: tr('Close'),
                       icon: const Icon(Icons.close_rounded),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     const SizedBox(width: AppSpacing.xxs),
                     Expanded(
-                      child: Text('Daily targets',
+                      child: Text(tr('Daily targets'),
                           style: AppTypography.headlineSm),
                     ),
                   ],
@@ -313,7 +314,7 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
                               progress: _progressFor(_calories),
                               initialProgress: _initialProgress,
                               value: _calories.round(),
-                              label: 'KCAL / DAY',
+                              label: tr('KCAL / DAY'),
                               strokeFraction: 0.06,
                             ),
                           ),
@@ -326,8 +327,8 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
                           children: [
                             Text(
                               _consumed > 0
-                                  ? '$_consumed kcal eaten today · tap the ring to type a number'
-                                  : 'Tap the ring to type an exact number',
+                                  ? tr('{n} kcal eaten today · tap the ring to type a number', {'n': _consumed})
+                                  : tr('Tap the ring to type an exact number'),
                               textAlign: TextAlign.center,
                               style: AppTypography.labelSm
                                   .copyWith(color: AppColors.onSurfaceVariant),
@@ -346,7 +347,7 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
                       stagger(
                         2,
                         _TargetSlider(
-                          label: 'Calories',
+                          label: tr('Calories'),
                           valueText: '${_calories.round()} kcal',
                           value: _calories,
                           min: _kCaloriesMin,
@@ -357,7 +358,7 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
                         ),
                       ),
                       const SizedBox(height: AppSpacing.lg),
-                      stagger(3, const SectionEyebrow('Macros')),
+                      stagger(3, SectionEyebrow(tr('Macros'))),
                       const SizedBox(height: AppSpacing.sm),
                       for (final (i, m) in _Macro.values.indexed) ...[
                         stagger(
@@ -386,7 +387,7 @@ class _NutritionTargetsScreenState extends State<NutritionTargetsScreen> {
                 padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
                     AppSpacing.xs, AppSpacing.marginMobile, AppSpacing.md),
                 child: PrimaryPillButton(
-                  label: 'Save targets',
+                  label: tr('Save targets'),
                   icon: Icons.check_rounded,
                   isLoading: _saving,
                   onPressed: _dirty ? _save : null,

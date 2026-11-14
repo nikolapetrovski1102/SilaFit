@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/bottom_nav_bar.dart';
+import '../../core/widgets/frozen_blur.dart';
 import '../../core/widgets/marker_drawn_title.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/section_eyebrow.dart';
@@ -29,6 +28,7 @@ import 'progress_models.dart';
 import 'weekly_analytics_controller.dart';
 import 'widgets/exercise_progress_card.dart';
 import 'widgets/personal_record_tile.dart';
+import '../../l10n/l10n.dart';
 
 /// The AI-narrated progress screen. Registered-tier only - the caller
 /// (RootShell) runs it through AccountGate before this ever mounts - and a
@@ -48,11 +48,19 @@ class _ProgressScreenState extends State<ProgressScreen> {
   late final ProgressController _controller;
   late final ExerciseProgressController _exerciseController;
 
+  /// The analytics cards listen to their own controllers, which don't
+  /// rebuild this screen - the frozen blur still needs to hear about them.
+  late final Listenable _blurRefresh;
+
   @override
   void initState() {
     super.initState();
     _controller = context.read<ProgressController>();
     _exerciseController = context.read<ExerciseProgressController>();
+    _blurRefresh = Listenable.merge([
+      context.read<AnalyticsController>(),
+      context.read<WeeklyAnalyticsController>(),
+    ]);
     // Deferred - see the matching comment in today_screen.dart: load()'s
     // first notifyListeners() must not fire synchronously mid-build.
     Future.microtask(_controller.load);
@@ -100,9 +108,9 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 _exerciseController.exercisesState.isLoading);
         return Stack(
           children: [
-            ImageFiltered(
+            FrozenBlur(
               enabled: blurred,
-              imageFilter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+              refresh: _blurRefresh,
               child: IgnorePointer(
                 ignoring: blurred,
                 child: _buildScrollView(context),
@@ -191,10 +199,10 @@ class _ProgressLockOverlay extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     UpgradeLockCard(
-                      title: 'Track every lift',
-                      message: 'See your estimated 1RM, top sets and volume '
-                          'for each exercise over time, plus AI reviews.',
-                      actionLabel: 'Unlock Progress',
+                      title: tr('Track every lift'),
+                      message: tr('See your estimated 1RM, top sets and volume '
+                          'for each exercise over time, plus AI reviews.'),
+                      actionLabel: tr('Unlock Progress'),
                       onUnlock: onUnlock,
                     ),
                     // Only offered while an ad is loaded and ready to play.
@@ -206,7 +214,7 @@ class _ProgressLockOverlay extends StatelessWidget {
                               padding:
                                   const EdgeInsets.only(top: AppSpacing.md),
                               child: SecondaryPillButton(
-                                label: 'Watch an ad to view once',
+                                label: tr('Watch an ad to view once'),
                                 icon: Icons.play_circle_outline_rounded,
                                 onPressed: onWatchAd,
                               ),
@@ -244,7 +252,7 @@ class _AdPassStrip extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
-                  'Viewing with an ad · Get Pro for unlimited access',
+                  tr('Viewing with an ad · Get Pro for unlimited access'),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant),
                 ),
@@ -275,9 +283,10 @@ class _ProgressContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // The title sits partly over the card below; touches pass through.
+        // The title sits just above the card below; touches pass through.
         MarkerTitleOverlap(
-          title: const MarkerDrawnTitle('Your progress', playKey: 'progress'),
+          title: MarkerDrawnTitle(tr('Your progress'), playKey: 'progress'),
+          overlapFactor: MarkerTitleOverlap.gapOverlapFactor,
           child: spotlightKey != null
               ? KeyedSubtree(
                   key: spotlightKey!,
@@ -342,7 +351,7 @@ class _PersonalRecordsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Expanded(child: SectionEyebrow('Personal Records')),
+                Expanded(child: SectionEyebrow(tr('Personal Records'))),
                 if (hasRecords)
                   Icon(Icons.arrow_forward_rounded,
                       size: 16, color: AppColors.onSurfaceVariant),
@@ -354,7 +363,7 @@ class _PersonalRecordsCard extends StatelessWidget {
             else if (state.error != null)
               Text(state.error!, style: AppTypography.bodySm)
             else if (!hasRecords)
-              Text('Log a set during a workout to start tracking PRs.',
+              Text(tr('Log a set during a workout to start tracking PRs.'),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant))
             else
@@ -379,10 +388,10 @@ class _YourInsightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionEyebrow('Your Insight', color: AppColors.accent),
+          SectionEyebrow(tr('Your Insight'), color: AppColors.accent),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            '"${insight ?? 'Log a few more sessions to unlock your first insight.'}"',
+            '"${insight ?? tr('Log a few more sessions to unlock your first insight.')}"',
             style: AppTypography.bodyLg.copyWith(
                 color: AppColors.onSurface, fontStyle: FontStyle.italic),
           ),
@@ -399,9 +408,9 @@ class _AiMonthlyReviewSection extends StatelessWidget {
   const _AiMonthlyReviewSection();
 
   @override
-  Widget build(BuildContext context) => const _AiReviewEntry(
-        title: 'AI Monthly Review',
-        description: 'Open your monthly overview',
+  Widget build(BuildContext context) => _AiReviewEntry(
+        title: tr('AI Monthly Review'),
+        description: tr('Open your monthly overview'),
         tier: 'PRO',
         weekly: false,
       );
@@ -413,9 +422,9 @@ class _AiWeeklyReviewSection extends StatelessWidget {
   const _AiWeeklyReviewSection();
 
   @override
-  Widget build(BuildContext context) => const _AiReviewEntry(
-        title: 'AI Weekly Review',
-        description: 'Open your weekly overview',
+  Widget build(BuildContext context) => _AiReviewEntry(
+        title: tr('AI Weekly Review'),
+        description: tr('Open your weekly overview'),
         tier: 'ADVANCED',
         weekly: true,
       );
@@ -485,7 +494,7 @@ class _AiReviewEntryState extends State<_AiReviewEntry> {
 
     final message = error?.trim().isNotEmpty == true
         ? error!
-        : 'Your review is not available yet.';
+        : tr('Your review is not available yet.');
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }

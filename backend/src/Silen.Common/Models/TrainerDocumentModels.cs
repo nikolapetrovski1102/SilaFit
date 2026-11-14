@@ -109,6 +109,14 @@ public sealed class SupplementProviderModel
     public string Category { get; set; } = "Protein";
 
     public int SortOrder { get; set; }
+
+    /// <summary>The grocery partner: the app offers to order a recipe's or a shopping list's
+    /// ingredients here (migration 0028).</summary>
+    public bool OrdersIngredients { get; set; }
+
+    /// <summary>The partner's product search, with <c>{query}</c> where the search text goes.
+    /// Null: the app opens <see cref="ShopUrl"/>.</summary>
+    public string? SearchUrl { get; set; }
 }
 
 /// <summary>The console's view of a provider, including hidden ones.</summary>
@@ -124,8 +132,28 @@ public sealed class AdminSupplementProviderModel
     public string Category { get; set; } = "Protein";
     public bool IsActive { get; set; }
     public int SortOrder { get; set; }
+    public bool OrdersIngredients { get; set; }
+    public string? SearchUrl { get; set; }
+    public bool BarcodeCatalogEnabled { get; set; }
+    public string? BarcodeCatalogUrl { get; set; }
+
+    /// <summary>The key itself never leaves the server.</summary>
+    public bool HasBarcodeCatalogApiKey { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+}
+
+/// <summary>A partner's product API that barcode lookups ask (switched on in the console).</summary>
+public sealed class PartnerBarcodeCatalogModel
+{
+    /// <summary>The provider's name: stored as the source of the foods it supplies.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>https, with <c>{barcode}</c> where the code goes.</summary>
+    public string ProductUrl { get; set; } = string.Empty;
+
+    public string? ApiKey { get; set; }
 }
 
 /// <summary>A meal with what goes into it and how to make it.</summary>

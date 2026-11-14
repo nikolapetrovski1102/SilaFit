@@ -35,6 +35,7 @@ import 'exercise_memory_store.dart';
 import 'today_controller.dart';
 import 'today_models.dart';
 import 'today_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// Exercises tagged with this `EquipmentType` (see the seed data in
 /// `database/seed/001_SeedReferenceData.sql`) are the only ones where a
@@ -719,7 +720,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   /// different lift.
   Future<void> _swapExercise() async {
     final picked =
-        await showExercisePickerSheet(context, title: 'Swap exercise');
+        await showExercisePickerSheet(context, title: tr('Swap exercise'));
     if (picked == null || !mounted) return;
     final memory = await ExerciseMemoryStore.instance.loadAll();
     if (!mounted) return;
@@ -742,7 +743,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
   /// inventing one.
   Future<void> _addExercise() async {
     final picked =
-        await showExercisePickerSheet(context, title: 'Add exercise');
+        await showExercisePickerSheet(context, title: tr('Add exercise'));
     if (picked == null || !mounted) return;
     final memory = await ExerciseMemoryStore.instance.loadAll();
     if (!mounted) return;
@@ -916,13 +917,13 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
       await MascotDialog.show(
         context,
         pose: isMilestone ? RamArt.standing : RamArt.charging,
-        title: isMilestone ? '$streakDays-day streak!' : 'Workout complete',
+        title: isMilestone ? trPlural(streakDays, '{n}-day streak!', '{n}-day streak!') : tr('Workout complete'),
         message: outcome == WorkoutCompletion.savedOffline
-            ? 'Nice work. Saved on your phone - it\'ll upload by itself when you\'re back online.'
+            ? tr('Nice work. Saved on your phone - it\'ll upload by itself when you\'re back online.')
             : isMilestone
-                ? 'You\'re on fire - $streakDays days in a row. Keep it going.'
-                : 'Nice work. Your session has been logged.',
-        actionLabel: 'Nice',
+                ? tr('You\'re on fire - {n} days in a row. Keep it going.', {'n': streakDays})
+                : tr('Nice work. Your session has been logged.'),
+        actionLabel: tr('Nice'),
         showConfetti: true,
       );
       // Offline there's no ad to fetch anyway; Free accounts only.
@@ -944,18 +945,18 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
         backgroundColor: AppColors.surfaceContainerHigh,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.card)),
-        title: Text('Leave workout?', style: AppTypography.headlineSm),
+        title: Text(tr('Leave workout?'), style: AppTypography.headlineSm),
         content: Text(
-            'Your progress is saved - pick up from here with Continue Workout on Home.',
+            tr('Your progress is saved - pick up from here with Continue Workout on Home.'),
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant)),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text('Keep training', style: AppTypography.bodyMd)),
+              child: Text(tr('Keep training'), style: AppTypography.bodyMd)),
           TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text('Leave', style: AppTypography.bodyMd)),
+              child: Text(tr('Leave'), style: AppTypography.bodyMd)),
         ],
       ),
     );
@@ -1010,10 +1011,10 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                       Icon(Icons.fitness_center_rounded,
                           size: 56, color: AppColors.accent),
                       const SizedBox(height: AppSpacing.md),
-                      Text('No exercises yet', style: AppTypography.headlineSm),
+                      Text(tr('No exercises yet'), style: AppTypography.headlineSm),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
-                          'This day has no exercises assigned. Add one to get started.',
+                          tr('This day has no exercises assigned. Add one to get started.'),
                           textAlign: TextAlign.center,
                           style: AppTypography.bodyMd
                               .copyWith(color: AppColors.onSurfaceVariant)),
@@ -1026,7 +1027,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
               padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
                   AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
               child: PrimaryPillButton(
-                label: 'Add Exercise',
+                label: tr('Add Exercise'),
                 icon: Icons.add_rounded,
                 onPressed: _addExercise,
               ),
@@ -1136,7 +1137,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                 children: [
                                   Expanded(
                                     child: Text(
-                                        'EXERCISE ${_exerciseIndex + 1} OF ${_exercises.length}',
+                                        tr('EXERCISE {i} OF {n}', {'i': _exerciseIndex + 1, 'n': _exercises.length}),
                                         style: AppTypography.labelCaps
                                             .copyWith(color: AppColors.accent)),
                                   ),
@@ -1191,7 +1192,7 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                                 // targetSets - and the whole target only shows up
                                 // when the plan actually prescribed a rep range.
                                 _hasRealRepTarget
-                                    ? '${_currentExercise.muscleGroup} · Target ${_currentSets.length} × ${_currentExercise.targetRepsLow}-${_currentExercise.targetRepsHigh} reps'
+                                    ? tr('{muscle} · Target {sets} × {low}-{high} reps', {'muscle': _currentExercise.muscleGroup, 'sets': _currentSets.length, 'low': _currentExercise.targetRepsLow, 'high': _currentExercise.targetRepsHigh})
                                     : _currentExercise.muscleGroup,
                                 style: AppTypography.bodyMd.copyWith(
                                     color: AppColors.onSurfaceVariant),
@@ -1283,15 +1284,15 @@ class _ActiveWorkoutTrackerScreenState extends State<ActiveWorkoutTrackerScreen>
                 children: [
                   Expanded(
                     child: SecondaryPillButton(
-                        label: 'Add Set', onPressed: _addSet),
+                        label: tr('Add Set'), onPressed: _addSet),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     flex: 2,
                     child: PrimaryPillButton(
                       label: _isLastExercise
-                          ? 'Finish Workout'
-                          : 'Finish Exercise',
+                          ? tr('Finish Workout')
+                          : tr('Finish Exercise'),
                       icon: _isLastExercise
                           ? Icons.check_rounded
                           : Icons.arrow_forward_rounded,
@@ -1363,7 +1364,7 @@ class _TelemetryBar extends StatelessWidget {
         // Always here, every tier - the sheet itself handles loading, an
         // empty history and the Free-tier upgrade prompt.
         Tooltip(
-          message: 'Exercise history',
+          message: tr('Exercise history'),
           child: GestureDetector(
             onTap: onHistory,
             behavior: HitTestBehavior.opaque,
@@ -1421,8 +1422,8 @@ class _ExerciseMenuChip extends StatelessWidget {
             ListTile(
               leading:
                   Icon(Icons.swap_horiz_rounded, color: AppColors.onSurface),
-              title: Text('Swap this exercise', style: AppTypography.bodyMd),
-              subtitle: Text('Replace it for this workout only',
+              title: Text(tr('Swap this exercise'), style: AppTypography.bodyMd),
+              subtitle: Text(tr('Replace it for this workout only'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
               onTap: () => Navigator.of(sheetContext).pop(onSwap),
@@ -1430,16 +1431,16 @@ class _ExerciseMenuChip extends StatelessWidget {
             ListTile(
               leading: Icon(Icons.add_circle_outline_rounded,
                   color: AppColors.onSurface),
-              title: Text('Add an exercise', style: AppTypography.bodyMd),
-              subtitle: Text('Tack on something extra for today',
+              title: Text(tr('Add an exercise'), style: AppTypography.bodyMd),
+              subtitle: Text(tr('Tack on something extra for today'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
               onTap: () => Navigator.of(sheetContext).pop(onAdd),
             ),
             ListTile(
               leading: Icon(Icons.reorder_rounded, color: AppColors.onSurface),
-              title: Text('Reorder exercises', style: AppTypography.bodyMd),
-              subtitle: Text('Drag to change what comes next',
+              title: Text(tr('Reorder exercises'), style: AppTypography.bodyMd),
+              subtitle: Text(tr('Drag to change what comes next'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
               onTap: () => Navigator.of(sheetContext).pop(onReorder),
@@ -1489,7 +1490,7 @@ class _WatchDemoChip extends StatelessWidget {
     final icon = isSearch
         ? Icons.travel_explore_rounded
         : Icons.play_circle_fill_rounded;
-    final label = isSearch ? 'Search form' : 'Watch form';
+    final label = isSearch ? tr('Search form') : tr('Watch form');
 
     return GestureDetector(
       onTap: onTap,
@@ -1659,7 +1660,7 @@ class _CurrentSetCard extends StatelessWidget {
   Future<void> _editWeight(BuildContext context) async {
     final result = await _showQuickEntrySheet(
       context,
-      title: 'Set ${setIndex + 1} weight',
+      title: tr('Set {n} weight', {'n': setIndex + 1}),
       unitSuffix: weightUnit,
       initialValue: double.parse(_formatWeight(set.weightKg, weightUnit)),
       step: weightUnit == 'lb' ? 5 : 2.5,
@@ -1673,8 +1674,8 @@ class _CurrentSetCard extends StatelessWidget {
   Future<void> _editReps(BuildContext context) async {
     final result = await _showQuickEntrySheet(
       context,
-      title: 'Set ${setIndex + 1} reps',
-      unitSuffix: 'reps',
+      title: tr('Set {n} reps', {'n': setIndex + 1}),
+      unitSuffix: tr('reps'),
       initialValue: set.reps.toDouble(),
       step: 1,
       min: 1,
@@ -1693,10 +1694,10 @@ class _CurrentSetCard extends StatelessWidget {
     if (bar != null) {
       final plates = _plateBreakdown(set.weightKg, bar, weightUnit);
       if (plates.isNotEmpty) {
-        plateLine = '${_formatWeight(bar, weightUnit)} $weightUnit bar + '
-            '${plates.map((p) => p % 1 == 0 ? p.toStringAsFixed(0) : p.toStringAsFixed(2)).join(' + ')} $weightUnit each side';
+        plateLine = tr('{bar} {unit} bar + {plates} {unit} each side', {'bar': _formatWeight(bar, weightUnit), 'unit': weightUnit, 'plates': 
+            plates.map((p) => p % 1 == 0 ? p.toStringAsFixed(0) : p.toStringAsFixed(2)).join(' + ')});
       } else if ((set.weightKg - bar).abs() < 0.01) {
-        plateLine = 'Empty bar';
+        plateLine = tr('Empty bar');
       }
     }
     return Column(
@@ -1708,7 +1709,7 @@ class _CurrentSetCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('SET ${setIndex + 1} OF ',
+                Text(tr('SET {n} OF ', {'n': setIndex + 1}),
                     style: AppTypography.labelCaps
                         .copyWith(color: AppColors.onSurfaceVariant)),
                 // The one place a set actually being added is visible in this
@@ -1756,7 +1757,7 @@ class _CurrentSetCard extends StatelessWidget {
         const SizedBox(height: AppSpacing.xxl),
         _BigStat(
           value: '${_formatWeight(set.weightKg, weightUnit)} $weightUnit',
-          label: 'WEIGHT',
+          label: tr('WEIGHT'),
           onMinus: () => onWeightDelta(-1),
           onPlus: () => onWeightDelta(1),
           onTap: () => _editWeight(context),
@@ -1787,7 +1788,7 @@ class _CurrentSetCard extends StatelessWidget {
                   Icon(Icons.trending_up_rounded,
                       size: 14, color: AppColors.accent),
                   const SizedBox(width: AppSpacing.xxs),
-                  Text('Last set was easy - try going heavier',
+                  Text(tr('Last set was easy - try going heavier'),
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.accent)),
                 ],
@@ -1797,8 +1798,8 @@ class _CurrentSetCard extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.xxl),
         _BigStat(
-          value: '${set.reps} reps',
-          label: 'REPS',
+          value: tr('{n} reps', {'n': set.reps}),
+          label: tr('REPS'),
           onMinus: () => onRepsDelta(-1),
           onPlus: () => onRepsDelta(1),
           onTap: () => _editReps(context),
@@ -1807,7 +1808,7 @@ class _CurrentSetCard extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: PrimaryPillButton(
-            label: 'Log Set',
+            label: tr('Log Set'),
             icon: Icons.check_rounded,
             height: 56,
             onPressed: onLog,
@@ -1842,9 +1843,9 @@ class _ExerciseCompleteCard extends StatelessWidget {
       children: [
         Icon(Icons.check_circle_rounded, size: 56, color: AppColors.accent),
         const SizedBox(height: AppSpacing.md),
-        Text('All $totalSets sets logged', style: AppTypography.headlineSm),
+        Text(tr('All {n} sets logged', {'n': totalSets}), style: AppTypography.headlineSm),
         const SizedBox(height: AppSpacing.xxs),
-        Text('Add another set, or move on when you\'re ready.',
+        Text(tr('Add another set, or move on when you\'re ready.'),
             textAlign: TextAlign.center,
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant)),
@@ -1862,7 +1863,7 @@ class _ExerciseCompleteCard extends StatelessWidget {
                 Icon(Icons.delete_outline_rounded,
                     size: 16, color: AppColors.onSurfaceVariant),
                 const SizedBox(width: AppSpacing.xxs),
-                Text('Remove last set',
+                Text(tr('Remove last set'),
                     style: AppTypography.bodySm
                         .copyWith(color: AppColors.onSurfaceVariant)),
               ],
@@ -1967,7 +1968,7 @@ class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
       setState(() => e.isForbidden ? _locked = true : _error = e.userMessage);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = "Couldn't load your history. Please try again.");
+      setState(() => _error = tr("Couldn't load your history. Please try again."));
     }
   }
 
@@ -1981,10 +1982,10 @@ class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
     if (_locked) {
       return [
         UpgradeLockCard(
-          title: 'See every set you\'ve logged',
-          message: 'Pro and Advanced show your past sessions for each '
-              'exercise right inside your workout.',
-          actionLabel: 'See plans',
+          title: tr('See every set you\'ve logged'),
+          message: tr('Pro and Advanced show your past sessions for each '
+              'exercise right inside your workout.'),
+          actionLabel: tr('See plans'),
           onUnlock: _openPlans,
         ),
       ];
@@ -2000,7 +2001,7 @@ class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
         Center(
           child: TextButton(
             onPressed: _load,
-            child: Text('RETRY',
+            child: Text(tr('RETRY'),
                 style:
                     AppTypography.labelCaps.copyWith(color: AppColors.accent)),
           ),
@@ -2019,11 +2020,11 @@ class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
         Icon(Icons.history_rounded,
             size: 40, color: AppColors.onSurfaceVariant),
         const SizedBox(height: AppSpacing.sm),
-        Text('No history yet',
+        Text(tr('No history yet'),
             textAlign: TextAlign.center, style: AppTypography.headlineSm),
         const SizedBox(height: AppSpacing.xxs),
         Text(
-            'Finish a set of this exercise and it will show up here next time.',
+            tr('Finish a set of this exercise and it will show up here next time.'),
             textAlign: TextAlign.center,
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant)),
@@ -2063,7 +2064,7 @@ class _ExerciseHistorySheetState extends State<_ExerciseHistorySheet> {
         children: [
           Text(widget.exerciseName, style: AppTypography.headlineSm),
           const SizedBox(height: AppSpacing.xxs),
-          Text('Your recent sessions for this exercise',
+          Text(tr('Your recent sessions for this exercise'),
               style: AppTypography.bodySm
                   .copyWith(color: AppColors.onSurfaceVariant)),
           const SizedBox(height: AppSpacing.lg),
@@ -2156,7 +2157,7 @@ class _LastTimeRowState extends State<_LastTimeRow> {
                     size: 18, color: AppColors.onSurfaceVariant),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
-                  'Last time: ${_formatWeight(mostRecent.weightKg, unit)} $unit × ${mostRecent.reps}',
+                  tr('Last time: {w} {unit} × {reps}', {'w': _formatWeight(mostRecent.weightKg, unit), 'unit': unit, 'reps': mostRecent.reps}),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant),
                 ),
@@ -2195,7 +2196,7 @@ class _HistorySessionCard extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: 56,
-                    child: Text('Set ${set.setNumber}',
+                    child: Text(tr('Set {n}', {'n': set.setNumber}),
                         style: AppTypography.bodyMd
                             .copyWith(color: AppColors.onSurfaceVariant)),
                   ),
@@ -2385,7 +2386,7 @@ Future<double?> _showQuickEntrySheet(
             ),
             const SizedBox(height: AppSpacing.md),
             PrimaryPillButton(
-              label: 'Set',
+              label: tr('Set'),
               onPressed: () {
                 final parsed = double.tryParse(controller.text.trim());
                 if (parsed == null) {
@@ -2439,9 +2440,9 @@ class _ReorderExercisesSheetState extends State<_ReorderExercisesSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Reorder exercises', style: AppTypography.headlineMd),
+            Text(tr('Reorder exercises'), style: AppTypography.headlineMd),
             const SizedBox(height: AppSpacing.xxs),
-            Text('Press and drag the handle to change what comes next.',
+            Text(tr('Press and drag the handle to change what comes next.'),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: AppSpacing.sm),
@@ -2461,7 +2462,7 @@ class _ReorderExercisesSheetState extends State<_ReorderExercisesSheet> {
             ),
             const SizedBox(height: AppSpacing.sm),
             PrimaryPillButton(
-              label: 'Done',
+              label: tr('Done'),
               onPressed: () => Navigator.of(context).pop(_order),
             ),
           ],

@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_exception.dart';
 import '../../../core/theme/app_colors.dart';
@@ -11,12 +13,19 @@ import '../../../core/widgets/section_eyebrow.dart';
 import '../../../core/widgets/silen_button.dart';
 import '../meal_controller.dart';
 import '../meal_models.dart';
+import '../../settings/ai_consent_gate.dart';
 import 'macro_amount_row.dart';
+import '../../../l10n/l10n.dart';
 
 /// Opens the "new food" form on its own - for when the catalog search has
-/// no match. Returns the created food (per 100 g), or null if dismissed.
+/// no match, or a scanned barcode nobody has added yet. Returns the created
+/// food (per 100 g), or null if dismissed. A [barcode] is saved with the food
+/// so the next scan finds it; [hint] prefills what Open Food Facts knew.
 Future<FoodItem?> showCustomFoodSheet(BuildContext context,
-    {required MealController controller, String initialName = ''}) {
+    {required MealController controller,
+    String initialName = '',
+    String? barcode,
+    BarcodeProductHint? hint}) {
   return showModalBottomSheet<FoodItem>(
     context: context,
     isScrollControlled: true,
@@ -33,6 +42,8 @@ Future<FoodItem?> showCustomFoodSheet(BuildContext context,
         child: _CustomFoodForm(
           controller: controller,
           initialName: initialName,
+          barcode: barcode,
+          hint: hint,
           onBack: () => Navigator.of(sheetContext).pop(),
           onCreated: (food) => Navigator.of(sheetContext).pop(food),
         ),
@@ -62,7 +73,7 @@ Future<double?> showGramsSheet(BuildContext context,
         food: food,
         title: title,
         initialGrams: initialGrams,
-        actionLabel: 'Update',
+        actionLabel: tr('Update'),
         onConfirm: (grams) => Navigator.of(sheetContext).pop(grams),
       ),
     ),
@@ -143,7 +154,7 @@ class _MacroDot extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text('$label ${_fmt(value)}g',
+        Text('${tr(label)} ${_fmt(value)}g',
             style: AppTypography.labelSm
                 .copyWith(color: AppColors.onSurfaceVariant)),
       ],
@@ -217,7 +228,7 @@ class _GramsEditorState extends State<_GramsEditor> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('HOW MUCH?',
+        Text(tr('HOW MUCH?'),
             style: AppTypography.labelCaps.copyWith(color: AppColors.accent)),
         const SizedBox(height: 4),
         Text(widget.title,
@@ -273,7 +284,7 @@ class _GramsEditorState extends State<_GramsEditor> {
             for (final g in quick)
               PillChip(
                 label: g == food?.servingSizeG
-                    ? '1 serving · ${_fmt(g)} g'
+                    ? tr('1 serving · {g} g', {'g': _fmt(g)})
                     : '${_fmt(g)} g',
                 selected: g == grams,
                 onTap: () => _set(g),
@@ -329,9 +340,9 @@ class NutrientGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final extras = <(String, String)>[
-      if (item.fiberG != null) ('Fiber', '${_fmt(item.fiberG!)} g'),
-      if (item.sugarG != null) ('Sugar', '${_fmt(item.sugarG!)} g'),
-      if (item.sodiumMg != null) ('Sodium', '${_fmt(item.sodiumMg!)} mg'),
+      if (item.fiberG != null) (tr('Fiber'), '${_fmt(item.fiberG!)} g'),
+      if (item.sugarG != null) (tr('Sugar'), '${_fmt(item.sugarG!)} g'),
+      if (item.sodiumMg != null) (tr('Sodium'), '${_fmt(item.sodiumMg!)} mg'),
     ];
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -346,15 +357,15 @@ class NutrientGrid extends StatelessWidget {
               _Stat(value: _fmt(item.caloriesKcal), label: 'KCAL'),
               _Stat(
                   value: '${_fmt(item.proteinG)}g',
-                  label: 'PROTEIN',
+                  label: tr('PROTEIN'),
                   color: AppColors.accent),
               _Stat(
                   value: '${_fmt(item.carbsG)}g',
-                  label: 'CARBS',
+                  label: tr('CARBS'),
                   color: AppColors.tertiaryContainer),
               _Stat(
                   value: '${_fmt(item.fatsG)}g',
-                  label: 'FAT',
+                  label: tr('FAT'),
                   color: AppColors.secondary),
             ],
           ),
@@ -426,12 +437,16 @@ class _Stat extends StatelessWidget {
 class _CustomFoodForm extends StatefulWidget {
   final MealController controller;
   final String initialName;
+  final String? barcode;
+  final BarcodeProductHint? hint;
   final VoidCallback onBack;
   final ValueChanged<FoodItem> onCreated;
 
   const _CustomFoodForm({
     required this.controller,
     required this.initialName,
+    this.barcode,
+    this.hint,
     required this.onBack,
     required this.onCreated,
   });
@@ -441,11 +456,17 @@ class _CustomFoodForm extends StatefulWidget {
 }
 
 class _CustomFoodFormState extends State<_CustomFoodForm> {
-  late final _nameController = TextEditingController(text: widget.initialName);
-  final _brandController = TextEditingController();
-  final _servingController = TextEditingController();
+  late final _nameController = TextEditingController(
+      text: widget.hint?.name ?? widget.initialName);
+  late final _brandController =
+      TextEditingController(text: widget.hint?.brandName ?? '');
+  late final _servingController = TextEditingController(
+      text: widget.hint?.servingSizeG == null
+          ? ''
+          : _fmt(widget.hint!.servingSizeG!));
   final List<MacroEntry> _entries = [MacroEntry()];
   bool _saving = false;
+  bool _readingLabel = false;
   String? _error;
 
   @override
@@ -492,23 +513,116 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
     });
   }
 
+  /// Photo of the nutrition table in, form filled out: the user only checks
+  /// the numbers and saves. Values the model couldn't read stay empty.
+  Future<void> _readLabel() async {
+    if (_readingLabel || _saving) return;
+    FocusScope.of(context).unfocus();
+    if (!await AiConsentGate.ensure(context) || !mounted) return;
+
+    setState(() {
+      _readingLabel = true;
+      _error = null;
+    });
+    try {
+      // Larger than the meal scan: small print on a label needs the pixels.
+      final XFile? file;
+      try {
+        file = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1600,
+          maxHeight: 1600,
+          imageQuality: 85,
+        );
+      } on PlatformException {
+        if (mounted) {
+          setState(() => _error =
+              tr('Allow camera access in Settings to read a label.'));
+        }
+        return;
+      }
+      if (file == null || !mounted) return;
+
+      final label =
+          await widget.controller.readNutritionLabel(await file.readAsBytes());
+      if (!mounted) return;
+      if (!label.isLabel) {
+        setState(() => _error = tr(
+            "That doesn't look like a nutrition label. Try again with the table in frame."));
+        return;
+      }
+      _applyLabel(label);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.userMessage);
+    } catch (_) {
+      if (mounted) setState(() => _error = ApiException.genericMessage);
+    } finally {
+      if (mounted) setState(() => _readingLabel = false);
+    }
+  }
+
+  void _applyLabel(NutritionLabelResult label) {
+    final values = <MacroKind, double?>{
+      MacroKind.calories: label.caloriesKcal,
+      MacroKind.protein: label.proteinG,
+      MacroKind.carbs: label.carbohydrateG,
+      MacroKind.fat: label.fatG,
+      MacroKind.fiber: label.fiberG,
+      MacroKind.sugar: label.sugarG,
+      MacroKind.sodium: label.sodiumMg,
+    };
+    if (values.values.every((v) => v == null)) {
+      setState(() => _error =
+          tr("Couldn't read the numbers. Try a sharper, closer photo."));
+      return;
+    }
+    HapticFeedback.lightImpact();
+    setState(() {
+      // Fresh rows (new keys) so each MacroAmountRow starts from its value.
+      for (final e in _entries) {
+        e.dispose();
+      }
+      _entries
+        ..clear()
+        ..addAll([
+          for (final kv in values.entries)
+            if (kv.value != null)
+              MacroEntry()
+                ..kind = kv.key
+                ..text.text = _fmt(kv.value!),
+        ]);
+      if (_entries.length < MacroKind.values.length) _entries.add(MacroEntry());
+      // Only fill what the user hasn't typed: their name beats the model's.
+      if (_nameController.text.trim().isEmpty && label.productName != null) {
+        _nameController.text = label.productName!;
+      }
+      if (_brandController.text.trim().isEmpty && label.brandName != null) {
+        _brandController.text = label.brandName!;
+      }
+      if (_servingController.text.trim().isEmpty &&
+          label.servingSizeG != null) {
+        _servingController.text = _fmt(label.servingSizeG!);
+      }
+    });
+  }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = 'Give the food a name.');
+      setState(() => _error = tr('Give the food a name.'));
       return;
     }
     for (final e in _entries) {
       final v = e.value;
       if (v == null) continue;
       if (e.kind == null) {
-        setState(() => _error = 'Pick what ${_fmt(v)} is.');
+        setState(() => _error = tr('Pick what {v} is.', {'v': _fmt(v)}));
         return;
       }
       if (v > e.kind!.maxPer100g) {
         setState(() => _error =
-            '${e.kind!.label} can\'t be more than ${_fmt(e.kind!.maxPer100g)} '
-                '${e.kind!.unit} per 100 g.');
+            tr('{label} can\'t be more than {max} {unit} per 100 g.', {'label': tr(e.kind!.label), 'max': _fmt(e.kind!.maxPer100g), 'unit': e.kind!.unit}));
         return;
       }
     }
@@ -520,7 +634,7 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
         (protein ?? 0) == 0 &&
         (carbs ?? 0) == 0 &&
         (fat ?? 0) == 0) {
-      setState(() => _error = 'Enter at least calories or one macro.');
+      setState(() => _error = tr('Enter at least calories or one macro.'));
       return;
     }
 
@@ -546,6 +660,7 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
         fiberG: _valueOf(MacroKind.fiber),
         sugarG: _valueOf(MacroKind.sugar),
         sodiumMg: _valueOf(MacroKind.sodium),
+        barcode: widget.barcode,
       );
       if (!mounted) return;
       widget.onCreated(food);
@@ -570,17 +685,30 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
             children: [
               _SheetBackButton(onTap: widget.onBack),
               const SizedBox(height: AppSpacing.xs),
-              Text('NEW FOOD',
+              Text(tr('NEW FOOD'),
                   style: AppTypography.labelCaps
                       .copyWith(color: AppColors.accent)),
               const SizedBox(height: 4),
-              Text('Add it from the label', style: AppTypography.headlineSm),
+              Text(tr('Add it from the label'), style: AppTypography.headlineSm),
+              if (widget.barcode != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _ScannedProduct(
+                    barcode: widget.barcode!, imageUrl: widget.hint?.imageUrl),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              SecondaryPillButton(
+                label: _readingLabel
+                    ? tr('Reading the label...')
+                    : tr('Read the label with AI'),
+                icon: Icons.document_scanner_outlined,
+                onPressed: _readingLabel || _saving ? null : _readLabel,
+              ),
               const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _nameController,
                 textCapitalization: TextCapitalization.sentences,
                 style: AppTypography.bodyMd,
-                decoration: const InputDecoration(labelText: 'Food name'),
+                decoration: InputDecoration(labelText: tr('Food name')),
               ),
               const SizedBox(height: AppSpacing.sm),
               Row(
@@ -591,7 +719,7 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
                       controller: _brandController,
                       style: AppTypography.bodyMd,
                       decoration:
-                          const InputDecoration(labelText: 'Brand (optional)'),
+                          InputDecoration(labelText: tr('Brand (optional)')),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.xs),
@@ -602,16 +730,16 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       style: AppTypography.bodyMd,
-                      decoration: const InputDecoration(
-                          labelText: 'Serving', suffixText: 'g'),
+                      decoration: InputDecoration(
+                          labelText: tr('Serving'), suffixText: 'g'),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
-              Text('NUTRITION PER 100 G', style: AppTypography.labelCaps),
+              Text(tr('NUTRITION PER 100 G'), style: AppTypography.labelCaps),
               const SizedBox(height: 2),
-              Text('Type a value, then pick what it is.',
+              Text(tr('Type a value, then pick what it is.'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
               const SizedBox(height: AppSpacing.sm),
@@ -639,10 +767,62 @@ class _CustomFoodFormState extends State<_CustomFoodForm> {
           padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
               AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
           child: PrimaryPillButton(
-            label: 'Save food',
+            label: tr('Save food'),
             icon: Icons.check_rounded,
             isLoading: _saving,
-            onPressed: _save,
+            onPressed: _readingLabel ? null : _save,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The scanned product at the top of the form: its photo when Open Food
+/// Facts has one, and the barcode it will be saved under.
+class _ScannedProduct extends StatelessWidget {
+  final String barcode;
+  final String? imageUrl;
+
+  const _ScannedProduct({required this.barcode, this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.inset),
+          child: Container(
+            width: 52,
+            height: 52,
+            color: AppColors.surfaceContainerHigh,
+            child: url == null
+                ? Icon(Icons.qr_code_scanner_rounded,
+                    color: AppColors.onSurfaceVariant)
+                : CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: AppColors.onSurfaceVariant),
+                  ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(barcode, style: AppTypography.bodyMd),
+              Text(
+                url == null
+                    ? tr('Nobody has added this product yet.')
+                    : tr('Photo from Open Food Facts. Add the nutrition below.'),
+                style: AppTypography.labelSm
+                    .copyWith(color: AppColors.onSurfaceVariant),
+              ),
+            ],
           ),
         ),
       ],

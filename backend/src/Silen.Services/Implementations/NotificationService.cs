@@ -3,6 +3,7 @@ using Silen.Common.Contracts;
 using Silen.Common.Dtos;
 using Silen.Common.Exceptions;
 using Silen.Common.Helpers;
+using Silen.Common.Localization;
 using Silen.Data.Abstractions;
 using Silen.Services.Abstractions;
 using Silen.Services.Helpers;
@@ -69,7 +70,7 @@ public sealed class NotificationService(
             }
 
             await notificationProvider
-                .RecordInteractionAsync(userId, DateTime.UtcNow, request.NotificationId, cancellationToken)
+                .RecordInteractionAsync(userId, DateTime.UtcNow, request.NotificationId, AppText.CurrentLanguage, cancellationToken)
                 .ConfigureAwait(false);
             return true;
         });

@@ -43,6 +43,17 @@ public sealed class SupplementProviderService(
             ThrowIfTooLong(request.PromoCode, 60, "Discount code");
             ThrowIfTooLong(request.DiscountLabel, 60, "Discount label");
             request.ShopUrl = RequireHttpsUrl(request.ShopUrl, "Shop link");
+            request.SearchUrl = RequireSearchUrl(request.SearchUrl);
+            request.BarcodeCatalogUrl = RequirePlaceholderUrl(request.BarcodeCatalogUrl, BarcodePlaceholder, "Barcode catalog link");
+            if (request.BarcodeCatalogEnabled && request.BarcodeCatalogUrl is null)
+            {
+                throw new ValidationException(
+                    "Barcode catalog switched on without a link.",
+                    $"Add the barcode catalog link (with {BarcodePlaceholder}) before switching it on.");
+            }
+
+            request.BarcodeCatalogApiKey = string.IsNullOrWhiteSpace(request.BarcodeCatalogApiKey) ? null : request.BarcodeCatalogApiKey.Trim();
+            ThrowIfTooLong(request.BarcodeCatalogApiKey, 500, "Barcode catalog API key");
             request.LogoUrl = string.IsNullOrWhiteSpace(request.LogoUrl) ? null : request.LogoUrl.Trim();
             ThrowIfTooLong(request.LogoUrl, 500, "Logo");
 
@@ -86,6 +97,36 @@ public sealed class SupplementProviderService(
         }
         return uri.ToString();
     }
+
+    /// <summary>The search link is filled per ingredient, so it has to say where the text goes.
+    /// Checked as an https URL with the placeholder swapped for a sample word.</summary>
+    public static string? RequireSearchUrl(string? value) =>
+        RequirePlaceholderUrl(value, SearchQueryPlaceholder, "Search link");
+
+    /// <summary>An https link with <paramref name="placeholder"/> where the per-use text goes;
+    /// blank gives null.</summary>
+    public static string? RequirePlaceholderUrl(string? value, string placeholder, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (!trimmed.Contains(placeholder, StringComparison.Ordinal))
+        {
+            throw new ValidationException(
+                $"Provider {field} '{trimmed}' has no {placeholder}.",
+                $"{field} must contain {placeholder} where the {(placeholder == BarcodePlaceholder ? "barcode" : "search text")} goes.");
+        }
+
+        RequireHttpsUrl(trimmed.Replace(placeholder, "1", StringComparison.Ordinal), field);
+        return trimmed;
+    }
+
+    public const string SearchQueryPlaceholder = "{query}";
+
+    public const string BarcodePlaceholder = "{barcode}";
 
     private static void ThrowIfTooLong(string? value, int max, string field)
     {

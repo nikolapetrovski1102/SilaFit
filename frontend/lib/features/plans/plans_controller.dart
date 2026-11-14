@@ -4,12 +4,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/state/resource_state.dart';
 import 'iap_service.dart';
 import 'plans_models.dart';
 import 'plans_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// What a restore actually achieved once the server has verified everything
 /// the store handed back - not merely that the store accepted the request.
@@ -62,6 +64,11 @@ class PlansController extends ChangeNotifier {
   /// offer replaces the intro offer on every product that carries it.
   PromoCode? promoCode;
 
+  // Debug builds only: a fake free-month code on the featured plan, so the
+  // code paywall can be checked without store offers (see
+  // [debugApplyPreviewCode]).
+  bool _debugPreview = false;
+
   StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
   Completer<bool>? _pendingPurchase;
   String? _pendingProductId;
@@ -105,7 +112,7 @@ class PlansController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -186,7 +193,7 @@ class PlansController extends ChangeNotifier {
     // one on top of a subscription that's already running - check before the
     // server spends one of the code's redemptions on this account.
     if (current?.isPaid == true) {
-      return 'You already have a subscription - codes are for starting a new one.';
+      return tr('You already have a subscription - codes are for starting a new one.');
     }
     final PromoCode promo;
     try {
@@ -202,14 +209,14 @@ class PlansController extends ChangeNotifier {
     if (catalog == null) return ApiException.genericMessage;
     try {
       if (!await _iapService.isAvailable()) {
-        return 'In-app purchases are not available on this device.';
+        return tr('In-app purchases are not available on this device.');
       }
       final quotes = await _iapService.loadQuotes(_productIds(catalog),
           promoOfferId: promo.playOfferId);
       // The server knows the code; only Play knows which products carry the
       // offer - a code whose offer isn't live on any of them is no discount.
       if (!quotes.values.any((q) => q.isPromoCode)) {
-        return 'This code doesn\'t apply to any plan right now.';
+        return tr('This code doesn\'t apply to any plan right now.');
       }
       promoCode = promo;
       _quotes = quotes;
@@ -223,6 +230,69 @@ class PlansController extends ChangeNotifier {
     if (!discounted(isYearly) && discounted(!isYearly)) isYearly = !isYearly;
     notifyListeners();
     return null;
+  }
+
+  /// Debug builds only: pretends the code "DEVTEST" unlocked a free first
+  /// month on the featured plan's monthly product - the same shape a real
+  /// Play promo-code offer takes - without asking the server or the store.
+  /// Buying stays blocked until [debugClearPreviewCode].
+  void debugApplyPreviewCode() {
+    if (!kDebugMode) return;
+    _debugPreview = true;
+    promoCode = const PromoCode(code: 'DEVTEST', playOfferId: 'dev-preview');
+    isYearly = false;
+    _applyPreviewQuotes();
+    notifyListeners();
+  }
+
+  void debugClearPreviewCode() {
+    if (!_debugPreview) return;
+    _debugPreview = false;
+    promoCode = null;
+    _quotes = {};
+    final catalog = state.data;
+    if (catalog != null) unawaited(_loadQuotes(catalog));
+    notifyListeners();
+  }
+
+  void _applyPreviewQuotes() {
+    final paid = (state.data ?? const <PlanCatalogEntry>[])
+        .where((e) => e.plan.monthlyPrice > 0)
+        .toList();
+    if (paid.isEmpty) return;
+    final plan = paid
+        .firstWhere((e) => e.plan.isFeatured, orElse: () => paid.first)
+        .plan;
+    final id = _productIdFor(plan, yearly: false);
+    if (id == null) return;
+    // The store's real regular price when it answered (a device), else the
+    // catalogue's (a simulator with no store products).
+    final regular = _quotes[id]?.product ??
+        ProductDetails(
+          id: id,
+          title: plan.name,
+          description: plan.name,
+          price: NumberFormat.simpleCurrency(name: 'USD')
+              .format(plan.monthlyPrice),
+          rawPrice: plan.monthlyPrice,
+          currencyCode: 'USD',
+        );
+    _quotes = {
+      ..._quotes,
+      id: StoreQuote(
+        product: regular,
+        isPromoCode: true,
+        intro: const StoreIntroOffer(
+          displayPrice: 'Free',
+          rawPrice: 0,
+          isFreeTrial: true,
+          isPerPeriod: false,
+          periodUnit: 'month',
+          periodValue: 1,
+          periodCount: 1,
+        ),
+      ),
+    };
   }
 
   void setBillingCycle({required bool yearly}) {
@@ -289,6 +359,7 @@ class PlansController extends ChangeNotifier {
       if (!await _iapService.isAvailable()) return;
       _quotes = await _iapService.loadQuotes(ids,
           promoOfferId: promoCode?.playOfferId);
+      if (_debugPreview) _applyPreviewQuotes();
       notifyListeners();
     } catch (_) {
       // The paywall falls back to the catalogue price; purchase() re-queries.
@@ -297,13 +368,18 @@ class PlansController extends ChangeNotifier {
 
   Future<bool> purchase(SubscriptionPlan plan) async {
     if (isPurchasing) return false;
+    if (_debugPreview) {
+      actionError = 'Preview only - buying is disabled for the DEVTEST code.';
+      notifyListeners();
+      return false;
+    }
     isPurchasing = true;
     actionError = null;
     notifyListeners();
 
     final productId = _productIdFor(plan);
     if (productId == null) {
-      actionError = 'This plan is not available for purchase yet.';
+      actionError = tr('This plan is not available for purchase yet.');
       isPurchasing = false;
       notifyListeners();
       return false;
@@ -311,7 +387,7 @@ class PlansController extends ChangeNotifier {
 
     try {
       if (!await _iapService.isAvailable()) {
-        actionError = 'In-app purchases are not available on this device.';
+        actionError = tr('In-app purchases are not available on this device.');
         isPurchasing = false;
         notifyListeners();
         return false;

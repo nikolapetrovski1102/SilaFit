@@ -36,10 +36,23 @@ public sealed class SupplementProvidersProvider(ISqlExecutor sqlExecutor) : ISup
                 SqlParameterBuilder.Create("@Category", request.Category),
                 SqlParameterBuilder.Create("@IsActive", request.IsActive),
                 SqlParameterBuilder.Create("@SortOrder", request.SortOrder),
+                SqlParameterBuilder.Create("@OrdersIngredients", request.OrdersIngredients),
+                SqlParameterBuilder.Create("@SearchUrl", request.SearchUrl),
+                SqlParameterBuilder.Create("@BarcodeCatalogEnabled", request.BarcodeCatalogEnabled),
+                SqlParameterBuilder.Create("@BarcodeCatalogUrl", request.BarcodeCatalogUrl),
+                SqlParameterBuilder.Create("@BarcodeCatalogApiKey", request.BarcodeCatalogApiKey),
+                SqlParameterBuilder.Create("@ClearBarcodeCatalogApiKey", request.ClearBarcodeCatalogApiKey),
                 .. AdminActorParameters.Build(actor)
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(reader, AdminContentRowMapper.MapMutation, cancellationToken),
             cancellationToken);
+
+    public async Task<PartnerBarcodeCatalogModel?> GetBarcodeCatalogAsync(CancellationToken cancellationToken = default) =>
+        (await sqlExecutor.QueryAsync(
+            "dbo.usp_SupplementProviders_GetBarcodeCatalog",
+            [],
+            reader => SqlResultSetReader.ReadListAsync(reader, TrainerDocumentRowMapper.MapBarcodeCatalog, cancellationToken),
+            cancellationToken)).FirstOrDefault();
 
     public Task<AdminMutationResultModel> DeleteAsync(Guid providerId, AdminActorModel actor, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(

@@ -14,6 +14,7 @@ import 'exercise_focus.dart';
 import 'exercise_form_button.dart';
 import 'exercises_models.dart';
 import 'exercises_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// Search-and-pick sheet backed by `GET /api/exercises`. Shared by the split
 /// builder (picking an exercise for a day) and the live-workout swap/add
@@ -226,15 +227,15 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(widget.title ?? 'Choose an exercise',
+            Text(widget.title ?? tr('Choose an exercise'),
                 style: AppTypography.headlineMd),
             const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _searchController,
               autofocus: false,
               onChanged: _onQueryChanged,
-              decoration: const InputDecoration(
-                hintText: 'Search exercises',
+              decoration: InputDecoration(
+                hintText: tr('Search exercises'),
                 prefixIcon: Icon(Icons.search_rounded),
               ),
             ),
@@ -271,19 +272,19 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
     if (_focus.fromTitle) {
       final groups =
           _focus.muscleGroups.map((g) => g.toUpperCase()).join(' & ');
-      return 'SUGGESTED FOR $groups';
+      return tr('SUGGESTED FOR {groups}', {'groups': groups});
     }
-    if (_focus.muscleGroups.isNotEmpty) return 'MORE FOR THIS DAY';
-    return 'SUGGESTED FOR YOU';
+    if (_focus.muscleGroups.isNotEmpty) return tr('MORE FOR THIS DAY');
+    return tr('SUGGESTED FOR YOU');
   }
 
   String get _suggestionBadge =>
-      _focus.isEmpty || _focus.fromTitle ? 'Suggested' : 'For this day';
+      _focus.isEmpty || _focus.fromTitle ? tr('Suggested') : tr('For this day');
 
   Widget _buildSuggestionList() {
     if (_suggestions.isEmpty) {
       return Center(
-        child: Text('Search for an exercise above.',
+        child: Text(tr('Search for an exercise above.'),
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant)),
       );
@@ -321,7 +322,7 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: AppSpacing.sm),
-            TextButton(onPressed: _search, child: const Text('Retry')),
+            TextButton(onPressed: _search, child: Text(tr('Retry'))),
           ],
         ),
       );
@@ -340,11 +341,11 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('No exact match for “$_resultsQuery”.',
+                  Text(tr('No exact match for “{q}”.', {'q': _resultsQuery}),
                       style: AppTypography.bodyMd
                           .copyWith(color: AppColors.onSurfaceVariant)),
                   const SizedBox(height: AppSpacing.xs),
-                  Text('DID YOU MEAN',
+                  Text(tr('DID YOU MEAN'),
                       style: AppTypography.labelCaps
                           .copyWith(color: AppColors.accent)),
                 ],
@@ -370,19 +371,19 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
             Icon(Icons.fitness_center_rounded,
                 size: 32, color: AppColors.onSurfaceVariant),
             const SizedBox(height: AppSpacing.sm),
-            Text('“$_resultsQuery” isn\'t in the library yet',
+            Text(tr('“{q}” isn\'t in the library yet', {'q': _resultsQuery}),
                 textAlign: TextAlign.center, style: AppTypography.headlineSm),
             const SizedBox(height: AppSpacing.xxs),
             Text(
-                'Add it with its muscle group, equipment and movement type, '
-                'and it works like any other exercise in your splits and '
-                'progress.',
+                tr('Add it with its muscle group, equipment and movement type, '
+                    'and it works like any other exercise in your splits and '
+                    'progress.'),
                 textAlign: TextAlign.center,
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: AppSpacing.md),
             PrimaryPillButton(
-              label: 'Add exercise',
+              label: tr('Add exercise'),
               icon: Icons.add_rounded,
               onPressed: _addCustom,
             ),
@@ -399,7 +400,7 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
       child: TextButton.icon(
         onPressed: _addCustom,
         icon: const Icon(Icons.add_rounded, size: 18),
-        label: Text('Not listed? Add “$_resultsQuery”',
+        label: Text(tr('Not listed? Add “{q}”', {'q': _resultsQuery}),
             overflow: TextOverflow.ellipsis),
       ),
     );
@@ -454,7 +455,7 @@ class _ExerciseTile extends StatelessWidget {
         children: [
           ExerciseFormButton(
               exerciseName: exercise.name, demoUrl: exercise.demoVideoUrl),
-          if ((trailing ?? (exercise.isCustom ? 'Yours' : null))
+          if ((trailing ?? (exercise.isCustom ? tr('Yours') : null))
               case final badge?) ...[
             const SizedBox(width: AppSpacing.xxs),
             Text(badge,

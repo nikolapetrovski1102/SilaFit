@@ -7,19 +7,22 @@
   <meta name="theme-color" content="#f5eedd" media="(prefers-color-scheme: light)" />
   <title>SilaFit — Workout Tracker &amp; Meal Plans for Lifters</title>
   <meta name="description" content="Log every set, follow a proven training split, and eat to your goal. SilaFit pairs workout tracking and PR progress with meal plans, macro tracking, and AI food scan. Free on iPhone." />
+  <link rel="alternate" hreflang="en" href="https://sila.fitness/" />
+  <link rel="alternate" hreflang="mk" href="https://sila.fitness/mk/" />
+  <link rel="alternate" hreflang="x-default" href="https://sila.fitness/" />
   <link rel="canonical" href="https://sila.fitness/" />
   <meta name="apple-itunes-app" content="app-id=6811345732" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://sila.fitness/" />
   <meta property="og:title" content="SilaFit — Workout Tracker &amp; Meal Plans for Lifters" />
   <meta property="og:description" content="Train smarter. Eat right. Recover better. Workout tracking, training splits, and meal plans in one app." />
-  <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png?v=20261103-runner" />
+  <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png?v=20261112-sf" />
   <meta name="twitter:card" content="summary" />
-  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
-  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
-  <link rel="stylesheet" href="css/base.css?v=20261103-marker" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261112-sf" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261112-sf" media="(prefers-color-scheme: light)" />
+  <link rel="stylesheet" href="css/base.css?v=20261112-sf" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261103-marker" />
+  <link rel="stylesheet" href="css/site.css?v=20261112-sf" />
   <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
   <script>
     (function () {
@@ -34,7 +37,7 @@
   </script>
 </head>
 <body>
-  <!-- Full-screen loader: the runner draws itself in, then fades (js/loader.js) -->
+  <!-- Full-screen loader: the SF mark paints itself in, then fades (js/loader.js) -->
   <div class="site-loader" id="siteLoader" aria-hidden="true">
     <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
     <img class="site-loader__mark" id="siteLoaderMark" alt="" />
@@ -45,7 +48,7 @@
       var d = document.documentElement;
       document.getElementById('siteLoaderMark').src = 'assets/img/branding/loader_'
         + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
-        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261103-2';
+        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261112-sf';
     })();
   </script>
 
@@ -53,7 +56,7 @@
   <header class="nav" id="mainNav">
     <div class="nav__inner">
       <a class="nav__logo" href="#top">
-        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
+        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261112-sf" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261112-sf" width="36" height="36" alt="" aria-hidden="true" />
         SilaFit
       </a>
       <nav class="nav__links" id="navLinks">
@@ -63,6 +66,7 @@
         <a href="pricing.html">Pricing</a>
       </nav>
       <div class="nav__cta">
+        <a class="lang-switch" href="mk/" hreflang="mk" lang="mk" aria-label="Македонски">MK</a>
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
           <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
           <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
@@ -82,7 +86,7 @@
         <div class="eyebrow eyebrow--accent reveal">Workout + nutrition tracking</div>
         <h1 class="t-hero marker-title" data-split>Strength, measured <em>to the rep.</em><span class="hero-sticker" data-nosplit aria-hidden="true">
           <svg class="hero-sticker__ring" viewBox="0 0 200 200"><defs><path id="stickerPath" d="M100 100m-78 0a78 78 0 1 1 156 0a78 78 0 1 1-156 0"/></defs><text><textPath href="#stickerPath" textLength="485">TRAIN · EAT · RECOVER · REPEAT ·</textPath></text></svg>
-          <span class="sila sila--glow sila--alive" data-sila="standing" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261103-real" width="512" height="512" alt="" decoding="async" /></span>
+          <span class="sila sila--glow sila--alive" data-sila="standing" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/standing.webp?v=20261112-ram" width="512" height="512" alt="" decoding="async" /></span>
         </span></h1>
         <div class="hero__row">
           <p class="t-lead reveal reveal-delay-1">
@@ -124,7 +128,7 @@
           <div class="media media--side reveal reveal-delay-2">
             <div>
               <span class="eyebrow streak-label">
-                <img class="streak-ram" src="assets/img/mascot/ram/emblem.webp?v=20261103-real" width="22" height="22" alt="" aria-hidden="true" />
+                <img class="streak-ram" src="assets/img/mascot/ram/emblem.webp?v=20261112-ram" width="22" height="22" alt="" aria-hidden="true" />
                 Current streak
               </span>
               <div class="t-stat"><span data-count="112">112</span><span class="t-muted-inline"> d</span></div>
@@ -133,7 +137,7 @@
               </ol>
               <p class="t-body">Rest days count. Recovery is training too.</p>
             </div>
-            <span class="sila sila--glow sila--alive mascot" data-sila="charging" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/charging.webp?v=20261103-real" width="512" height="512" alt="" loading="lazy" decoding="async" /></span>
+            <span class="sila sila--glow sila--alive mascot" data-sila="charging" aria-hidden="true"><img class="sila__art" src="assets/img/mascot/ram/charging.webp?v=20261112-ram" width="512" height="512" alt="" loading="lazy" decoding="async" /></span>
           </div>
         </div>
       </div>
@@ -186,7 +190,7 @@
       <div class="wrap">
         <div class="closing" data-closing>
           <h2 class="t-hero reveal">Your next PR is already on the curve.</h2>
-          <div class="closing__mascot reveal"><p class="sila-bubble" data-closing-bubble>one more rep. then the next PR.</p><span class="sila sila--glow sila--alive" data-sila="determined" role="img" aria-label="Sila, the SilaFit ram mascot" data-closing-sila><img class="sila__art" src="assets/img/mascot/ram/determined.webp?v=20261103-real" width="512" height="512" alt="" loading="lazy" decoding="async" /></span></div>
+          <div class="closing__mascot reveal"><p class="sila-bubble" data-closing-bubble>one more rep. then the next PR.</p><span class="sila sila--glow sila--alive" data-sila="determined" role="img" aria-label="Sila, the SilaFit ram mascot" data-closing-sila><img class="sila__art" src="assets/img/mascot/ram/determined.webp?v=20261112-ram" width="512" height="512" alt="" loading="lazy" decoding="async" /></span></div>
           <div class="closing__actions reveal">
             <div class="store-cta">
               <a class="store-badge" href="https://apps.apple.com/app/id6811345732" data-app-link aria-label="Download SilaFit on the App Store">
@@ -211,7 +215,7 @@
       <div class="footer__grid">
         <div class="footer__brand">
           <a class="nav__logo" href="#top">
-            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
+            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261112-sf" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261112-sf" width="36" height="36" alt="" aria-hidden="true" />
             SilaFit
           </a>
           <p>Workout tracking, training splits, and meal plans in one app, with streaks that respect recovery.</p>
@@ -252,12 +256,12 @@
     </div>
   </footer>
 
-  <script src="js/loader.js?v=20261103-marker"></script>
+  <script src="js/loader.js?v=20261112-sf"></script>
   <script src="js/theme.js"></script>
   <script src="js/data.js"></script>
   <script src="js/vendor-qrcode.js"></script>
   <script src="js/site.js?v=20261103-2"></script>
-  <script src="js/sila.js?v=20261103-real"></script>
-  <script src="js/motion.js?v=20261103-marker"></script>
+  <script src="js/sila.js?v=20261112-sf"></script>
+  <script src="js/motion.js?v=20261112-sf"></script>
 </body>
 </html>

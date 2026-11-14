@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 /// "WEEK k" divider between the weeks of a multi-week split or diet plan.
 class WeekHeader extends StatelessWidget {
@@ -20,7 +21,7 @@ class WeekHeader extends StatelessWidget {
           top: first ? 0 : AppSpacing.sm, bottom: AppSpacing.sm),
       child: Row(
         children: [
-          Text('WEEK $week',
+          Text(tr('WEEK {n}', {'n': week}),
               style: AppTypography.labelCaps.copyWith(color: AppColors.accent)),
           const SizedBox(width: AppSpacing.sm),
           Expanded(child: Divider(color: AppColors.outlineVariant, height: 1)),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart' show AppRadius;
 import '../theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 /// The small uppercase tracked-out label used above headings everywhere
 /// ("SESSION READINESS", "SYSTEM TELEMETRY & ACCESS", ...).
@@ -15,7 +16,7 @@ class SectionEyebrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      text.toUpperCase(),
+      tr(text).toUpperCase(),
       style: AppTypography.labelCaps
           .copyWith(color: color ?? AppColors.onSurfaceVariant),
     );

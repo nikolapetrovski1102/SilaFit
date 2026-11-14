@@ -38,6 +38,7 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IAccountProvider, AccountProvider>();
         services.AddScoped<IProgressAdPassProvider, ProgressAdPassProvider>();
         services.AddScoped<IPartnerLeadsProvider, PartnerLeadsProvider>();
+        services.AddScoped<IDownloadLinksProvider, DownloadLinksProvider>();
         services.AddScoped<ITrainerDocumentsProvider, TrainerDocumentsProvider>();
         services.AddScoped<ISupplementProvidersProvider, SupplementProvidersProvider>();
         services.AddScoped<IMotivationalQuotesProvider, MotivationalQuotesProvider>();

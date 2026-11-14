@@ -1,3 +1,4 @@
+import '../../l10n/l10n.dart';
 /// Mirrors `Silen.Common.Models.SplitModels` / `Silen.Common.Dtos.SplitsDtos`.
 class WorkoutSplit {
   final String splitId;
@@ -199,7 +200,7 @@ SplitDayWithExercises implicitRestDay(int cyclePos) => SplitDayWithExercises(
       day: SplitDay(
         splitDayId: '',
         dayIndex: cyclePos + 1,
-        title: 'Rest Day',
+        title: tr('Rest Day'),
         estimatedMinutes: 0,
         isRestDay: true,
       ),

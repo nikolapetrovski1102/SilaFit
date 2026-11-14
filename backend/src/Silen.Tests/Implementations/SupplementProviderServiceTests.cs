@@ -81,4 +81,30 @@ public class SupplementProviderServiceTests
         Assert.Throws<Silen.Common.Exceptions.ValidationException>(() =>
             AdminConsoleService.CleanRecipeLines(Enumerable.Repeat("x", 6).ToList(), 5, 10, "step"));
     }
+
+    [Theory]
+    [InlineData("https://paket.mk/search")]          // no placeholder
+    [InlineData("http://paket.mk/search?q={query}")] // not https
+    public void RequireSearchUrl_WithoutPlaceholderOrHttps_IsRejected(string url) =>
+        Assert.Throws<Silen.Common.Exceptions.ValidationException>(() => SupplementProviderService.RequireSearchUrl(url));
+
+    [Fact]
+    public void RequireSearchUrl_KeepsThePlaceholder()
+    {
+        Assert.Equal("https://paket.mk/search?q={query}", SupplementProviderService.RequireSearchUrl(" https://paket.mk/search?q={query} "));
+        Assert.Null(SupplementProviderService.RequireSearchUrl("  "));
+    }
+
+    [Theory]
+    [InlineData("https://api.paket.mk/products")]          // no placeholder
+    [InlineData("http://api.paket.mk/products/{barcode}")] // not https
+    [InlineData("https://api.paket.mk/search?q={query}")]  // the search placeholder, not the barcode one
+    public void BarcodeCatalogLink_WithoutBarcodePlaceholderOrHttps_IsRejected(string url) =>
+        Assert.Throws<Silen.Common.Exceptions.ValidationException>(() => SupplementProviderService.RequirePlaceholderUrl(
+            url, SupplementProviderService.BarcodePlaceholder, "Barcode catalog link"));
+
+    [Fact]
+    public void BarcodeCatalogLink_KeepsThePlaceholder() =>
+        Assert.Equal("https://api.paket.mk/products/{barcode}", SupplementProviderService.RequirePlaceholderUrl(
+            "https://api.paket.mk/products/{barcode} ", SupplementProviderService.BarcodePlaceholder, "Barcode catalog link"));
 }

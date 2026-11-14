@@ -8,20 +8,24 @@ namespace Silen.Data.Providers;
 public sealed class FoodScanProvider(ISqlExecutor sqlExecutor) : IFoodScanProvider
 {
     public Task<FoodScanReservationModel> TryReserveAsync(
-        Guid userId, DateTime dayStartUtc, int dailyLimit, CancellationToken cancellationToken = default) =>
+        Guid userId, string kind, bool isTrial, DateTime dayStartUtc, int dailyLimit, int trialLimit,
+        CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
             "dbo.usp_FoodScan_TryReserve",
             [
                 SqlParameterBuilder.Create("@UserId", userId),
+                SqlParameterBuilder.Create("@Kind", kind),
+                SqlParameterBuilder.Create("@IsTrial", isTrial),
                 SqlParameterBuilder.Create("@DayStartUtc", dayStartUtc),
-                SqlParameterBuilder.Create("@DailyLimit", dailyLimit)
+                SqlParameterBuilder.Create("@DailyLimit", dailyLimit),
+                SqlParameterBuilder.Create("@TrialLimit", trialLimit)
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(
                 reader,
                 r => new FoodScanReservationModel
                 {
                     Allowed = r.GetBoolean(r.GetOrdinal("Allowed")),
-                    UsedToday = r.GetInt32(r.GetOrdinal("UsedToday")),
+                    Used = r.GetInt32(r.GetOrdinal("Used")),
                     FoodScanId = r.IsDBNull(r.GetOrdinal("FoodScanId")) ? null : r.GetInt64(r.GetOrdinal("FoodScanId"))
                 },
                 cancellationToken),
@@ -36,14 +40,20 @@ public sealed class FoodScanProvider(ISqlExecutor sqlExecutor) : IFoodScanProvid
             ],
             cancellationToken);
 
-    public Task<int> CountSinceAsync(Guid userId, DateTime dayStartUtc, CancellationToken cancellationToken = default) =>
+    public Task<FoodScanUsageModel> GetUsageAsync(Guid userId, DateTime dayStartUtc, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(
-            "dbo.usp_FoodScan_CountSince",
+            "dbo.usp_FoodScan_Usage",
             [
                 SqlParameterBuilder.Create("@UserId", userId),
                 SqlParameterBuilder.Create("@DayStartUtc", dayStartUtc)
             ],
             reader => SqlResultSetReader.ReadScalarRowAsync(
-                reader, r => r.GetInt32(r.GetOrdinal("UsedToday")), cancellationToken),
+                reader,
+                r => new FoodScanUsageModel
+                {
+                    MealToday = r.GetInt32(r.GetOrdinal("MealToday")),
+                    BarcodeTrialUsed = r.GetInt32(r.GetOrdinal("BarcodeTrialUsed"))
+                },
+                cancellationToken),
             cancellationToken);
 }

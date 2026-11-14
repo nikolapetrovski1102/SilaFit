@@ -12,6 +12,7 @@ import 'diet_plan_models.dart';
 import 'widgets/diet_plan_card.dart';
 import 'widgets/locked_diet_plans.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// Browse view for diet plans - the meal-planning equivalent of
 /// `SplitsScreen`. Unlike splits, plans carry no server-computed
@@ -60,7 +61,7 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                MarkerDrawnTitle('Diet Plans', playKey: 'diet-plans'),
+                MarkerDrawnTitle(tr('Diet Plans'), playKey: 'diet-plans'),
                 const SizedBox(height: AppSpacing.md),
                 if (_controller.requiresUpgrade)
                   LockedDietPlans(
@@ -84,9 +85,9 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
 
   Widget _buildContent(List<DietPlan> plans) {
     if (plans.isEmpty) {
-      return const MascotEmptyState(
-        title: 'No diet plans yet',
-        message: 'Weekly and monthly meal plans will show up here once ready.',
+      return MascotEmptyState(
+        title: tr('No diet plans yet'),
+        message: tr('Weekly and monthly meal plans will show up here once ready.'),
       );
     }
     final visible =
@@ -104,7 +105,7 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
               const options = [null, 'Weekly', 'Monthly'];
               final value = options[i];
               return PillChip(
-                label: value ?? 'All Plans',
+                label: value != null ? tr(value) : tr('All Plans'),
                 selected: _periodFilter == value,
                 onTap: () => setState(() => _periodFilter = value),
               );
@@ -116,7 +117,7 @@ class _DietPlansScreenState extends State<DietPlansScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 48),
             child: Center(
-                child: Text('No plans match this filter.', style: AppTypography.bodySm)),
+                child: Text(tr('No plans match this filter.'), style: AppTypography.bodySm)),
           ),
         for (final plan in visible) ...[
           DietPlanCard(plan: plan),

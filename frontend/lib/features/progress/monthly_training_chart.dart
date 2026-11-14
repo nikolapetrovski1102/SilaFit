@@ -12,6 +12,7 @@ import '../../core/widgets/silen_dropdown.dart';
 import 'analytics_models.dart';
 import 'weight_display.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// Plots logged load, not an inferred quality/effort score. The drawing starts
 /// at the baseline, then traces each real point with a moving tip.
@@ -94,20 +95,20 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.marginMobile, vertical: AppSpacing.xl),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const MarkerDrawnTitle('See your effort over time',
+        MarkerDrawnTitle(tr('See your effort over time'),
             playKey: 'monthly-effort'),
         const SizedBox(height: AppSpacing.sm),
         Text(
-            'Working weight, reps and logged effort tell different parts of the story.',
+            tr('Working weight, reps and logged effort tell different parts of the story.'),
             style: AppTypography.bodyMd),
         const SizedBox(height: AppSpacing.lg),
         if (exercise == null)
-          const SectionCard(
+          SectionCard(
               child: Text(
-                  'No exercise sets logged for this month yet. Log weights and reps during workouts to build your graph.'))
+                  tr('No exercise sets logged for this month yet. Log weights and reps during workouts to build your graph.')))
         else ...[
           SilenDropdown<int>(
-            label: 'Exercise',
+            label: tr('Exercise'),
             value: _selected.clamp(0, exercises.length - 1),
             items: [
               for (var i = 0; i < exercises.length; i++)
@@ -134,16 +135,16 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                 Text(
-                    '${w(exercise.points.last.weightKg)} $unit × ${exercise.points.last.reps} reps',
+                    tr('{w} {unit} × {n} reps', {'w': w(exercise.points.last.weightKg), 'unit': unit, 'n': exercise.points.last.reps}),
                     style: AppTypography.headlineLg
                         .copyWith(color: AppColors.accent)),
                 Text(
-                    'Latest heaviest set · ${DateFormat.MMMd().format(exercise.points.last.dateUtc)}$perDumbbell',
+                    tr('Latest heaviest set · {date}', {'date': DateFormat.MMMd().format(exercise.points.last.dateUtc)}) + perDumbbell,
                     style: AppTypography.bodySm),
                 const SizedBox(height: AppSpacing.md),
                 Semantics(
                   label:
-                      '${exercise.exerciseName}. Heaviest set per session. Record through month end ${w(exercise.recordWeightKg)} $unitWord. ${exercise.points.map((p) => '${DateFormat.MMMd().format(p.dateUtc)}: ${w(p.weightKg)} $unitWord, ${p.reps} reps').join('; ')}',
+                      tr('{name}. Heaviest set per session. Record through month end {w} {unit}. {points}', {'name': exercise.exerciseName, 'w': w(exercise.recordWeightKg), 'unit': unitWord, 'points': exercise.points.map((p) => '${DateFormat.MMMd().format(p.dateUtc)}: ${w(p.weightKg)} $unitWord, ${tr('{n} reps', {'n': p.reps})}').join('; ')}),
                   child: SizedBox(
                       height: 220,
                       child: LayoutBuilder(builder: (context, constraints) {
@@ -193,45 +194,45 @@ class _MonthlyTrainingChartState extends State<MonthlyTrainingChart>
                                   selected: touched,
                                   selectedLabel: point == null
                                       ? null
-                                      : '${w(point.weightKg)} $unit × ${point.reps} reps\n${DateFormat.MMMd().format(point.dateUtc)}${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
+                                      : '${tr('{w} {unit} × {n} reps', {'w': w(point.weightKg), 'unit': unit, 'n': point.reps})}\n${DateFormat.MMMd().format(point.dateUtc)}${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
                                 )),
                           ),
                         );
                       })),
                 ),
                 Text(
-                    'Heaviest set each session · $unit$perDumbbell\nDashed line: PR through month end (${w(exercise.recordWeightKg)} $unit)',
+                    tr('Heaviest set each session · {unit}{suffix}\nDashed line: PR through month end ({w} {unit})', {'unit': unit, 'suffix': perDumbbell, 'w': w(exercise.recordWeightKg)}),
                     style: AppTypography.bodySm),
               ])),
           const SizedBox(height: AppSpacing.md),
           Text(
               exercise.points.length < 2
-                  ? 'One session is a starting point. More logs are needed to show a trend.'
+                  ? tr('One session is a starting point. More logs are needed to show a trend.')
                   : exercise.steadyLoad
-                      ? 'Your heaviest logged weight stayed at ${w(exercise.points.last.weightKg)} $unit across ${exercise.points.length} sessions. ${exercise.points.last.reps > exercise.points.first.reps ? 'You added reps at that weight.' : 'There is no upward load trend in these logs yet.'}'
+                      ? '${tr('Your heaviest logged weight stayed at {w} {unit} across {n} sessions.', {'w': w(exercise.points.last.weightKg), 'unit': unit, 'n': exercise.points.length})} ${exercise.points.last.reps > exercise.points.first.reps ? tr('You added reps at that weight.') : tr('There is no upward load trend in these logs yet.')}'
                       : exercise.improved
-                          ? 'Your latest set shows progress over your first session this month.'
-                          : 'Your load varied this month. Compare the reps too before drawing conclusions about progress.',
+                          ? tr('Your latest set shows progress over your first session this month.')
+                          : tr('Your load varied this month. Compare the reps too before drawing conclusions about progress.'),
               style: AppTypography.bodyMd),
           const SizedBox(height: AppSpacing.md),
           SectionCard(
               child: Text(
                   rpes.isEmpty
-                      ? 'Workout effort (RPE): not logged'
-                      : 'Average workout effort: ${(rpes.reduce((a, b) => a + b) / rpes.length).toStringAsFixed(1)}/10 RPE\nFrom ${rpes.length} logged sessions for this exercise. This is session effort, not an exercise quality score.',
+                      ? tr('Workout effort (RPE): not logged')
+                      : tr('Average workout effort: {avg}/10 RPE\nFrom {n} logged sessions for this exercise. This is session effort, not an exercise quality score.', {'avg': (rpes.reduce((a, b) => a + b) / rpes.length).toStringAsFixed(1), 'n': rpes.length}),
                   style: AppTypography.bodyMd)),
           const SizedBox(height: AppSpacing.sm),
           Text(
-              'Training below your PR can be intentional. Load alone cannot tell us about technique, recovery or how hard a set felt.',
+              tr('Training below your PR can be intentional. Load alone cannot tell us about technique, recovery or how hard a set felt.'),
               style: AppTypography.bodySm),
           const SizedBox(height: AppSpacing.lg),
-          const SectionEyebrow('The sets behind the line'),
+          SectionEyebrow(tr('The sets behind the line')),
           const SizedBox(height: AppSpacing.sm),
           for (final point in exercise.points)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Text(
-                  '${DateFormat.MMMd().format(point.dateUtc)} · ${w(point.weightKg)} $unit × ${point.reps} reps${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
+                  '${DateFormat.MMMd().format(point.dateUtc)} · ${tr('{w} {unit} × {n} reps', {'w': w(point.weightKg), 'unit': unit, 'n': point.reps})}${point.sessionRpe == null ? '' : ' · RPE ${point.sessionRpe!.toStringAsFixed(1)}'}',
                   style: AppTypography.bodySm),
             ),
         ],
@@ -283,7 +284,8 @@ class _TrainingPainter extends CustomPainter {
             style: TextStyle(
                 color: AppColors.onSurfaceVariant,
                 fontSize: 10,
-                fontFamily: 'HankenGrotesk')),
+                fontFamily: 'HankenGrotesk',
+                fontFamilyFallback: const ['GolosText'])),
         textDirection: TextDirection.ltr)
       ..layout();
     painter.paint(canvas, position);
@@ -395,7 +397,8 @@ class _TrainingPainter extends CustomPainter {
                 color: AppColors.onSurface,
                 fontSize: 11,
                 height: 1.35,
-                fontFamily: 'HankenGrotesk')),
+                fontFamily: 'HankenGrotesk',
+                fontFamilyFallback: const ['GolosText'])),
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr)
       ..layout(maxWidth: size.width - 16);

@@ -18,6 +18,7 @@ import '../../onboarding/widgets/age_wheel_picker.dart';
 import '../exercise_progress_controller.dart';
 import '../progress_models.dart';
 import '../weight_display.dart';
+import '../../../l10n/l10n.dart';
 
 /// Hairline used in place of card edges - the tracker sits straight on the
 /// screen's ambient backdrop, so separation comes from type and spacing.
@@ -69,7 +70,7 @@ class ExerciseProgressCard extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: SectionEyebrow('Exercise Progress',
+                child: SectionEyebrow(tr('Exercise Progress'),
                     color: AppColors.accent),
               ),
               const SizedBox(width: AppSpacing.xs),
@@ -94,7 +95,7 @@ class ExerciseProgressCard extends StatelessWidget {
                 message: exercisesState.error!,
                 onRetry: () => controller.load(force: true))
           else if (!hasExercises)
-            Text('Log sets during a workout to track each exercise over time.',
+            Text(tr('Log sets during a workout to track each exercise over time.'),
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant))
           else ...[
@@ -190,7 +191,7 @@ class _TimeframeValue extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text('LAST', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+          Text(tr('LAST'), style: AppTypography.labelCaps.copyWith(fontSize: 10)),
           Row(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -207,7 +208,7 @@ class _TimeframeValue extends StatelessWidget {
               _timeframeHero(
                 _unitHeroTag,
                 _TimeframeSlot(
-                  label: unit.short,
+                  label: tr(unit.short),
                   style: AppTypography.headlineLg
                       .copyWith(color: AppColors.accent, height: 1),
                 ),
@@ -419,10 +420,10 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SectionEyebrow('Timeframe',
+                              SectionEyebrow(tr('Timeframe'),
                                   color: AppColors.accent),
                               const SizedBox(height: 4),
-                              Text('Show progress for',
+                              Text(tr('Show progress for'),
                                   style: AppTypography.headlineLg),
                             ],
                           ),
@@ -457,11 +458,11 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
                           min: 0,
                           max: ProgressTimeframeUnit.values.length - 1,
                           labelBuilder: (i) =>
-                              ProgressTimeframeUnit.values[i].short,
+                              tr(ProgressTimeframeUnit.values[i].short),
                           onChanged: _setUnit,
                           hideSelectedLabel: _inFlight,
                           selectionBuilder: (pill) =>
-                              _hero(_unitHeroTag, _unit.short, pill),
+                              _hero(_unitHeroTag, tr(_unit.short), pill),
                         ),
                       ),
                     ],
@@ -471,7 +472,7 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
                     child: AnimatedSwitcher(
                       duration: _motion,
                       child: Text(
-                        'Last ${_unit.describe(_amount)}',
+                        tr('Last {period}', {'period': _unit.describe(_amount)}),
                         key: ValueKey((_amount, _unit)),
                         textAlign: TextAlign.center,
                         style: AppTypography.headlineSm,
@@ -484,7 +485,7 @@ class _TimeframePickerScreenState extends State<_TimeframePickerScreen> {
                         0, AppSpacing.marginMobile, AppSpacing.md),
                     child: HeroExpandReveal(
                       child: PrimaryPillButton(
-                        label: 'Done',
+                        label: tr('Done'),
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
                     ),
@@ -556,7 +557,7 @@ class _ExerciseSelector extends StatelessWidget {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          selected?.exerciseName ?? 'Choose an exercise',
+                          selected?.exerciseName ?? tr('Choose an exercise'),
                           maxLines: 1,
                           softWrap: false,
                           style: AppTypography.headlineLg,
@@ -579,8 +580,8 @@ class _ExerciseSelector extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${exercises.length} tracked '
-                '${exercises.length == 1 ? 'exercise' : 'exercises'} · tap to search',
+                trPlural(exercises.length, '{n} tracked exercise · tap to search',
+                    '{n} tracked exercises · tap to search'),
                 style: AppTypography.bodySm,
               ),
             ],
@@ -656,10 +657,10 @@ class _ExerciseSearchScreenState extends State<_ExerciseSearchScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SectionEyebrow('Exercise Progress',
+                            SectionEyebrow(tr('Exercise Progress'),
                                 color: AppColors.accent),
                             const SizedBox(height: 4),
-                            Text('Track an exercise',
+                            Text(tr('Track an exercise'),
                                 style: AppTypography.headlineLg),
                           ],
                         ),
@@ -687,7 +688,7 @@ class _ExerciseSearchScreenState extends State<_ExerciseSearchScreen> {
                       if (results.length == 1) _select(results.first);
                     },
                     decoration: InputDecoration(
-                      hintText: 'Search your exercises',
+                      hintText: tr('Search your exercises'),
                       fillColor: AppColors.onSurface.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadius.full),
@@ -721,7 +722,7 @@ class _ExerciseSearchScreenState extends State<_ExerciseSearchScreen> {
                   child: results.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.only(top: AppSpacing.xl),
-                          child: Text('No tracked exercise matches "$_query".',
+                          child: Text(tr('No tracked exercise matches "{q}".', {'q': _query}),
                               textAlign: TextAlign.center,
                               style: AppTypography.bodyMd
                                   .copyWith(color: AppColors.onSurfaceVariant)),
@@ -800,8 +801,8 @@ class _ExerciseResultRow extends StatelessWidget {
                               : AppColors.highEmphasis)),
                   const SizedBox(height: 2),
                   Text(
-                    '$sessions session${sessions == 1 ? '' : 's'} · last '
-                    '${DateFormat('MMM d').format(exercise.lastTrainedAtUtc.toLocal())}',
+                    trPlural(sessions, '{n} session · last {date}', '{n} sessions · last {date}',
+                        {'date': DateFormat('MMM d').format(exercise.lastTrainedAtUtc.toLocal())}),
                     style: AppTypography.bodySm,
                   ),
                 ],
@@ -821,10 +822,10 @@ class _ExerciseResultRow extends StatelessWidget {
 
 extension on ExerciseProgressMetric {
   String get label => switch (this) {
-        ExerciseProgressMetric.estimatedOneRm => 'Est. 1RM',
-        ExerciseProgressMetric.topSet => 'Top set',
-        ExerciseProgressMetric.volume => 'Volume',
-        ExerciseProgressMetric.reps => 'Reps',
+        ExerciseProgressMetric.estimatedOneRm => tr('Est. 1RM'),
+        ExerciseProgressMetric.topSet => tr('Top set'),
+        ExerciseProgressMetric.volume => tr('Volume'),
+        ExerciseProgressMetric.reps => tr('Reps'),
       };
 
   bool get isWeight => this != ExerciseProgressMetric.reps;
@@ -864,7 +865,7 @@ class _ProgressBody extends StatelessWidget {
     if (points.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        child: Text('No sessions for this exercise in the selected timeframe.',
+        child: Text(tr('No sessions for this exercise in the selected timeframe.'),
             style: AppTypography.bodySm
                 .copyWith(color: AppColors.onSurfaceVariant)),
       );
@@ -922,9 +923,9 @@ class _ProgressBody extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Best ${formatDisplayWeight(best)} $unit · '
-          '${points.length} session${points.length == 1 ? '' : 's'}'
-          '${isPerDumbbell && effective.isPerSet ? perDumbbellSuffix : ''}',
+          trPlural(points.length, 'Best {w} {unit} · {n} session', 'Best {w} {unit} · {n} sessions',
+                  {'w': formatDisplayWeight(best), 'unit': unit}) +
+              (isPerDumbbell && effective.isPerSet ? perDumbbellSuffix : ''),
           style: AppTypography.bodySm,
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -932,7 +933,7 @@ class _ProgressBody extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Center(
-                child: Text('Train it again to see your trend.',
+                child: Text(tr('Train it again to see your trend.'),
                     style: AppTypography.bodySm)),
           )
         else
@@ -942,8 +943,8 @@ class _ProgressBody extends StatelessWidget {
           ),
         const SizedBox(height: AppSpacing.xl),
         SectionEyebrow(isPerDumbbell
-            ? 'Recent sessions$perDumbbellSuffix'
-            : 'Recent sessions'),
+            ? tr('Recent sessions') + perDumbbellSuffix
+            : tr('Recent sessions')),
         const SizedBox(height: AppSpacing.xs),
         for (final (i, p) in points.reversed.take(3).indexed) ...[
           if (i > 0) Divider(height: 1, thickness: 1, color: _hairline),
@@ -1302,7 +1303,7 @@ class _SessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final topSet = point.topWeightKg > 0
         ? '${formatWeight(point.topWeightKg, weightUnit)} $weightUnit × ${point.topSetReps}'
-        : '${point.totalReps} reps';
+        : tr('{n} reps', {'n': point.totalReps});
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       child: Row(
@@ -1315,7 +1316,7 @@ class _SessionRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-                '${point.setCount} set${point.setCount == 1 ? '' : 's'}',
+                trPlural(point.setCount, '{n} set', '{n} sets'),
                 style: AppTypography.bodySm),
           ),
           Text(topSet,
@@ -1337,7 +1338,7 @@ class _RetryMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onRetry,
-      child: Text('$message Tap to retry.',
+      child: Text(tr('{message} Tap to retry.', {'message': message}),
           style:
               AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant)),
     );

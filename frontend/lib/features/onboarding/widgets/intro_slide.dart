@@ -8,19 +8,24 @@ import '../../../core/widgets/dumbbell_icon.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 import '../../../core/widgets/marker_drawn_title.dart';
+import '../../../l10n/l10n.dart';
 
 /// One page of the intro carousel: an optional icon mark plus
 /// headline/subhead. Without a mark the headline sits centred on its own.
 class IntroSlideData {
   final Widget? iconMark;
-  final String headline;
-  final String subhead;
+  final String _headline;
+  final String _subhead;
+
+  String get headline => tr(_headline);
+  String get subhead => tr(_subhead);
 
   const IntroSlideData({
     this.iconMark,
-    required this.headline,
-    required this.subhead,
-  });
+    required String headline,
+    required String subhead,
+  })  : _headline = headline,
+        _subhead = subhead;
 }
 
 /// The swipeable intro carousel: Skip top-right on every slide, a
@@ -90,7 +95,7 @@ class _IntroCarouselState extends State<IntroCarousel> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: widget.onSkip,
-                  child: Text('Skip',
+                  child: Text(tr('Skip'),
                       style: AppTypography.bodyMd
                           .copyWith(color: AppColors.onSurfaceVariant)),
                 ),
@@ -130,7 +135,7 @@ class _IntroCarouselState extends State<IntroCarousel> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryPillButton(
-                  label: _isLast ? 'Continue' : 'Get started',
+                  label: _isLast ? tr('Continue') : tr('Get started'),
                   onPressed: _onCta,
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -141,9 +146,9 @@ class _IntroCarouselState extends State<IntroCarousel> {
                       style: AppTypography.bodyMd
                           .copyWith(color: AppColors.onSurfaceVariant),
                       children: [
-                        const TextSpan(text: 'Already have an account? '),
+                        TextSpan(text: tr('Already have an account? ')),
                         TextSpan(
-                            text: 'Log in',
+                            text: tr('Log in'),
                             style: TextStyle(
                                 color: AppColors.secondary,
                                 fontWeight: FontWeight.w600)),

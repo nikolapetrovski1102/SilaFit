@@ -4,6 +4,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/state/resource_state.dart';
 import 'progress_models.dart';
 import 'progress_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// Whether the caller may use per-exercise progress tracking. Learned from
 /// the server (a 403 on `/progress/exercises`) rather than the client's own
@@ -31,7 +32,10 @@ enum ProgressTimeframeUnit {
     required this.singular,
   });
 
-  String describe(int amount) => '$amount $singular${amount == 1 ? '' : 's'}';
+  String describe(int amount) => switch (this) {
+        month => trPlural(amount, '{n} month', '{n} months'),
+        year => trPlural(amount, '{n} year', '{n} years'),
+      };
 }
 
 /// App-wide controller for the PRO/Advanced per-exercise tracker on the
@@ -100,7 +104,7 @@ class ExerciseProgressController extends ChangeNotifier {
         exercisesState = ResourceState.error(e.userMessage);
       }
     } catch (_) {
-      exercisesState = const ResourceState.error(ApiException.genericMessage);
+      exercisesState = ResourceState.error(ApiException.genericMessage);
     } finally {
       _exercisesLoading = false;
     }
@@ -177,7 +181,7 @@ class ExerciseProgressController extends ChangeNotifier {
       }
       next = ResourceState.error(e.userMessage);
     } catch (_) {
-      next = const ResourceState.error(ApiException.genericMessage);
+      next = ResourceState.error(ApiException.genericMessage);
     }
     if (request != _progressRequest) return;
     progressState = next;

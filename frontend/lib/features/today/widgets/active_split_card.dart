@@ -11,6 +11,7 @@ import '../../../core/widgets/slim_action_row.dart';
 import '../../splits/my_splits_screen.dart';
 import '../today_controller.dart';
 import '../today_models.dart';
+import '../../../l10n/l10n.dart';
 
 /// Replaces the old "armed push trigger" banner on Today: surfaces the
 /// user's currently active split, or a prompt to create one if they haven't
@@ -33,16 +34,20 @@ class ActiveSplitCard extends StatelessWidget {
   /// rather than being forced to one large fixed size.
   static const _emphasis = 1.15;
 
-  const ActiveSplitCard({super.key, required this.activeSplit, this.scale = 1, this.spotlightKey});
+  const ActiveSplitCard(
+      {super.key,
+      required this.activeSplit,
+      this.scale = 1,
+      this.spotlightKey});
 
   @override
   Widget build(BuildContext context) {
     final split = activeSplit;
     final value = split == null
-        ? 'Create your first split'
+        ? tr('Create your first split')
         : split.durationDays != null
-            ? '${split.name} · ${split.durationDays}-day program'
-            : split.name ?? 'Split active';
+            ? tr('{name} · {n}-day program', {'name': split.name, 'n': split.durationDays})
+            : split.name ?? tr('Split active');
 
     final rowScale = scale * _emphasis;
     final todayController = context.read<TodayController>();
@@ -55,7 +60,7 @@ class ActiveSplitCard extends StatelessWidget {
             SoftDumbbellIcon(size: 22 * rowScale, color: AppColors.accent),
         iconColor: AppColors.accent,
         iconBackground: AppColors.accent.withOpacity(0.16),
-        label: 'MY SPLIT',
+        label: tr('MY SPLIT'),
         value: value,
         // A ceiling, not a fixed size - FittedBox in SlimActionRow scales
         // this down for a long split name and leaves it be for a short one,

@@ -16,6 +16,7 @@ import 'register_screen.dart';
 import 'widgets/auth_blob_background.dart';
 import 'widgets/oauth_sign_in_buttons.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -209,14 +210,14 @@ class _LoginScreenState extends State<LoginScreen>
                               children: [
                                 _FadeUp(
                                   animation: headerIn,
-                                  child: const MarkerDrawnTitle('Welcome back',
+                                  child: MarkerDrawnTitle(tr('Welcome back'),
                                       playKey: 'login'),
                                 ),
                                 const SizedBox(height: AppSpacing.xs),
                                 _FadeUp(
                                   animation: headerIn,
                                   child: Text(
-                                    'Log in to sync your training history across devices.',
+                                    tr('Log in to sync your training history across devices.'),
                                     style: AppTypography.bodyMd.copyWith(
                                         color: AppColors.onSurfaceVariant),
                                   ),
@@ -249,12 +250,12 @@ class _LoginScreenState extends State<LoginScreen>
                                             editableTextState:
                                                 editableTextState,
                                           ),
-                                          decoration: const InputDecoration(
-                                              hintText: 'Email'),
+                                          decoration: InputDecoration(
+                                              hintText: tr('Email')),
                                           validator: (value) => (value ==
                                                       null ||
                                                   !value.contains('@'))
-                                              ? 'Enter a valid email'
+                                              ? tr('Enter a valid email')
                                               : null,
                                         ),
                                         const SizedBox(
@@ -272,14 +273,14 @@ class _LoginScreenState extends State<LoginScreen>
                                             editableTextState:
                                                 editableTextState,
                                           ),
-                                          decoration: const InputDecoration(
-                                              hintText: 'Password'),
+                                          decoration: InputDecoration(
+                                              hintText: tr('Password')),
                                           onFieldSubmitted: (_) =>
                                               _submit(auth),
                                           validator: (value) =>
                                               (value == null ||
                                                       value.isEmpty)
-                                                  ? 'Enter your password'
+                                                  ? tr('Enter your password')
                                                   : null,
                                         ),
                                       ],
@@ -290,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 _FadeUp(
                                   animation: ctaIn,
                                   child: PrimaryPillButton(
-                                      label: 'Log In',
+                                      label: tr('Log In'),
                                       isLoading: auth.isBusy,
                                       onPressed: () => _submit(auth)),
                                 ),
@@ -336,11 +337,11 @@ class _LoginScreenState extends State<LoginScreen>
                                             color:
                                                 AppColors.onSurfaceVariant),
                                         children: [
-                                          const TextSpan(
-                                              text:
-                                                  "Don't have an account? "),
                                           TextSpan(
-                                            text: 'Sign up',
+                                              text: tr(
+                                                  "Don't have an account? ")),
+                                          TextSpan(
+                                            text: tr('Sign up'),
                                             style: TextStyle(
                                                 color: AppColors.accent,
                                                 fontWeight: FontWeight.w600),
@@ -431,7 +432,7 @@ class _BackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Back',
+      label: tr('Back'),
       child: Material(
         color: Colors.transparent,
         child: Ink(

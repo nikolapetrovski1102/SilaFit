@@ -11,6 +11,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 import '../../../core/widgets/marker_drawn_title.dart';
+import '../../../l10n/l10n.dart';
 
 /// The closing screen of the flow: animated bell, "Stay on track" pitch,
 /// and a real OS notification-permission prompt behind "Continue". There is
@@ -79,7 +80,7 @@ class NotificationPermissionScreen extends StatelessWidget {
               child: OnboardingStepContentTransition(
                 child: Semantics(
                   image: true,
-                  label: 'Ringing notification bell',
+                  label: tr('Ringing notification bell'),
                   child: Center(
                     child: FractionallySizedBox(
                       widthFactor: 0.96,
@@ -105,12 +106,12 @@ class NotificationPermissionScreen extends StatelessWidget {
               incomingOffset: 14,
               child: Column(
                 children: [
-                  const MarkerDrawnTitle('Stay on track',
+                  MarkerDrawnTitle(tr('Stay on track'),
                       playKey: 'notification-permission',
                       textAlign: TextAlign.center),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Get a nudge on workout days and reminders when it’s time to log your progress.',
+                    tr('Get a nudge on workout days and reminders when it’s time to log your progress.'),
                     textAlign: TextAlign.center,
                     style: AppTypography.bodyMd.copyWith(
                         color: AppColors.onSurfaceVariant, height: 1.4),
@@ -120,7 +121,7 @@ class NotificationPermissionScreen extends StatelessWidget {
             ),
             const Spacer(flex: 2),
             PrimaryPillButton(
-              label: 'Continue',
+              label: tr('Continue'),
               isLoading: isSubmitting,
               onPressed: isSubmitting ? null : _requestAndFinish,
             ),

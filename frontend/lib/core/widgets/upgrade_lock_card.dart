@@ -7,6 +7,7 @@ import '../theme/app_typography.dart';
 import 'section_card.dart';
 import 'section_eyebrow.dart';
 import 'silen_button.dart';
+import '../../l10n/l10n.dart';
 
 /// The upgrade prompt that sits over a blurred PRO/Advanced feature (the
 /// Progress screen, the suggested-split library). The caller owns the blur
@@ -94,7 +95,7 @@ class _UpgradeLockCardState extends State<UpgradeLockCard>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppSpacing.sm),
-          SectionEyebrow('PRO · ADVANCED', color: AppColors.secondary),
+          SectionEyebrow(tr('PRO · ADVANCED'), color: AppColors.secondary),
           const SizedBox(height: AppSpacing.md),
           PrimaryPillButton(
             label: widget.actionLabel,

@@ -21,4 +21,30 @@ public interface IFoodNutritionProvider
         string sourceFoodId,
         byte[] contentHash,
         CancellationToken cancellationToken = default);
+
+    /// <summary>The food with this exact barcode and all four headline nutrients: the
+    /// user's own first, then the catalog by source priority. Null when there is none.</summary>
+    Task<FoodNutritionModel?> GetByBarcodeAsync(
+        Guid userId, string barcode, CancellationToken cancellationToken = default);
+
+    /// <summary>What other users named this barcode product (name, brand, serving - no
+    /// nutrition), to prefill the "add it" form. Null when nobody else has saved it.
+    /// Saving it twice with matching nutrition, by two users, makes it a shared
+    /// 'SilaFit Community' food (dbo.foodnutrition_promotebarcode).</summary>
+    Task<BarcodeProductHintDto?> GetBarcodeSuggestionAsync(
+        Guid userId, string barcode, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds (or refreshes) a product fetched live from Open Food Facts - or a
+    /// partner catalog, named by <paramref name="sourceName"/> - in the shared catalog,
+    /// keyed by its barcode like the importer's rows.</summary>
+    Task<FoodNutritionModel> SaveOpenFoodFactsAsync(
+        OpenFoodFactsProductModel product,
+        string name,
+        string normalizedName,
+        byte[] contentHash,
+        string sourceName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The source name of foods fetched live from Open Food Facts.</summary>
+    const string OpenFoodFactsSourceName = "Open Food Facts";
 }

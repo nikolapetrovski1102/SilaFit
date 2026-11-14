@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -429,8 +430,7 @@ class DayOval extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const weekdayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final letter = weekdayLetters[day.date.weekday - 1];
+    final letter = DateFormat.EEEEE().format(day.date).toUpperCase();
     final isToday = _isToday;
     final isFuture = dateOnly(day.date).isAfter(dateOnly(DateTime.now()));
     final completed = day.status == 'Completed';

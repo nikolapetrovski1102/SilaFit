@@ -121,7 +121,7 @@ public class NotificationServiceTests
             .Setup(p => p.RegisterDeviceTokenAsync(userId, It.Is<RegisterDeviceTokenRequest>(r => r.TimeZoneId == "Europe/Skopje"), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         notificationProvider
-            .Setup(p => p.RecordInteractionAsync(userId, It.IsAny<DateTime>(), notificationId, It.IsAny<CancellationToken>()))
+            .Setup(p => p.RecordInteractionAsync(userId, It.IsAny<DateTime>(), notificationId, "en", It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await sut.RecordInteractionAsync(userId, request);
@@ -139,7 +139,7 @@ public class NotificationServiceTests
         var request = new RecordNotificationInteractionRequest { TimeZoneId = null };
 
         notificationProvider
-            .Setup(p => p.RecordInteractionAsync(userId, It.IsAny<DateTime>(), null, It.IsAny<CancellationToken>()))
+            .Setup(p => p.RecordInteractionAsync(userId, It.IsAny<DateTime>(), null, "en", It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await sut.RecordInteractionAsync(userId, request);

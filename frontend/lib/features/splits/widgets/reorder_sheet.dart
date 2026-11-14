@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/silen_button.dart';
+import '../../../l10n/l10n.dart';
 
 /// Generic drag-and-drop reorder sheet shared by the split builder's day
 /// list ([SplitBuilderScreen]) and a day's exercise list
@@ -105,7 +106,7 @@ class _ReorderSheetState<T> extends State<_ReorderSheet<T>> {
             ),
             const SizedBox(height: AppSpacing.sm),
             PrimaryPillButton(
-              label: 'Done',
+              label: tr('Done'),
               onPressed: () => Navigator.of(context).pop(_order),
             ),
           ],

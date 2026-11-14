@@ -1,4 +1,5 @@
 import 'meal_models.dart';
+import '../../l10n/l10n.dart';
 
 /// One curated meal plus the score/reason behind its placement. The score is
 /// only ever compared against other matches; [reason] is the sentence the UI
@@ -136,20 +137,20 @@ String _reasonFor(
   final personReason = suggestion.matchReason;
   if (remainingKcal != null && remainingKcal > 0) {
     if (personReason != null) {
-      return '$personReason · $remainingKcal kcal left today';
+      return tr('{reason} · {kcal} kcal left today', {'reason': personReason, 'kcal': remainingKcal});
     }
     if (proteinGap != null && proteinGap > 0 && suggestion.proteinG >= 20) {
-      return 'Best match for your $remainingKcal kcal remaining · '
-          '${suggestion.proteinG}g protein toward today\'s target';
+      return tr('Best match for your {kcal} kcal remaining · {p}g protein toward today\'s target',
+          {'kcal': remainingKcal, 'p': suggestion.proteinG});
     }
-    return 'Best match for your $remainingKcal kcal remaining';
+    return tr('Best match for your {kcal} kcal remaining', {'kcal': remainingKcal});
   }
   if (remainingKcal != null) {
     return personReason ??
-        'You\'re at today\'s calorie target - lightest options first';
+        tr('You\'re at today\'s calorie target - lightest options first');
   }
   return personReason ??
-      'A strong $slot option · ${suggestion.proteinG}g protein';
+      tr('A strong {slot} option · {p}g protein', {'slot': L10n.isMacedonian ? tr(slot).toLowerCase() : slot, 'p': suggestion.proteinG});
 }
 
 double _clamp01(num value) => value.clamp(0.0, 1.0).toDouble();

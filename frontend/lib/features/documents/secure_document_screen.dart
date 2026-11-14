@@ -7,6 +7,7 @@ import '../../core/platform/screen_security.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 /// A trainer's PDF, read-only, in a locked WebView.
 ///
@@ -105,16 +106,17 @@ class _SecureDocumentScreenState extends State<SecureDocumentScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: Icon(Icons.no_photography_outlined, color: AppColors.error),
-        title: const Text('Screenshots are off here'),
+        title: Text(tr('Screenshots are off here')),
         content: Text(
-          'This document is a personal copy from '
-          '${widget.trainerName ?? 'your trainer'}. Every page carries your '
+          tr('This document is a personal copy from '
+          '{trainer}. Every page carries your '
           'name, so please keep it to yourself.',
+            {'trainer': widget.trainerName ?? tr('your trainer')}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
+            child: Text(tr('Got it')),
           ),
         ],
       ),
@@ -136,7 +138,7 @@ class _SecureDocumentScreenState extends State<SecureDocumentScreen> {
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.sm),
             child: Tooltip(
-              message: 'Protected: no screenshots, no sharing',
+              message: tr('Protected: no screenshots, no sharing'),
               child: Icon(Icons.lock_outline_rounded,
                   size: 20, color: AppColors.onSurfaceVariant),
             ),
@@ -159,12 +161,12 @@ class _SecureDocumentScreenState extends State<SecureDocumentScreen> {
                         Icon(Icons.wifi_off_rounded,
                             size: 40, color: AppColors.onSurfaceVariant),
                         const SizedBox(height: AppSpacing.sm),
-                        Text('The document could not be loaded.',
+                        Text(tr('The document could not be loaded.'),
                             textAlign: TextAlign.center,
                             style: AppTypography.headlineSm),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          'Check your connection, then close it and open it again.',
+                          tr('Check your connection, then close it and open it again.'),
                           textAlign: TextAlign.center,
                           style: AppTypography.bodySm
                               .copyWith(color: AppColors.onSurfaceVariant),
@@ -172,7 +174,7 @@ class _SecureDocumentScreenState extends State<SecureDocumentScreen> {
                         const SizedBox(height: AppSpacing.md),
                         FilledButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Close'),
+                          child: Text(tr('Close')),
                         ),
                       ],
                     ),

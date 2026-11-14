@@ -19,7 +19,10 @@ class StreakBadge extends StatefulWidget {
   final VoidCallback onTap;
 
   const StreakBadge(
-      {super.key, required this.streakDays, required this.scale, required this.onTap});
+      {super.key,
+      required this.streakDays,
+      required this.scale,
+      required this.onTap});
 
   @override
   State<StreakBadge> createState() => _StreakBadgeState();
@@ -97,14 +100,16 @@ class _StreakBadgeState extends State<StreakBadge> {
           curve: Curves.easeOut,
           child: Padding(
             padding: EdgeInsets.symmetric(
-                horizontal: AppSpacing.xs * scale, vertical: AppSpacing.xxs * scale),
+                horizontal: AppSpacing.xs * scale,
+                vertical: AppSpacing.xxs * scale),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 StreakFire(streakDays: widget.streakDays, size: 34 * scale),
                 SizedBox(width: AppSpacing.xxs * scale),
                 Text('${widget.streakDays}',
-                    style: AppTypography.headlineSm.copyWith(fontSize: 22 * scale)),
+                    style: AppTypography.headlineSm
+                        .copyWith(fontSize: 22 * scale)),
                 SizedBox(width: 2 * scale),
                 Icon(Icons.chevron_right_rounded,
                     color: AppColors.onSurfaceVariant, size: 16 * scale),

@@ -41,7 +41,7 @@ class SplitsController extends ChangeNotifier {
       requiresUpgrade = e.isForbidden;
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -88,7 +88,7 @@ class SplitDetailController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -161,7 +161,7 @@ class MySplitsController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }
@@ -204,7 +204,7 @@ class SplitBuilderController extends ChangeNotifier {
     } on ApiException catch (e) {
       loadState = ResourceState.error(e.userMessage);
     } catch (_) {
-      loadState = const ResourceState.error(ApiException.genericMessage);
+      loadState = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }

@@ -5,7 +5,7 @@
 #     ios/Runner path, so pubspec.yaml has it skip iOS entirely.
 #   - Android ic_launcher_light: legacy PNGs for API < 26 plus the adaptive
 #     icon XML with its own burgundy foreground (ic_launcher_light_foreground).
-#   - Android ic_stat_silafit: the white runner as the push notification small
+#   - Android ic_stat_silafit: the white SF mark as the push notification small
 #     icon (AndroidManifest default_notification_icon). Without it FCM falls
 #     back to the launcher icon, which the status bar flattens to a blob.
 # macOS only (uses sips). Run from anywhere:
@@ -95,14 +95,14 @@ cat > "$RES/mipmap-anydpi-v26/ic_launcher_light.xml" <<'XML'
 </adaptive-icon>
 XML
 
-# Notification small icon: the runner cropped out of the monochrome layer
-# (its artwork spans x 262-733, y 295-751 of 1024) to a centred 520px
+# Notification small icon: the SF mark cropped out of the monochrome layer
+# (its artwork spans x 305-717, y 277-746 of 1024) to a centred 520px
 # square, then 24dp per density. White on transparent; Android tints it.
 MONO=assets/branding/app_icon_monochrome.png
 for pair in mdpi:24 hdpi:36 xhdpi:48 xxhdpi:72 xxxhdpi:96; do
   density=${pair%:*}
   px=${pair#*:}
-  sips -s format png -c 520 520 --cropOffset 263 238 "$MONO" \
+  sips -s format png -c 520 520 --cropOffset 252 251 "$MONO" \
     --out "$RES/drawable-$density/ic_stat_silafit.png" >/dev/null
   sips -z "$px" "$px" "$RES/drawable-$density/ic_stat_silafit.png" >/dev/null
 done

@@ -42,7 +42,7 @@ class SettingsController extends ChangeNotifier {
     } on ApiException catch (e) {
       state = ResourceState.error(e.userMessage);
     } catch (_) {
-      state = const ResourceState.error(ApiException.genericMessage);
+      state = ResourceState.error(ApiException.genericMessage);
     } finally {
       _isLoading = false;
     }

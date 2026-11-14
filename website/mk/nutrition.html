@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="mk" data-root="../">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#172d30" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5eedd" media="(prefers-color-scheme: light)" />
+  <title>Исхрана и планови за оброци — SilaFit</title>
+  <meta name="description" content="Цели за калории и макроа што ги следат тренинзите, планови за оброци од вистинска храна врз USDA податоци и AI скенирање храна." />
+  <link rel="alternate" hreflang="en" href="https://sila.fitness/nutrition.html" />
+  <link rel="alternate" hreflang="mk" href="https://sila.fitness/mk/nutrition.html" />
+  <link rel="alternate" hreflang="x-default" href="https://sila.fitness/nutrition.html" />
+  <link rel="canonical" href="https://sila.fitness/mk/nutrition.html" />
+  <meta name="apple-itunes-app" content="app-id=6811345732" />
+  <meta property="og:locale" content="mk_MK" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://sila.fitness/mk/nutrition.html" />
+  <meta property="og:title" content="Исхрана и планови за оброци — SilaFit" />
+  <meta property="og:description" content="Цели за калории и макроа што ги следат тренинзите, планови за оброци од вистинска храна врз USDA податоци и AI скенирање храна." />
+  <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png?v=20261112-sf" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="icon" type="image/png" href="../assets/img/branding/app_icon.png?v=20261112-sf" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="../assets/img/branding/app_icon_light.png?v=20261112-sf" media="(prefers-color-scheme: light)" />
+  <link rel="stylesheet" href="../css/base.css?v=20261112-sf" />
+  <link rel="stylesheet" href="../css/ambient.css?v=20260925" />
+  <link rel="stylesheet" href="../css/site.css?v=20261112-sf" />
+  <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('silafit-theme'); } catch (e) { /* private mode */ }
+      var theme = (stored === 'light' || stored === 'dark')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+      try { if (sessionStorage.getItem('silafit-loader-seen')) document.documentElement.classList.add('loader-fast'); } catch (e) { /* private mode */ }
+    })();
+  </script>
+</head>
+<body>
+  <!-- Full-screen loader: the SF mark paints itself in, then fades (js/loader.js) -->
+  <div class="site-loader" id="siteLoader" aria-hidden="true">
+    <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
+    <img class="site-loader__mark" id="siteLoaderMark" alt="" />
+  </div>
+  <script>
+    /* One drawing for the active theme: full on the first page of a visit, quick after that. */
+    (function () {
+      var d = document.documentElement;
+      document.getElementById('siteLoaderMark').src = '../assets/img/branding/loader_'
+        + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
+        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261112-sf';
+    })();
+  </script>
+
+  <!-- ================= Nav ================= -->
+  <header class="nav" id="mainNav">
+    <div class="nav__inner">
+      <a class="nav__logo" href="index.html">
+        <img class="brand-mark brand-mark--dark" src="../assets/img/branding/app_icon_96.webp?v=20261112-sf" width="36" height="36" alt="Лого на SilaFit" /><img class="brand-mark brand-mark--light" src="../assets/img/branding/app_icon_96_light.webp?v=20261112-sf" width="36" height="36" alt="" aria-hidden="true" />
+        SilaFit
+      </a>
+      <nav class="nav__links" id="navLinks">
+        <a href="features.html">Функции</a>
+        <a href="training.html">Тренинг</a>
+        <a href="nutrition.html" class="is-active" aria-current="page">Исхрана</a>
+        <a href="pricing.html">Цени</a>
+      </nav>
+      <div class="nav__cta">
+        <a class="lang-switch" href="../nutrition.html" hreflang="en" lang="en" aria-label="English">EN</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Префрли на светла тема" title="Префрли на светла тема">
+          <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
+          <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
+        </button>
+        <a class="btn btn--primary btn--sm" href="download.html">Преземи</a>
+      </div>
+      <button class="nav__burger" id="navBurger" aria-label="Мени" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h16M4 16h16"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= Nutrition ================= -->
+    <section class="section" id="nutrition" data-scene="mix">
+      <div class="wrap">
+        <div class="section__head">
+          <span class="eyebrow eyebrow--accent reveal">Исхрана</span>
+          <h1 class="t-xl marker-title">Планови за исхрана што се прилагодуваат на тренинзите.</h1>
+          <p class="t-lead reveal">Вистинска храна во реални порции, со макроа пресметани од USDA податоци на 100 g, без погодување. Избери цел, добиј план за недела, запиши со еден допир.</p>
+        </div>
+
+        <div class="macros" data-macros>
+          <div class="macro macro--kcal reveal" style="--p:82">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="2000">2.000</span></div>
+            <span class="eyebrow">Дневна цел kcal</span>
+            <span class="macro__logged">1.640 запишани денес</span>
+          </div>
+          <div class="macro macro--protein reveal reveal-delay-1" style="--p:83">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="160">160</span><small>g</small></div>
+            <span class="eyebrow">Протеини</span>
+            <span class="macro__logged">132 g запишани</span>
+          </div>
+          <div class="macro macro--carbs reveal reveal-delay-2" style="--p:78">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="180">180</span><small>g</small></div>
+            <span class="eyebrow">Јаглехидрати</span>
+            <span class="macro__logged">141 g запишани</span>
+          </div>
+          <div class="macro macro--fats reveal reveal-delay-3" style="--p:75">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring__track" cx="60" cy="60" r="52" pathLength="100"/><circle class="ring__bar" cx="60" cy="60" r="52" pathLength="100"/></svg>
+            <div class="t-stat"><span data-count="65">65</span><small>g</small></div>
+            <span class="eyebrow">Масти</span>
+            <span class="macro__logged">49 g запишани</span>
+          </div>
+        </div>
+
+        <div class="meals">
+          <div class="meals__head reveal">
+            <span class="eyebrow">Предлози за овој месец</span>
+            <span class="eyebrow" style="color:var(--outline)">Се обновува секој месец</span>
+          </div>
+          <ul class="meal-list" id="mealStrip"><!-- rendered from SilaStore --></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= Next page ================= -->
+    <section class="section section--rule page-next" data-scene="mix">
+      <div class="wrap page-next__inner">
+        <span class="eyebrow">Истражи понатаму</span>
+        <a class="page-next__link reveal" href="pricing.html">Цени<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= Footer ================= -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer__grid">
+        <div class="footer__brand">
+          <a class="nav__logo" href="index.html">
+            <img class="brand-mark brand-mark--dark" src="../assets/img/branding/app_icon_96.webp?v=20261112-sf" width="36" height="36" alt="Лого на SilaFit" /><img class="brand-mark brand-mark--light" src="../assets/img/branding/app_icon_96_light.webp?v=20261112-sf" width="36" height="36" alt="" aria-hidden="true" />
+            SilaFit
+          </a>
+          <p>Следење тренинзи, сплитови и планови за исхрана во една апликација, со низа што го почитува опоравокот.</p>
+        </div>
+        <div>
+          <h4>Производ</h4>
+          <ul>
+            <li><a href="download.html">Преземи ја апликацијата</a></li>
+            <li><a href="features.html">Функции</a></li>
+            <li><a href="nutrition.html">Планирање оброци</a></li>
+            <li><a href="training.html">Сплитови за тренинг</a></li>
+            <li><a href="pricing.html">Цени</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Компанија</h4>
+          <ul>
+            <li><a href="about.html">За нас</a></li>
+            <li><a href="pricing.html#community">Заедница</a></li>
+            <li><a href="support.html">Поддршка</a></li>
+            <li><a href="careers.html">Кариера</a></li>
+            <li><a href="press.html">За медиуми</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Правно</h4>
+          <ul>
+            <li><a href="../privacy.html">Политика за приватност (EN)</a></li>
+            <li><a href="../terms.html">Услови за користење (EN)</a></li>
+            <li><a href="delete-account.html">Избриши го мојот профил</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 SilaFit. Сите права задржани.</span>
+        <span>Направено од вежбачи, за вежбачи.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../js/loader.js?v=20261112-sf"></script>
+  <script src="../js/theme.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/vendor-qrcode.js"></script>
+  <script src="../js/site.js?v=20261103-2"></script>
+  <script src="../js/sila.js?v=20261112-sf"></script>
+  <script src="../js/motion.js?v=20261112-sf"></script>
+</body>
+</html>

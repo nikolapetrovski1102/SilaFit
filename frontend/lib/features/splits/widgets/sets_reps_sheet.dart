@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/silen_button.dart';
+import '../../../l10n/l10n.dart';
 
 // Mirrors the bounds dbo.split_day_exercise_upsert enforces.
 const _kMaxSets = 20;
@@ -103,8 +104,8 @@ class _SetsRepsSheetState extends State<_SetsRepsSheet> {
   }
 
   String get _summary => _low == _high
-      ? '$_sets × $_low reps'
-      : '$_sets × $_low–$_high reps';
+      ? tr('{sets} × {low} reps', {'sets': _sets, 'low': _low})
+      : tr('{sets} × {low}–{high} reps', {'sets': _sets, 'low': _low, 'high': _high});
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +117,7 @@ class _SetsRepsSheetState extends State<_SetsRepsSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Sets and reps', style: AppTypography.headlineMd),
+            Text(tr('Sets and reps'), style: AppTypography.headlineMd),
             const SizedBox(height: AppSpacing.xxs),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 160),
@@ -136,9 +137,9 @@ class _SetsRepsSheetState extends State<_SetsRepsSheet> {
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
-                Expanded(child: _label('SETS')),
-                Expanded(child: _label('MIN REPS')),
-                Expanded(child: _label('MAX REPS')),
+                Expanded(child: _label(tr('SETS'))),
+                Expanded(child: _label(tr('MIN REPS'))),
+                Expanded(child: _label(tr('MAX REPS'))),
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -189,7 +190,7 @@ class _SetsRepsSheetState extends State<_SetsRepsSheet> {
             ),
             const SizedBox(height: AppSpacing.md),
             PrimaryPillButton(
-              label: 'Save',
+              label: tr('Save'),
               onPressed: () => Navigator.of(context).pop((_sets, _low, _high)),
             ),
           ],

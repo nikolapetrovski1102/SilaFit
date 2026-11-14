@@ -114,7 +114,8 @@ public sealed class TrainerAssignmentNotifier(
 
         if (context.NotificationsEnabled)
         {
-            var content = NotificationMessageComposer.TrainerProgramAssigned(isSplit, context.ProgramName, trainerName, documentOnly);
+            var language = await notificationProvider.GetUserLanguageAsync(userId, cancellationToken);
+            var content = NotificationMessageComposer.TrainerProgramAssigned(isSplit, context.ProgramName, trainerName, documentOnly, language);
             var created = await notificationProvider.TryCreateNotificationAsync(new NewNotificationModel
             {
                 UserId = userId,

@@ -87,7 +87,8 @@ internal sealed class SourceImporters(HttpClient http, string cacheDirectory, Sq
                 Number(Get(values, header, "fiber_100g")),
                 Number(Get(values, header, "sugars_100g")),
                 Multiply(Number(Get(values, header, "sodium_100g")), 1000m),
-                true);
+                true,
+                First(Get(values, header, "image_small_url"), Get(values, header, "image_url")));
             await writer.AddAsync(row, cancellationToken);
         }
         await writer.FlushAsync(cancellationToken);

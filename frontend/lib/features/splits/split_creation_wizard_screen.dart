@@ -17,6 +17,7 @@ import '../exercises/exercises_repository.dart';
 import 'splits_repository.dart';
 import 'widgets/ink_field.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 // The wizard no longer asks for these - every split it creates is the same
 // shape, and the day-by-day flow below is where all the real customization
@@ -116,6 +117,11 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
   /// Finished days -> whether each was a rest day.
   final _completedDays = <int, bool>{};
 
+  /// Finished training days' titles and exercises, so a later day can
+  /// repeat one.
+  final _dayTitles = <int, String>{};
+  final _dayExercises = <int, List<ExerciseSummary>>{};
+
   final _added = <_AddedExercise>[];
   final _chipKeys = <String, GlobalKey>{};
   final _rowKeys = <String, GlobalKey>{};
@@ -128,8 +134,8 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
   final _flights = <OverlayEntry>[];
   bool _finishing = false;
 
-  String get _presetName => 'Awesome Split ${widget.existingSplitCount + 1}';
-  String _presetDay(int day) => 'Awesome Day $day';
+  String get _presetName => tr('Awesome Split {n}', {'n': widget.existingSplitCount + 1});
+  String _presetDay(int day) => tr('Awesome Day {n}', {'n': day});
 
   @override
   void initState() {
@@ -139,7 +145,6 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     _intro = AnimationController(vsync: this, duration: _kIntro)..forward();
     _underline = AnimationController(vsync: this, duration: kInkMorph);
     _focus.addListener(_onFocusChanged);
-    _preset(_presetName);
   }
 
   @override
@@ -175,12 +180,13 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
       _focus.hasFocus &&
       _input.text.trim().isNotEmpty;
 
-  /// Fills the field with [text] fully selected, so typing replaces it and
-  /// submitting straight away keeps it.
-  void _preset(String text) {
+  /// Puts [text] back in the field with the cursor at its end - used to
+  /// restore what they typed. Fresh steps start empty instead, with the
+  /// default name as the placeholder (submitting empty keeps it).
+  void _restore(String text) {
     _input.value = TextEditingValue(
       text: text,
-      selection: TextSelection(baseOffset: 0, extentOffset: text.length),
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 
@@ -241,7 +247,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
       _splitName = name;
       _stage = _Stage.dayTitle;
     });
-    _preset(_presetDay(_day));
+    _input.clear();
     _intro.forward(from: 0);
     _focus.requestFocus();
   }
@@ -256,9 +262,11 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
       _splitName = null;
       _dayTitle = null;
       _completedDays.clear();
+      _dayTitles.clear();
+      _dayExercises.clear();
       _resetDayState();
     });
-    _preset(name);
+    _restore(name);
     _intro.forward(from: 0);
     _focus.requestFocus();
   }
@@ -267,7 +275,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     final day = _day;
     final typed = _input.text.trim();
     final title = rest
-        ? (typed.isEmpty || typed == _presetDay(day) ? 'Rest day' : typed)
+        ? (typed.isEmpty || typed == _presetDay(day) ? tr('Rest day') : typed)
         : (typed.isEmpty ? _presetDay(day) : typed);
     HapticFeedback.lightImpact();
 
@@ -286,6 +294,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     }
 
     _dayId = dayId;
+    _dayTitles[day] = title;
     setState(() {
       _dayFrom = _heroTop;
       _dayFromSize = _heroSize;
@@ -299,9 +308,26 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     _loadSuggestions(title);
   }
 
+  /// Starts the current day as a copy of finished day [source]: same title,
+  /// same exercises (saved fresh on this day), landing on the exercise step
+  /// so the copy can still be tweaked.
+  void _repeatDay(int source) {
+    _input.text = _dayTitles[source]!;
+    _commitDay(rest: false);
+    final exercises = _dayExercises[source] ?? const <ExerciseSummary>[];
+    setState(() {
+      for (final exercise in exercises) {
+        final entry = _AddedExercise(exercise, landed: true);
+        _save(entry, sortOrder: _added.length);
+        _added.add(entry);
+      }
+    });
+  }
+
   void _nextDay() {
     HapticFeedback.lightImpact();
     _completedDays[_day] = false;
+    _dayExercises[_day] = [for (final a in _added) a.exercise];
     _advance();
   }
 
@@ -317,7 +343,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
       _stage = _Stage.dayTitle;
       _resetDayState();
     });
-    _preset(_presetDay(_day));
+    _input.clear();
     _intro.forward(from: 0);
     _focus.requestFocus();
   }
@@ -408,17 +434,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     _focus.unfocus();
 
     final entry = _AddedExercise(exercise, landed: from == null);
-    final sortOrder = _added.length;
-    final save = _dayId!.then((dayId) => _splits.saveDayExercise(
-          splitDayId: dayId!,
-          exerciseId: id,
-          sortOrder: sortOrder,
-          targetSets: _kDefaultSets,
-          targetRepsLow: _kDefaultRepsLow,
-          targetRepsHigh: _kDefaultRepsHigh,
-        ));
-    entry.saved = save;
-    _track(save, onError: () => setState(() => _added.remove(entry)));
+    _save(entry, sortOrder: _added.length);
 
     setState(() => _added.add(entry));
     if (_input.text.isNotEmpty) {
@@ -442,6 +458,20 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
         onLanded: () {
           if (mounted) setState(() => entry.landed = true);
         });
+  }
+
+  /// Saves [entry] onto the current day behind the UI.
+  void _save(_AddedExercise entry, {required int sortOrder}) {
+    final save = _dayId!.then((dayId) => _splits.saveDayExercise(
+          splitDayId: dayId!,
+          exerciseId: entry.exercise.exerciseId,
+          sortOrder: sortOrder,
+          targetSets: _kDefaultSets,
+          targetRepsLow: _kDefaultRepsLow,
+          targetRepsHigh: _kDefaultRepsHigh,
+        ));
+    entry.saved = save;
+    _track(save, onError: () => setState(() => _added.remove(entry)));
   }
 
   void _remove(_AddedExercise entry) {
@@ -640,7 +670,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                                 offset: Offset(0, 6 * (1 - t)), child: child),
                           ),
                           child: Text(
-                            'DAY $_day OF $_kDurationDays',
+                            tr('DAY {n} OF {total}', {'n': _day, 'total': _kDurationDays}),
                             style: AppTypography.labelCaps
                                 .copyWith(color: AppColors.accent),
                           ),
@@ -721,7 +751,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
         // Outside the intro fade: focus doesn't change between steps, so
         // the line stays put while the text swaps above it.
         FocusUnderline(animation: _underline),
-        Expanded(child: picking ? _buildResults() : const SizedBox.shrink()),
+        Expanded(child: picking ? _buildResults() : _buildRepeatDays()),
       ],
     );
   }
@@ -731,7 +761,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     final hint = switch (_stage) {
       _Stage.name => _presetName,
       _Stage.dayTitle => _presetDay(_day),
-      _ => 'Search exercises',
+      _ => tr('Search exercises'),
     };
     if (picking) return _textField(AppTypography.headlineSm, hint, picking);
     // Re-fit on every keystroke. Applied directly rather than tweened - an
@@ -770,6 +800,49 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     );
   }
 
+  /// On a day's title step: the training days built so far, each one tap
+  /// from being repeated here.
+  Widget _buildRepeatDays() {
+    final days = [
+      for (var d = 1; d < _day; d++)
+        if (_completedDays[d] == false && _dayTitles[d] != null) d,
+    ];
+    if (_stage != _Stage.dayTitle || days.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _intro, curve: Curves.easeOut),
+      child: SingleChildScrollView(
+        padding:
+            const EdgeInsets.only(top: AppSpacing.lg, bottom: AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr('OR REPEAT A DAY'), style: AppTypography.labelCaps),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                for (final d in days)
+                  ExerciseChip(
+                    label: tr('Day {n} · {title}', {'n': d, 'title': _dayTitles[d]}),
+                    detail: _repeatDetail(d),
+                    onTap: () => _repeatDay(d),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _repeatDetail(int day) {
+    final count = _dayExercises[day]?.length ?? 0;
+    return trPlural(count, '{n} exercise', '{n} exercises');
+  }
+
   Widget _buildResults() {
     final items = _visible;
     final query = _input.text.trim();
@@ -794,7 +867,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Text(
-              'SUGGESTED',
+              tr('SUGGESTED'),
               style: AppTypography.labelCaps,
             ),
           ),
@@ -806,7 +879,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                     opacity: query.isNotEmpty && !_searching ? 1 : 0,
                     duration: kInkQuick,
                     child: Text(
-                      'No matches for "$query"',
+                      tr('No matches for "{q}"', {'q': query}),
                       style: AppTypography.bodySm
                           .copyWith(color: AppColors.onSurfaceVariant),
                     ),
@@ -835,7 +908,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
     final Widget bar = switch (_stage) {
       _Stage.name => PrimaryPillButton(
           key: const ValueKey('bar-name'),
-          label: 'Continue',
+          label: tr('Continue'),
           icon: Icons.arrow_forward_rounded,
           onPressed: _commitName,
         ),
@@ -844,7 +917,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
           children: [
             Expanded(
               child: SecondaryPillButton(
-                label: 'Rest day',
+                label: tr('Rest day'),
                 icon: Icons.bedtime_outlined,
                 onPressed: () => _commitDay(rest: true),
               ),
@@ -852,7 +925,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: PrimaryPillButton(
-                label: 'Continue',
+                label: tr('Continue'),
                 icon: Icons.arrow_forward_rounded,
                 onPressed: () => _commitDay(rest: false),
               ),
@@ -861,7 +934,7 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
         ),
       _ => PrimaryPillButton(
           key: ValueKey('bar-exercises-$_day'),
-          label: _day < _kDurationDays ? 'Next day' : 'Finish',
+          label: _day < _kDurationDays ? tr('Next day') : tr('Finish'),
           icon: _day < _kDurationDays
               ? Icons.arrow_forward_rounded
               : Icons.check_rounded,
@@ -896,19 +969,19 @@ class _SplitCreationWizardScreenState extends State<SplitCreationWizardScreen>
                 Icon(Icons.check_circle_rounded,
                     size: 56, color: AppColors.accent),
                 const SizedBox(height: AppSpacing.lg),
-                MarkerDrawnTitle('${_splitName ?? 'Your split'} is ready',
+                MarkerDrawnTitle(tr('{name} is ready', {'name': _splitName ?? tr('Your split')}),
                     playKey: 'split-ready:$_splitName',
                     textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Every day is built out and ready to go.',
+                  tr('Every day is built out and ready to go.'),
                   style: AppTypography.bodyMd
                       .copyWith(color: AppColors.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryPillButton(
-                  label: 'Done',
+                  label: tr('Done'),
                   icon: Icons.check_rounded,
                   isLoading: _finishing,
                   onPressed: _done,

@@ -33,7 +33,8 @@ public sealed class FoodScanItemDto
     public string Confidence { get; set; } = "medium";
 }
 
-/// <summary>The caller's AI food-scan allowance for their current local day.</summary>
+/// <summary>The caller's AI food-scan allowance for their current local day, plus whether
+/// barcode scanning is open to them.</summary>
 public sealed class FoodScanQuotaDto
 {
     /// <summary>False below the Advanced tier - scanning isn't offered at all.</summary>
@@ -41,4 +42,8 @@ public sealed class FoodScanQuotaDto
     public int DailyLimit { get; set; }
     public int UsedToday { get; set; }
     public int RemainingToday { get; set; }
+
+    /// <summary>True for Pro and Advanced, and for a Free account that hasn't used its few
+    /// trial barcode scans yet. False sends the scan button to the plans instead.</summary>
+    public bool BarcodeAvailable { get; set; }
 }

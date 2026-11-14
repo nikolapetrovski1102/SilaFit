@@ -15,6 +15,7 @@ import '../../plans/plans_screen.dart';
 import '../today_models.dart';
 import '../today_repository.dart';
 import '../../../core/widgets/marker_drawn_title.dart';
+import '../../../l10n/l10n.dart';
 
 /// Full breakdown of every set logged for a completed past day, grouped by
 /// exercise in the order they were worked. Reached from Home's "View set
@@ -63,8 +64,8 @@ class _SetHistoryScreenState extends State<SetHistoryScreen> {
           : _state = ResourceState.error(e.userMessage));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _state = const ResourceState.error(
-          "Couldn't load set history. Please try again."));
+      setState(() => _state = ResourceState.error(
+          tr("Couldn't load set history. Please try again.")));
     }
   }
 
@@ -75,7 +76,7 @@ class _SetHistoryScreenState extends State<SetHistoryScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Set History', style: AppTypography.headlineSm),
+        title: Text(tr('Set History'), style: AppTypography.headlineSm),
       ),
       body: SafeArea(
         child: _locked
@@ -104,10 +105,10 @@ class _SetHistoryScreenState extends State<SetHistoryScreen> {
         SectionEyebrow(DateFormat('EEEE, MMM d').format(widget.date)),
         const SizedBox(height: AppSpacing.sm),
         UpgradeLockCard(
-          title: 'See your full month of training',
-          message: 'Free shows the sets from your last 14 days. Pro and '
-              'Advanced open every workout from the past month.',
-          actionLabel: 'See plans',
+          title: tr('See your full month of training'),
+          message: tr('Free shows the sets from your last 14 days. Pro and '
+              'Advanced open every workout from the past month.'),
+          actionLabel: tr('See plans'),
           onUnlock: () => Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const PlansScreen())),
         ),
@@ -132,7 +133,7 @@ class _SetHistoryList extends StatelessWidget {
             horizontal: AppSpacing.gutterMobile, vertical: 64),
         child: Center(
           child: Text(
-            'No set-by-set history was recorded for this session.',
+            tr('No set-by-set history was recorded for this session.'),
             textAlign: TextAlign.center,
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant),
@@ -155,7 +156,7 @@ class _SetHistoryList extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.gutterMobile, vertical: AppSpacing.lg),
       children: [
-        MarkerDrawnTitle(sessionTitle ?? 'Training Session',
+        MarkerDrawnTitle(sessionTitle ?? tr('Training Session'),
             playKey: 'set-history:$date'),
         const SizedBox(height: AppSpacing.xxs),
         Text(DateFormat('EEEE, MMM d').format(date),
@@ -191,7 +192,7 @@ class _ExerciseSetsCard extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: 56,
-                    child: Text('Set ${set.setNumber}',
+                    child: Text(tr('Set {n}', {'n': set.setNumber}),
                         style: AppTypography.bodyMd
                             .copyWith(color: AppColors.onSurfaceVariant)),
                   ),

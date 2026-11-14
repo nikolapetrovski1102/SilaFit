@@ -41,20 +41,32 @@ class SplitHeroImage extends StatelessWidget {
       valueListenable: context.read<SessionStore>().profileGender,
       builder: (context, gender, _) {
         final url = resolveSplitHeroUrl(heroImageUrl, gender);
-        if (url == null) return Image.asset(_kFallback, fit: fit);
+        final decodeWidth = _decodeWidth(context);
+        if (url == null) {
+          return Image.asset(_kFallback, fit: fit, cacheWidth: decodeWidth);
+        }
 
         return CachedNetworkImage(
           imageUrl: url,
           fit: fit,
+          memCacheWidth: decodeWidth,
           fadeInDuration: const Duration(milliseconds: 180),
           placeholder: (context, _) => ColoredBox(
               color: Theme.of(context).colorScheme.surfaceContainerHighest),
-          errorWidget: (_, __, ___) => Image.asset(_kFallback, fit: fit),
+          errorWidget: (_, __, ___) =>
+              Image.asset(_kFallback, fit: fit, cacheWidth: decodeWidth),
         );
       },
     );
   }
 }
+
+/// Hero images never render wider than the screen, so there's no point
+/// decoding them any wider - full-size decodes are what push low-memory
+/// phones into GC pauses and image cache evictions while scrolling.
+int _decodeWidth(BuildContext context) =>
+    (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context))
+        .round();
 
 /// Warms the cache for [heroImageUrls] so cards render without a placeholder
 /// flash - call once a split list has loaded.
@@ -64,6 +76,12 @@ void precacheSplitHeroImages(
   for (final value in heroImageUrls.toSet()) {
     final url = resolveSplitHeroUrl(value, gender);
     if (url == null) continue;
-    precacheImage(CachedNetworkImageProvider(url), context).ignore();
+    // Same decode width as [SplitHeroImage], so the warmed entry is the
+    // one the card actually looks up.
+    precacheImage(
+            ResizeImage.resizeIfNeeded(
+                _decodeWidth(context), null, CachedNetworkImageProvider(url)),
+            context)
+        .ignore();
   }
 }

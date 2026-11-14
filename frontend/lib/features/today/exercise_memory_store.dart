@@ -55,8 +55,8 @@ class ExerciseMemoryStore {
     final all = await _loadAll();
     all[exerciseId] = ExerciseMemory(weightKg: weightKg, reps: reps);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _key, jsonEncode(all.map((id, memory) => MapEntry(id, memory.toJson()))));
+    await prefs.setString(_key,
+        jsonEncode(all.map((id, memory) => MapEntry(id, memory.toJson()))));
   }
 
   /// Drops every remembered exercise. Called on sign-out so the outgoing

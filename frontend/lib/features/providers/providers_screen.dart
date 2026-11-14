@@ -12,6 +12,7 @@ import 'provider_actions.dart';
 import 'provider_logo.dart';
 import 'supplement_provider_models.dart';
 import 'supplement_providers_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// Settings -> Partner discounts: every partner shop with its code.
 class ProvidersScreen extends StatefulWidget {
@@ -31,19 +32,19 @@ class _ProvidersScreenState extends State<ProvidersScreen> {
     _load();
   }
 
-  Future<void> _load({bool refresh = false}) async {
-    if (!refresh) setState(() => _state = const ResourceState.loading());
+  /// Reuses the partner list already fetched this session, so reopening the
+  /// page shows it straight away instead of flashing a loading skeleton.
+  Future<void> _load() async {
+    setState(() => _state = const ResourceState.loading());
     try {
-      final list = await context
-          .read<SupplementProvidersRepository>()
-          .getAll(refresh: true);
+      final list = await context.read<SupplementProvidersRepository>().getAll();
       if (mounted) setState(() => _state = ResourceState.data(list));
     } on ApiException catch (e) {
       if (mounted) setState(() => _state = ResourceState.error(e.userMessage));
     } catch (_) {
       if (mounted) {
         setState(() => _state =
-            const ResourceState.error("Couldn't load partner discounts."));
+            ResourceState.error(tr("Couldn't load partner discounts.")));
       }
     }
   }
@@ -65,11 +66,11 @@ class _ProvidersScreenState extends State<ProvidersScreen> {
                       IconButton(
                         icon: Icon(Icons.arrow_back_rounded,
                             color: AppColors.onSurface),
-                        tooltip: 'Back',
+                        tooltip: tr('Back'),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                       Expanded(
-                        child: Text('Partner discounts',
+                        child: Text(tr('Partner discounts'),
                             style: AppTypography.bodyMd
                                 .copyWith(fontWeight: FontWeight.w600)),
                       ),
@@ -77,18 +78,14 @@ class _ProvidersScreenState extends State<ProvidersScreen> {
                   ),
                 ),
                 Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () => _load(refresh: true),
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.marginMobile,
-                          vertical: AppSpacing.lg),
-                      child: ResourceBuilder<List<SupplementProvider>>(
-                        state: _state,
-                        onRetry: _load,
-                        builder: (context, list) => _body(list),
-                      ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.marginMobile,
+                        vertical: AppSpacing.lg),
+                    child: ResourceBuilder<List<SupplementProvider>>(
+                      state: _state,
+                      onRetry: _load,
+                      builder: (context, list) => _body(list),
                     ),
                   ),
                 ),
@@ -105,14 +102,14 @@ class _ProvidersScreenState extends State<ProvidersScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Codes from shops we work with. Tap a code to copy it.',
+          tr('Codes from shops we work with. Tap a code to copy it.'),
           style:
               AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant),
         ),
         const SizedBox(height: AppSpacing.md),
         if (list.isEmpty)
           SectionCard(
-            child: Text('No partner discounts right now. Check back soon.',
+            child: Text(tr('No partner discounts right now. Check back soon.'),
                 style: AppTypography.bodySm
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ),
@@ -207,7 +204,7 @@ class _ProviderCard extends StatelessWidget {
                 TextButton.icon(
                   onPressed: () => openProviderShop(context, provider),
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Shop'),
+                  label: Text(tr('Shop')),
                 ),
             ],
           ),

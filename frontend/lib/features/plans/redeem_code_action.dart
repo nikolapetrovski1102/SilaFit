@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../auth/account_gate.dart';
 import 'plans_controller.dart';
 import 'plans_screen.dart';
+import '../../l10n/l10n.dart';
 
 /// The one "Redeem a code" flow, shared by Settings and the paywall.
 ///
@@ -37,8 +38,8 @@ Future<bool> runRedeemCode(BuildContext context,
   try {
     await context.read<PlansController>().redeemCode();
   } catch (_) {
-    messenger.showSnackBar(const SnackBar(
-        content: Text('Code redemption isn\'t available right now.')));
+    messenger.showSnackBar(SnackBar(
+        content: Text(tr('Code redemption isn\'t available right now.'))));
   }
   return false;
 }
@@ -56,8 +57,8 @@ Future<bool> _redeemOnAndroid(BuildContext context,
 
   switch (result) {
     case _RedeemResult.applied:
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Code applied - your offer is on the plans.')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr('Code applied - your offer is on the plans.'))));
       if (openPaywall) {
         navigator.push(MaterialPageRoute(builder: (_) => const PlansScreen()));
       }
@@ -65,12 +66,12 @@ Future<bool> _redeemOnAndroid(BuildContext context,
     case _RedeemResult.playCode:
       try {
         await controller.redeemCode();
-        messenger.showSnackBar(const SnackBar(
+        messenger.showSnackBar(SnackBar(
             content: Text(
-                'Redeem your code in Google Play, then come back - SilaFit unlocks automatically.')));
+                tr('Redeem your code in Google Play, then come back - SilaFit unlocks automatically.'))));
       } catch (_) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Code redemption isn\'t available right now.')));
+        messenger.showSnackBar(SnackBar(
+            content: Text(tr('Code redemption isn\'t available right now.'))));
       }
     case null:
       break;
@@ -122,7 +123,7 @@ class _PromoCodeDialogState extends State<_PromoCodeDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Redeem a code'),
+      title: Text(tr('Redeem a code')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,7 +139,7 @@ class _PromoCodeDialogState extends State<_PromoCodeDialog> {
             maxLength: 40,
             onSubmitted: (_) => _apply(),
             decoration: InputDecoration(
-              hintText: 'Enter your code',
+              hintText: tr('Enter your code'),
               errorText: _error,
               errorMaxLines: 3,
               counterText: '',
@@ -151,7 +152,7 @@ class _PromoCodeDialogState extends State<_PromoCodeDialog> {
                   ? null
                   : () => Navigator.of(context).pop(_RedeemResult.playCode),
               style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: const Text('Have a Google Play code?'),
+              child: Text(tr('Have a Google Play code?')),
             ),
           ),
         ],
@@ -159,7 +160,7 @@ class _PromoCodeDialogState extends State<_PromoCodeDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(tr('Cancel')),
         ),
         TextButton(
           onPressed: _busy ? null : _apply,
@@ -168,7 +169,7 @@ class _PromoCodeDialogState extends State<_PromoCodeDialog> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Apply'),
+              : Text(tr('Apply')),
         ),
       ],
     );

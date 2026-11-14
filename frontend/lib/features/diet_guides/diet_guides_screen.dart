@@ -13,6 +13,7 @@ import 'diet_guide_detail_screen.dart';
 import 'diet_guide_models.dart';
 import 'diet_guide_repository.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// Browse view for the imported long-form diet guides (Clean Eating, Keto,
 /// IIFYM, ...). Separate from `DietPlansScreen`, which lists the assignable
@@ -41,7 +42,7 @@ class _DietGuidesScreenState extends State<DietGuidesScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Diet Guides', style: AppTypography.headlineSm),
+        title: Text(tr('Diet Guides'), style: AppTypography.headlineSm),
       ),
       body: AnimatedBuilder(
         animation: _controller,
@@ -53,11 +54,11 @@ class _DietGuidesScreenState extends State<DietGuidesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                MarkerDrawnTitle('Diet Guides', playKey: 'diet-guides'),
+                MarkerDrawnTitle(tr('Diet Guides'), playKey: 'diet-guides'),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
-                  'Reference guides on how each approach works, what it allows '
-                  'and what the science says.',
+                  tr('Reference guides on how each approach works, what it allows '
+                  'and what the science says.'),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant),
                 ),
@@ -77,9 +78,9 @@ class _DietGuidesScreenState extends State<DietGuidesScreen> {
 
   Widget _buildContent(List<DietGuide> guides) {
     if (guides.isEmpty) {
-      return const MascotEmptyState(
-        title: 'No diet guides yet',
-        message: 'Diet guides will show up here once they are available.',
+      return MascotEmptyState(
+        title: tr('No diet guides yet'),
+        message: tr('Diet guides will show up here once they are available.'),
       );
     }
     return Column(
@@ -133,6 +134,9 @@ class _DietGuideCard extends StatelessWidget {
                     child: Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
+                      cacheWidth: (MediaQuery.sizeOf(context).width *
+                              MediaQuery.devicePixelRatioOf(context))
+                          .round(),
                       errorBuilder: (_, __, ___) => Container(
                         color: AppColors.surfaceContainerHigh,
                         alignment: Alignment.center,
@@ -163,7 +167,7 @@ class _DietGuideCard extends StatelessWidget {
                       children: [
                         if (guide.sectionCount > 0)
                           PillChip(
-                            label: '${guide.sectionCount} sections',
+                            label: trPlural(guide.sectionCount, '{n} section', '{n} sections'),
                             icon: Icons.menu_book_rounded,
                           ),
                         const Spacer(),

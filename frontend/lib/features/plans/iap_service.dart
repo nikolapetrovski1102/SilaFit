@@ -7,6 +7,7 @@ import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../l10n/l10n.dart';
 
 /// A store's introductory offer on one subscription product, as the store
 /// itself quotes it - the paywall only ever advertises a discount that one of
@@ -37,23 +38,33 @@ class StoreIntroOffer {
   /// "month", "3 months", "week"... - the offer's whole span.
   String get duration {
     final total = periodValue * periodCount;
-    return total == 1 ? periodUnit : '$total ${periodUnit}s';
+    return total == 1 ? _unitWord(1) : '$total ${_unitWord(total)}';
   }
+
+  /// The localized period unit for a count of [n].
+  String _unitWord(int n) => switch (periodUnit) {
+        'day' => trPlural(n, 'day', 'days'),
+        'week' => trPlural(n, 'week', 'weeks'),
+        'year' => trPlural(n, 'year', 'years'),
+        _ => trPlural(n, 'month', 'months'),
+      };
 
   /// True when the whole offer is a single unit - "a month", "a week".
   bool get isSingleUnit => periodValue * periodCount == 1;
 
   /// "1 month", "3 months" - [duration] with the count spelled out, for
   /// badges.
-  String get countedDuration => isSingleUnit ? '1 $periodUnit' : duration;
+  String get countedDuration => isSingleUnit ? '1 ${_unitWord(1)}' : duration;
 
   /// "€1.49/month for the first 3 months" / "Free for the first week".
   String get summary {
-    if (isFreeTrial) return 'Free for the first $duration';
-    final unit = periodValue == 1 ? periodUnit : '$periodValue ${periodUnit}s';
+    if (isFreeTrial) return tr('Free for the first {d}', {'d': duration});
+    final unit = periodValue == 1
+        ? _unitWord(1)
+        : '$periodValue ${_unitWord(periodValue)}';
     return isPerPeriod && periodCount > 1
-        ? '$displayPrice/$unit for the first $duration'
-        : '$displayPrice for the first $duration';
+        ? tr('{price}/{unit} for the first {d}', {'price': displayPrice, 'unit': unit, 'd': duration})
+        : tr('{price} for the first {d}', {'price': displayPrice, 'd': duration});
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../l10n/l10n.dart';
 
 /// A drag-to-adjust curved rating slider: a handle glides along a rising
 /// arc between [values].length discrete stops, with the current stop's
@@ -169,7 +170,7 @@ class _ArcRatingSliderState extends State<ArcRatingSlider>
                   size: 11, color: AppColors.onSurfaceVariant),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Text('Drag to adjust',
+            Text(tr('Drag to adjust'),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],

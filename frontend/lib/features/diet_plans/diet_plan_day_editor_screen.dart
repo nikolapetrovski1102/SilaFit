@@ -10,6 +10,7 @@ import '../meals/meal_models.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_models.dart';
 import 'meal_suggestion_picker_sheet.dart';
+import '../../l10n/l10n.dart';
 
 /// Build/edit screen for one day within a diet plan the user owns - day
 /// header (title) plus its meal-slot list. A brand-new day (no
@@ -71,7 +72,7 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
     if (ok) {
       _dietPlanDayId ??= _findLatestDayId(existingDays.length);
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Day saved.')));
+          .showSnackBar(SnackBar(content: Text(tr('Day saved.'))));
       setState(() {});
     } else if (widget.builderController.actionError != null) {
       ScaffoldMessenger.of(context)
@@ -94,15 +95,15 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this day?'),
-        content: const Text('Every meal on this day goes with it.'),
+        title: Text(tr('Delete this day?')),
+        content: Text(tr('Every meal on this day goes with it.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -175,14 +176,14 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Which meal slot?'),
+        title: Text(tr('Which meal slot?')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final type in kMealTypes)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(type),
+                title: Text(tr(type)),
                 onTap: () => Navigator.of(context).pop(type),
               ),
           ],
@@ -190,7 +191,7 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
         ],
       ),
     );
@@ -203,7 +204,7 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(_dietPlanDayId == null ? 'New Day' : 'Edit Day',
+        title: Text(_dietPlanDayId == null ? tr('New Day') : tr('Edit Day'),
             style: AppTypography.headlineSm),
         actions: [
           if (_dietPlanDayId != null)
@@ -223,11 +224,11 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
               children: [
                 TextField(
                   controller: _title,
-                  decoration: const InputDecoration(labelText: 'Title (optional)'),
+                  decoration: InputDecoration(labelText: tr('Title (optional)')),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 PrimaryPillButton(
-                  label: _dietPlanDayId == null ? 'Create day' : 'Save changes',
+                  label: _dietPlanDayId == null ? tr('Create day') : tr('Save changes'),
                   icon: Icons.check_rounded,
                   isLoading: widget.builderController.isSaving,
                   onPressed: _saveHeader,
@@ -237,11 +238,11 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SectionEyebrow('Meals'),
+                      SectionEyebrow(tr('Meals')),
                       TextButton.icon(
                         onPressed: _addMeal,
                         icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Add meal'),
+                        label: Text(tr('Add meal')),
                       ),
                     ],
                   ),
@@ -262,7 +263,7 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
     if (meals.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text('No meals yet - tap "Add meal" to build this day.',
+        child: Text(tr('No meals yet - tap "Add meal" to build this day.'),
             style: AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant)),
       );
     }
@@ -281,7 +282,7 @@ class _DietPlanDayEditorScreenState extends State<DietPlanDayEditorScreen> {
                           style: AppTypography.labelCaps
                               .copyWith(color: AppColors.accent)),
                       Text(meal.title, style: AppTypography.bodyMd),
-                      Text('${meal.caloriesKcal} kcal',
+                      Text(tr('{n} kcal', {'n': meal.caloriesKcal}),
                           style: AppTypography.labelSm
                               .copyWith(color: AppColors.onSurfaceVariant)),
                     ],

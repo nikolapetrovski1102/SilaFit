@@ -8,7 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/duration_format.dart';
-import '../../../core/widgets/mascot/ram_mascot.dart';
+import '../../../core/widgets/marker_drawn_title.dart';
 import '../../../core/widgets/progress_ring.dart';
 import '../../../core/widgets/silen_button.dart';
 import '../../splits/split_builder_screen.dart';
@@ -23,6 +23,7 @@ import '../workout_preview_screen.dart';
 import 'day_preview.dart';
 import 'day_scroll_strip.dart';
 import 'set_history_screen.dart';
+import '../../../l10n/l10n.dart';
 
 /// Home's hero: the scrollable day picker and whichever day it's centered
 /// on, floating directly on the page background rather than boxed in a
@@ -185,22 +186,22 @@ class _SessionSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(split == null ? 'NO ACTIVE SPLIT' : 'NOTHING SCHEDULED',
-            style: AppTypography.labelCaps.copyWith(
-                color: AppColors.accent, fontSize: 12 * scale)),
+        Text(split == null ? tr('NO ACTIVE SPLIT') : tr('NOTHING SCHEDULED'),
+            style: AppTypography.labelCaps
+                .copyWith(color: AppColors.accent, fontSize: 12 * scale)),
         SizedBox(height: AppSpacing.xxs * scale),
-        Text(split == null ? 'Plan your training' : 'No exercises today',
+        Text(split == null ? tr('Plan your training') : tr('No exercises today'),
             style: AppTypography.headlineLg.copyWith(fontSize: 32 * scale)),
         SizedBox(height: AppSpacing.xs * scale),
         Text(
             split == null
-                ? 'Create a split to get a workout scheduled for each day.'
-                : 'Add exercises to today\'s day in ${split.name ?? 'your split'} to start a workout.',
+                ? tr('Create a split to get a workout scheduled for each day.')
+                : tr('Add exercises to today\'s day in {split} to start a workout.', {'split': split.name ?? tr('your split')}),
             style: AppTypography.bodyLg
                 .copyWith(color: AppColors.onSurfaceVariant)),
         SizedBox(height: AppSpacing.lg * scale),
         PrimaryPillButton(
-          label: split == null ? 'Create a Split' : 'Edit Split',
+          label: split == null ? tr('Create a Split') : tr('Edit Split'),
           icon: split == null ? Icons.add_rounded : Icons.edit_rounded,
           height: (48 * scale).clamp(48, 72),
           onPressed: () => split == null
@@ -243,8 +244,8 @@ class _SessionSection extends StatelessWidget {
     if (detail != null && !detail.split.isEditableByMe) {
       await navigator.push(MaterialPageRoute(
         builder: (_) => SplitDetailScreen(
-          controller: SplitDetailController(repository, splitId,
-              initialDetail: detail),
+          controller:
+              SplitDetailController(repository, splitId, initialDetail: detail),
           splitName: detail!.split.name,
         ),
       ));
@@ -260,10 +261,30 @@ class _SessionSection extends StatelessWidget {
 
   String get _dateLabel => DateFormat('EEE, MMM d').format(preview.date);
 
+  /// The split day's own name - a preset ("Push Day") or one the user typed
+  /// - in the street-style marker face, sized to the name: a short one goes
+  /// big, a longer one steps down until it fits two lines. Fallback wording
+  /// ("Nothing scheduled") isn't a name, so it stays in the plain headline
+  /// style.
+  Widget _dayTitle(String fallback, double size) {
+    final title = preview.title;
+    if (title == null || title.trim().isEmpty) {
+      return Text(fallback,
+          style: AppTypography.headlineLg.copyWith(fontSize: size * scale));
+    }
+    return StreetName(title,
+        fontSize: 60 * scale,
+        minFontSize: 28 * scale,
+        maxLines: 2,
+        // Always the full name - a very long one wraps to a third line
+        // rather than being cut off.
+        truncate: false);
+  }
+
   Widget _buildScheduledToday() {
     final minutesLabel = preview.estimatedMinutes != null
         ? formatMinutesLabel(preview.estimatedMinutes!)
-        : 'Duration not set';
+        : tr('Duration not set');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -274,13 +295,11 @@ class _SessionSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(preview.focusLabel?.toUpperCase() ?? 'SCHEDULED TODAY',
+                  Text(preview.focusLabel?.toUpperCase() ?? tr('SCHEDULED TODAY'),
                       style: AppTypography.labelCaps.copyWith(
                           color: AppColors.accent, fontSize: 12 * scale)),
                   SizedBox(height: AppSpacing.xxs * scale),
-                  Text(preview.title ?? 'Training Session',
-                      style: AppTypography.headlineLg
-                          .copyWith(fontSize: 32 * scale)),
+                  _dayTitle(tr('Training Session'), 32),
                 ],
               ),
             ),
@@ -319,7 +338,7 @@ class _SessionSection extends StatelessWidget {
               // under way (sets logged, or just the clock already running) -
               // "Start Workout" would read as discarding that instead of
               // picking it back up.
-              label: isResumingWorkout ? 'Continue Workout' : 'Start Workout',
+              label: isResumingWorkout ? tr('Continue Workout') : tr('Start Workout'),
               icon: isResumingWorkout
                   ? Icons.play_circle_fill_rounded
                   : Icons.play_arrow_rounded,
@@ -335,6 +354,11 @@ class _SessionSection extends StatelessWidget {
   /// A day - future or already gone - that the active split has scheduled
   /// but isn't today. Home stays concise and opens the full plan separately.
   Widget _buildUpcomingPreview(BuildContext context) {
+    // A past day lands here too when nothing was logged for it (no session
+    // on record - before the account existed, or the history window hasn't
+    // loaded). It mustn't read as "upcoming"; it's what the split had
+    // scheduled that day.
+    final isPast = preview.date.isBefore(dateOnly(DateTime.now()));
     final minutesLabel = preview.estimatedMinutes != null
         ? formatMinutesLabel(preview.estimatedMinutes!)
         : null;
@@ -348,14 +372,13 @@ class _SessionSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('UPCOMING · ${_dateLabel.toUpperCase()}',
+                  Text(
+                      '${isPast ? tr('NOT LOGGED') : tr('UPCOMING')} · ${_dateLabel.toUpperCase()}',
                       style: AppTypography.labelCaps.copyWith(
                           color: AppColors.onSurfaceVariant,
                           fontSize: 12 * scale)),
                   SizedBox(height: AppSpacing.xxs * scale),
-                  Text(preview.title ?? 'Nothing scheduled',
-                      style: AppTypography.headlineLg
-                          .copyWith(fontSize: 32 * scale)),
+                  _dayTitle(tr('Nothing scheduled'), 32),
                 ],
               ),
             ),
@@ -364,7 +387,7 @@ class _SessionSection extends StatelessWidget {
               progress: 0,
               size: 68 * scale,
               strokeWidth: 5.5 * scale,
-              child: Icon(Icons.event_rounded,
+              child: Icon(isPast ? Icons.history_rounded : Icons.event_rounded,
                   color: AppColors.onSurfaceVariant, size: 26 * scale),
             ),
           ],
@@ -375,7 +398,11 @@ class _SessionSection extends StatelessWidget {
             Icon(Icons.schedule_rounded,
                 color: AppColors.onSurfaceVariant, size: 20 * scale),
             SizedBox(width: AppSpacing.xs * scale),
-            Text(minutesLabel ?? 'No active split to preview',
+            Text(
+                minutesLabel ??
+                    (isPast
+                        ? tr('No workout logged this day')
+                        : tr('No active split to preview')),
                 style: AppTypography.bodyLg
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],
@@ -383,7 +410,7 @@ class _SessionSection extends StatelessWidget {
         if (minutesLabel != null) ...[
           SizedBox(height: AppSpacing.lg * scale),
           _WorkoutDetailLink(
-            label: 'View full workout',
+            label: tr('View full workout'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => WorkoutPreviewScreen(
                 preview: preview,
@@ -398,7 +425,10 @@ class _SessionSection extends StatelessWidget {
               Icon(Icons.event_repeat_rounded,
                   color: AppColors.onSurfaceVariant, size: 18 * scale),
               SizedBox(width: AppSpacing.xs * scale),
-              Text('From your active split · comes up on $_dateLabel',
+              Text(
+                  isPast
+                      ? tr('From your active split · was planned for {date}', {'date': _dateLabel})
+                      : tr('From your active split · comes up on {date}', {'date': _dateLabel}),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant)),
             ],
@@ -411,41 +441,30 @@ class _SessionSection extends StatelessWidget {
   Widget _buildRestDay() {
     final today = dateOnly(DateTime.now());
     final subtitle = preview.isToday
-        ? 'No session scheduled. Recovery is part of the program.'
+        ? tr('No session scheduled. Recovery is part of the program.')
         : preview.date.isBefore(today)
-            ? 'Recovery day - no session scheduled.'
-            : 'Recovery day coming up in your split.';
-    return Row(
+            ? tr('Recovery day - no session scheduled.')
+            : tr('Recovery day coming up in your split.');
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!preview.isToday) _dateEyebrow(),
-              Text('REST DAY',
-                  style:
-                      AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
-              SizedBox(height: AppSpacing.xxs * scale),
-              Text(
-                subtitle,
-                style: AppTypography.bodyLg
-                    .copyWith(color: AppColors.onSurfaceVariant),
-              ),
-            ],
-          ),
+        if (!preview.isToday) _dateEyebrow(),
+        StreetName(tr('REST DAY'),
+            fontSize: 60 * scale, minFontSize: 28 * scale, maxLines: 1),
+        SizedBox(height: AppSpacing.xxs * scale),
+        Text(
+          subtitle,
+          style:
+              AppTypography.bodyLg.copyWith(color: AppColors.onSurfaceVariant),
         ),
-        SizedBox(width: AppSpacing.md * scale),
-        Image.asset(RamArt.sleepy.assetPath,
-            width: 68 * scale, height: 68 * scale),
       ],
     );
   }
 
   Widget _buildCompleted(BuildContext context) {
     final subtitle = preview.isToday
-        ? 'Completed. Nice work today.'
-        : 'Completed on $_dateLabel.';
+        ? tr('Completed. Nice work today.')
+        : tr('Completed on {date}.', {'date': _dateLabel});
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -457,9 +476,7 @@ class _SessionSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (!preview.isToday) _dateEyebrow(),
-                  Text(preview.title ?? 'Session',
-                      style: AppTypography.headlineLg
-                          .copyWith(fontSize: 30 * scale)),
+                  _dayTitle(tr('Session'), 30),
                   SizedBox(height: AppSpacing.xxs * scale),
                   Text(subtitle,
                       style: AppTypography.bodyLg
@@ -482,7 +499,7 @@ class _SessionSection extends StatelessWidget {
         if (!preview.isToday) ...[
           SizedBox(height: AppSpacing.lg * scale),
           _WorkoutDetailLink(
-            label: 'View set history',
+            label: tr('View set history'),
             scale: scale,
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => SetHistoryScreen(
@@ -505,11 +522,9 @@ class _SessionSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _dateEyebrow(),
-              Text(preview.title ?? 'Session missed',
-                  style:
-                      AppTypography.headlineLg.copyWith(fontSize: 30 * scale)),
+              _dayTitle(tr('Session missed'), 30),
               SizedBox(height: AppSpacing.xxs * scale),
-              Text('No session logged for this day.',
+              Text(tr('No session logged for this day.'),
                   style: AppTypography.bodyLg
                       .copyWith(color: AppColors.onSurfaceVariant)),
             ],

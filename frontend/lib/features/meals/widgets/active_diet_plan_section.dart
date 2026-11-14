@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +18,7 @@ import '../../diet_plans/my_diet_plans_screen.dart';
 import '../meal_controller.dart';
 import '../meal_models.dart';
 import '../meal_recipe_screen.dart';
+import '../../../l10n/l10n.dart';
 
 /// The "Active Diet Plan" block that replaced the old "Logged Meals" list on
 /// Nutrition: shows the user's active plan's meals for the day currently
@@ -44,13 +46,13 @@ class ActiveDietPlanSection extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SectionEyebrow('Active Diet Plan'),
+                SectionEyebrow(tr('Active Diet Plan')),
                 GestureDetector(
                   onTap: () => _openPlans(context),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Change',
+                      Text(tr('Change'),
                           style: AppTypography.labelSm
                               .copyWith(color: AppColors.accent)),
                       Icon(Icons.chevron_right_rounded,
@@ -84,7 +86,7 @@ class ActiveDietPlanSection extends StatelessWidget {
       if (state.error != null) {
         return _MessageCard(
           message: state.error!,
-          actionLabel: 'RETRY',
+          actionLabel: tr('RETRY'),
           onAction: () => controller.load(force: true),
         );
       }
@@ -94,8 +96,8 @@ class ActiveDietPlanSection extends StatelessWidget {
     final plan = state.data!.plan;
     if (plan == null) {
       return _MessageCard(
-        message: 'No active plan yet. Create your own or pick a suggested one.',
-        actionLabel: 'GET STARTED',
+        message: tr('No active plan yet. Create your own or pick a suggested one.'),
+        actionLabel: tr('GET STARTED'),
         onAction: () => _openPlans(context),
       );
     }
@@ -114,16 +116,6 @@ class _PlanDayCard extends StatelessWidget {
 
   const _PlanDayCard({required this.plan, required this.mealController});
 
-  static const _kDayNames = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final repository = context.read<DietPlanRepository>();
@@ -131,8 +123,8 @@ class _PlanDayCard extends StatelessWidget {
     final planDay = plan.dayFor(dayIndex);
     final multiWeek = plan.cycleLength > 7;
     final position = multiWeek
-        ? 'Week ${(dayIndex - 1) ~/ 7 + 1} of ${plan.cycleLength ~/ 7} · Day ${(dayIndex - 1) % 7 + 1}'
-        : 'Day $dayIndex';
+        ? tr('Week {w} of {total} · Day {d}', {'w': (dayIndex - 1) ~/ 7 + 1, 'total': plan.cycleLength ~/ 7, 'd': (dayIndex - 1) % 7 + 1})
+        : tr('Day {n}', {'n': dayIndex});
     final dayLogs = mealController.state.data?.meals ?? const <MealLog>[];
 
     return SectionCard(
@@ -150,8 +142,8 @@ class _PlanDayCard extends StatelessWidget {
                             .copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      '${plan.plan.periodType} · $position'
-                      ' · ${_kDayNames[mealController.selectedDate.weekday - 1]}',
+                      '${tr(plan.plan.periodType)} · $position'
+                      ' · ${DateFormat.EEEE().format(mealController.selectedDate)}',
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant),
                     ),
@@ -172,7 +164,7 @@ class _PlanDayCard extends StatelessWidget {
                     ),
                   ));
                 },
-                child: Text('Open',
+                child: Text(tr('Open'),
                     style: AppTypography.labelSm
                         .copyWith(color: AppColors.accent)),
               ),
@@ -182,7 +174,7 @@ class _PlanDayCard extends StatelessWidget {
           if (planDay == null || planDay.meals.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text('This plan day has no meals yet.',
+              child: Text(tr('This plan day has no meals yet.'),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onSurfaceVariant)),
             )
@@ -293,7 +285,7 @@ class _PlanMealRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   Text(
-                    '${meal.caloriesKcal} kcal · P${meal.proteinG} C${meal.carbsG} F${meal.fatsG} · Recipe',
+                    tr('{kcal} kcal · P{p} C{c} F{f} · Recipe', {'kcal': meal.caloriesKcal, 'p': meal.proteinG, 'c': meal.carbsG, 'f': meal.fatsG}),
                     style: AppTypography.labelSm
                         .copyWith(color: AppColors.onSurfaceVariant),
                   ),
@@ -305,8 +297,8 @@ class _PlanMealRow extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const PillChip(
-                    label: 'Logged', icon: Icons.check_circle_rounded),
+                PillChip(
+                    label: tr('Logged'), icon: Icons.check_circle_rounded),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.close_rounded, size: 18),
@@ -317,7 +309,7 @@ class _PlanMealRow extends StatelessWidget {
           else
             GestureDetector(
               onTap: onLog,
-              child: const PillChip(label: 'Log'),
+              child: PillChip(label: tr('Log')),
             ),
         ],
       ),

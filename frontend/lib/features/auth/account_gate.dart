@@ -11,6 +11,7 @@ import '../onboarding/widgets/intro_slide.dart' show OnboardingIconMark;
 import 'auth_controller.dart';
 import 'register_screen.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// The single place that implements "when the user wants to track
 /// progress, buy, or use another gated feature, require an account".
@@ -111,18 +112,18 @@ class _AccountRequiredSheetState extends State<_AccountRequiredSheet>
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              const MarkerDrawnTitle('Create a free account',
+              MarkerDrawnTitle(tr('Create a free account'),
                   playKey: 'account-gate', textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Your guest progress carries over - this just locks it to an account so you can track it long-term, purchase a plan, or use AI features.',
+                tr('Your guest progress carries over - this just locks it to an account so you can track it long-term, purchase a plan, or use AI features.'),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.xl),
               PrimaryPillButton(
-                label: 'Create Account',
+                label: tr('Create Account'),
                 icon: Icons.arrow_forward_rounded,
                 onPressed: () async {
                   final linked = await Navigator.of(context).push<bool>(
@@ -135,7 +136,7 @@ class _AccountRequiredSheetState extends State<_AccountRequiredSheet>
               ),
               const SizedBox(height: AppSpacing.sm),
               SecondaryPillButton(
-                  label: 'Not Now',
+                  label: tr('Not Now'),
                   onPressed: () => Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(builder: (_) => const RootShell()),
                         (route) => false,

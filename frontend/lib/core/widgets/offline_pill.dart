@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 /// Small status pill that fades in while [offline] is true or writes made
 /// with no signal are still waiting to upload ([pendingCount]) - tells the
@@ -20,10 +21,12 @@ class OfflinePill extends StatelessWidget {
 
   /// What the pill says, or null when there's nothing to say.
   static String? label({required bool offline, required int pending}) {
-    final changes = pending == 1 ? '1 change' : '$pending changes';
-    if (offline && pending > 0) return 'Offline · $changes saved on phone';
-    if (offline) return 'Offline · showing saved data';
-    if (pending > 0) return 'Syncing $changes…';
+    final changes = trPlural(pending, '{n} change', '{n} changes');
+    if (offline && pending > 0) {
+      return tr('Offline · {changes} saved on phone', {'changes': changes});
+    }
+    if (offline) return tr('Offline · showing saved data');
+    if (pending > 0) return tr('Syncing {changes}…', {'changes': changes});
     return null;
   }
 

@@ -10,6 +10,7 @@ import '../../core/widgets/skeleton.dart';
 import 'diet_plan_controller.dart';
 import 'diet_plan_day_editor_screen.dart';
 import 'diet_plan_models.dart';
+import '../../l10n/l10n.dart';
 
 const _kPeriodTypes = ['Weekly', 'Monthly'];
 
@@ -59,7 +60,7 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
     final name = _name.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Give your plan a name.')));
+          .showSnackBar(SnackBar(content: Text(tr('Give your plan a name.'))));
       return;
     }
     final duration = int.tryParse(_duration.text.trim()) ?? 7;
@@ -72,7 +73,7 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
     if (!mounted) return;
     if (ok) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Plan saved.')));
+          .showSnackBar(SnackBar(content: Text(tr('Plan saved.'))));
       setState(() {});
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context)
@@ -84,16 +85,16 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete plan?'),
-        content: const Text(
-            'This removes the plan and every day/meal in it. This can\'t be undone.'),
+        title: Text(tr('Delete plan?')),
+        content: Text(
+            tr('This removes the plan and every day/meal in it. This can\'t be undone.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -130,7 +131,7 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-            widget.controller.dietPlanId == null ? 'New Diet Plan' : 'Edit Diet Plan',
+            widget.controller.dietPlanId == null ? tr('New Diet Plan') : tr('Edit Diet Plan'),
             style: AppTypography.headlineSm),
         actions: [
           if (widget.controller.dietPlanId != null)
@@ -148,17 +149,17 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionEyebrow('Plan details'),
+                SectionEyebrow(tr('Plan details')),
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name'),
+                  decoration: InputDecoration(labelText: tr('Name')),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: _description,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Description (optional)'),
+                  decoration: InputDecoration(labelText: tr('Description (optional)')),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Row(
@@ -166,10 +167,10 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _periodType,
-                        decoration: const InputDecoration(labelText: 'Period'),
+                        decoration: InputDecoration(labelText: tr('Period')),
                         items: [
                           for (final period in _kPeriodTypes)
-                            DropdownMenuItem(value: period, child: Text(period)),
+                            DropdownMenuItem(value: period, child: Text(tr(period))),
                         ],
                         onChanged: (value) =>
                             setState(() => _periodType = value ?? _periodType),
@@ -180,7 +181,7 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
                       child: TextField(
                         controller: _duration,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Days (1-31)'),
+                        decoration: InputDecoration(labelText: tr('Days (1-31)')),
                       ),
                     ),
                   ],
@@ -188,8 +189,8 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
                 const SizedBox(height: AppSpacing.md),
                 PrimaryPillButton(
                   label: widget.controller.dietPlanId == null
-                      ? 'Create plan'
-                      : 'Save changes',
+                      ? tr('Create plan')
+                      : tr('Save changes'),
                   icon: Icons.check_rounded,
                   isLoading: widget.controller.isSaving,
                   onPressed: _saveHeader,
@@ -199,11 +200,11 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SectionEyebrow('Plan days'),
+                      SectionEyebrow(tr('Plan days')),
                       TextButton.icon(
                         onPressed: () => _openDay(),
                         icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Add day'),
+                        label: Text(tr('Add day')),
                       ),
                     ],
                   ),
@@ -226,7 +227,7 @@ class _DietPlanBuilderScreenState extends State<DietPlanBuilderScreen> {
     if (days.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text('No days yet - add your first plan day.',
+        child: Text(tr('No days yet - add your first plan day.'),
             style: AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant)),
       );
     }
@@ -274,9 +275,9 @@ class _DayRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(day.day.title ?? 'Day ${day.day.dayIndex}',
+                  Text(day.day.title ?? tr('Day {n}', {'n': day.day.dayIndex}),
                       style: AppTypography.bodyMd),
-                  Text('${day.meals.length} meals',
+                  Text(trPlural(day.meals.length, '{n} meal', '{n} meals'),
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant)),
                 ],

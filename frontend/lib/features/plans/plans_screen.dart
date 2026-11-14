@@ -24,6 +24,7 @@ import 'plans_models.dart';
 import 'redeem_code_action.dart';
 import 'restore_purchases_action.dart';
 import 'subscription_celebration.dart';
+import '../../l10n/l10n.dart';
 
 /// Where Settings' "Manage" goes. A paying user lands on the plan list with
 /// their current plan selected - picking Free or "Cancel subscription" from
@@ -348,7 +349,7 @@ class _PlansScreenState extends State<PlansScreen> {
                   alignment: Alignment.topLeft,
                   child: _TopControl(
                     icon: Icons.arrow_back_rounded,
-                    tooltip: 'Back',
+                    tooltip: tr('Back'),
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
                 ),
@@ -376,7 +377,7 @@ class _ContinueFreeButton extends StatelessWidget {
           minimumSize: const Size(0, 44),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           visualDensity: VisualDensity.compact),
-      child: Text('Continue with Free Plan',
+      child: Text(tr('Continue with Free Plan'),
           style: AppTypography.bodySm.copyWith(
               fontSize: 14,
               color: AppColors.onSurface,
@@ -429,20 +430,20 @@ class _PlansHeader extends StatelessWidget {
         // (a touch smaller so the plans stay in view); the upgrade paywall
         // keeps its compact heading.
         if (isManaging) ...[
-          const MarkerDrawnTitle('Manage Your Plan',
+          MarkerDrawnTitle(tr('Manage Your Plan'),
               playKey: 'manage-plan', scale: 0.8, textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.sm),
         ] else ...[
-          Text('Choose Your Protocol',
+          Text(tr('Choose Your Protocol'),
               style: AppTypography.headlineMd, textAlign: TextAlign.center),
           const SizedBox(height: 2),
         ],
         Text(
           controller.promoCode != null
-              ? 'Code ${controller.promoCode!.code} applied.'
+              ? tr('Code {code} applied.', {'code': controller.promoCode!.code})
               : isWelcomeOffer && controller.hasIntroOffer
-                  ? 'New members get an introductory price on their first billing period.'
-                  : 'Transparent pricing. Upgrade or cancel anytime.',
+                  ? tr('New members get an introductory price on their first billing period.')
+                  : tr('Transparent pricing. Upgrade or cancel anytime.'),
           style: AppTypography.bodySm,
           textAlign: TextAlign.center,
         ),
@@ -468,13 +469,13 @@ class _BillingToggle extends StatelessWidget {
       child: Row(
         children: [
           _ToggleButton(
-              label: 'Monthly',
+              label: tr('Monthly'),
               selected: !controller.isYearly,
               onTap: () => controller.setBillingCycle(yearly: false)),
           _ToggleButton(
               label: switch (controller.yearlySavingsPercent) {
-                final pct? => 'Yearly · Save $pct%',
-                null => 'Yearly',
+                final pct? => tr('Yearly · Save {pct}%', {'pct': pct}),
+                null => tr('Yearly'),
               },
               selected: controller.isYearly,
               onTap: () => controller.setBillingCycle(yearly: true)),
@@ -627,23 +628,23 @@ class _PlanRowState extends State<_PlanRow> {
     final catalogPrice =
         controller.isYearly ? entry.plan.yearlyPrice : entry.plan.monthlyPrice;
     final priceText = quote?.price ?? _fallbackPrice(catalogPrice);
-    final cadence = controller.isYearly ? '/yr' : '/mo';
+    final cadence = controller.isYearly ? tr('/yr') : tr('/mo');
     final periodDays = controller.isYearly ? 365 : 30;
     final perDayText = quote != null
         ? quote.format(quote.rawPrice / periodDays)
         : _fallbackPrice(catalogPrice / periodDays);
     final introPct = quote?.introDiscountPercent;
     final String? introBadge = widget.isCurrentPlan
-        ? 'CURRENT PLAN'
+        ? tr('CURRENT PLAN')
         : intro == null
             ? null
             : intro.isFreeTrial
                 ? (quote!.isPromoCode
-                    ? '${intro.countedDuration.toUpperCase()} FREE'
-                    : 'FREE TRIAL')
+                    ? tr('{d} FREE', {'d': intro.countedDuration}).toUpperCase()
+                    : tr('FREE TRIAL'))
                 : introPct != null
-                    ? '$introPct% OFF'
-                    : 'INTRO OFFER';
+                    ? tr('{pct}% OFF', {'pct': introPct})
+                    : tr('INTRO OFFER');
 
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
@@ -699,9 +700,9 @@ class _PlanRowState extends State<_PlanRow> {
                               child: _Badge(label: introBadge),
                             )
                           else if (entry.plan.isFeatured)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.only(bottom: 2),
-                              child: _Badge(label: 'MOST POPULAR'),
+                              child: _Badge(label: tr('MOST POPULAR')),
                             ),
                           Text(entry.plan.name,
                               style: AppTypography.headlineSm
@@ -744,8 +745,8 @@ class _PlanRowState extends State<_PlanRow> {
                         ),
                         Text(
                           intro != null
-                              ? 'then $priceText$cadence'
-                              : '≈ $perDayText/day',
+                              ? tr('then {price}{cadence}', {'price': priceText, 'cadence': cadence})
+                              : tr('≈ {price}/day', {'price': perDayText}),
                           style: AppTypography.labelSm.copyWith(
                               fontSize: 11, color: AppColors.onSurfaceVariant),
                         ),
@@ -960,7 +961,7 @@ class _FreeRow extends StatelessWidget {
                       .copyWith(color: AppColors.onSurfaceVariant)),
             ),
             if (isCurrent)
-              Text('Current Plan',
+              Text(tr('Current Plan'),
                   style: AppTypography.labelSm.copyWith(
                       color:
                           AppColors.onSurfaceVariant.withValues(alpha: 0.7))),
@@ -1007,8 +1008,8 @@ class _PlansFooter extends StatelessWidget {
   /// "Start your free month of Pro" / "Try Pro free for 3 months".
   static String _freeTrialLabel(StoreIntroOffer intro, String planName) =>
       intro.isSingleUnit
-          ? 'Start your free ${intro.duration} of $planName'
-          : 'Try $planName free for ${intro.duration}';
+          ? tr('Start your free {d} of {plan}', {'d': intro.duration, 'plan': planName})
+          : tr('Try {plan} free for {d}', {'d': intro.duration, 'plan': planName});
 
   @override
   Widget build(BuildContext context) {
@@ -1023,7 +1024,7 @@ class _PlansFooter extends StatelessWidget {
     final catalogPrice =
         controller.isYearly ? entry.plan.yearlyPrice : entry.plan.monthlyPrice;
     final priceText = quote?.price ?? _fallbackPrice(catalogPrice);
-    final cadence = controller.isYearly ? 'year' : 'month';
+    final cadence = tr(controller.isYearly ? 'year' : 'month');
     final mutedStyle = AppTypography.bodySm.copyWith(
         color: AppColors.onSurfaceVariant, fontSize: 11, height: 1.35);
     final linkStyle = AppTypography.bodySm.copyWith(
@@ -1049,16 +1050,16 @@ class _PlansFooter extends StatelessWidget {
         children: [
           PrimaryPillButton(
             label: _isFree
-                ? 'Switch to ${entry.plan.name}'
+                ? tr('Switch to {plan}', {'plan': entry.plan.name})
                 : isCurrent
-                    ? 'Your current plan'
+                    ? tr('Your current plan')
                     : intro != null
                         ? (intro.isFreeTrial
                             ? _freeTrialLabel(intro, entry.plan.name)
-                            : 'Claim ${entry.plan.name} · ${intro.displayPrice}')
+                            : tr('Claim {plan} · {price}', {'plan': entry.plan.name, 'price': intro.displayPrice}))
                         : onCancelSubscription != null
-                            ? 'Switch to ${entry.plan.name} · $priceText/$cadence'
-                            : 'Upgrade to ${entry.plan.name} · $priceText/$cadence',
+                            ? tr('Switch to {plan} · {price}/{cadence}', {'plan': entry.plan.name, 'price': priceText, 'cadence': cadence})
+                            : tr('Upgrade to {plan} · {price}/{cadence}', {'plan': entry.plan.name, 'price': priceText, 'cadence': cadence}),
             icon: isCurrent ? null : Icons.arrow_forward_rounded,
             isLoading: !_isFree && controller.isPurchasing,
             onPressed: _isFree
@@ -1078,7 +1079,7 @@ class _PlansFooter extends StatelessWidget {
                         Icon(Icons.check_circle_rounded,
                             size: 16, color: AppColors.accent),
                         const SizedBox(width: 6),
-                        Text('Code $appliedCode applied',
+                        Text(tr('Code {code} applied', {'code': appliedCode}),
                             style: AppTypography.bodySm.copyWith(
                                 fontSize: 13,
                                 color: AppColors.onSurface,
@@ -1092,7 +1093,7 @@ class _PlansFooter extends StatelessWidget {
                         minimumSize: const Size(0, 40),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         visualDensity: VisualDensity.compact),
-                    child: Text('Have a code?',
+                    child: Text(tr('Have a code?'),
                         style: AppTypography.bodySm.copyWith(
                             fontSize: 14,
                             color: AppColors.onSurface,
@@ -1105,7 +1106,7 @@ class _PlansFooter extends StatelessWidget {
                   minimumSize: const Size(0, 44),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   visualDensity: VisualDensity.compact),
-              child: Text('Cancel subscription',
+              child: Text(tr('Cancel subscription'),
                   style: AppTypography.bodySm.copyWith(
                       fontSize: 14,
                       color: AppColors.onSurface,
@@ -1118,10 +1119,12 @@ class _PlansFooter extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                '${intro != null ? '${intro.summary}, then $priceText/$cadence. ' : ''}'
-                'Auto-renews at $priceText/$cadence until cancelled. Cancel anytime '
-                'in your $storeName settings at least 24 hours before the '
-                'current period ends.',
+                (intro != null
+                        ? tr('{summary}, then {price}/{cadence}. ', {'summary': intro.summary, 'price': priceText, 'cadence': cadence})
+                        : '') +
+                    tr('Auto-renews at {price}/{cadence} until cancelled. Cancel anytime '
+                        'in your {store} settings at least 24 hours before the '
+                        'current period ends.', {'price': priceText, 'cadence': cadence, 'store': storeName}),
                 textAlign: TextAlign.center,
                 style: mutedStyle,
               ),
@@ -1133,19 +1136,19 @@ class _PlansFooter extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _FooterLink(
-                label: 'Terms of Use',
+                label: tr('Terms of Use'),
                 style: linkStyle,
                 onPressed: () =>
-                    openHostedPage(context, termsUrl, 'Terms of Use'),
+                    openHostedPage(context, termsUrl, tr('Terms of Use')),
               ),
               _FooterLink(
-                label: 'Privacy Policy',
+                label: tr('Privacy Policy'),
                 style: linkStyle,
                 onPressed: () =>
-                    openHostedPage(context, privacyUrl, 'Privacy Policy'),
+                    openHostedPage(context, privacyUrl, tr('Privacy Policy')),
               ),
               _FooterLink(
-                label: 'Restore purchases',
+                label: tr('Restore purchases'),
                 style: linkStyle,
                 onPressed: controller.isRestoring
                     ? null
@@ -1153,7 +1156,7 @@ class _PlansFooter extends StatelessWidget {
               ),
               if (!showCodeEntry)
                 _FooterLink(
-                  label: 'Redeem code',
+                  label: tr('Redeem code'),
                   style: linkStyle,
                   onPressed: onRedeemCode,
                 ),

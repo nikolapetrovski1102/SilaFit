@@ -50,6 +50,11 @@ class ScreenSecurity {
 
   static bool _appLocked = false;
 
+  /// Store-screenshot builds: `--dart-define=ALLOW_SCREENSHOTS=true` skips
+  /// the app-wide lock so the simulator / device can capture every screen.
+  /// Trainer documents still take their own hold. Never set for release.
+  static const allowScreenshots = bool.fromEnvironment('ALLOW_SCREENSHOTS');
+
   /// Keeps the lock on for the rest of the run: screenshots, recordings and
   /// the app-switcher preview are blocked on every screen. Call once the first
   /// frame is up - iOS needs the key window to install its secure layer.
@@ -58,6 +63,11 @@ class ScreenSecurity {
   static Future<void> lockApp() async {
     if (_appLocked) return;
     _appLocked = true;
+    if (allowScreenshots) {
+      // Clear the FLAG_SECURE that MainActivity.onCreate already set.
+      if (_holders == 0) await _set(false);
+      return;
+    }
     await enable();
   }
 

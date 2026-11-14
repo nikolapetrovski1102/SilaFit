@@ -22,7 +22,29 @@
     return (isFileProtocol || isLoopbackHttp) ? 'http://localhost:5080' : '';
   }
 
-  var FALLBACK = "We couldn't send your message right now. Please email support@sila.fitness directly.";
+  /* The Macedonian page (/mk/support.html) carries lang="mk". Server
+     messages are English, so it shows its own fallback instead. */
+  var MK = document.documentElement.lang === 'mk';
+  var T = MK ? {
+    name: 'Внесете го вашето име.',
+    email: 'Внесете ја вашата е-пошта.',
+    emailBad: 'Внесете важечка е-пошта.',
+    topic: 'Изберете тема.',
+    message: 'Опишете што се случи (најмалку 10 знаци).',
+    sending: 'Се испраќа…',
+    send: 'Испрати порака',
+    fallback: 'Пораката не можеше да се испрати во моментов. Пишете ни директно на support@sila.fitness.'
+  } : {
+    name: 'Please enter your name.',
+    email: 'Please enter your email address.',
+    emailBad: 'Please enter a valid email address.',
+    topic: 'Please choose a topic.',
+    message: 'Please describe what happened (at least 10 characters).',
+    sending: 'Sending…',
+    send: 'Send message',
+    fallback: "We couldn't send your message right now. Please email support@sila.fitness directly."
+  };
+  var FALLBACK = T.fallback;
 
   var nameInput = form.elements.name;
   var emailInput = form.elements.email;
@@ -37,7 +59,7 @@
   var again = document.getElementById('contactAgain');
 
   messageInput.addEventListener('input', function () {
-    count.textContent = messageInput.value.length.toLocaleString('en');
+    count.textContent = messageInput.value.length.toLocaleString(MK ? 'mk-MK' : 'en');
   });
 
   // Clear an error as soon as the visitor starts fixing it.
@@ -55,13 +77,13 @@
   /* Returns the first problem (and marks the field), or null when valid. */
   function validate() {
     var problems = [];
-    if (!nameInput.value.trim()) problems.push([nameInput, 'Please enter your name.']);
+    if (!nameInput.value.trim()) problems.push([nameInput, T.name]);
     var email = emailInput.value.trim();
-    if (!email) problems.push([emailInput, 'Please enter your email address.']);
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) problems.push([emailInput, 'Please enter a valid email address.']);
-    if (!selectedTopic()) problems.push([topics, 'Please choose a topic.']);
+    if (!email) problems.push([emailInput, T.email]);
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) problems.push([emailInput, T.emailBad]);
+    if (!selectedTopic()) problems.push([topics, T.topic]);
     var message = messageInput.value.trim();
-    if (message.length < 10) problems.push([messageInput, 'Please describe what happened (at least 10 characters).']);
+    if (message.length < 10) problems.push([messageInput, T.message]);
 
     problems.forEach(function (p) {
       if (p[0] === topics) topics.classList.add('is-invalid');
@@ -76,7 +98,7 @@
 
   function setBusy(busy) {
     submit.disabled = busy;
-    submitLabel.textContent = busy ? 'Sending…' : 'Send message';
+    submitLabel.textContent = busy ? T.sending : T.send;
   }
 
   form.addEventListener('submit', function (e) {
@@ -106,7 +128,7 @@
       .then(function (response) {
         return response.json().catch(function () { return null; }).then(function (body) {
           if (response.ok && body && body.success) return;
-          throw new Error((body && body.message) || FALLBACK);
+          throw new Error((!MK && body && body.message) || FALLBACK);
         });
       })
       .then(function () {

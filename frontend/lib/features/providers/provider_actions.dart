@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'supplement_provider_models.dart';
+import '../../l10n/l10n.dart';
 
 /// Copies the partner's code and confirms with a snackbar.
 Future<void> copyProviderCode(
@@ -15,7 +16,7 @@ Future<void> copyProviderCode(
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
-        SnackBar(content: Text('Code $code copied. Paste it at checkout.')));
+        SnackBar(content: Text(tr('Code {code} copied. Paste it at checkout.', {'code': code}))));
 }
 
 /// Opens the partner's shop in the browser, copying the code first so it is
@@ -31,6 +32,6 @@ Future<void> openProviderShop(
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) {
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Couldn't open the shop.")));
+        .showSnackBar(SnackBar(content: Text(tr("Couldn't open the shop."))));
   }
 }

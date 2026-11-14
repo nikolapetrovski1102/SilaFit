@@ -376,7 +376,7 @@
   var myPermissions = [];
   function has(permission) { return myPermissions.indexOf(permission) > -1; }
 
-  var CONTENT_NAV_IDS = ['navSplits', 'navDietPlans', 'navSuggestions', 'navExercises', 'navPlans', 'navProviders', 'navUsers'];
+  var CONTENT_NAV_IDS = ['navSplits', 'navDietPlans', 'navSuggestions', 'navExercises', 'navPlans', 'navProviders', 'navUsers', 'navDownloadLinks'];
 
   function applyContentNavGating() {
     CONTENT_NAV_IDS.forEach(function (id) {
@@ -2421,6 +2421,142 @@
   }
 
   /* ================================================================
+     DOWNLOAD LINKS — https://sila.fitness/download?src=<code>
+     Each row is one tagged link: opens of the page, then the installs
+     credited to it (first app sign-in from the same network) and how
+     many of those signed up and bought.
+     ================================================================ */
+  var DOWNLOAD_LINK_BASE = 'https://sila.fitness/download';
+
+  function downloadLinkUrl(code) {
+    return code ? DOWNLOAD_LINK_BASE + '?src=' + encodeURIComponent(code) : DOWNLOAD_LINK_BASE;
+  }
+
+  function pct(part, whole) {
+    return whole ? Math.round(part / whole * 100) + '%' : '—';
+  }
+
+  function loadDownloadLinks() {
+    var days = num(($('#downloadLinksPeriod') || {}).value);
+    return auth.getDownloadLinkReport(days).then(function (result) {
+      if (!toastOnFailure(result, 'Could not load the download link report.')) return;
+      renderDownloadLinks(result.data || {});
+    });
+  }
+
+  function renderDownloadLinks(report) {
+    var sources = report.sources || [];
+    var leads = report.leads || [];
+    var total = sources.reduce(function (t, s) {
+      t.opens += s.opens; t.devices += s.uniqueDevices; t.installs += s.installs;
+      t.signedUp += s.signedUp; t.purchased += s.purchased; t.paying += s.payingNow;
+      return t;
+    }, { opens: 0, devices: 0, installs: 0, signedUp: 0, purchased: 0, paying: 0 });
+
+    $('#downloadLinksKpis').innerHTML = [
+      { l: 'Link opens', v: fmtInt(total.opens), sub: fmtInt(total.devices) + ' unique devices' },
+      { l: 'Installs', v: fmtInt(total.installs), sub: pct(total.installs, total.devices) + ' of devices' },
+      { l: 'Signed up', v: fmtInt(total.signedUp), sub: pct(total.signedUp, total.installs) + ' of installs' },
+      { l: 'Bought', v: fmtInt(total.purchased), sub: fmtInt(total.paying) + ' paying now' }
+    ].map(function (k) {
+      return '<div class="user-kpi"><div class="user-kpi__label">' + k.l + '</div><div class="user-kpi__val">' + k.v + '</div><div class="user-kpi__sub">' + k.sub + '</div></div>';
+    }).join('');
+
+    var head = '<thead><tr><th>Link</th><th>Opens</th><th>Devices</th><th>iPhone / Android / Desktop</th>' +
+      '<th>Installs</th><th>Signed up</th><th>Bought</th><th>Paying now</th><th>Last open</th><th></th></tr></thead>';
+    var body = sources.map(function (s) {
+      var tagged = !!s.sourceCode;
+      var url = downloadLinkUrl(s.sourceCode);
+      return '<tr>' +
+        '<td><div class="row-title">' + esc(s.label) +
+          ' <span class="chip' + (s.channel === 'social' ? ' chip--gold' : s.channel === 'partner' ? ' chip--accent' : '') + '">' + esc(s.channel) + '</span>' +
+          (s.isActive ? '' : ' <span class="chip chip--error">Off</span>') + '</div>' +
+          '<div class="row-sub">' + (tagged ? esc(url) : 'Opens of /download without a known ?src') + '</div></td>' +
+        '<td>' + fmtInt(s.opens) + '</td>' +
+        '<td>' + fmtInt(s.uniqueDevices) + '</td>' +
+        '<td class="label-sm">' + fmtInt(s.iosOpens) + ' / ' + fmtInt(s.androidOpens) + ' / ' + fmtInt(s.desktopOpens) + '</td>' +
+        '<td>' + fmtInt(s.installs) + '</td>' +
+        '<td>' + fmtInt(s.signedUp) + '</td>' +
+        '<td>' + fmtInt(s.purchased) + (s.installs ? ' <span class="label-sm">(' + pct(s.purchased, s.installs) + ')</span>' : '') + '</td>' +
+        '<td>' + fmtInt(s.payingNow) + '</td>' +
+        '<td class="label-sm">' + fmtDate(s.lastVisitAtUtc) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' + (tagged
+          ? '<button class="btn btn--secondary btn--sm" data-copy-link="' + esc(url) + '">Copy</button>' +
+            '<button class="btn btn--secondary btn--sm" style="margin-left:6px;" data-qr-link="' + esc(s.sourceCode) + '">QR</button>'
+          : '') + '</td>' +
+      '</tr>';
+    }).join('');
+    $('#downloadLinksTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+
+    var leadHead = '<thead><tr><th>Lead</th><th>Link</th><th>Device</th><th>Opened link</th><th>Installed</th><th>Status</th></tr></thead>';
+    var leadBody = leads.map(function (l) {
+      var name = l.displayName || l.email || (l.accountTier === 'Guest' ? 'Guest (no account yet)' : 'Unnamed user');
+      var status = l.payingNow
+        ? '<span class="chip chip--solid">Paying' + (l.activePlanCode ? ' · ' + esc(l.activePlanCode) : '') + '</span>'
+        : l.purchased ? '<span class="chip chip--gold">Bought</span>'
+        : l.accountTier !== 'Guest' ? '<span class="chip chip--accent">Signed up</span>'
+        : '<span class="chip">Downloaded</span>';
+      return '<tr>' +
+        '<td><div class="row-title">' + esc(name) + '</div><div class="row-sub">' + esc(l.email && l.displayName ? l.email : l.accountTier) + '</div></td>' +
+        '<td class="label-sm">' + esc(l.sourceLabel) + '</td>' +
+        '<td class="label-sm">' + esc(l.deviceLabel || l.platform) + '</td>' +
+        '<td class="label-sm">' + fmtDate(l.visitedAtUtc) + '</td>' +
+        '<td class="label-sm">' + fmtDate(l.installedAtUtc) + '</td>' +
+        '<td>' + status + '</td>' +
+      '</tr>';
+    }).join('');
+    $('#downloadLeadsTable').innerHTML = leadHead + '<tbody>' +
+      (leadBody || '<tr><td colspan="6"><div class="empty-state">' + window.Sila.html('sleepy', { className: 'empty-state__sila' }) + '<div class="headline-sm">No installs from a link yet</div></div></td></tr>') +
+    '</tbody>';
+
+    $$('#downloadLinksTable [data-copy-link]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.getAttribute('data-copy-link');
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () {
+          toast('Link copied.');
+        }, function () { toast('Could not copy: ' + text, true); });
+      });
+    });
+    $$('#downloadLinksTable [data-qr-link]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var code = btn.getAttribute('data-qr-link');
+        var source = sources.find(function (s) { return s.sourceCode === code; });
+        openDownloadLinkQr(code, source ? source.label : code);
+      });
+    });
+  }
+
+  /* Printable QR for one link, with an SVG download for posters and stickers. */
+  function openDownloadLinkQr(code, label) {
+    var url = downloadLinkUrl(code);
+    var svg;
+    try {
+      var qr = window.qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      svg = qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
+    } catch (e) {
+      toast('Could not draw the QR code.', true);
+      return;
+    }
+    var backdrop = openModal(
+      modalHead(label + ' QR code') +
+      '<div style="text-align:center;">' +
+        '<div style="background:#fff;border-radius:12px;padding:12px;max-width:280px;margin:0 auto;">' + svg + '</div>' +
+        '<p class="label-sm" style="margin-top:12px;word-break:break-all;">' + esc(url) + '</p>' +
+      '</div>' +
+      '<div class="modal__actions">' +
+        '<button class="btn btn--ghost" data-close>Close</button>' +
+        '<a class="btn btn--primary" download="silafit-download-' + esc(code) + '.svg" href="data:image/svg+xml;charset=utf-8,' +
+          encodeURIComponent(svg) + '">Download SVG</a>' +
+      '</div>');
+    wireClose(backdrop);
+  }
+
+  var downloadLinksPeriod = $('#downloadLinksPeriod');
+  if (downloadLinksPeriod) downloadLinksPeriod.addEventListener('change', loadDownloadLinks);
+
+  /* ================================================================
      USERS — read-only table with KPI row
      ================================================================ */
   var userQuery = '';
@@ -3225,6 +3361,8 @@
             providerLogo(p, 40) +
             '<span class="chip chip--accent">' + esc(p.category) + '</span>' +
             (p.isActive ? '' : '<span class="chip">Hidden</span>') +
+            (p.ordersIngredients ? '<span class="chip chip--gold">Orders ingredients</span>' : '') +
+            (p.barcodeCatalogEnabled ? '<span class="chip chip--gold">Barcode catalog</span>' : '') +
             '<span class="spacer"></span>' +
             (canWrite ? (
               '<div class="row-actions">' +
@@ -3271,7 +3409,7 @@
   function openProviderEditor(providerId) {
     var isNew = !providerId;
     var p = isNew
-      ? { name: '', tagline: '', logoUrl: '', promoCode: '', discountLabel: '', shopUrl: 'https://', category: 'Protein', isActive: true, sortOrder: providersCache.length }
+      ? { name: '', tagline: '', logoUrl: '', promoCode: '', discountLabel: '', shopUrl: 'https://', category: 'Protein', isActive: true, sortOrder: providersCache.length, ordersIngredients: false, searchUrl: '', barcodeCatalogEnabled: false, barcodeCatalogUrl: '', hasBarcodeCatalogApiKey: false }
       : providersCache.find(function (x) { return x.providerId === providerId; });
     if (!isNew && !p) return;
 
@@ -3302,6 +3440,26 @@
             '<span class="label-sm" id="pvLogoStatus" style="color:var(--on-surface-variant)">Square, at least 256×256.</span>' +
           '</div>' +
           '<input type="hidden" id="pvLogo" value="' + esc(p.logoUrl || '') + '" /></div>' +
+        '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
+          '<label class="switch"><input type="checkbox" id="pvOrders"' + (p.ordersIngredients ? ' checked' : '') + ' /><span class="track"></span></label>' +
+          '<span class="label-sm">Grocery partner: users can order recipe and shopping-list ingredients here, with the code copied for checkout</span>' +
+        '</div>' +
+        '<div class="field field--full"><label>Product search link (https, optional)</label>' +
+          '<input class="input" id="pvSearch" maxlength="500" value="' + esc(p.searchUrl || '') + '" placeholder="https://paket.mk/search?q={query}" />' +
+          '<span class="label-sm" style="color:var(--on-surface-variant)">Put {query} where the ingredient goes. Empty: the app opens the shop link.</span></div>' +
+        '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
+          '<label class="switch"><input type="checkbox" id="pvCatalog"' + (p.barcodeCatalogEnabled ? ' checked' : '') + ' /><span class="track"></span></label>' +
+          '<span class="label-sm">Barcode catalog: scanned barcodes are looked up in this partner\'s products first, before Open Food Facts</span>' +
+        '</div>' +
+        '<div class="field field--full"><label>Barcode catalog link (https)</label>' +
+          '<input class="input" id="pvCatalogUrl" maxlength="500" value="' + esc(p.barcodeCatalogUrl || '') + '" placeholder="https://api.paket.mk/products/{barcode}" />' +
+          '<span class="label-sm" style="color:var(--on-surface-variant)">Put {barcode} where the scanned code goes. Works even while the provider is hidden.</span></div>' +
+        '<div class="field field--full"><label>Barcode catalog API key</label>' +
+          '<input class="input" id="pvCatalogKey" type="password" autocomplete="off" maxlength="500" value="" placeholder="' + (p.hasBarcodeCatalogApiKey ? 'Saved. Leave empty to keep it' : 'Optional, sent as a Bearer token') + '" />' +
+          (p.hasBarcodeCatalogApiKey
+            ? '<label class="label-sm" style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--on-surface-variant)"><input type="checkbox" id="pvCatalogKeyClear" /> Remove the saved key</label>'
+            : '') +
+        '</div>' +
         '<div class="field field--full" style="flex-direction:row;align-items:center;gap:12px;">' +
           '<label class="switch"><input type="checkbox" id="pvActive"' + (p.isActive ? ' checked' : '') + ' /><span class="track"></span></label>' +
           '<span class="label-sm">Show in the app</span>' +
@@ -3340,7 +3498,13 @@
         shopUrl: shop === 'https://' ? null : (shop || null),
         category: $('#pvCategory').value,
         isActive: $('#pvActive').checked,
-        sortOrder: num($('#pvSort').value)
+        sortOrder: num($('#pvSort').value),
+        ordersIngredients: $('#pvOrders').checked,
+        searchUrl: $('#pvSearch').value.trim() || null,
+        barcodeCatalogEnabled: $('#pvCatalog').checked,
+        barcodeCatalogUrl: $('#pvCatalogUrl').value.trim() || null,
+        barcodeCatalogApiKey: $('#pvCatalogKey').value.trim() || null,
+        clearBarcodeCatalogApiKey: !!($('#pvCatalogKeyClear') && $('#pvCatalogKeyClear').checked)
       };
       if (!payload.name) { toast('Give the provider a name first', true); return; }
       auth.saveProvider(payload).then(function (result) {
@@ -3454,6 +3618,7 @@
     $$('[data-open-create="diet-plan-import"]').forEach(function (b) { b.hidden = !has('content.diet_plans.write'); });
     $$('[data-open-create="provider"]').forEach(function (b) { b.hidden = !has('content.providers.write'); });
     if (has('users.read')) loaders.push(loadUsers());
+    if (has('users.read')) loadDownloadLinks();
 
     Promise.all(loaders).then(renderOverview);
   });

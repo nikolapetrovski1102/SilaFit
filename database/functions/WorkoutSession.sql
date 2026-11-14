@@ -153,6 +153,16 @@ BEGIN
             v_workoutsessionid := p_workoutsessionid;
             INSERT INTO dbo.workoutsessions (workoutsessionid, userid, splitdayid, scheduleddateutc, status)
             VALUES (v_workoutsessionid, p_userid, p_splitdayid, v_scheduleddate, 'Scheduled');
+        ELSIF v_workoutsessionid IS NOT NULL
+              AND EXISTS (SELECT 1 FROM dbo.splitdays WHERE splitdayid = p_splitdayid) THEN
+            -- The server's session for that day may still point at the split
+            -- that was active when it was created (e.g. Home loaded in the
+            -- morning, then the user switched splits and trained offline).
+            -- The phone is reporting the split day that was actually done,
+            -- so the finished session records that one, not the stale one.
+            UPDATE dbo.workoutsessions
+            SET splitdayid = p_splitdayid
+            WHERE workoutsessionid = v_workoutsessionid AND userid = p_userid;
         END IF;
         -- Otherwise the split day was deleted before the upload: nothing to
         -- attach the workout to, so it falls through as not found.
@@ -258,7 +268,9 @@ END $$;
 
 -- Feeds the Progress screen: aggregate totals (result set 1) plus the raw
 -- per-day statuses (result set 2) the service uses to build the heatmap and
--- the rule-based narrative text.
+-- the rule-based narrative text. Each day also carries the split day its
+-- session was tied to, so history shows what was actually trained rather
+-- than what the currently active split would have scheduled.
 CREATE OR REPLACE FUNCTION dbo.usp_workoutsession_getrangesummary(
     p_userid uuid,
     p_fromdateutc date,
@@ -279,10 +291,12 @@ BEGIN
     RETURN NEXT c1;
 
     OPEN c2 FOR
-    SELECT scheduleddateutc, status, tonnagekg, rpescore
-    FROM dbo.workoutsessions
-    WHERE userid = p_userid AND scheduleddateutc BETWEEN p_fromdateutc AND p_todateutc
-    ORDER BY scheduleddateutc;
+    SELECT ws.scheduleddateutc, ws.status, ws.tonnagekg, ws.rpescore,
+           sd.splitdayid, sd.title, sd.focuslabel, sd.estimatedminutes, sd.isrestday
+    FROM dbo.workoutsessions ws
+    LEFT JOIN dbo.splitdays sd ON sd.splitdayid = ws.splitdayid
+    WHERE ws.userid = p_userid AND ws.scheduleddateutc BETWEEN p_fromdateutc AND p_todateutc
+    ORDER BY ws.scheduleddateutc;
     RETURN NEXT c2;
 END $$;
 

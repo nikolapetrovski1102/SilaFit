@@ -5,6 +5,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../progress_models.dart';
 import '../weight_display.dart';
+import '../../../l10n/l10n.dart';
 
 /// One exercise's personal record row - shared by the Progress tab's
 /// top-3 preview card and the full [AllPersonalRecordsScreen] list so the
@@ -32,7 +33,7 @@ class PersonalRecordTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 if (record.isPerDumbbell)
-                  Text('Per dumbbell',
+                  Text(tr('Per dumbbell'),
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant)),
               ],

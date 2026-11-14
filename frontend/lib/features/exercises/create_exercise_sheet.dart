@@ -10,6 +10,7 @@ import '../../core/widgets/silen_button.dart';
 import 'exercise_focus.dart';
 import 'exercises_models.dart';
 import 'exercises_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// Equipment a custom exercise can use - the catalogue's own values plus Band
 /// and Other. Must match `ExercisesService.EquipmentTypes` on the server.
@@ -88,13 +89,13 @@ class _CreateExerciseFormState extends State<_CreateExerciseForm> {
   Future<void> _save() async {
     final name = _nameController.text.trim();
     final String? missing = name.length < 2
-        ? 'Give the exercise a name.'
+        ? tr('Give the exercise a name.')
         : _muscleGroup == null
-            ? 'Pick the muscle group it trains.'
+            ? tr('Pick the muscle group it trains.')
             : _equipment == null
-                ? 'Pick the equipment it uses.'
+                ? tr('Pick the equipment it uses.')
                 : _isCompound == null
-                    ? 'Say whether it\'s compound or isolation.'
+                    ? tr('Say whether it\'s compound or isolation.')
                     : null;
     if (missing != null) {
       setState(() => _error = missing);
@@ -133,14 +134,14 @@ class _CreateExerciseFormState extends State<_CreateExerciseForm> {
             padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
                 AppSpacing.md, AppSpacing.marginMobile, AppSpacing.md),
             children: [
-              Text('NEW EXERCISE',
+              Text(tr('NEW EXERCISE'),
                   style: AppTypography.labelCaps
                       .copyWith(color: AppColors.accent)),
               const SizedBox(height: 4),
-              Text('Add it to your library', style: AppTypography.headlineSm),
+              Text(tr('Add it to your library'), style: AppTypography.headlineSm),
               const SizedBox(height: 2),
-              Text('Only you will see it. Fill in every detail so it slots '
-                  'into your splits and progress like any other exercise.',
+              Text(tr('Only you will see it. Fill in every detail so it slots '
+                  'into your splits and progress like any other exercise.'),
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
               const SizedBox(height: AppSpacing.md),
@@ -149,29 +150,30 @@ class _CreateExerciseFormState extends State<_CreateExerciseForm> {
                 textCapitalization: TextCapitalization.words,
                 maxLength: 150,
                 style: AppTypography.bodyMd,
-                decoration: const InputDecoration(
-                    labelText: 'Exercise name', counterText: ''),
+                decoration: InputDecoration(
+                    labelText: tr('Exercise name'), counterText: ''),
               ),
               const SizedBox(height: AppSpacing.lg),
               _ChoiceGroup(
-                label: 'Muscle group',
+                label: tr('Muscle group'),
                 options: kExerciseMuscleGroups,
                 selected: _muscleGroup,
                 onSelected: (v) => setState(() => _muscleGroup = v),
               ),
               const SizedBox(height: AppSpacing.lg),
               _ChoiceGroup(
-                label: 'Equipment',
+                label: tr('Equipment'),
                 options: kExerciseEquipmentTypes,
                 selected: _equipment,
                 onSelected: (v) => setState(() => _equipment = v),
               ),
               const SizedBox(height: AppSpacing.lg),
               _ChoiceGroup(
-                label: 'Movement type',
-                hint: 'Compound works several joints (squat, row); '
-                    'isolation works one (curl, raise).',
+                label: tr('Movement type'),
+                hint: tr('Compound works several joints (squat, row); '
+                    'isolation works one (curl, raise).'),
                 options: const ['Compound', 'Isolation'],
+                labelFor: tr,
                 selected: switch (_isCompound) {
                   true => 'Compound',
                   false => 'Isolation',
@@ -193,7 +195,7 @@ class _CreateExerciseFormState extends State<_CreateExerciseForm> {
           padding: const EdgeInsets.fromLTRB(AppSpacing.marginMobile,
               AppSpacing.sm, AppSpacing.marginMobile, AppSpacing.md),
           child: PrimaryPillButton(
-            label: 'Save exercise',
+            label: tr('Save exercise'),
             icon: Icons.check_rounded,
             isLoading: _saving,
             onPressed: _save,
@@ -211,6 +213,7 @@ class _ChoiceGroup extends StatelessWidget {
   final List<String> options;
   final String? selected;
   final ValueChanged<String> onSelected;
+  final String Function(String)? labelFor;
 
   const _ChoiceGroup({
     required this.label,
@@ -218,6 +221,7 @@ class _ChoiceGroup extends StatelessWidget {
     required this.options,
     required this.selected,
     required this.onSelected,
+    this.labelFor,
   });
 
   @override
@@ -239,7 +243,7 @@ class _ChoiceGroup extends StatelessWidget {
           children: [
             for (final option in options)
               PillChip(
-                label: option,
+                label: labelFor?.call(option) ?? option,
                 selected: option == selected,
                 onTap: () => onSelected(option),
               ),

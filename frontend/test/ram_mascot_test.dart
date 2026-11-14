@@ -34,8 +34,10 @@ void main() {
       await tester.pumpWidget(_host(const RamMascot(RamArt.smug, size: 40),
           brightness: brightness));
       final image = tester.widget<Image>(find.byType(Image));
-      expect((image.image as AssetImage).assetName,
-          'assets/mascot/ram/smug.png');
+      // Decoded at display size, so the asset sits inside a ResizeImage.
+      final provider = image.image;
+      final asset = provider is ResizeImage ? provider.imageProvider : provider;
+      expect((asset as AssetImage).assetName, 'assets/mascot/ram/smug.png');
     }
   });
 

@@ -27,9 +27,23 @@ public static class RateLimitPolicies
     /// <summary>The website's anonymous support contact form, partitioned per client IP.</summary>
     public const string SupportContact = "support-contact";
 
+    /// <summary>Nutrition-label photo reads - billable vision calls open to every tier -
+    /// partitioned per authenticated user.</summary>
+    public const string FoodLabelScan = "food-label-scan";
+
+    /// <summary>Barcode lookups, partitioned per authenticated user. Loose: scanning a whole
+    /// shopping bag is normal; this only stops a script from walking the barcode space
+    /// through our server (and its catalog writes). Covers the lookup and the on-device
+    /// Open Food Facts result post. The app holds itself to 15 OFF calls a minute.</summary>
+    public const string BarcodeLookup = "barcode-lookup";
+
     /// <summary>Discount code redemption, partitioned per authenticated user (fallback IP) - tight enough to make guessing codes impractical.</summary>
     public const string PromoCodes = "promo-codes";
 
     /// <summary>The partner website's server-to-server lead endpoints, partitioned per client IP - also bounds Basic-auth guessing.</summary>
     public const string Partner = "partner";
+
+    /// <summary>The website download page's anonymous visit beacon, partitioned per client IP - loose,
+    /// since a whole gym can scan the same QR code on one Wi-Fi.</summary>
+    public const string DownloadVisit = "download-visit";
 }

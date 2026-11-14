@@ -19,7 +19,8 @@ internal sealed record FoodNutritionRow(
     decimal? FiberG,
     decimal? SugarG,
     decimal? SodiumMg,
-    bool IsBranded)
+    bool IsBranded,
+    string? ImageUrl = null)
 {
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex Punctuation = new(@"[^\p{L}\p{N}]+", RegexOptions.Compiled);

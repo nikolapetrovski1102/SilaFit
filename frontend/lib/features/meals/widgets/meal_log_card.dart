@@ -6,6 +6,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/section_eyebrow.dart';
 import '../meal_models.dart';
 import 'food_picker_sheet.dart' show MacroLine;
+import '../../../l10n/l10n.dart';
 
 /// One meal in the day's list. A logged meal opens the meal tracker on tap
 /// ([onOpen]) and, when it was built food by food, expands to show those
@@ -75,17 +76,17 @@ class _MealLogCardState extends State<MealLogCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(meal.title,
+                        Text(tr(meal.title),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.bodyMd),
                         const SizedBox(height: 2),
                         Text(
                           [
-                            meal.mealType,
+                            tr(meal.mealType),
                             '${meal.caloriesKcal} kcal',
                             if (hasFoods)
-                              '${meal.items.length} ${meal.items.length == 1 ? 'food' : 'foods'}',
+                              trPlural(meal.items.length, '{n} food', '{n} foods'),
                           ].join(' · '),
                           style: AppTypography.labelSm
                               .copyWith(color: AppColors.onSurfaceVariant),
@@ -101,10 +102,10 @@ class _MealLogCardState extends State<MealLogCard> {
                   ),
                   const SizedBox(width: AppSpacing.xs),
                   if (!logged) ...[
-                    PillChip(label: 'Log', onTap: widget.onLog),
+                    PillChip(label: tr('Log'), onTap: widget.onLog),
                     IconButton(
                       onPressed: widget.onDelete,
-                      tooltip: 'Remove',
+                      tooltip: tr('Remove'),
                       visualDensity: VisualDensity.compact,
                       icon: Icon(Icons.close_rounded,
                           size: 18, color: AppColors.onSurfaceVariant),
@@ -112,7 +113,7 @@ class _MealLogCardState extends State<MealLogCard> {
                   ] else if (hasFoods)
                     IconButton(
                       onPressed: () => setState(() => _expanded = !_expanded),
-                      tooltip: _expanded ? 'Hide foods' : 'Show foods',
+                      tooltip: _expanded ? tr('Hide foods') : tr('Show foods'),
                       visualDensity: VisualDensity.compact,
                       icon: AnimatedRotation(
                         turns: _expanded ? 0.5 : 0,

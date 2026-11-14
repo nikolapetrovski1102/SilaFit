@@ -49,6 +49,23 @@ public sealed class AdminSupplementProviderUpsertRequest
     public string Category { get; set; } = "Protein";
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+
+    /// <summary>The grocery partner the app sends ingredients to.</summary>
+    public bool OrdersIngredients { get; set; }
+
+    /// <summary>https product search with <c>{query}</c> where the search text goes.</summary>
+    public string? SearchUrl { get; set; }
+
+    /// <summary>Ask this partner's product API about scanned barcodes.</summary>
+    public bool BarcodeCatalogEnabled { get; set; }
+
+    /// <summary>https product endpoint with <c>{barcode}</c> where the code goes.</summary>
+    public string? BarcodeCatalogUrl { get; set; }
+
+    /// <summary>Blank keeps the stored key.</summary>
+    public string? BarcodeCatalogApiKey { get; set; }
+
+    public bool ClearBarcodeCatalogApiKey { get; set; }
 }
 
 /// <summary>Replaces a meal suggestion's ingredient and step lists, in order.</summary>

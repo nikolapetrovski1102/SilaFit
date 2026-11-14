@@ -1,3 +1,5 @@
+using Silen.Common.Localization;
+
 namespace Silen.Common.Contracts;
 
 /// <summary>
@@ -10,21 +12,22 @@ public sealed class ApiResponse<T>
 
     public T? Data { get; init; }
 
-    /// <summary>User-safe message. Null on success unless the caller wants to surface one.</summary>
+    /// <summary>User-safe message, in the request's language (see <see cref="AppText"/>).
+    /// Null on success unless the caller wants to surface one.</summary>
     public string? Message { get; init; }
 
     public static ApiResponse<T> Ok(T? data, string? message = null) => new()
     {
         Success = true,
         Data = data,
-        Message = message
+        Message = message is null ? null : AppText.Translate(message)
     };
 
     public static ApiResponse<T> Fail(string message) => new()
     {
         Success = false,
         Data = default,
-        Message = message
+        Message = AppText.Translate(message)
     };
 }
 
@@ -35,7 +38,8 @@ public sealed class ApiResponse
 
     public string? Message { get; init; }
 
-    public static ApiResponse Ok(string? message = null) => new() { Success = true, Message = message };
+    public static ApiResponse Ok(string? message = null) =>
+        new() { Success = true, Message = message is null ? null : AppText.Translate(message) };
 
-    public static ApiResponse Fail(string message) => new() { Success = false, Message = message };
+    public static ApiResponse Fail(string message) => new() { Success = false, Message = AppText.Translate(message) };
 }

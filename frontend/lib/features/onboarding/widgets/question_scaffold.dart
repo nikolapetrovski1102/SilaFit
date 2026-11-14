@@ -6,6 +6,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/silen_button.dart';
 import 'onboarding_step_transition.dart';
 import '../../../core/widgets/marker_drawn_title.dart';
+import '../../../l10n/l10n.dart';
 
 /// Shared chrome for every assessment question: a soft square back button,
 /// title and compact step count, then the animated question content and a
@@ -74,7 +75,7 @@ class QuestionScaffold extends StatelessWidget {
                 _BackButton(onTap: onBack),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text(title,
+                  child: Text(tr(title),
                       style: AppTypography.headlineMd.copyWith(
                         fontWeight: FontWeight.w700,
                       )),
@@ -83,7 +84,7 @@ class QuestionScaffold extends StatelessWidget {
                 if (onSkip != null)
                   TextButton(
                     onPressed: onSkip,
-                    child: Text('Skip',
+                    child: Text(tr('Skip'),
                         style: AppTypography.bodyMd
                             .copyWith(color: AppColors.onSurfaceVariant)),
                   ),
@@ -158,7 +159,7 @@ class _BackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Back',
+      label: tr('Back'),
       child: Material(
         color: Colors.transparent,
         child: Ink(
@@ -200,7 +201,7 @@ class _StepCounter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Step $step of $stepCount',
+      label: tr('Step {step} of {count}', {'step': step, 'count': stepCount}),
       child: Padding(
         key: const Key('assessment-step-badge'),
         padding: const EdgeInsets.symmetric(horizontal: 4),

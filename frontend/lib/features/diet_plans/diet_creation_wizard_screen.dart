@@ -16,6 +16,7 @@ import '../meals/meal_repository.dart';
 import '../splits/widgets/ink_field.dart';
 import 'diet_plan_repository.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 // Same shape for every diet the wizard creates: a week, one day at a time.
 // The diet-plan builder is where the header gets tuned afterwards.
@@ -154,8 +155,8 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
   final _flights = <OverlayEntry>[];
   bool _finishing = false;
 
-  String get _presetName => 'Awesome Diet ${widget.existingPlanCount + 1}';
-  String _presetDay(int day) => 'Day $day';
+  String get _presetName => tr('Awesome Diet {n}', {'n': widget.existingPlanCount + 1});
+  String _presetDay(int day) => tr('Day {n}', {'n': day});
 
   /// Breakfast, Lunch, Dinner, then Snacks for everything after.
   String get _nextMealType =>
@@ -349,7 +350,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
 
   void _startMeal() {
     _mealType = _nextMealType;
-    _preset(_mealType);
+    _preset(tr(_mealType));
     _intro.forward(from: 0);
     _focus.requestFocus();
   }
@@ -359,14 +360,14 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
     HapticFeedback.selectionClick();
     // Still on the suggested name - follow the slot they picked.
     final followsType = _input.text.trim().isEmpty ||
-        kMealTypes.contains(_input.text.trim());
+        kMealTypes.map(tr).contains(_input.text.trim());
     setState(() => _mealType = type);
-    if (followsType) _preset(type);
+    if (followsType) _preset(tr(type));
   }
 
   void _commitMeal() {
     final typed = _input.text.trim();
-    final title = typed.isEmpty ? _mealType : typed;
+    final title = typed.isEmpty ? tr(_mealType) : typed;
     HapticFeedback.lightImpact();
     setState(() {
       _mealFrom = _mealInputTop;
@@ -780,7 +781,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                 ? Stack(
                     key: ValueKey('day-$_day-$_generation'),
                     children: [
-                      _eyebrow('DAY $_day OF $_kDurationDays', dayEyebrowTop),
+                      _eyebrow(tr('DAY {n} OF {total}', {'n': _day, 'total': _kDurationDays}), dayEyebrowTop),
                       Positioned.fill(
                         child: InkMorphText(
                           text: _dayTitle!,
@@ -802,7 +803,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                     key: ValueKey(
                         'meal-$_day-${_dayMeals.length}-$_generation'),
                     children: [
-                      _eyebrow(_mealType.toUpperCase(), mealEyebrowTop),
+                      _eyebrow(tr(_mealType).toUpperCase(), mealEyebrowTop),
                       Positioned.fill(
                         child: InkMorphText(
                           text: _mealTitle!,
@@ -895,8 +896,8 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
     final hint = switch (_stage) {
       _Stage.name => _presetName,
       _Stage.dayTitle => _presetDay(_day),
-      _Stage.mealName => _mealType,
-      _ => 'Search foods',
+      _Stage.mealName => tr(_mealType),
+      _ => tr('Search foods'),
     };
     if (picking) return _textField(AppTypography.headlineSm, hint, picking);
     // Re-fit on every keystroke. Applied directly rather than tweened - an
@@ -947,7 +948,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
           children: [
             for (final type in kMealTypes)
               _SlotPill(
-                label: type,
+                label: tr(type),
                 selected: type == _mealType,
                 onTap: () => _pickMealType(type),
               ),
@@ -955,7 +956,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
         ),
         if (_dayMeals.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          Text('ON THIS DAY', style: AppTypography.labelCaps),
+          Text(tr('ON THIS DAY'), style: AppTypography.labelCaps),
           const SizedBox(height: AppSpacing.xs),
           for (final meal in _dayMeals)
             Padding(
@@ -996,7 +997,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                     opacity: query.isNotEmpty && !_searching ? 1 : 0,
                     duration: kInkQuick,
                     child: Text(
-                      'No matches for "$query"',
+                      tr('No matches for "{q}"', {'q': query}),
                       style: AppTypography.bodySm
                           .copyWith(color: AppColors.onSurfaceVariant),
                     ),
@@ -1026,20 +1027,19 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
     final muted =
         AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant);
     if (_ingredients.isEmpty) {
-      return Text('Search for an ingredient to add it to this meal.',
+      return Text(tr('Search for an ingredient to add it to this meal.'),
           style: muted);
     }
     final t = _totals;
     return Text.rich(
       TextSpan(children: [
         TextSpan(
-          text: '${t.calories.round()} kcal',
+          text: tr('{n} kcal', {'n': t.calories.round()}),
           style: AppTypography.bodySm.copyWith(
               color: AppColors.highEmphasis, fontWeight: FontWeight.w600),
         ),
         TextSpan(
-          text: '  ·  ${t.protein.round()}g protein  ·  '
-              '${t.carbs.round()}g carbs  ·  ${t.fats.round()}g fat',
+          text: tr('  ·  {p}g protein  ·  {c}g carbs  ·  {f}g fat', {'p': t.protein.round(), 'c': t.carbs.round(), 'f': t.fats.round()}),
         ),
       ]),
       style: muted,
@@ -1051,14 +1051,14 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
     final Widget bar = switch (_stage) {
       _Stage.name => PrimaryPillButton(
           key: const ValueKey('bar-name'),
-          label: 'Continue',
+          label: tr('Continue'),
           icon: Icons.arrow_forward_rounded,
           onPressed: _commitName,
         ),
       _Stage.dayTitle => _previousDayMeals.isEmpty
           ? PrimaryPillButton(
               key: ValueKey('bar-day-$_day'),
-              label: 'Continue',
+              label: tr('Continue'),
               icon: Icons.arrow_forward_rounded,
               onPressed: _commitDay,
             )
@@ -1067,7 +1067,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
               children: [
                 Expanded(
                   child: SecondaryPillButton(
-                    label: 'Repeat day ${_day - 1}',
+                    label: tr('Repeat day {n}', {'n': _day - 1}),
                     icon: Icons.repeat_rounded,
                     onPressed: _repeatPreviousDay,
                   ),
@@ -1075,7 +1075,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: PrimaryPillButton(
-                    label: 'Continue',
+                    label: tr('Continue'),
                     icon: Icons.arrow_forward_rounded,
                     onPressed: _commitDay,
                   ),
@@ -1085,7 +1085,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
       _Stage.mealName => _dayMeals.isEmpty
           ? PrimaryPillButton(
               key: ValueKey('bar-meal-$_day'),
-              label: 'Add ingredients',
+              label: tr('Add ingredients'),
               icon: Icons.arrow_forward_rounded,
               onPressed: _commitMeal,
             )
@@ -1094,7 +1094,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
               children: [
                 Expanded(
                   child: SecondaryPillButton(
-                    label: lastDay ? 'Finish' : 'Next day',
+                    label: lastDay ? tr('Finish') : tr('Next day'),
                     icon: lastDay
                         ? Icons.check_rounded
                         : Icons.arrow_forward_rounded,
@@ -1104,7 +1104,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: PrimaryPillButton(
-                    label: 'Add meal',
+                    label: tr('Add meal'),
                     icon: Icons.add_rounded,
                     onPressed: _commitMeal,
                   ),
@@ -1113,7 +1113,7 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
             ),
       _ => PrimaryPillButton(
           key: ValueKey('bar-ingredients-$_day'),
-          label: 'Save meal',
+          label: tr('Save meal'),
           icon: Icons.check_rounded,
           onPressed: _ingredients.isEmpty ? null : _saveMeal,
         ),
@@ -1146,19 +1146,19 @@ class _DietCreationWizardScreenState extends State<DietCreationWizardScreen>
                 Icon(Icons.check_circle_rounded,
                     size: 56, color: AppColors.accent),
                 const SizedBox(height: AppSpacing.lg),
-                MarkerDrawnTitle('${_dietName ?? 'Your diet'} is ready',
+                MarkerDrawnTitle(tr('{name} is ready', {'name': _dietName ?? tr('Your diet')}),
                     playKey: 'diet-ready:$_dietName',
                     textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Every day is planned out and ready to go.',
+                  tr('Every day is planned out and ready to go.'),
                   style: AppTypography.bodyMd
                       .copyWith(color: AppColors.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryPillButton(
-                  label: 'Done',
+                  label: tr('Done'),
                   icon: Icons.check_rounded,
                   isLoading: _finishing,
                   onPressed: _done,
@@ -1270,7 +1270,7 @@ class _SavedMealRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(meal.mealType.toUpperCase(),
+                Text(tr(meal.mealType).toUpperCase(),
                     style: AppTypography.labelCaps
                         .copyWith(color: AppColors.accent)),
                 Text(meal.title,
@@ -1283,8 +1283,7 @@ class _SavedMealRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
           Text(
-            '${meal.calories} kcal · ${meal.items.length} '
-            '${meal.items.length == 1 ? 'ingredient' : 'ingredients'}',
+            '${tr('{n} kcal', {'n': meal.calories})} · ${trPlural(meal.items.length, '{n} ingredient', '{n} ingredients')}',
             style:
                 AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant),
           ),
@@ -1305,7 +1304,7 @@ class _FoodResultRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final detail = [
       if (food.brandName != null && food.brandName!.isNotEmpty) food.brandName!,
-      '${food.caloriesKcal.round()} kcal / 100 g',
+      tr('{n} kcal / 100 g', {'n': food.caloriesKcal.round()}),
     ].join(' · ');
     return Material(
       color: AppColors.surfaceContainer.withValues(alpha: 0.6),
@@ -1389,17 +1388,17 @@ class _GramsDialogState extends State<_GramsDialog> {
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
         ],
-        decoration: const InputDecoration(labelText: 'Amount', suffixText: 'g'),
+        decoration: InputDecoration(labelText: tr('Amount'), suffixText: tr('g')),
         onSubmitted: (_) => _save(),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(0.0),
-          child: const Text('Remove'),
+          child: Text(tr('Remove')),
         ),
         TextButton(
           onPressed: _save,
-          child: const Text('Save'),
+          child: Text(tr('Save')),
         ),
       ],
     );

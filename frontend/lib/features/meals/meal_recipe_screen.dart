@@ -12,6 +12,8 @@ import '../../core/widgets/skeleton.dart';
 import 'meal_models.dart';
 import 'meal_repository.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../providers/grocery_order.dart';
+import '../../l10n/l10n.dart';
 
 /// Opens [MealRecipeScreen] for one meal suggestion.
 Future<void> openMealRecipe(BuildContext context,
@@ -57,7 +59,7 @@ class _MealRecipeScreenState extends State<MealRecipeScreen> {
     } catch (_) {
       if (mounted) {
         setState(() =>
-            _state = const ResourceState.error("Couldn't load the recipe."));
+            _state = ResourceState.error(tr("Couldn't load the recipe.")));
       }
     }
   }
@@ -93,13 +95,12 @@ class _MealRecipeScreenState extends State<MealRecipeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (recipe.mealType.isNotEmpty)
-          SectionEyebrow(recipe.mealType, color: AppColors.accent),
+          SectionEyebrow(tr(recipe.mealType), color: AppColors.accent),
         const SizedBox(height: AppSpacing.sm),
         MarkerDrawnTitle(recipe.title, playKey: 'recipe:${recipe.title}'),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          '${recipe.caloriesKcal} kcal · P${recipe.proteinG} '
-          'C${recipe.carbsG} F${recipe.fatsG}',
+          tr('{kcal} kcal · P{p} C{c} F{f}', {'kcal': recipe.caloriesKcal, 'p': recipe.proteinG, 'c': recipe.carbsG, 'f': recipe.fatsG}),
           style:
               AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant),
         ),
@@ -111,7 +112,7 @@ class _MealRecipeScreenState extends State<MealRecipeScreen> {
           const SizedBox(height: AppSpacing.lg),
           SectionCard(
             child: Text(
-              'No recipe for this meal yet. Its macros above are what to aim for.',
+              tr('No recipe for this meal yet. Its macros above are what to aim for.'),
               style: AppTypography.bodySm
                   .copyWith(color: AppColors.onSurfaceVariant),
             ),
@@ -122,7 +123,7 @@ class _MealRecipeScreenState extends State<MealRecipeScreen> {
           Row(
             children: [
               Expanded(
-                  child: Text('INGREDIENTS', style: AppTypography.labelCaps)),
+                  child: Text(tr('INGREDIENTS'), style: AppTypography.labelCaps)),
               Text('${_checked.length}/${recipe.ingredients.length}',
                   style: AppTypography.labelSm
                       .copyWith(color: AppColors.onSurfaceVariant)),
@@ -172,10 +173,11 @@ class _MealRecipeScreenState extends State<MealRecipeScreen> {
               ],
             ),
           ),
+          OrderIngredientsButton(ingredients: recipe.ingredients),
         ],
         if (recipe.steps.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.lg),
-          Text('STEPS', style: AppTypography.labelCaps),
+          Text(tr('STEPS'), style: AppTypography.labelCaps),
           const SizedBox(height: AppSpacing.sm),
           for (var i = 0; i < recipe.steps.length; i++) ...[
             SectionCard(

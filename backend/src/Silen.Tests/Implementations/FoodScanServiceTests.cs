@@ -29,6 +29,7 @@ public class FoodScanServiceTests
             Options.Create(new OpenRouterOptions { FoodScanModel = "test/vision" }));
 
         subscriptionGate.Setup(g => g.HasActiveAdvancedAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         userSettingsProvider
             .Setup(p => p.GetAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserSettingsModel { UserId = userId, AiDataConsentAtUtc = DateTime.UtcNow });
@@ -36,8 +37,22 @@ public class FoodScanServiceTests
 
     private void AllowReservation(int usedAfter = 1, long foodScanId = 42) =>
         foodScanProvider
-            .Setup(p => p.TryReserveAsync(userId, It.IsAny<DateTime>(), FoodScanService.DailyScanLimit, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FoodScanReservationModel { Allowed = true, UsedToday = usedAfter, FoodScanId = foodScanId });
+            .Setup(p => p.TryReserveAsync(
+                userId, "meal", false, It.IsAny<DateTime>(), FoodScanService.DailyScanLimit, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FoodScanReservationModel { Allowed = true, Used = usedAfter, FoodScanId = foodScanId });
+
+    private void BelowAdvanced(bool isPro)
+    {
+        subscriptionGate.Setup(g => g.HasActiveAdvancedAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        subscriptionGate.Setup(g => g.HasActiveProAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(isPro);
+    }
+
+    private void FreeTier() => BelowAdvanced(isPro: false);
+
+    private void UsageIs(int mealToday = 0, int barcodeTrialUsed = 0) =>
+        foodScanProvider
+            .Setup(p => p.GetUsageAsync(userId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FoodScanUsageModel { MealToday = mealToday, BarcodeTrialUsed = barcodeTrialUsed });
 
     private void AiReturns(object response) =>
         openRouterClient
@@ -56,9 +71,9 @@ public class FoodScanServiceTests
         };
 
     [Fact]
-    public async Task ScanAsync_WithoutAdvanced_ReturnsForbiddenWithoutReservingOrCallingAi()
+    public async Task ScanAsync_Pro_ReturnsForbiddenWithoutReservingOrCallingAi()
     {
-        subscriptionGate.Setup(g => g.HasActiveAdvancedAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        BelowAdvanced(isPro: true);
 
         var result = await sut.ScanAsync(userId, Jpeg, null);
 
@@ -95,8 +110,9 @@ public class FoodScanServiceTests
     public async Task ScanAsync_DailyAllowanceSpent_ReturnsTooManyRequestsWithoutCallingAi()
     {
         foodScanProvider
-            .Setup(p => p.TryReserveAsync(userId, It.IsAny<DateTime>(), FoodScanService.DailyScanLimit, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FoodScanReservationModel { Allowed = false, UsedToday = 3 });
+            .Setup(p => p.TryReserveAsync(
+                userId, "meal", false, It.IsAny<DateTime>(), FoodScanService.DailyScanLimit, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FoodScanReservationModel { Allowed = false, Used = 3 });
 
         var result = await sut.ScanAsync(userId, Jpeg, null);
 
@@ -192,9 +208,10 @@ public class FoodScanServiceTests
             .ReturnsAsync(new UserSettingsModel { UserId = userId, AiDataConsentAtUtc = DateTime.UtcNow, TimeZoneId = "+05:00" });
         DateTime? dayStartUtc = null;
         foodScanProvider
-            .Setup(p => p.TryReserveAsync(userId, It.IsAny<DateTime>(), FoodScanService.DailyScanLimit, It.IsAny<CancellationToken>()))
-            .Callback((Guid _, DateTime start, int _, CancellationToken _) => dayStartUtc = start)
-            .ReturnsAsync(new FoodScanReservationModel { Allowed = false, UsedToday = 3 });
+            .Setup(p => p.TryReserveAsync(
+                userId, "meal", false, It.IsAny<DateTime>(), FoodScanService.DailyScanLimit, 0, It.IsAny<CancellationToken>()))
+            .Callback((Guid _, string _, bool _, DateTime start, int _, int _, CancellationToken _) => dayStartUtc = start)
+            .ReturnsAsync(new FoodScanReservationModel { Allowed = false, Used = 3 });
 
         await sut.ScanAsync(userId, Jpeg, null);
 
@@ -205,14 +222,60 @@ public class FoodScanServiceTests
     }
 
     [Fact]
-    public async Task GetQuotaAsync_BelowAdvanced_IsUnavailable()
+    public async Task GetQuotaAsync_Advanced_ReturnsTodaysMealScansAndBarcodes()
     {
-        subscriptionGate.Setup(g => g.HasActiveAdvancedAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        UsageIs(mealToday: 1, barcodeTrialUsed: 5);
 
         var result = await sut.GetQuotaAsync(userId);
 
-        Assert.True(result.IsSuccess);
+        Assert.True(result.Data!.IsAvailable);
+        Assert.Equal(2, result.Data.RemainingToday);
+        Assert.True(result.Data.BarcodeAvailable);
+    }
+
+    [Fact]
+    public async Task GetQuotaAsync_Pro_NoMealScanButBarcodes()
+    {
+        BelowAdvanced(isPro: true);
+        UsageIs(barcodeTrialUsed: 3);
+
+        var result = await sut.GetQuotaAsync(userId);
+
         Assert.False(result.Data!.IsAvailable);
+        Assert.True(result.Data.BarcodeAvailable);
+    }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    public async Task GetQuotaAsync_Free_BarcodesOnlyWhileTheTrialLasts(int barcodeTrialUsed, bool available)
+    {
+        FreeTier();
+        UsageIs(barcodeTrialUsed: barcodeTrialUsed);
+
+        var result = await sut.GetQuotaAsync(userId);
+
+        Assert.False(result.Data!.IsAvailable);
+        Assert.Equal(available, result.Data.BarcodeAvailable);
+    }
+
+    [Fact]
+    public async Task ReadLabelAsync_FreeTier_ReadsWithoutTouchingTheAllowance()
+    {
+        FreeTier();
+        AiReturns(LabelResponse());
+
+        var result = await sut.ReadLabelAsync(userId, Jpeg);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(370, result.Data!.CaloriesKcal);
         foodScanProvider.VerifyNoOtherCalls();
     }
+
+    private static object LabelResponse() => new
+    {
+        isLabel = true, productName = "Oats", brandName = "", servingSizeG = (decimal?)40, kcalPer100g = (decimal?)370,
+        proteinPer100g = (decimal?)13, carbsPer100g = (decimal?)60, fatPer100g = (decimal?)7, fiberPer100g = (decimal?)10,
+        sugarPer100g = (decimal?)1, sodiumMgPer100g = (decimal?)5
+    };
 }

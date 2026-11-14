@@ -7,19 +7,22 @@
   <meta name="theme-color" content="#f5eedd" media="(prefers-color-scheme: light)" />
   <title>Training splits — SilaFit</title>
   <meta name="description" content="Proven training splits (PPL, Upper/Lower, PHUL, Arnold) matched to your goal, with an estimated 1RM and PR curve from every logged set." />
+  <link rel="alternate" hreflang="en" href="https://sila.fitness/training.html" />
+  <link rel="alternate" hreflang="mk" href="https://sila.fitness/mk/training.html" />
+  <link rel="alternate" hreflang="x-default" href="https://sila.fitness/training.html" />
   <link rel="canonical" href="https://sila.fitness/training.html" />
   <meta name="apple-itunes-app" content="app-id=6811345732" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://sila.fitness/training.html" />
   <meta property="og:title" content="Training splits — SilaFit" />
   <meta property="og:description" content="Proven training splits (PPL, Upper/Lower, PHUL, Arnold) matched to your goal, with an estimated 1RM and PR curve from every logged set." />
-  <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png?v=20261103-runner" />
+  <meta property="og:image" content="https://sila.fitness/assets/img/branding/app_icon.png?v=20261112-sf" />
   <meta name="twitter:card" content="summary" />
-  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261103-runner" media="(prefers-color-scheme: dark)" />
-  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261103-runner" media="(prefers-color-scheme: light)" />
-  <link rel="stylesheet" href="css/base.css?v=20261103-marker" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon.png?v=20261112-sf" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="assets/img/branding/app_icon_light.png?v=20261112-sf" media="(prefers-color-scheme: light)" />
+  <link rel="stylesheet" href="css/base.css?v=20261112-sf" />
   <link rel="stylesheet" href="css/ambient.css?v=20260925" />
-  <link rel="stylesheet" href="css/site.css?v=20261103-marker" />
+  <link rel="stylesheet" href="css/site.css?v=20261112-sf" />
   <!-- Resolve the theme before first paint: saved choice → OS → dark. See js/theme.js -->
   <script>
     (function () {
@@ -34,7 +37,7 @@
   </script>
 </head>
 <body>
-  <!-- Full-screen loader: the runner draws itself in, then fades (js/loader.js) -->
+  <!-- Full-screen loader: the SF mark paints itself in, then fades (js/loader.js) -->
   <div class="site-loader" id="siteLoader" aria-hidden="true">
     <div class="site-loader__blur"><span></span><span></span><span></span><span></span></div>
     <img class="site-loader__mark" id="siteLoaderMark" alt="" />
@@ -45,7 +48,7 @@
       var d = document.documentElement;
       document.getElementById('siteLoaderMark').src = 'assets/img/branding/loader_'
         + (d.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
-        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261103-2';
+        + (d.classList.contains('loader-fast') ? '_fast' : '') + '.svg?v=20261112-sf';
     })();
   </script>
 
@@ -53,7 +56,7 @@
   <header class="nav" id="mainNav">
     <div class="nav__inner">
       <a class="nav__logo" href="index.html">
-        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
+        <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261112-sf" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261112-sf" width="36" height="36" alt="" aria-hidden="true" />
         SilaFit
       </a>
       <nav class="nav__links" id="navLinks">
@@ -63,6 +66,7 @@
         <a href="pricing.html">Pricing</a>
       </nav>
       <div class="nav__cta">
+        <a class="lang-switch" href="mk/training.html" hreflang="mk" lang="mk" aria-label="Македонски">MK</a>
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
           <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg>
           <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.6 8.6 0 0 1 9.4 4 8.6 8.6 0 1 0 20 14.6Z"/></svg>
@@ -152,7 +156,7 @@
       <div class="footer__grid">
         <div class="footer__brand">
           <a class="nav__logo" href="index.html">
-            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261103-runner" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261103-runner" width="36" height="36" alt="" aria-hidden="true" />
+            <img class="brand-mark brand-mark--dark" src="assets/img/branding/app_icon_96.webp?v=20261112-sf" width="36" height="36" alt="SilaFit logo" /><img class="brand-mark brand-mark--light" src="assets/img/branding/app_icon_96_light.webp?v=20261112-sf" width="36" height="36" alt="" aria-hidden="true" />
             SilaFit
           </a>
           <p>Workout tracking, training splits, and meal plans in one app, with streaks that respect recovery.</p>
@@ -193,12 +197,12 @@
     </div>
   </footer>
 
-  <script src="js/loader.js?v=20261103-marker"></script>
+  <script src="js/loader.js?v=20261112-sf"></script>
   <script src="js/theme.js"></script>
   <script src="js/data.js"></script>
   <script src="js/vendor-qrcode.js"></script>
   <script src="js/site.js?v=20261103-2"></script>
-  <script src="js/sila.js?v=20261103-real"></script>
-  <script src="js/motion.js?v=20261103-marker"></script>
+  <script src="js/sila.js?v=20261112-sf"></script>
+  <script src="js/motion.js?v=20261112-sf"></script>
 </body>
 </html>

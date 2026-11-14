@@ -20,6 +20,23 @@ class SupplementProvidersRepository {
     return _memo = list;
   }
 
+  /// The grocery partner to order ingredients from, or null while none is
+  /// switched on in the console - every "Order the ingredients" entry point
+  /// stays hidden until then.
+  Future<SupplementProvider?> groceryPartner() async {
+    try {
+      final all = await getAll();
+      for (final p in all) {
+        if (p.ordersIngredients && (p.shopUrl != null || p.searchUrl != null)) {
+          return p;
+        }
+      }
+    } catch (_) {
+      // An offer, never an error: no partner means no button.
+    }
+    return null;
+  }
+
   /// The protein partner to suggest, or null when none has a code or a shop.
   Future<SupplementProvider?> proteinPartner() async {
     try {

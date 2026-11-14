@@ -95,7 +95,11 @@ $$;
 -- Result set 1: current streak + this week's compliance percentage (see
 -- dbo.ufn_Streak_GetStatus for what counts).
 -- Result set 2: Monday..Sunday of the current week with each day's session
--- status, for the "consistency strip" UI.
+-- status, for the "consistency strip" UI, plus the split day that session is
+-- tied to. A past day keeps the split day it was actually trained on even
+-- after the user switches splits, so the client should prefer these columns
+-- over re-running the active split's rotation; they are NULL for days with no
+-- session row (future days, implicit rest), where the rotation still applies.
 CREATE OR REPLACE FUNCTION dbo.usp_streak_getstatus(
     p_userid uuid
 ) RETURNS SETOF refcursor LANGUAGE plpgsql AS $$
@@ -113,10 +117,12 @@ BEGIN
     OPEN c2 FOR
     SELECT
         w.calendardate AS sessiondate,
-        ws.status AS sessionstatus
+        ws.status AS sessionstatus,
+        sd.splitdayid, sd.title, sd.focuslabel, sd.estimatedminutes, sd.isrestday
     FROM (SELECT v_weekstart + n AS calendardate FROM generate_series(0, 6) AS g(n)) w
     LEFT JOIN dbo.workoutsessions ws
            ON ws.userid = p_userid AND ws.scheduleddateutc = w.calendardate
+    LEFT JOIN dbo.splitdays sd ON sd.splitdayid = ws.splitdayid
     ORDER BY w.calendardate;
     RETURN NEXT c2;
 END $$;

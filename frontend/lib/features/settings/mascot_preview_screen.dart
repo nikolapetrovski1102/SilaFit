@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/widgets/mascot/celebrating_ram.dart';
 import '../../core/widgets/mascot/mascot_dialog.dart';
 import '../../core/widgets/mascot/mascot_empty_state.dart';
 import '../../core/widgets/mascot/mascot_toast.dart';
@@ -130,11 +129,14 @@ class _MascotPreviewScreenState extends State<MascotPreviewScreen> {
                           _button('Plain dialog', _plainDialog,
                               secondary: true),
                         ]),
-                        ..._section('Celebration stage (tap Sila to replay)', [
+                        ..._section('Scrub reveal', [
                           Center(
-                            child: CelebratingRam(
-                                key: ValueKey('$_stageRun-$_reduceMotion'),
-                                size: 150),
+                            child: RamMascot(
+                              key: ValueKey('$_stageRun-$_reduceMotion'),
+                              RamArt.standing,
+                              size: 150,
+                              scribbleIn: true,
+                            ),
                           ),
                           const SizedBox(height: AppSpacing.md),
                           _button('Restart', () => setState(() => _stageRun++),

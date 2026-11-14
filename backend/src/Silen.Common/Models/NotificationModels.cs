@@ -63,6 +63,9 @@ public sealed class NotificationCandidateModel
 
     public string TimeZoneId { get; set; } = "UTC";
 
+    /// <summary>The app's UI language ("en" or "mk") the pushes are written in.</summary>
+    public string Language { get; set; } = "en";
+
     public DateTime? LastInteractionAtUtc { get; set; }
     public DateTime? LastPushedAtUtc { get; set; }
     public DateTime? LastMotivationAtUtc { get; set; }

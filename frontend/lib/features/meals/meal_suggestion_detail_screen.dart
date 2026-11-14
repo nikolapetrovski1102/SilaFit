@@ -12,6 +12,7 @@ import 'meal_controller.dart';
 import 'meal_models.dart';
 import 'meal_recipe_screen.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// One curated meal's detail + activate action - mirrors SplitDetailScreen:
 /// a hero summary, then a single primary button that flips from
@@ -42,7 +43,7 @@ class _MealSuggestionDetailScreenState
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-              '${widget.controller.suggestion.title} added to today\'s plan.')));
+              tr('{meal} added to today\'s plan.', {'meal': widget.controller.suggestion.title}))));
     } else if (widget.controller.actionError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.controller.actionError!)));
@@ -106,7 +107,7 @@ class _DetailBody extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             _MetaPill(
                 icon: Icons.egg_alt_rounded,
-                label: '${suggestion.proteinG}g protein'),
+                label: tr('{n}g protein', {'n': suggestion.proteinG})),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
@@ -121,13 +122,13 @@ class _DetailBody extends StatelessWidget {
                 children: [
                   Expanded(
                       child: _MacroStat(
-                          label: 'Protein', grams: suggestion.proteinG)),
+                          label: tr('Protein'), grams: suggestion.proteinG)),
                   Expanded(
                       child:
-                          _MacroStat(label: 'Carbs', grams: suggestion.carbsG)),
+                          _MacroStat(label: tr('Carbs'), grams: suggestion.carbsG)),
                   Expanded(
                       child:
-                          _MacroStat(label: 'Fats', grams: suggestion.fatsG)),
+                          _MacroStat(label: tr('Fats'), grams: suggestion.fatsG)),
                 ],
               ),
             ],
@@ -135,7 +136,7 @@ class _DetailBody extends StatelessWidget {
         ),
         if (suggestion.ingredientPreview?.trim().isNotEmpty == true) ...[
           const SizedBox(height: AppSpacing.lg),
-          Text('INGREDIENTS', style: AppTypography.labelCaps),
+          Text(tr('INGREDIENTS'), style: AppTypography.labelCaps),
           const SizedBox(height: AppSpacing.sm),
           SectionCard(
             child: Column(
@@ -164,7 +165,7 @@ class _DetailBody extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.xs),
                     child: Text(
-                      '+${suggestion.ingredientCount - 4} more in the full recipe',
+                      tr('+{n} more in the full recipe', {'n': suggestion.ingredientCount - 4}),
                       style: AppTypography.labelSm
                           .copyWith(color: AppColors.onSurfaceVariant),
                     ),
@@ -179,7 +180,7 @@ class _DetailBody extends StatelessWidget {
               mealSuggestionId: suggestion.mealSuggestionId,
               title: suggestion.title),
           icon: const Icon(Icons.menu_book_rounded, size: 18),
-          label: const Text('Ingredients & steps'),
+          label: Text(tr('Ingredients & steps')),
         ),
         const SizedBox(height: AppSpacing.lg),
         if (readOnly)
@@ -189,7 +190,7 @@ class _DetailBody extends StatelessWidget {
                 Icon(Icons.visibility_outlined, color: AppColors.accent),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text('Sample preview only — no meal will be added.',
+                  child: Text(tr('Sample preview only — no meal will be added.'),
                       style: AppTypography.bodySm),
                 ),
               ],
@@ -198,7 +199,7 @@ class _DetailBody extends StatelessWidget {
         else ...[
           PrimaryPillButton(
             label:
-                controller.activated ? 'Added to Plan' : 'Activate This Meal',
+                controller.activated ? tr('Added to Plan') : tr('Activate This Meal'),
             icon: controller.activated
                 ? Icons.check_rounded
                 : Icons.add_circle_outline_rounded,
@@ -208,8 +209,8 @@ class _DetailBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             controller.activated
-                ? 'Mark it logged from the Nutrition tab once you\'ve eaten it.'
-                : 'Adds this to ${DateFormat('EEEE, MMM d').format(today)} as a planned meal.',
+                ? tr('Mark it logged from the Nutrition tab once you\'ve eaten it.')
+                : tr('Adds this to {date} as a planned meal.', {'date': DateFormat('EEEE, MMM d').format(today)}),
             textAlign: TextAlign.center,
             style: AppTypography.labelSm
                 .copyWith(color: AppColors.onSurfaceVariant),

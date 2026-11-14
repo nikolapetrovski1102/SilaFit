@@ -1,22 +1,11 @@
-/// English month name for `month` (1-12), or a neutral fallback for a malformed
+import 'package:intl/intl.dart';
+import '../../l10n/l10n.dart';
+/// Localised month name for `month` (1-12), or a neutral fallback for a malformed
 /// value - shared by [MonthlyAnalytics.periodLabel] and the recap screen header.
 String monthLabel(int year, int month) {
-  if (month < 1 || month > 12) return 'Monthly Recap';
-  const names = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  return '${names[month - 1]} $year';
+  if (month < 1 || month > 12) return tr('Monthly Recap');
+  final label = DateFormat('LLLL y').format(DateTime(year, month));
+  return label.isEmpty ? label : label[0].toUpperCase() + label.substring(1);
 }
 
 /// The shared shape both the monthly (Pro) and weekly (Advanced) recap screens
@@ -276,7 +265,7 @@ class WeeklyAnalytics implements AnalyticsRecap {
 
   @override
   String get periodLabel =>
-      'Week $weekNumber · ${_shortDate(weekStartUtc)} – ${_shortDate(weekEndUtc)}, $year';
+      tr('Week {n} · {start} – {end}, {year}', {'n': weekNumber, 'start': _shortDate(weekStartUtc), 'end': _shortDate(weekEndUtc), 'year': year});
 
   const WeeklyAnalytics({
     this.exercises = const [],
@@ -329,22 +318,5 @@ class WeeklyAnalytics implements AnalyticsRecap {
 }
 
 String _shortDate(DateTime date) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  final month = date.month >= 1 && date.month <= 12
-      ? months[date.month - 1]
-      : '${date.month}';
-  return '$month ${date.day}';
+  return DateFormat.MMMd().format(date);
 }

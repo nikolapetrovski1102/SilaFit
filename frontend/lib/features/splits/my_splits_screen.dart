@@ -22,6 +22,7 @@ import 'splits_repository.dart';
 import 'splits_screen.dart';
 import 'widgets/split_hero_image.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// The user's own splits - built via the in-app builder, always fully
 /// editable - plus any split a trainer assigned them, which is listed
@@ -93,7 +94,7 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
       // split_detail_screen.dart.
       context.read<TodayController>().load(force: true);
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${split.name} is now your active split.')));
+          SnackBar(content: Text(tr('{name} is now your active split.', {'name': split.name}))));
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -101,7 +102,7 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ApiException.genericMessage)));
+          SnackBar(content: Text(ApiException.genericMessage)));
     }
   }
 
@@ -120,14 +121,14 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
       await repository.duplicate(split.splitId);
       if (!mounted) return;
       _controller.load(force: true);
-      _snack('${split.name} duplicated.');
+      _snack(tr('{name} duplicated.', {'name': split.name}));
     } on ApiException catch (e) {
       if (!mounted) return;
       _snack(
         e.userMessage,
         action: e.isForbidden
             ? SnackBarAction(
-                label: 'Upgrade',
+                label: tr('Upgrade'),
                 onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const PlansScreen())),
               )
@@ -143,16 +144,16 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete ${split.name}?'),
-        content: const Text(
-            'This removes the split and every day/exercise in it. This can\'t be undone.'),
+        title: Text(tr('Delete {name}?', {'name': split.name})),
+        content: Text(
+            tr('This removes the split and every day/exercise in it. This can\'t be undone.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -163,7 +164,7 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
       if (!mounted) return;
       _controller.load(force: true);
       if (isActive) context.read<TodayController>().load(force: true);
-      _snack('${split.name} deleted.');
+      _snack(tr('{name} deleted.', {'name': split.name}));
     } on ApiException catch (e) {
       if (!mounted) return;
       _snack(e.userMessage);
@@ -210,16 +211,16 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     MarkerTitleOverlap(
-                      title: const MarkerDrawnTitle('My Splits',
+                      title: MarkerDrawnTitle(tr('My Splits'),
                           playKey: 'my-splits'),
                       child: _CreateSplitCta(onTap: _openWizard),
                     ),
                     if (activeSplit == null) ...[
                       const SizedBox(height: AppSpacing.lg),
-                      Text('No active split yet',
+                      Text(tr('No active split yet'),
                           style: AppTypography.headlineSm),
                       const SizedBox(height: AppSpacing.xs),
-                      Text('Create one to get your training rolling.',
+                      Text(tr('Create one to get your training rolling.'),
                           style: AppTypography.bodyMd
                               .copyWith(color: AppColors.onSurfaceVariant)),
                     ],
@@ -232,7 +233,7 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const SizedBox(height: AppSpacing.lg),
-                            const SectionEyebrow('Your splits'),
+                            SectionEyebrow(tr('Your splits')),
                             const SizedBox(height: AppSpacing.sm),
                             for (final split in splits) ...[
                               if (split.isEditableByMe)
@@ -243,12 +244,12 @@ class _MySplitsScreenState extends State<MySplitsScreen> {
                                   borderRadius: AppRadius.card,
                                   actions: [
                                     SwipeAction(
-                                      label: 'Duplicate',
+                                      label: tr('Duplicate'),
                                       icon: Icons.copy_rounded,
                                       onTap: () => _duplicateSplit(split),
                                     ),
                                     SwipeAction(
-                                      label: 'Delete',
+                                      label: tr('Delete'),
                                       icon: Icons.delete_outline_rounded,
                                       isDestructive: true,
                                       onTap: () => _deleteSplit(split,
@@ -333,11 +334,11 @@ class _CreateSplitCta extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Create Split',
+                  Text(tr('Create Split'),
                       style: AppTypography.headlineSm
                           .copyWith(color: AppColors.onAccent)),
                   const SizedBox(height: 2),
-                  Text('One simple step at a time',
+                  Text(tr('One simple step at a time'),
                       style: AppTypography.bodySm.copyWith(
                           color: AppColors.onAccent.withOpacity(0.85))),
                 ],
@@ -419,7 +420,7 @@ class _MySplitCardState extends State<_MySplitCard> {
                           Icon(Icons.lock_rounded,
                               size: 12, color: AppColors.onSurfaceVariant),
                           const SizedBox(width: 6),
-                          Text('FROM YOUR TRAINER',
+                          Text(tr('FROM YOUR TRAINER'),
                               style: AppTypography.labelCaps.copyWith(
                                   color: AppColors.onSurfaceVariant)),
                         ],
@@ -442,7 +443,7 @@ class _MySplitCardState extends State<_MySplitCard> {
                           Icon(Icons.check_rounded,
                               size: 12, color: AppColors.onAccent),
                           const SizedBox(width: 6),
-                          Text('ACTIVE',
+                          Text(tr('ACTIVE'),
                               style: AppTypography.labelCaps
                                   .copyWith(color: AppColors.onAccent)),
                         ],
@@ -470,7 +471,7 @@ class _MySplitCardState extends State<_MySplitCard> {
                           children: [
                             _MetaPill(
                                 icon: Icons.calendar_view_week_rounded,
-                                label: '${split.durationDays} days'),
+                                label: trPlural(split.durationDays, '{n} day', '{n} days')),
                             _MetaPill(
                                 icon: Icons.trending_up_rounded,
                                 label: split.level),
@@ -478,7 +479,7 @@ class _MySplitCardState extends State<_MySplitCard> {
                         ),
                       ),
                       if (widget.isActive)
-                        Text('Active',
+                        Text(tr('Active'),
                             style: AppTypography.labelSm
                                 .copyWith(color: AppColors.accent))
                       else
@@ -490,7 +491,7 @@ class _MySplitCardState extends State<_MySplitCard> {
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
                             : IconButton(
-                                tooltip: 'Set as active split',
+                                tooltip: tr('Set as active split'),
                                 visualDensity: VisualDensity.compact,
                                 icon: Icon(Icons.play_circle_outline_rounded,
                                     color: AppColors.accent),
@@ -553,7 +554,7 @@ class _SuggestedSplitsRow extends StatelessWidget {
             Icon(Icons.auto_awesome_rounded, color: AppColors.accent),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Text('Suggested splits',
+              child: Text(tr('Suggested splits'),
                   style: AppTypography.bodyMd
                       .copyWith(fontWeight: FontWeight.w600)),
             ),

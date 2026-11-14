@@ -473,6 +473,12 @@
       return request('/api/admin/content/diet-plans/meals/' + encodeURIComponent(dietPlanMealId), 'DELETE');
     },
 
+    /* Download links report (users.read): opens per ?src tag over the last `days`
+       days (0 = all time), the installs credited to them and the leads behind those. */
+    getDownloadLinkReport: function (days) {
+      return request('/api/admin/download-links?days=' + encodeURIComponent(days || 0), 'GET');
+    },
+
     getUsers: function (search, limit) {
       var params = [];
       if (search) params.push('search=' + encodeURIComponent(search));

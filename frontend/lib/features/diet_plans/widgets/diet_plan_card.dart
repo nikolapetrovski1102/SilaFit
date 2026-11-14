@@ -11,6 +11,7 @@ import '../diet_plan_controller.dart';
 import '../diet_plan_detail_screen.dart';
 import '../diet_plan_models.dart';
 import '../diet_plan_repository.dart';
+import '../../../l10n/l10n.dart';
 
 /// One diet-plan catalogue card. Shared by the full "Diet Plans" catalog (full
 /// width) and the Nutrition screen's horizontal strips ([width]
@@ -74,7 +75,11 @@ class DietPlanCard extends StatelessWidget {
                                   .round(),
                             )
                           : Image.asset('assets/branding/split_hero.png',
-                              fit: BoxFit.cover),
+                              fit: BoxFit.cover,
+                              cacheWidth: ((width ??
+                                          MediaQuery.sizeOf(context).width) *
+                                      MediaQuery.devicePixelRatioOf(context))
+                                  .round()),
                     ),
                   ),
                   if (plan.isSystemDefault)
@@ -88,7 +93,7 @@ class DietPlanCard extends StatelessWidget {
                             color: AppColors.accent,
                             borderRadius:
                                 BorderRadius.circular(AppRadius.full)),
-                        child: Text('FEATURED',
+                        child: Text(tr('FEATURED'),
                             style: AppTypography.labelCaps
                                 .copyWith(color: AppColors.onAccent)),
                       ),
@@ -122,14 +127,14 @@ class DietPlanCard extends StatelessWidget {
                       children: [
                         _MetaPill(
                             icon: Icons.calendar_view_week_rounded,
-                            label: '${plan.durationDays} days'),
+                            label: trPlural(plan.durationDays, '{n} day', '{n} days')),
                         if (plan.isEditableByMe)
-                          const _MetaPill(
-                              icon: Icons.edit_rounded, label: 'Your plan')
+                          _MetaPill(
+                              icon: Icons.edit_rounded, label: tr('Your plan'))
                         else if (!plan.isSystemDefault)
-                          const _MetaPill(
+                          _MetaPill(
                               icon: Icons.restaurant_menu_rounded,
-                              label: 'From your coach'),
+                              label: tr('From your coach')),
                       ],
                     ),
                   ],

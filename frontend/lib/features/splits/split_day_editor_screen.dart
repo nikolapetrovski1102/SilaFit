@@ -17,6 +17,7 @@ import 'widgets/ink_field.dart';
 import 'widgets/muscle_focus_field.dart';
 import 'widgets/reorder_sheet.dart';
 import 'widgets/sets_reps_sheet.dart';
+import '../../l10n/l10n.dart';
 
 // New exercises start on the same target as the creation wizard's; tapping
 // a chip tunes it.
@@ -99,7 +100,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
       _loadSuggestions();
     } else {
       // Preset, fully selected - typing replaces it, submitting keeps it.
-      final preset = 'Awesome Day ${_dayIndex()}';
+      final preset = tr('Awesome Day {n}', {'n': _dayIndex()});
       _title = TextEditingController.fromValue(TextEditingValue(
         text: preset,
         selection: TextSelection(baseOffset: 0, extentOffset: preset.length),
@@ -252,7 +253,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('ABOUT HOW LONG?',
+              Text(tr('ABOUT HOW LONG?'),
                   style: AppTypography.labelCaps
                       .copyWith(color: AppColors.onSurfaceVariant)),
               const SizedBox(height: AppSpacing.sm),
@@ -285,15 +286,15 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this day?'),
-        content: const Text('Every exercise on this day goes with it.'),
+        title: Text(tr('Delete this day?')),
+        content: Text(tr('Every exercise on this day goes with it.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -485,8 +486,8 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
     FocusScope.of(context).unfocus();
     final order = await showReorderSheet<SplitDayExercise>(
       context,
-      title: 'Reorder exercises',
-      subtitle: 'Press and drag the handle to change what comes next.',
+      title: tr('Reorder exercises'),
+      subtitle: tr('Press and drag the handle to change what comes next.'),
       items: _savedExercises,
       idOf: (e) => e.splitDayExerciseId,
       titleOf: (e) => e.name,
@@ -563,13 +564,13 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
         if (exists && !_isRestDay && _savedExercises.length > 1)
           IconButton(
             icon: const Icon(Icons.reorder_rounded, size: 20),
-            tooltip: 'Reorder exercises',
+            tooltip: tr('Reorder exercises'),
             onPressed: _reorderExercises,
           ),
         if (exists)
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded, size: 20),
-            tooltip: 'Delete day',
+            tooltip: tr('Delete day'),
             onPressed: _deleteDay,
           ),
       ],
@@ -596,7 +597,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('DAY ${_dayIndex()}',
+              Text(tr('DAY {n}', {'n': _dayIndex()}),
                   style: AppTypography.labelCaps
                       .copyWith(color: AppColors.accent)),
               Text(
@@ -640,7 +641,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
 
   Widget _buildHeader() {
     final id = _splitDayId;
-    final eyebrowText = 'DAY ${_dayIndex()}';
+    final eyebrowText = tr('DAY {n}', {'n': _dayIndex()});
     final eyebrowStyle = AppTypography.labelCaps.copyWith(
         color: _isRestDay ? AppColors.onSurfaceVariant : AppColors.accent);
     final eyebrow = Text(eyebrowText, style: eyebrowStyle);
@@ -676,7 +677,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
             ),
             _MetaPill(
               icon: _isRestDay ? Icons.bedtime_rounded : Icons.bedtime_outlined,
-              label: 'Rest',
+              label: tr('Rest'),
               selected: _isRestDay,
               onTap: _toggleRest,
             ),
@@ -686,7 +687,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
         InkField(
           controller: _title,
           focusNode: _titleFocus,
-          hint: 'Name this day',
+          hint: tr('Name this day'),
           hero: true,
           heroTag: id == null ? null : dayTitleHeroTag(id),
           autofocus: widget.splitDayId == null,
@@ -713,9 +714,9 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
   Widget _buildBody() {
     final Widget child;
     if (_isRestDay) {
-      child = _note('A rest day - nothing to plan. Recovery counts too.');
+      child = _note(tr('A rest day - nothing to plan. Recovery counts too.'));
     } else if (_splitDayId == null) {
-      child = _note('Name the day, then add its exercises.');
+      child = _note(tr('Name the day, then add its exercises.'));
     } else {
       child = _buildExercises();
     }
@@ -795,7 +796,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
         InkField(
           controller: _search,
           focusNode: _searchFocus,
-          hint: 'Add exercise',
+          hint: tr('Add exercise'),
           style: AppTypography.headlineSm,
           textCapitalization: TextCapitalization.none,
           keepFocusOnSubmit: true,
@@ -829,7 +830,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
         if (query.isEmpty && items.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-            child: Text('SUGGESTED', style: AppTypography.labelCaps),
+            child: Text(tr('SUGGESTED'), style: AppTypography.labelCaps),
           ),
         Expanded(
           child: items.isEmpty
@@ -839,7 +840,7 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
                     opacity: query.isNotEmpty && !_searching ? 1 : 0,
                     duration: kInkQuick,
                     child: Text(
-                      'No matches for "$query"',
+                      tr('No matches for "{q}"', {'q': query}),
                       style: AppTypography.bodySm
                           .copyWith(color: AppColors.onSurfaceVariant),
                     ),
@@ -871,9 +872,9 @@ class _SplitDayEditorScreenState extends State<SplitDayEditorScreen> {
 
 String _formatMinutes(int minutes) {
   final h = minutes ~/ 60, m = minutes % 60;
-  if (h == 0) return '$m min';
-  if (m == 0) return '${h}h';
-  return '${h}h $m';
+  if (h == 0) return tr('{n} min', {'n': m});
+  if (m == 0) return tr('{h}h', {'h': h});
+  return tr('{h}h {m}', {'h': h, 'm': m});
 }
 
 /// A small tappable pill for the day's settings row.

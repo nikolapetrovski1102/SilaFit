@@ -1,22 +1,25 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import 'ram_mascot.dart';
+import '../../../l10n/l10n.dart';
 
 /// One thing Sila says: the expression to show and the words in the bubble.
 class MascotLine {
   final RamArt art;
-  final String text;
+  final String _text;
 
-  const MascotLine(this.art, this.text);
+  /// The line in the current UI language.
+  String get text => tr(_text);
+
+  const MascotLine(this.art, this._text);
 }
 
-/// Sila next to a speech bubble. The text types itself out while Sila
-/// bobs as if talking, then both settle. When the [line] changes, it talks
+/// Sila next to a speech bubble. Sila is scrubbed in (graffiti marker
+/// zigzag, see `ScribbleReveal`) and stays still while the text types itself
+/// out. When the [line] changes, Sila is scrubbed in again and it talks
 /// again. With reduced motion turned on, the full line appears at once.
 ///
 /// Screen readers get the whole line in one go ("Sila says: ..."), never
@@ -86,28 +89,25 @@ class _TalkingMascotState extends State<TalkingMascot>
     final text = widget.line.text;
     return Semantics(
       container: true,
-      label: '$mascotName says: $text',
+      label: tr('{name} says: {text}', {'name': mascotName, 'text': text}),
       child: ExcludeSemantics(
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
             final t = _controller.value;
-            final typed = ((t - _startDelay) / (1 - _startDelay))
-                .clamp(0.0, 1.0);
+            final typed =
+                ((t - _startDelay) / (1 - _startDelay)).clamp(0.0, 1.0);
             final visibleChars = (text.length * typed).round();
-            final talking = t > 0 && t < 1;
-            // A quick bob plus a slight squash while talking.
-            final wave = talking ? math.sin(t * math.pi * 14) : 0.0;
             return Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Transform(
-                  alignment: Alignment.bottomCenter,
-                  transform: Matrix4.identity()
-                    ..translateByDouble(0.0, -2.5 * wave.abs(), 0.0, 1.0)
-                    ..scaleByDouble(1 + 0.03 * wave, 1 - 0.03 * wave, 1.0, 1.0),
-                  child: RamMascot(widget.line.art,
-                      size: widget.mascotSize, excludeFromSemantics: true),
+                // Keyed by the line, so each new line scrubs Sila in afresh.
+                RamMascot(
+                  key: ValueKey((widget.line.art, widget.line.text)),
+                  widget.line.art,
+                  size: widget.mascotSize,
+                  excludeFromSemantics: true,
+                  scribbleIn: true,
                 ),
                 const SizedBox(width: AppSpacing.xs),
                 Flexible(

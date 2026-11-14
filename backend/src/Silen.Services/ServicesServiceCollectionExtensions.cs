@@ -22,10 +22,12 @@ public static class ServicesServiceCollectionExtensions
         services.AddScoped<IDietPlanService, DietPlanService>();
         services.AddScoped<IDietGuideService, DietGuideService>();
         services.AddScoped<ISupportService, SupportService>();
+        services.AddScoped<IDownloadLinkService, DownloadLinkService>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IMealPlanningService, MealPlanningService>();
         services.AddScoped<IFoodService, FoodService>();
+        services.AddSingleton<BarcodeOffTickets>();
         services.AddScoped<IFoodScanService, FoodScanService>();
         services.AddScoped<ILinkImportService, LinkImportService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
@@ -61,6 +63,16 @@ public static class ServicesServiceCollectionExtensions
         // one is still on tiktok.com, so a shared link can't point the server anywhere else.
         services.AddHttpClient<ILinkPreviewClient, TikTokPreviewClient>(client => client.Timeout = TimeSpan.FromSeconds(10))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        // Short timeout: the barcode scan waits on it, and a slow lookup should fall back to
+        // "add it yourself" rather than leave the user holding the camera. OFF asks API
+        // clients to identify themselves by app name in the User-Agent.
+        services.AddHttpClient<IOpenFoodFactsClient, OpenFoodFactsClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(6);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SilaFit/1.0 (+https://sila.fitness)");
+        });
+        // Same short timeout as OFF: it sits in front of OFF in the barcode lookup.
+        services.AddHttpClient<IPartnerFoodCatalogClient, PartnerFoodCatalogClient>(client => client.Timeout = TimeSpan.FromSeconds(4));
         services.AddHttpClient<IAppStoreServerClient, AppStoreServerClient>();
         services.AddHttpClient<IGooglePlayDeveloperClient, GooglePlayDeveloperClient>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();

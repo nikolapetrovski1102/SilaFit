@@ -51,7 +51,7 @@
       burger = document.createElement('button');
       burger.className = 'nav__burger';
       burger.type = 'button';
-      burger.setAttribute('aria-label', 'Menu');
+      burger.setAttribute('aria-label', document.documentElement.lang === 'mk' ? 'Мени' : 'Menu');
       burger.setAttribute('aria-expanded', 'false');
       burger.innerHTML =
         '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h16M4 16h16"/></svg>';
@@ -399,18 +399,15 @@
     burst(r.left + r.width / 2, r.top + r.height * 0.12, count);
   }
 
-  /* Sila celebrates when something good happens: a leap, a turn in the air
-     and a fist pump, with confetti on the landing (js/sila.js). Without
-     sila.js, the mascot just hops. */
+  /* Sila celebrates when something good happens: scrubbed in cheering,
+     with confetti once the scrub is done (js/sila.js), like the app's
+     celebration dialog. Without sila.js there's just the confetti. */
   function cheer(container, count) {
     var sila = container && (container.matches('.sila') ? container : container.querySelector('.sila'));
     if (sila && window.Sila && window.Sila.celebrate) {
       window.Sila.celebrate(sila, { onLand: function () { burstOver(sila, count); } });
       return;
     }
-    container.classList.remove('is-hopping');
-    void container.offsetWidth;
-    container.classList.add('is-hopping');
     burstFrom(container, count);
   }
 
@@ -418,9 +415,6 @@
   $$('.mascot, .closing__mascot').forEach(function (m) {
     m.style.cursor = 'pointer';
     m.addEventListener('click', function () { cheer(m, 60); });
-    m.addEventListener('animationend', function (e) {
-      if (e.animationName === 'mascot-hop') m.classList.remove('is-hopping');
-    });
   });
 
   var closing = document.querySelector('[data-closing]');

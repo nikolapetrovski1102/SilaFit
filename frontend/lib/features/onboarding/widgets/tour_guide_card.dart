@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../l10n/l10n.dart';
 
 /// Copy for each step of the post-onboarding feature tour, in order: Home,
 /// Splits, Progress, Nutrition, Settings. Shared by [RootShell] and the
@@ -355,7 +356,7 @@ class TourGuideCard extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   child: Text(
-                    'Skip',
+                    tr('Skip'),
                     style: AppTypography.bodyMd.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -425,7 +426,7 @@ class TourGuideCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        nextLabel,
+                        tr(nextLabel),
                         style: AppTypography.headlineSm.copyWith(
                           color: AppColors.onAccent,
                           fontSize: 14,

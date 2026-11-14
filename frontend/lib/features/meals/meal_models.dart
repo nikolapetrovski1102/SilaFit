@@ -117,6 +117,10 @@ class FoodItem {
   final double? fiberG;
   final double? sugarG;
   final double? sodiumMg;
+  final String? barcode;
+
+  /// Product photo (Open Food Facts), when the catalog has one.
+  final String? imageUrl;
   final bool isCustom;
 
   const FoodItem({
@@ -132,6 +136,8 @@ class FoodItem {
     this.fiberG,
     this.sugarG,
     this.sodiumMg,
+    this.barcode,
+    this.imageUrl,
     this.isCustom = false,
   });
 
@@ -150,6 +156,8 @@ class FoodItem {
       fiberG: _toNullableDouble(map['fiberG']),
       sugarG: _toNullableDouble(map['sugarG']),
       sodiumMg: _toNullableDouble(map['sodiumMg']),
+      barcode: map['barcode'] as String?,
+      imageUrl: map['imageUrl'] as String?,
       isCustom: map['isCustom'] as bool? ?? false,
     );
   }
@@ -425,19 +433,121 @@ class MealSuggestion {
   }
 }
 
-/// Mirrors `Silen.Common.Dtos.FoodScanQuotaDto` - the Advanced-only AI photo
-/// scan allowance for the user's current local day.
+/// Mirrors `Silen.Common.Dtos.BarcodeLookupResultDto` - a scanned package
+/// barcode. [food] is set when the catalog (or a live Open Food Facts lookup)
+/// has it; otherwise [hint] may still name the product for the "add it" form.
+/// [checkOpenFoodFacts]: the catalog missed and the app should ask Open Food
+/// Facts from the device (see `MealRepository.lookupBarcode`).
+class BarcodeLookupResult {
+  final String barcode;
+  final FoodItem? food;
+  final BarcodeProductHint? hint;
+  final bool checkOpenFoodFacts;
+
+  const BarcodeLookupResult(
+      {required this.barcode,
+      this.food,
+      this.hint,
+      this.checkOpenFoodFacts = false});
+
+  bool get found => food != null;
+
+  factory BarcodeLookupResult.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return BarcodeLookupResult(
+      barcode: map['barcode'] as String? ?? '',
+      food: map['food'] == null ? null : FoodItem.fromJson(map['food']),
+      hint:
+          map['hint'] == null ? null : BarcodeProductHint.fromJson(map['hint']),
+      checkOpenFoodFacts: map['checkOpenFoodFacts'] as bool? ?? false,
+    );
+  }
+}
+
+class BarcodeProductHint {
+  final String? name;
+  final String? brandName;
+  final String? imageUrl;
+  final double? servingSizeG;
+
+  const BarcodeProductHint(
+      {this.name, this.brandName, this.imageUrl, this.servingSizeG});
+
+  factory BarcodeProductHint.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return BarcodeProductHint(
+      name: map['name'] as String?,
+      brandName: map['brandName'] as String?,
+      imageUrl: map['imageUrl'] as String?,
+      servingSizeG: _toNullableDouble(map['servingSizeG']),
+    );
+  }
+}
+
+/// Mirrors `Silen.Common.Dtos.NutritionLabelResultDto` - a nutrition-table
+/// photo read into per-100 g values. Null means the label didn't show it.
+class NutritionLabelResult {
+  final bool isLabel;
+  final String? productName;
+  final String? brandName;
+  final double? servingSizeG;
+  final double? caloriesKcal;
+  final double? proteinG;
+  final double? carbohydrateG;
+  final double? fatG;
+  final double? fiberG;
+  final double? sugarG;
+  final double? sodiumMg;
+
+  const NutritionLabelResult({
+    required this.isLabel,
+    this.productName,
+    this.brandName,
+    this.servingSizeG,
+    this.caloriesKcal,
+    this.proteinG,
+    this.carbohydrateG,
+    this.fatG,
+    this.fiberG,
+    this.sugarG,
+    this.sodiumMg,
+  });
+
+  factory NutritionLabelResult.fromJson(dynamic json) {
+    final map = json as Map<String, dynamic>;
+    return NutritionLabelResult(
+      isLabel: map['isLabel'] as bool? ?? false,
+      productName: map['productName'] as String?,
+      brandName: map['brandName'] as String?,
+      servingSizeG: _toNullableDouble(map['servingSizeG']),
+      caloriesKcal: _toNullableDouble(map['caloriesKcal']),
+      proteinG: _toNullableDouble(map['proteinG']),
+      carbohydrateG: _toNullableDouble(map['carbohydrateG']),
+      fatG: _toNullableDouble(map['fatG']),
+      fiberG: _toNullableDouble(map['fiberG']),
+      sugarG: _toNullableDouble(map['sugarG']),
+      sodiumMg: _toNullableDouble(map['sodiumMg']),
+    );
+  }
+}
+
+/// Mirrors `Silen.Common.Dtos.FoodScanQuotaDto`. [isAvailable]: the AI meal
+/// photo scan (Advanced), with [usedToday]/[remainingToday] for the user's
+/// current local day. [barcodeAvailable]: whether a barcode scan will go
+/// through (Pro and Advanced always; Free only while its tries last).
 class FoodScanQuota {
   final bool isAvailable;
   final int dailyLimit;
   final int usedToday;
   final int remainingToday;
+  final bool barcodeAvailable;
 
   const FoodScanQuota({
     required this.isAvailable,
     required this.dailyLimit,
     required this.usedToday,
     required this.remainingToday,
+    this.barcodeAvailable = true,
   });
 
   factory FoodScanQuota.fromJson(dynamic json) {
@@ -447,6 +557,7 @@ class FoodScanQuota {
       dailyLimit: map['dailyLimit'] as int? ?? 0,
       usedToday: map['usedToday'] as int? ?? 0,
       remainingToday: map['remainingToday'] as int? ?? 0,
+      barcodeAvailable: map['barcodeAvailable'] as bool? ?? true,
     );
   }
 }

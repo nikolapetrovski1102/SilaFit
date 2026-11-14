@@ -6,6 +6,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/section_eyebrow.dart';
 import '../meal_models.dart';
+import '../../../l10n/l10n.dart';
 
 /// One card in the horizontal "Suggested this month" strip - tapping it
 /// hands the suggestion to [onTap], which opens the quick-add sheet
@@ -57,8 +58,7 @@ class MealSuggestionCard extends StatelessWidget {
                     label: '${suggestion.caloriesKcal} kcal',
                   ),
                   _MacroChip(
-                    label: '${suggestion.proteinG}P · '
-                        '${suggestion.carbsG}C · ${suggestion.fatsG}F',
+                    label: tr('{p}P · {c}C · {f}F', {'p': suggestion.proteinG, 'c': suggestion.carbsG, 'f': suggestion.fatsG}),
                   ),
                 ],
               ),

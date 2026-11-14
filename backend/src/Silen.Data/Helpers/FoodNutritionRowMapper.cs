@@ -1,4 +1,5 @@
 using Npgsql;
+using Silen.Common.Dtos;
 using Silen.Common.Models;
 
 namespace Silen.Data.Helpers;
@@ -21,6 +22,15 @@ public static class FoodNutritionRowMapper
         FiberG = reader.GetNullableDecimal("FiberG"),
         SugarG = reader.GetNullableDecimal("SugarG"),
         SodiumMg = reader.GetNullableDecimal("SodiumMg"),
+        ImageUrl = reader.GetNullableString("ImageUrl"),
         IsCustom = reader.GetBoolValue("IsCustom")
+    };
+
+    /// <summary>dbo.foodnutrition_getbarcodesuggestion: another user's name for a product.</summary>
+    public static BarcodeProductHintDto MapBarcodeSuggestion(NpgsqlDataReader reader) => new()
+    {
+        Name = reader.GetNullableString("Name"),
+        BrandName = reader.GetNullableString("BrandName"),
+        ServingSizeG = reader.GetNullableDecimal("ServingSizeG")
     };
 }

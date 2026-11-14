@@ -81,6 +81,9 @@ class _DietGuideDetailScreenState extends State<DietGuideDetailScreen> {
                 child: Image.network(
                   imageUrl,
                   fit: BoxFit.cover,
+                  cacheWidth: (MediaQuery.sizeOf(context).width *
+                          MediaQuery.devicePixelRatioOf(context))
+                      .round(),
                   errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),

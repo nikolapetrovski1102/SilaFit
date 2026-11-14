@@ -1,4 +1,5 @@
 using Silen.Common.Dtos;
+using Silen.Common.Localization;
 using Silen.Common.Models;
 using Silen.Data.Abstractions;
 using Silen.Data.Helpers;
@@ -38,15 +39,26 @@ public sealed class NotificationProvider(ISqlExecutor sqlExecutor) : INotificati
             cancellationToken);
 
     public Task RecordInteractionAsync(
-        Guid userId, DateTime atUtc, Guid? notificationId, CancellationToken cancellationToken = default) =>
+        Guid userId, DateTime atUtc, Guid? notificationId, string? language, CancellationToken cancellationToken = default) =>
         sqlExecutor.ExecuteAsync(
             "dbo.usp_Notification_RecordInteraction",
             [
                 SqlParameterBuilder.Create("@UserId", userId),
                 SqlParameterBuilder.Create("@AtUtc", atUtc),
-                SqlParameterBuilder.Create("@NotificationId", notificationId)
+                SqlParameterBuilder.Create("@NotificationId", notificationId),
+                SqlParameterBuilder.Create("@Language", language is null ? null : AppText.Normalize(language))
             ],
             cancellationToken);
+
+    public async Task<string> GetUserLanguageAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var language = await sqlExecutor.QueryAsync(
+            "dbo.usp_Notification_GetUserLanguage",
+            [SqlParameterBuilder.Create("@UserId", userId)],
+            reader => SqlResultSetReader.ReadSingleOrDefaultAsync(reader, r => r.GetNullableString("Language"), cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+        return AppText.Normalize(language);
+    }
 
     public Task<List<NotificationCandidateModel>> GetCandidatesAsync(int maxUsers, CancellationToken cancellationToken = default) =>
         sqlExecutor.QueryAsync(

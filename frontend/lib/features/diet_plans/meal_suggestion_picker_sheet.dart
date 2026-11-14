@@ -12,6 +12,7 @@ import '../meals/meal_controller.dart';
 import '../meals/meal_models.dart';
 import '../meals/meal_recommendation.dart';
 import '../meals/meal_repository.dart';
+import '../../l10n/l10n.dart';
 
 /// Search-and-pick sheet backed by `GET /api/meals/suggestions` - the
 /// diet-plan-builder equivalent of `ExercisePickerSheet`. [mealType], when
@@ -134,14 +135,14 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Choose a meal', style: AppTypography.headlineMd),
+            Text(tr('Choose a meal'), style: AppTypography.headlineMd),
             const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _searchController,
               autofocus: false,
               onChanged: _onQueryChanged,
-              decoration: const InputDecoration(
-                hintText: 'Search meals',
+              decoration: InputDecoration(
+                hintText: tr('Search meals'),
                 prefixIcon: Icon(Icons.search_rounded),
               ),
             ),
@@ -151,14 +152,14 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
               child: Row(
                 children: [
                   _FilterChip(
-                    label: 'All',
+                    label: tr('All'),
                     selected: _mealTypeFilter == null,
                     onTap: () => setState(() => _mealTypeFilter = null),
                   ),
                   for (final type in kMealTypes) ...[
                     const SizedBox(width: AppSpacing.xxs),
                     _FilterChip(
-                      label: type,
+                      label: tr(type),
                       selected: _mealTypeFilter == type,
                       onTap: () => setState(() => _mealTypeFilter = type),
                     ),
@@ -193,7 +194,7 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
                 textAlign: TextAlign.center,
                 style: AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: AppSpacing.sm),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(onPressed: _load, child: Text(tr('Retry'))),
           ],
         ),
       );
@@ -201,7 +202,7 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
     final results = _rankedFiltered;
     if (results.isEmpty) {
       return Center(
-        child: Text('No meals match this filter.',
+        child: Text(tr('No meals match this filter.'),
             style: AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant)),
       );
     }
@@ -221,7 +222,7 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
               // suggestion - labelling it makes that visible instead of implied.
               if (index == 0) ...[
                 const SizedBox(width: AppSpacing.xs),
-                Text('BEST MATCH',
+                Text(tr('BEST MATCH'),
                     style: AppTypography.labelCaps
                         .copyWith(color: AppColors.accent)),
               ],
@@ -231,8 +232,7 @@ class _MealSuggestionPickerSheetState extends State<MealSuggestionPickerSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${suggestion.mealType} • ${suggestion.caloriesKcal} kcal • '
-                '${suggestion.proteinG}g protein',
+                tr('{type} • {kcal} kcal • {p}g protein', {'type': tr(suggestion.mealType), 'kcal': suggestion.caloriesKcal, 'p': suggestion.proteinG}),
                 style: AppTypography.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant),
               ),

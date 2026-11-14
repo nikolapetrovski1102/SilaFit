@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api/api_exception.dart';
@@ -14,6 +15,7 @@ import '../../progress/progress_models.dart';
 import '../../progress/progress_repository.dart';
 import 'set_history_screen.dart';
 import 'day_preview.dart';
+import '../../../l10n/l10n.dart';
 
 /// Opens the streak history sheet - tapped from the streak badge on Home.
 /// Shows the last 12 weeks of sessions as a small calendar so the user can
@@ -108,7 +110,7 @@ class _StreakHistorySheetState extends State<StreakHistorySheet> {
     } catch (_) {
       if (!mounted) return;
       setState(() =>
-          _state = const ResourceState.error(ApiException.genericMessage));
+          _state = ResourceState.error(ApiException.genericMessage));
     }
   }
 
@@ -130,7 +132,7 @@ class _StreakHistorySheetState extends State<StreakHistorySheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${widget.currentStreakDays} day streak',
+                      Text(trPlural(widget.currentStreakDays, '{n} day streak', '{n} day streak'),
                           style: AppTypography.headlineMd),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
@@ -145,17 +147,17 @@ class _StreakHistorySheetState extends State<StreakHistorySheet> {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'This week is ${widget.weeklyCompliancePercent} percent complete.',
+              tr('This week is {p} percent complete.', {'p': widget.weeklyCompliancePercent}),
               style: AppTypography.bodyMd
                   .copyWith(color: AppColors.onSurfaceVariant),
             ),
             const SizedBox(height: AppSpacing.lg),
-            const SectionEyebrow('Consistency history'),
+            SectionEyebrow(tr('Consistency history')),
             const SizedBox(height: AppSpacing.xxs),
             Text(
               _isPaid
-                  ? 'Tap a completed day from the last $_paidHistoryDays days to see its sets.'
-                  : 'Tap a completed day from the last $_freeHistoryDays days to see its sets. Pro shows the full month.',
+                  ? tr('Tap a completed day from the last {n} days to see its sets.', {'n': _paidHistoryDays})
+                  : tr('Tap a completed day from the last {n} days to see its sets. Pro shows the full month.', {'n': _freeHistoryDays}),
               style: AppTypography.bodySm
                   .copyWith(color: AppColors.onSurfaceVariant),
             ),
@@ -177,13 +179,13 @@ class _StreakHistorySheetState extends State<StreakHistorySheet> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            const Wrap(
+            Wrap(
               spacing: AppSpacing.md,
               runSpacing: AppSpacing.xs,
               children: [
-                _LegendItem(status: 'Completed', label: 'Completed'),
-                _LegendItem(status: 'ActiveRest', label: 'Rest day'),
-                _LegendItem(status: 'Missed', label: 'Missed'),
+                _LegendItem(status: 'Completed', label: tr('Completed')),
+                _LegendItem(status: 'ActiveRest', label: tr('Rest day')),
+                _LegendItem(status: 'Missed', label: tr('Missed')),
               ],
             ),
           ],
@@ -251,7 +253,12 @@ class _HistoryGrid extends StatelessWidget {
     return _DayAccess.none;
   }
 
-  static const _weekdayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  /// Monday-first narrow weekday letters in the current language
+  /// (1 Jan 2024 was a Monday).
+  static List<String> get _weekdayLetters => [
+        for (var i = 0; i < 7; i++)
+          DateFormat.EEEEE().format(DateTime(2024, 1, 1 + i)).toUpperCase(),
+      ];
 
   List<List<HeatmapDay?>> _groupByWeek() {
     final sorted = [...days]..sort((a, b) => a.date.compareTo(b.date));
@@ -278,7 +285,7 @@ class _HistoryGrid extends StatelessWidget {
     if (days.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-        child: Text('No sessions logged yet.',
+        child: Text(tr('No sessions logged yet.'),
             textAlign: TextAlign.center,
             style: AppTypography.bodyMd
                 .copyWith(color: AppColors.onSurfaceVariant)),
@@ -320,8 +327,8 @@ class _HistoryGrid extends StatelessWidget {
     return Semantics(
       button: true,
       label: access == _DayAccess.locked
-          ? 'Completed day, history requires Pro'
-          : 'View sets for this day',
+          ? tr('Completed day, history requires Pro')
+          : tr('View sets for this day'),
       child: InkResponse(
         radius: 20,
         onTap: () => onOpenDay(day!, locked: access == _DayAccess.locked),
@@ -409,9 +416,11 @@ class _HistoryDot extends StatelessWidget {
 /// its next stage (see [StreakFire]).
 String _streakCaption(int streakDays) {
   final next = StreakFire.nextStageAt(streakDays);
-  if (streakDays <= 0) return 'Finish a workout to light your streak.';
-  if (next == null) return "You're on fire. Keep it blazing!";
+  if (streakDays <= 0) return tr('Finish a workout to light your streak.');
+  if (next == null) return tr("You're on fire. Keep it blazing!");
   final left = next - streakDays;
-  final stage = next == StreakFire.hotAt ? 'burns hotter' : 'is blazing';
-  return '$left more ${left == 1 ? 'day' : 'days'} until your fire $stage.';
+  final stage = next == StreakFire.hotAt;
+  return stage
+      ? trPlural(left, '{n} more day until your fire burns hotter.', '{n} more days until your fire burns hotter.')
+      : trPlural(left, '{n} more day until your fire is blazing.', '{n} more days until your fire is blazing.');
 }

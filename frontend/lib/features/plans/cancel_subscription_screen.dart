@@ -13,6 +13,7 @@ import '../progress/progress_repository.dart';
 import 'plans_controller.dart';
 import 'plans_models.dart';
 import '../../core/widgets/marker_drawn_title.dart';
+import '../../l10n/l10n.dart';
 
 /// Three-step retention flow ahead of the store's cancel screen, opened from
 /// the plan list when a paying user picks Free or "Cancel subscription": a "stay"
@@ -122,10 +123,10 @@ class _CancelSubscriptionScreenState extends State<CancelSubscriptionScreen> {
       0 => (
           _StayStep(subscription: sub),
           _Actions(
-            primaryLabel: 'Keep SilaFit ${sub.planName}',
+            primaryLabel: tr('Keep SilaFit {plan}', {'plan': sub.planName}),
             onPrimary: _keep,
             secondaryLabel: switch (cheaper) {
-              final tier? => 'Switch to ${tier.plan.name} instead',
+              final tier? => tr('Switch to {plan} instead', {'plan': tier.plan.name}),
               null => null,
             },
             onSecondary: cheaper == null ? null : () => _switchTo(cheaper),
@@ -135,7 +136,7 @@ class _CancelSubscriptionScreenState extends State<CancelSubscriptionScreen> {
       1 => (
           _LossStep(history: _history, features: _currentFeatures(catalog)),
           _Actions(
-            primaryLabel: 'Keep my progress',
+            primaryLabel: tr('Keep my progress'),
             onPrimary: _keep,
             onContinue: _next,
           ),
@@ -143,9 +144,9 @@ class _CancelSubscriptionScreenState extends State<CancelSubscriptionScreen> {
       _ => (
           _StoreStep(subscription: sub),
           _Actions(
-            primaryLabel: 'Keep SilaFit ${sub.planName}',
+            primaryLabel: tr('Keep SilaFit {plan}', {'plan': sub.planName}),
             onPrimary: _keep,
-            secondaryLabel: 'Open $storeName subscriptions',
+            secondaryLabel: tr('Open {store} subscriptions', {'store': storeName}),
             onSecondary: () async {
               await openManageSubscriptions();
               if (mounted) _keep();
@@ -174,15 +175,15 @@ class _CancelSubscriptionScreenState extends State<CancelSubscriptionScreen> {
                         IconButton(
                           icon: Icon(Icons.arrow_back_rounded,
                               color: AppColors.onSurface),
-                          tooltip: 'Back',
+                          tooltip: tr('Back'),
                           onPressed: _back,
                         ),
                         Expanded(
-                          child: Text('Cancel subscription',
+                          child: Text(tr('Cancel subscription'),
                               style: AppTypography.bodyMd
                                   .copyWith(fontWeight: FontWeight.w600)),
                         ),
-                        Text('${_step + 1} of $_stepCount',
+                        Text(tr('{n} of {total}', {'n': _step + 1, 'total': _stepCount}),
                             style: AppTypography.bodySm
                                 .copyWith(color: AppColors.onSurfaceVariant)),
                       ],
@@ -216,7 +217,7 @@ class _CancelSubscriptionScreenState extends State<CancelSubscriptionScreen> {
 }
 
 String _formatDate(DateTime? utc) => utc == null
-    ? 'the end of this period'
+    ? tr('the end of this period')
     : DateFormat.yMMMd().format(utc.toLocal());
 
 class _StayStep extends StatelessWidget {
@@ -232,12 +233,12 @@ class _StayStep extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        MarkerDrawnTitle("We'd hate to see you go", playKey: 'cancel-1'),
+        MarkerDrawnTitle(tr("We'd hate to see you go"), playKey: 'cancel-1'),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'If you cancel, SilaFit ${sub.planName} stays active until '
-          '${_formatDate(sub.expiresAtUtc)}. After that your account moves '
-          'to the Free plan and premium features lock.',
+          tr('If you cancel, SilaFit {plan} stays active until '
+          '{date}. After that your account moves '
+          'to the Free plan and premium features lock.', {'plan': sub.planName, 'date': _formatDate(sub.expiresAtUtc)}),
           style:
               AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
         ),
@@ -245,15 +246,15 @@ class _StayStep extends StatelessWidget {
         SectionCard(
           child: Column(
             children: [
-              _DetailRow(label: 'Plan', value: 'SilaFit ${sub.planName}'),
+              _DetailRow(label: tr('Plan'), value: 'SilaFit ${sub.planName}'),
               const SizedBox(height: AppSpacing.xs),
               _DetailRow(
-                  label: 'Billing',
-                  value: sub.billingCycle ?? 'Subscription',
+                  label: tr('Billing'),
+                  value: sub.billingCycle ?? tr('Subscription'),
                   style: muted),
               const SizedBox(height: AppSpacing.xs),
               _DetailRow(
-                label: sub.autoRenewing ? 'Renews' : 'Ends',
+                label: sub.autoRenewing ? tr('Renews') : tr('Ends'),
                 value: _formatDate(sub.expiresAtUtc),
                 style: muted,
               ),
@@ -292,8 +293,8 @@ class _LossStep extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
-                  'Premium insights built from your training stop updating '
-                  'once your plan ends.',
+                  tr('Premium insights built from your training stop updating '
+                  'once your plan ends.'),
                   style: AppTypography.bodySm
                       .copyWith(color: AppColors.onErrorContainer),
                 ),
@@ -309,7 +310,7 @@ class _LossStep extends StatelessWidget {
                     .copyWith(color: AppColors.accent)),
           ),
           Center(
-            child: Text('workouts completed this year',
+            child: Text(tr('workouts completed this year'),
                 style: AppTypography.bodyMd
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ),
@@ -318,20 +319,20 @@ class _LossStep extends StatelessWidget {
             child: Column(
               children: [
                 _DetailRow(
-                    label: 'Volume lifted',
+                    label: tr('Volume lifted'),
                     value:
                         '${NumberFormat.decimalPattern().format(h.tonnageKg.round())} kg'),
                 const SizedBox(height: AppSpacing.xs),
-                _DetailRow(label: 'Exercises tracked', value: '${h.exercises}'),
+                _DetailRow(label: tr('Exercises tracked'), value: '${h.exercises}'),
                 const SizedBox(height: AppSpacing.xs),
                 _DetailRow(
-                    label: 'Current streak', value: '${h.streakDays} days'),
+                    label: tr('Current streak'), value: trPlural(h.streakDays, '{n} day', '{n} days')),
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
         ] else ...[
-          MarkerDrawnTitle("You're about to lose", playKey: 'cancel-2'),
+          MarkerDrawnTitle(tr("You're about to lose"), playKey: 'cancel-2'),
           const SizedBox(height: AppSpacing.lg),
         ],
         if (features.isNotEmpty)
@@ -339,7 +340,7 @@ class _LossStep extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Included in your plan',
+                Text(tr('Included in your plan'),
                     style: AppTypography.bodyMd
                         .copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: AppSpacing.xs),
@@ -376,13 +377,13 @@ class _StoreStep extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        MarkerDrawnTitle('Cancel in $storeName', playKey: 'cancel-3'),
+        MarkerDrawnTitle(tr('Cancel in {store}', {'store': storeName}), playKey: 'cancel-3'),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          '$storeName manages your subscription, so the last step happens '
+          tr('{store} manages your subscription, so the last step happens '
           'there. You keep full access until '
-          '${_formatDate(subscription.expiresAtUtc)}, and your workouts, '
-          'meals and history stay on your account.',
+          '{date}, and your workouts, '
+          'meals and history stay on your account.', {'store': storeName, 'date': _formatDate(subscription.expiresAtUtc)}),
           style:
               AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
         ),
@@ -452,7 +453,7 @@ class _Actions extends StatelessWidget {
             style: TextButton.styleFrom(
                 minimumSize: const Size(0, 44),
                 padding: const EdgeInsets.symmetric(horizontal: 12)),
-            child: Text('Continue to cancel',
+            child: Text(tr('Continue to cancel'),
                 style: AppTypography.bodySm
                     .copyWith(fontSize: 14, color: AppColors.onSurfaceVariant)),
           ),

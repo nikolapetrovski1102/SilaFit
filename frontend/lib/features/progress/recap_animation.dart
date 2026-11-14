@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../l10n/l10n.dart';
 
 /// Theme the vector paints before parsing, including gradient color stops.
 /// Source files remain intact; each composition is cached once per palette.
@@ -134,7 +135,7 @@ class _RecapAnimationStageState extends State<RecapAnimationStage> {
   @override
   Widget build(BuildContext context) => Semantics(
         button: true,
-        label: 'Replay animation',
+        label: tr('Replay animation'),
         onTap: _restart,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,

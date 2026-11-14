@@ -50,7 +50,7 @@ internal sealed class SqlFoodWriter : IAsyncDisposable
                 sourcefoodid varchar(120) COLLATE ci, sourceurl varchar(1000) COLLATE ci,
                 servingsizeg numeric(12,3), calorieskcal numeric(12,3), proteing numeric(12,3),
                 carbohydrateg numeric(12,3), fatg numeric(12,3), fiberg numeric(12,3), sugarg numeric(12,3),
-                sodiummg numeric(12,3), isbranded boolean, contenthash bytea
+                sodiummg numeric(12,3), isbranded boolean, contenthash bytea, imageurl varchar(1000) COLLATE ci
             ) ON COMMIT DROP;
             """, connection, transaction))
         {
@@ -60,7 +60,7 @@ internal sealed class SqlFoodWriter : IAsyncDisposable
         await using (var import = await connection.BeginBinaryImportAsync("""
             COPY foodnutritionimport (name, normalizedname, brandname, barcode, datatype, sourcename, sourcefoodid,
                 sourceurl, servingsizeg, calorieskcal, proteing, carbohydrateg, fatg, fiberg, sugarg, sodiummg,
-                isbranded, contenthash) FROM STDIN (FORMAT BINARY)
+                isbranded, contenthash, imageurl) FROM STDIN (FORMAT BINARY)
             """, cancellationToken))
         {
             foreach (var row in batch)
@@ -81,6 +81,7 @@ internal sealed class SqlFoodWriter : IAsyncDisposable
                 }
                 await import.WriteAsync(row.IsBranded, NpgsqlDbType.Boolean, cancellationToken);
                 await import.WriteAsync(row.ContentHash, NpgsqlDbType.Bytea, cancellationToken);
+                await WriteText(import, Fit(row.ImageUrl, 1000), cancellationToken);
             }
             await import.CompleteAsync(cancellationToken);
         }
@@ -92,11 +93,11 @@ internal sealed class SqlFoodWriter : IAsyncDisposable
             (
                 name, normalizedname, brandname, barcode, datatype, sourcename, sourcefoodid, sourceurl,
                 servingsizeg, calorieskcal, proteing, carbohydrateg, fatg, fiberg, sugarg, sodiummg,
-                isbranded, contenthash
+                isbranded, contenthash, imageurl
             )
             SELECT s.name, s.normalizedname, s.brandname, s.barcode, s.datatype, s.sourcename, s.sourcefoodid,
                    s.sourceurl, s.servingsizeg, s.calorieskcal, s.proteing, s.carbohydrateg, s.fatg, s.fiberg,
-                   s.sugarg, s.sodiummg, s.isbranded, s.contenthash
+                   s.sugarg, s.sodiummg, s.isbranded, s.contenthash, s.imageurl
             FROM
             (
                 SELECT i.*, ROW_NUMBER() OVER (PARTITION BY sourcename, sourcefoodid ORDER BY sourcefoodid) AS sourcerank,
@@ -112,7 +113,8 @@ internal sealed class SqlFoodWriter : IAsyncDisposable
                 servingsizeg = excluded.servingsizeg, calorieskcal = excluded.calorieskcal,
                 proteing = excluded.proteing, carbohydrateg = excluded.carbohydrateg, fatg = excluded.fatg,
                 fiberg = excluded.fiberg, sugarg = excluded.sugarg, sodiummg = excluded.sodiummg,
-                isbranded = excluded.isbranded, importedatutc = dbo.sysutcdatetime();
+                isbranded = excluded.isbranded,
+                imageurl = COALESCE(excluded.imageurl, dbo.foodnutrition.imageurl), importedatutc = dbo.sysutcdatetime();
             """, connection, transaction))
         {
             merge.CommandTimeout = 0;

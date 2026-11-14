@@ -7,12 +7,15 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart' show AppRadius, AppSpacing;
 import '../theme/app_typography.dart';
+import '../../l10n/l10n.dart';
 
 class NavTab {
-  final String label;
+  final String _label;
   final IconData icon;
 
-  const NavTab(this.label, this.icon);
+  const NavTab(this._label, this.icon);
+
+  String get label => tr(_label);
 }
 
 const kSilenNavTabs = [

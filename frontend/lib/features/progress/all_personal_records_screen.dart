@@ -10,6 +10,7 @@ import '../../core/widgets/skeleton.dart';
 import 'progress_models.dart';
 import 'progress_repository.dart';
 import 'widgets/personal_record_tile.dart';
+import '../../l10n/l10n.dart';
 
 /// Every exercise the account has a logged Personal Record for - not just the
 /// top-3 preview the Progress tab's card shows. Fetches independently of
@@ -48,7 +49,7 @@ class _AllPersonalRecordsScreenState extends State<AllPersonalRecordsScreen> {
       setState(() => _state = ResourceState.error(e.userMessage));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _state = const ResourceState.error(ApiException.genericMessage));
+      setState(() => _state = ResourceState.error(ApiException.genericMessage));
     }
   }
 
@@ -59,7 +60,7 @@ class _AllPersonalRecordsScreenState extends State<AllPersonalRecordsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Personal Records', style: AppTypography.headlineSm),
+        title: Text(tr('Personal Records'), style: AppTypography.headlineSm),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -73,7 +74,7 @@ class _AllPersonalRecordsScreenState extends State<AllPersonalRecordsScreen> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 64),
                   child: Center(
-                    child: Text('Log a set during a workout to start tracking PRs.',
+                    child: Text(tr('Log a set during a workout to start tracking PRs.'),
                         style: AppTypography.bodySm
                             .copyWith(color: AppColors.onSurfaceVariant)),
                   ),

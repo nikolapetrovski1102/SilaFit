@@ -101,7 +101,9 @@ public static class TrainerDocumentRowMapper
         DiscountLabel = reader.GetNullableString("DiscountLabel"),
         ShopUrl = reader.GetNullableString("ShopUrl"),
         Category = reader.GetStringValue("Category"),
-        SortOrder = reader.GetInt32Value("SortOrder")
+        SortOrder = reader.GetInt32Value("SortOrder"),
+        OrdersIngredients = reader.GetBoolValue("OrdersIngredients"),
+        SearchUrl = reader.GetNullableString("SearchUrl")
     };
 
     public static AdminSupplementProviderModel MapAdminProvider(NpgsqlDataReader reader) => new()
@@ -116,8 +118,20 @@ public static class TrainerDocumentRowMapper
         Category = reader.GetStringValue("Category"),
         IsActive = reader.GetBoolValue("IsActive"),
         SortOrder = reader.GetInt32Value("SortOrder"),
+        OrdersIngredients = reader.GetBoolValue("OrdersIngredients"),
+        SearchUrl = reader.GetNullableString("SearchUrl"),
+        BarcodeCatalogEnabled = reader.GetBoolValue("BarcodeCatalogEnabled"),
+        BarcodeCatalogUrl = reader.GetNullableString("BarcodeCatalogUrl"),
+        HasBarcodeCatalogApiKey = reader.GetBoolValue("HasBarcodeCatalogApiKey"),
         CreatedAtUtc = reader.GetDateTimeValue("CreatedAtUtc"),
         UpdatedAtUtc = reader.GetDateTimeValue("UpdatedAtUtc")
+    };
+
+    public static PartnerBarcodeCatalogModel MapBarcodeCatalog(NpgsqlDataReader reader) => new()
+    {
+        Name = reader.GetStringValue("Name"),
+        ProductUrl = reader.GetStringValue("ProductUrl"),
+        ApiKey = reader.GetNullableString("ApiKey")
     };
 
     public static MealRecipeModel MapRecipeHeader(NpgsqlDataReader reader) => new()

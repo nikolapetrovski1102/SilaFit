@@ -17,8 +17,13 @@ public interface INotificationProvider
 
     Task<List<UserDeviceTokenModel>> GetActiveDeviceTokensAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>Records that the user used the app. <paramref name="language"/> is the app's
+    /// UI language at the time; it is stored so scheduled pushes go out in it.</summary>
     Task RecordInteractionAsync(
-        Guid userId, DateTime atUtc, Guid? notificationId, CancellationToken cancellationToken = default);
+        Guid userId, DateTime atUtc, Guid? notificationId, string? language, CancellationToken cancellationToken = default);
+
+    /// <summary>The user's stored app language ("en" or "mk"); "en" when unknown.</summary>
+    Task<string> GetUserLanguageAsync(Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Opted-in candidates for one publish run. <paramref name="maxUsers"/> is passed
